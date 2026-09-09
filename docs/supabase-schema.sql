@@ -621,3 +621,191 @@ ON CONFLICT DO NOTHING;
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT 'role-super-admin', id FROM permissions
 ON CONFLICT DO NOTHING;
+
+-- ============================================
+-- SETTLEMENT & FINANCIAL ENGINE TABLES
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS monthly_consumption_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  consumer_unit_id UUID NOT NULL REFERENCES consumer_units(id),
+  month DATE NOT NULL,
+  consumption_kwh NUMERIC(12,2) NOT NULL,
+  average_rate NUMERIC(10,4),
+  peak_consumption NUMERIC(12,2),
+  off_peak_consumption NUMERIC(12,2),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  deleted_at TIMESTAMP,
+  UNIQUE(consumer_unit_id, month)
+);
+
+CREATE TABLE IF NOT EXISTS market_tariffs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  contract_id UUID NOT NULL REFERENCES energy_contracts(id),
+  month DATE NOT NULL,
+  regulated_tariff NUMERIC(10,4) NOT NULL,
+  acl_tariff NUMERIC(10,4) NOT NULL,
+  pld_price NUMERIC(10,4),
+  te_price NUMERIC(10,4),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(contract_id, month)
+);
+
+CREATE TABLE IF NOT EXISTS monthly_energy_settlements (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  contract_id UUID NOT NULL REFERENCES energy_contracts(id),
+  consumer_unit_id UUID NOT NULL REFERENCES consumer_units(id),
+  month DATE NOT NULL,
+  status VARCHAR(20) DEFAULT 'DRAFT', -- DRAFT, PROCESSING, APPROVED, PUBLISHED
+  consumption_kwh NUMERIC(12,2),
+  regulated_cost NUMERIC(14,2),
+  acl_cost NUMERIC(14,2),
+  gross_savings NUMERIC(14,2),
+  deductions NUMERIC(14,2),
+  net_savings NUMERIC(14,2),
+  honorarie NUMERIC(14,2),
+  version_number INT DEFAULT 1,
+  created_by UUID REFERENCES auth.users(id),
+  approved_by UUID REFERENCES auth.users(id),
+  approved_at TIMESTAMP,
+  published_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  deleted_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS settlement_versions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  settlement_id UUID NOT NULL REFERENCES monthly_energy_settlements(id),
+  version_number INT NOT NULL,
+  data JSONB NOT NULL,
+  reason VARCHAR(500),
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(settlement_id, version_number)
+);
+
+CREATE TABLE IF NOT EXISTS cost_deductions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  settlement_id UUID NOT NULL REFERENCES monthly_energy_settlements(id),
+  deduction_type VARCHAR(50) NOT NULL, -- ICMS, PIS, COFINS, TUSD, TE, etc
+  amount NUMERIC(14,2),
+  description VARCHAR(255),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS consumption_forecasts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  consumer_unit_id UUID NOT NULL REFERENCES consumer_units(id),
+  forecast_month DATE NOT NULL,
+  base_scenario NUMERIC(12,2) NOT NULL,
+  optimistic_scenario NUMERIC(12,2),
+  pessimistic_scenario NUMERIC(12,2),
+  confidence_level NUMERIC(3,2),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(consumer_unit_id, forecast_month)
+);
+
+CREATE TABLE IF NOT EXISTS financial_alerts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  consumer_unit_id UUID NOT NULL REFERENCES consumer_units(id),
+  alert_type VARCHAR(50), -- CONSUMPTION_ANOMALY, SAVINGS_BELOW_TARGET, CONTRACT_EXPIRING, TARIFF_CHANGE
+  severity VARCHAR(20), -- LOW, MEDIUM, HIGH, CRITICAL
+  message TEXT,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes para performance
+CREATE INDEX idx_monthly_consumption_unit_month ON monthly_consumption_history(consumer_unit_id, month);
+CREATE INDEX idx_market_tariffs_contract_month ON market_tariffs(contract_id, month);
+CREATE INDEX idx_settlements_contract_month ON monthly_energy_settlements(contract_id, month);
+CREATE INDEX idx_settlements_status ON monthly_energy_settlements(status);
+CREATE INDEX idx_settlements_organization ON monthly_energy_settlements(consumer_unit_id);
+CREATE INDEX idx_forecasts_unit_month ON consumption_forecasts(consumer_unit_id, forecast_month);
+CREATE INDEX idx_alerts_unit_read ON financial_alerts(consumer_unit_id, is_read);
+
+-- RLS Policies
+ALTER TABLE monthly_consumption_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE market_tariffs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_energy_settlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settlement_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cost_deductions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consumption_forecasts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial_alerts ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policy para monthly_consumption_history
+CREATE POLICY "consumption_history_select_by_organization" ON monthly_consumption_history
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM consumer_units cu
+      JOIN customers c ON cu.customer_id = c.id
+      WHERE cu.id = consumer_unit_id
+      AND c.organization_id = auth.uid()::text
+    )
+  );
+
+-- RLS Policy para settlements
+CREATE POLICY "settlements_select_by_organization" ON monthly_energy_settlements
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM consumer_units cu
+      JOIN customers c ON cu.customer_id = c.id
+      WHERE cu.id = consumer_unit_id
+      AND c.organization_id = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "settlements_insert_by_organization" ON monthly_energy_settlements
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM consumer_units cu
+      JOIN customers c ON cu.customer_id = c.id
+      WHERE cu.id = consumer_unit_id
+      AND c.organization_id = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "settlements_update_by_organization" ON monthly_energy_settlements
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM consumer_units cu
+      JOIN customers c ON cu.customer_id = c.id
+      WHERE cu.id = consumer_unit_id
+      AND c.organization_id = auth.uid()::text
+    )
+  );
+
+-- RLS Policy para forecasts
+CREATE POLICY "forecasts_select_by_organization" ON consumption_forecasts
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM consumer_units cu
+      JOIN customers c ON cu.customer_id = c.id
+      WHERE cu.id = consumer_unit_id
+      AND c.organization_id = auth.uid()::text
+    )
+  );
+
+-- RLS Policy para alerts
+CREATE POLICY "alerts_select_by_organization" ON financial_alerts
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM consumer_units cu
+      JOIN customers c ON cu.customer_id = c.id
+      WHERE cu.id = consumer_unit_id
+      AND c.organization_id = auth.uid()::text
+    )
+  );
+

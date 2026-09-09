@@ -7,6 +7,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { ConsumerUnitsModule } from './modules/consumer-units/consumer-units.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { SettlementsModule } from './modules/settlements/settlements.module';
 import { SupabaseService } from './services/supabase.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { SupabaseService } from './services/supabase.service';
     ConsumerUnitsModule,
     ContractsModule,
     DocumentsModule,
+    SettlementsModule,
   ],
   controllers: [AppController],
   providers: [AppService, SupabaseService],
