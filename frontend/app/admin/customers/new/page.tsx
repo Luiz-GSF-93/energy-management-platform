@@ -1,15 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/auth-context';
+import { useState } from 'react';
+import Link from 'next/link';
 
-export default function NewCustomerPage() {
-  const { token } = useAuth();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
+export const dynamic = 'force-dynamic';
+
+export default function NewCustomer() {
+  const { user, isLoading } = useAuth();
   const [formData, setFormData] = useState({
-    organizationId: 'org-default',
     name: '',
     email: '',
     document: '',
@@ -19,85 +18,39 @@ export default function NewCustomerPage() {
     state: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  if (isLoading) return <div className="p-8">Carregando...</div>;
+  if (!user) return <div className="p-8">Acesso negado</div>;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL;
-      const res = await fetch(`${API_URL}/customers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
-        alert('Cliente criado com sucesso!');
-        router.push('/admin/customers');
-      } else {
-        alert('Erro ao criar cliente');
-      }
-    } catch (error) {
-      console.error('Erro:', error);
-      alert('Erro ao criar cliente');
-    } finally {
-      setLoading(false);
-    }
+    // TODO: Implementar chamada ao backend
+    console.log('Form submitted:', formData);
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px' }}>
-      <h1>Novo Cliente</h1>
-
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+    <div className="p-8 max-w-2xl">
+      <h1 className="text-3xl font-bold mb-8">Novo Cliente</h1>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label>Nome *</label>
-          <input type="text" name="name" value={formData.name} onChange={handleChange} required style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
+          <label className="block font-bold mb-2">Nome</label>
+          <input type="text" className="w-full border px-4 py-2 rounded" required />
         </div>
-
         <div>
-          <label>Email *</label>
-          <input type="email" name="email" value={formData.email} onChange={handleChange} required style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
+          <label className="block font-bold mb-2">Email</label>
+          <input type="email" className="w-full border px-4 py-2 rounded" required />
         </div>
-
         <div>
-          <label>Documento (CNPJ/CPF)</label>
-          <input type="text" name="document" value={formData.document} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
+          <label className="block font-bold mb-2">Documento</label>
+          <input type="text" className="w-full border px-4 py-2 rounded" />
         </div>
-
-        <div>
-          <label>Telefone</label>
-          <input type="tel" name="phone" value={formData.phone} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
+        <div className="flex gap-4">
+          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded">
+            Salvar
+          </button>
+          <Link href="/admin/customers" className="bg-gray-400 text-white px-6 py-2 rounded">
+            Cancelar
+          </Link>
         </div>
-
-        <div>
-          <label>Endereço</label>
-          <input type="text" name="address" value={formData.address} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        </div>
-
-        <div>
-          <label>Cidade</label>
-          <input type="text" name="city" value={formData.city} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        </div>
-
-        <div>
-          <label>Estado</label>
-          <input type="text" name="state" value={formData.state} onChange={handleChange} style={{ width: '100%', padding: '8px', marginTop: '5px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        </div>
-
-        <button type="submit" disabled={loading} style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          {loading ? 'Salvando...' : 'Salvar Cliente'}
-        </button>
-
-        <a href="/admin/customers" style={{ padding: '10px 20px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', textDecoration: 'none', textAlign: 'center' }}>Cancelar</a>
       </form>
     </div>
   );

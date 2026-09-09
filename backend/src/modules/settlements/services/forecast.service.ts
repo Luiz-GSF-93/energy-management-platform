@@ -25,7 +25,11 @@ export class ForecastService {
       .order('month', { ascending: false })
       .limit(12);
 
-    const avg = history?.reduce((sum, r) => sum + (r.consumption_kwh || 0), 0) / (history?.length || 1) || 0;
+    const historyArray = history || [];
+    const avg = historyArray.length > 0
+      ? historyArray.reduce((sum, r) => sum + (r.consumption_kwh || 0), 0) / historyArray.length
+      : 0;
+
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
 
