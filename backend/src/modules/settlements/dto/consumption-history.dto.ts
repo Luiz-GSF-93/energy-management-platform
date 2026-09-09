@@ -1,25 +1,27 @@
-import { IsUUID, IsDate, IsNumber, IsOptional, Type } from 'class-validator';
+import { IsString, IsNumber, IsDate, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class CreateConsumptionHistoryDto {
-  @IsUUID()
-  consumerUnitId!: string;
+export class ConsumptionHistoryDto {
+  @IsString()
+  consumer_unit_id: string;
 
   @IsDate()
   @Type(() => Date)
-  month!: Date;
+  month: Date;
 
   @IsNumber()
-  consumptionKwh!: number;
+  @Min(0)
+  consumption_kwh: number;
 
+  @IsNumber()
   @IsOptional()
-  @IsNumber()
-  averageRate?: number;
+  average_rate?: number;
 
-  @IsOptional()
   @IsNumber()
-  peakConsumption?: number;
+  @IsOptional()
+  peak_consumption?: number;
 
-  @IsOptional()
   @IsNumber()
-  offPeakConsumption?: number;
+  @IsOptional()
+  off_peak_consumption?: number;
 }

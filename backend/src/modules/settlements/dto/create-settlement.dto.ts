@@ -1,52 +1,37 @@
-import { IsUUID, IsDate, IsNumber, IsOptional, IsString, Type } from 'class-validator';
+import { IsString, IsNumber, IsDate, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateSettlementDto {
-  @IsUUID()
-  contractId!: string;
+  @IsString()
+  energy_contract_id: string;
 
-  @IsUUID()
-  consumerUnitId!: string;
+  @IsString()
+  consumer_unit_id: string;
 
   @IsDate()
   @Type(() => Date)
-  month!: Date;
+  month: Date;
 
   @IsNumber()
-  consumptionKwh!: number;
-
-  @IsNumber()
-  regulatedCost!: number;
-
-  @IsNumber()
-  aclCost!: number;
-
   @IsOptional()
+  consumption_kwh?: number;
+
   @IsNumber()
+  @IsOptional()
+  @Min(0)
+  gross_savings?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
   deductions?: number;
-}
 
-export class UpdateSettlementDto {
-  @IsOptional()
-  @IsString()
-  status?: 'DRAFT' | 'PROCESSING' | 'APPROVED' | 'PUBLISHED';
-
-  @IsOptional()
   @IsNumber()
-  netSavings?: number;
-
   @IsOptional()
-  @IsNumber()
+  @Min(0)
   honorarie?: number;
-}
 
-export class ApproveSettlementDto {
-  @IsOptional()
   @IsString()
-  reason?: string;
-}
-
-export class PublishSettlementDto {
   @IsOptional()
-  @IsString()
-  reason?: string;
+  notes?: string;
 }

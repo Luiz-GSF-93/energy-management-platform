@@ -1,25 +1,31 @@
-import { IsUUID, IsDate, IsNumber, IsOptional, Type } from 'class-validator';
+import { IsString, IsNumber, IsDate, IsOptional, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class CreateForecastDto {
-  @IsUUID()
-  consumerUnitId!: string;
+export class ForecastDto {
+  @IsString()
+  consumer_unit_id: string;
 
   @IsDate()
   @Type(() => Date)
-  forecastMonth!: Date;
+  forecast_month: Date;
 
   @IsNumber()
-  baseScenario!: number;
+  @Min(0)
+  base_scenario: number;
 
+  @IsNumber()
   @IsOptional()
-  @IsNumber()
-  optimisticScenario?: number;
+  @Min(0)
+  optimistic_scenario?: number;
 
-  @IsOptional()
   @IsNumber()
-  pessimisticScenario?: number;
+  @IsOptional()
+  @Min(0)
+  pessimistic_scenario?: number;
 
-  @IsOptional()
   @IsNumber()
-  confidenceLevel?: number;
+  @IsOptional()
+  @Min(0)
+  @Max(1)
+  confidence_level?: number;
 }

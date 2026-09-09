@@ -1,24 +1,29 @@
-import { IsUUID, IsDate, IsNumber, IsOptional, Type } from 'class-validator';
+import { IsString, IsNumber, IsDate, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class CreateTariffDto {
-  @IsUUID()
-  contractId!: string;
+export class TariffDto {
+  @IsString()
+  energy_contract_id: string;
 
   @IsDate()
   @Type(() => Date)
-  month!: Date;
+  month: Date;
 
   @IsNumber()
-  regulatedTariff!: number;
+  @Min(0)
+  regulated_tariff: number;
 
   @IsNumber()
-  aclTariff!: number;
+  @Min(0)
+  acl_tariff: number;
 
+  @IsNumber()
   @IsOptional()
-  @IsNumber()
-  pldPrice?: number;
+  @Min(0)
+  pld_price?: number;
 
-  @IsOptional()
   @IsNumber()
-  tePrice?: number;
+  @IsOptional()
+  @Min(0)
+  te_price?: number;
 }
