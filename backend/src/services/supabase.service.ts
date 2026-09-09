@@ -7,10 +7,10 @@ export class SupabaseService {
   private supabaseClient: any;
 
   constructor(private configService: ConfigService) {
-    const supabaseUrl = this.configService.get('SUPABASE_URL') || '';
-    const supabaseKey = this.configService.get('SUPABASE_SERVICE_KEY') || '';
+    const supabaseUrl = (this.configService.get('SUPABASE_URL') || '') as string;
+    const supabaseKey = (this.configService.get('SUPABASE_SERVICE_KEY') || '') as string;
     
-    this.supabaseClient = createClient(supabaseUrl as string, supabaseKey as string);
+    this.supabaseClient = createClient(supabaseUrl, supabaseKey);
   }
 
   getClient() {

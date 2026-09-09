@@ -38,7 +38,13 @@ export class ConsumptionHistoryService {
       .order('month', { ascending: true })
       .limit(months);
     if (error) throw new BadRequestException(error.message);
-    return { trend: data, average: data?.reduce((sum, r) => sum + (r.consumption_kwh || 0), 0) / (data?.length || 1) };
+    
+    const dataArray = data || [];
+    const average = dataArray.length > 0
+      ? dataArray.reduce((sum: number, r: any) => sum + (r.consumption_kwh || 0), 0) / dataArray.length
+      : 0;
+    
+    return { trend: dataArray, average };
   }
 
   async findOne(id: string) {

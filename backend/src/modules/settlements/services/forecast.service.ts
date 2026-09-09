@@ -27,7 +27,7 @@ export class ForecastService {
 
     const historyArray = history || [];
     const avg = historyArray.length > 0
-      ? historyArray.reduce((sum, r) => sum + (r.consumption_kwh || 0), 0) / historyArray.length
+      ? historyArray.reduce((sum: number, r: any) => sum + (r.consumption_kwh || 0), 0) / historyArray.length
       : 0;
 
     const nextMonth = new Date();
