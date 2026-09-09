@@ -1,16 +1,14 @@
-import { IsString, IsNumber, IsDate, IsOptional, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class CreateSettlementDto {
   @IsString()
-  energy_contract_id: string;
+  energy_contract_id: string = '';
 
   @IsString()
-  consumer_unit_id: string;
+  consumer_unit_id: string = '';
 
-  @IsDate()
-  @Type(() => Date)
-  month: Date;
+  @IsString()
+  month: string = '';
 
   @IsNumber()
   @IsOptional()

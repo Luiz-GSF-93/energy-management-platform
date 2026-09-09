@@ -1,23 +1,50 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
-import { CreateForecastDto } from '../dto/forecast.dto';
+import { ForecastDto } from '../dto/forecast.dto';
 
 @Injectable()
 export class ForecastService {
   constructor(private supabaseService: SupabaseService) {}
 
-  async create(createForecastDto: CreateForecastDto) {
-    const forecastMonth = new Date(createForecastDto.forecastMonth).toISOString().split('T')[0];
+  async create(dto: ForecastDto) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('consumption_forecasts')
+      .insert([dto])
+      .select();
+    if (error) throw new BadRequestException(error.message);
+    return data?.[0];
+  }
+
+  async generateForecast(consumerUnitId: string) {
+    const { data: history } = await this.supabaseService
+      .getClient()
+      .from('monthly_consumption_history')
+      .select('consumption_kwh')
+      .eq('consumer_unit_id', consumerUnitId)
+      .order('month', { ascending: false })
+      .limit(12);
+
+    const avg = history?.reduce((sum, r) => sum + (r.consumption_kwh || 0), 0) / (history?.length || 1) || 0;
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
 
     const { data, error } = await this.supabaseService
       .getClient()
       .from('consumption_forecasts')
-      .insert([{ ...createForecastDto, forecastMonth }])
-      .select()
-      .single();
-
+      .insert([
+        {
+          consumer_unit_id: consumerUnitId,
+          forecast_month: nextMonth.toISOString().split('T')[0],
+          base_scenario: avg,
+          optimistic_scenario: avg * 1.1,
+          pessimistic_scenario: avg * 0.9,
+          confidence_level: 0.85,
+        },
+      ])
+      .select();
     if (error) throw new BadRequestException(error.message);
-    return data;
+    return data?.[0];
   }
 
   async findByConsumerUnit(consumerUnitId: string) {
@@ -25,52 +52,42 @@ export class ForecastService {
       .getClient()
       .from('consumption_forecasts')
       .select('*')
-      .eq('consumerUnitId', consumerUnitId)
-      .order('forecastMonth', { ascending: false });
-
+      .eq('consumer_unit_id', consumerUnitId)
+      .order('forecast_month', { ascending: false });
     if (error) throw new BadRequestException(error.message);
     return data;
   }
 
-  async generateForecast(consumerUnitId: string) {
-    // Buscar histórico de 12-24 meses
-    const { data: history, error: historyError } = await this.supabaseService
+  async findOne(id: string) {
+    const { data, error } = await this.supabaseService
       .getClient()
-      .from('monthly_consumption_history')
-      .select('month, consumptionKwh')
-      .eq('consumerUnitId', consumerUnitId)
-      .is('deletedAt', null)
-      .order('month', { ascending: false })
-      .limit(24);
+      .from('consumption_forecasts')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw new NotFoundException('Forecast not found');
+    return data;
+  }
 
-    if (historyError) throw new BadRequestException(historyError.message);
+  async update(id: string, dto: Partial<ForecastDto>) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('consumption_forecasts')
+      .update(dto)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new BadRequestException(error.message);
+    return data;
+  }
 
-    if (!history || history.length < 3) {
-      throw new BadRequestException('Insufficient historical data for forecasting');
-    }
-
-    // Calcular média móvel simples (12 meses)
-    const values = (history as any[]).map(h => h.consumptionKwh).reverse();
-    const avg = values.reduce((a, b) => a + b, 0) / values.length;
-
-    // Cenários simples
-    const baseScenario = avg;
-    const optimisticScenario = avg * 0.9; // 10% reduction
-    const pessimisticScenario = avg * 1.1; // 10% increase
-
-    // Próximo mês
-    const nextMonth = new Date();
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-
-    const forecast = await this.create({
-      consumerUnitId,
-      forecastMonth: nextMonth,
-      baseScenario,
-      optimisticScenario,
-      pessimisticScenario,
-      confidenceLevel: 0.75,
-    });
-
-    return forecast;
+  async delete(id: string) {
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('consumption_forecasts')
+      .delete()
+      .eq('id', id);
+    if (error) throw new BadRequestException(error.message);
+    return { success: true };
   }
 }

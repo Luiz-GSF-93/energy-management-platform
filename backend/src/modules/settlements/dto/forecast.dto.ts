@@ -1,17 +1,15 @@
-import { IsString, IsNumber, IsDate, IsOptional, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
 
 export class ForecastDto {
   @IsString()
-  consumer_unit_id: string;
+  consumer_unit_id: string = '';
 
-  @IsDate()
-  @Type(() => Date)
-  forecast_month: Date;
+  @IsString()
+  forecast_month: string = '';
 
   @IsNumber()
   @Min(0)
-  base_scenario: number;
+  base_scenario: number = 0;
 
   @IsNumber()
   @IsOptional()

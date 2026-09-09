@@ -1,17 +1,15 @@
-import { IsString, IsNumber, IsDate, IsOptional, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class ConsumptionHistoryDto {
   @IsString()
-  consumer_unit_id: string;
+  consumer_unit_id: string = '';
 
-  @IsDate()
-  @Type(() => Date)
-  month: Date;
+  @IsString()
+  month: string = '';
 
   @IsNumber()
   @Min(0)
-  consumption_kwh: number;
+  consumption_kwh: number = 0;
 
   @IsNumber()
   @IsOptional()
