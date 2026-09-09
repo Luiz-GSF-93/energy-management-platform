@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY backend/package.json backend/package-lock.json ./
+COPY backend/package.json ./
 
 RUN npm install
 
@@ -20,7 +20,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY backend/package.json backend/package-lock.json ./
+COPY backend/package.json ./
 
 RUN npm install --production
 
