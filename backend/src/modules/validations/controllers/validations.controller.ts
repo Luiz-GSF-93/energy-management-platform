@@ -8,8 +8,8 @@ import { SupabaseService } from '../../../services/supabase.service';
 interface JwtPayload {
   sub: string;
   email: string;
-  iat: number;
-  exp: number;
+  iat?: number;
+  exp?: number;
 }
 
 @Controller('validations')
@@ -30,29 +30,49 @@ export class ValidationsController {
     @CurrentUser() user: JwtPayload
   ) {
     try {
-      console.log('👤 Usuário autenticado:', user.email);
+      console.log('👤 @CurrentUser recebido:', JSON.stringify(user, null, 2));
 
       // 1️⃣ Extrair userId do JWT (sub)
-      const userId = user.sub;
+      const userId = user?.sub;
+      console.log('🔍 userId extraído:', userId);
+
       if (!userId) {
+        console.error('❌ userId vazio!');
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      // 2️⃣ Buscar organização do usuário no Supabase
+      // 2️⃣ Debug: Consultar usuário no Supabase
+      console.log('🔎 Buscando usuário com id:', userId);
       const { data: userData, error: userError } = await this.supabaseService
         .getClient()
         .from('users')
-        .select('organization_id')
+        .select('id, auth_user_id, email, organization_id')
         .eq('id', userId)
         .single();
 
-      if (userError || !userData) {
+      if (userError) {
         console.error('❌ Erro ao buscar usuário:', userError);
-        throw new BadRequestException('Usuário não encontrado no banco de dados');
-      }
+        
+        // Tentar buscar por auth_user_id
+        console.log('🔄 Tentando buscar por auth_user_id:', userId);
+        const { data: userData2, error: userError2 } = await this.supabaseService
+          .getClient()
+          .from('users')
+          .select('id, auth_user_id, email, organization_id')
+          .eq('auth_user_id', userId)
+          .single();
+        
+        if (userError2 || !userData2) {
+          console.error('❌ Usuário não encontrado por auth_user_id:', userError2);
+          throw new BadRequestException('Usuário não encontrado no banco de dados');
+        }
 
-      const userOrganizationId = userData.organization_id;
-      console.log('✅ Organização do usuário:', userOrganizationId);
+        console.log('✅ Usuário encontrado por auth_user_id:', userData2);
+        var userOrganizationId = userData2.organization_id;
+      } else {
+        console.log('✅ Usuário encontrado por id:', userData);
+        var userOrganizationId = userData.organization_id;
+      }
 
       // 3️⃣ Validar que a organização do payload corresponde à do usuário
       if (userOrganizationId !== dto.organizationId) {
@@ -125,7 +145,6 @@ export class ValidationsController {
 
   /**
    * GET /api/v1/validations/:settlementId
-   * Recupera validações de uma apuração
    */
   @Get(':settlementId')
   async getValidations(
@@ -149,7 +168,6 @@ export class ValidationsController {
 
   /**
    * POST /api/v1/validations/savings
-   * Calcula economia entre períodos
    */
   @Post('savings')
   async calculateSavings(
