@@ -3,9 +3,11 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 
-interface JwtPayload {
+export interface JwtPayload {
   sub: string;
   email: string;
+  iat?: number;
+  exp?: number;
 }
 
 @Injectable()
@@ -24,7 +26,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
-    return { userId: payload.sub, email: payload.email };
+  /**
+   * Passport invoca este método com o payload decodificado do JWT.
+   * O retorno será anexado a req.user e passado ao @CurrentUser() decorator.
+   */
+  async validate(payload: JwtPayload): Promise<JwtPayload> {
+    console.log('✅ JwtStrategy.validate() - Payload recebido:', {
+      sub: payload.sub,
+      email: payload.email,
+    });
+    
+    // Retornar o payload completo para que @CurrentUser() receba { sub, email, iat, exp }
+    return payload;
   }
 }
