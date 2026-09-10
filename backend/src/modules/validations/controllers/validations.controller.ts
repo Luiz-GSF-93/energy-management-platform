@@ -20,9 +20,6 @@ export class ValidationsController {
     private supabaseService: SupabaseService,
   ) {}
 
-  /**
-   * POST /api/v1/validations/calculate
-   */
   @Post('calculate')
   async validateCalculation(
     @Body() dto: ValidateCalculationDto,
@@ -31,12 +28,23 @@ export class ValidationsController {
     try {
       const userId = user?.sub;
       console.log('✅ userId (sub):', userId);
+      console.log('📦 DTO recebido:', JSON.stringify(dto, null, 2));
 
       if (!userId) {
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      // Usar RPC function para buscar organização de forma segura
+      // Validar campos obrigatórios
+      if (!dto.settlementId || dto.settlementId.trim() === '') {
+        throw new BadRequestException('settlementId é obrigatório');
+      }
+      if (!dto.energyContractId || dto.energyContractId.trim() === '') {
+        throw new BadRequestException('energyContractId é obrigatório');
+      }
+      if (!dto.organizationId || dto.organizationId.trim() === '') {
+        throw new BadRequestException('organizationId é obrigatório');
+      }
+
       console.log('🔎 Buscando organização via RPC...');
       const { data: rpcResult, error: rpcError } = await this.supabaseService
         .getClient()
@@ -80,26 +88,31 @@ export class ValidationsController {
         };
       }
 
+      console.log('📝 Preparando para salvar validação...');
+      const validationData = {
+        settlementId: dto.settlementId,
+        energyContractId: dto.energyContractId,
+        organizationId: userOrganizationId,
+        consumptionKwh: dto.consumptionKwh,
+        regulatedCost: dto.regulatedCost,
+        aclCost: dto.aclCost,
+        grossSavings: dto.grossSavings,
+        netSavings: dto.netSavings,
+        honorarie: dto.honorarie,
+        totalCost: dto.totalCost,
+        finalValue: dto.finalValue,
+        isValid: true,
+        errors: [],
+        warnings: validation.warnings,
+        validatedAt: new Date(),
+        validatedBy: userId,
+        metadata: dto.metadata || {},
+      };
+
+      console.log('📦 Dados para salvar:', JSON.stringify(validationData, null, 2));
+
       const result = await this.validatorService.saveValidation(
-        {
-          settlementId: dto.settlementId,
-          energyContractId: dto.energyContractId,
-          organizationId: userOrganizationId,
-          consumptionKwh: dto.consumptionKwh,
-          regulatedCost: dto.regulatedCost,
-          aclCost: dto.aclCost,
-          grossSavings: dto.grossSavings,
-          netSavings: dto.netSavings,
-          honorarie: dto.honorarie,
-          totalCost: dto.totalCost,
-          finalValue: dto.finalValue,
-          isValid: true,
-          errors: [],
-          warnings: validation.warnings,
-          validatedAt: new Date(),
-          validatedBy: userId,
-          metadata: dto.metadata,
-        },
+        validationData,
         userOrganizationId
       );
 
@@ -121,9 +134,6 @@ export class ValidationsController {
     }
   }
 
-  /**
-   * GET /api/v1/validations/:settlementId
-   */
   @Get(':settlementId')
   async getValidations(
     @Param('settlementId') settlementId: string,
@@ -144,9 +154,6 @@ export class ValidationsController {
     }
   }
 
-  /**
-   * POST /api/v1/validations/savings
-   */
   @Post('savings')
   async calculateSavings(
     @Body() dto: { previousBill: number; currentBill: number },
