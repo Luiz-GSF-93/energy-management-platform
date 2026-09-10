@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SupabaseService } from 'src/services/supabase.service';
+import { SupabaseService } from '../../../services/supabase.service';
 import { CalculationValidation, ValidationError, ValidationResult } from '../interfaces';
 
 @Injectable()
@@ -52,7 +52,7 @@ export class CalculationValidatorService {
 
     // 2️⃣ Validação de totalCost = regulatedCost + aclCost
     const expectedTotal = data.regulatedCost + data.aclCost;
-    const tolerance = expectedTotal * 0.01; // 1% de tolerância
+    const tolerance = expectedTotal * 0.01;
     if (Math.abs(data.totalCost - expectedTotal) > tolerance) {
       errors.push({
         field: 'totalCost',
@@ -62,19 +62,19 @@ export class CalculationValidatorService {
       });
     }
 
-    // 3️⃣ Validação de grossSavings (deve ser positivo se há economia)
+    // 3️⃣ Validação de grossSavings
     if (data.grossSavings < 0) {
       warnings.push(`Economia bruta negativa: ${data.grossSavings.toFixed(2)}`);
     }
 
-    // 4️⃣ Validação de netSavings = grossSavings - deductions
+    // 4️⃣ Validação de netSavings
     const deductions = data.grossSavings - data.netSavings;
     if (deductions < 0 || deductions > data.grossSavings) {
       warnings.push(`Deduções fora do intervalo esperado: ${deductions.toFixed(2)}`);
     }
 
-    // 5️⃣ Validação de honorários (deve ser % da economia)
-    const expectedHonorarie = data.netSavings * 0.15; // 15% é padrão
+    // 5️⃣ Validação de honorários
+    const expectedHonorarie = data.netSavings * 0.15;
     if (Math.abs(data.honorarie - expectedHonorarie) > expectedHonorarie * 0.5) {
       warnings.push(
         `Honorários fora do intervalo esperado. Esperado: ~${expectedHonorarie.toFixed(2)}, Recebido: ${data.honorarie.toFixed(2)}`
@@ -129,7 +129,6 @@ export class CalculationValidatorService {
       return { anomalyCount: 0, anomalies: [] };
     }
 
-    // Verificar variações anormais
     for (let i = 1; i < calculations.length; i++) {
       const current = calculations[i].finalValue;
       const previous = calculations[i - 1].finalValue;

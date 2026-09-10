@@ -11,9 +11,6 @@ import { ConsumerUnitsModule } from './modules/consumer-units/consumer-units.mod
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
-import { UsersModule } from './modules/users/users.module';
-import { RolesModule } from './modules/roles/roles.module';
-import { PermissionsModule } from './modules/permissions/permissions.module';
 import { ValidationsModule } from './modules/validations/validations.module';
 
 @Module({
@@ -28,9 +25,6 @@ import { ValidationsModule } from './modules/validations/validations.module';
     ContractsModule,
     DocumentsModule,
     SettlementsModule,
-    UsersModule,
-    RolesModule,
-    PermissionsModule,
     ValidationsModule,
   ],
   controllers: [AppController],

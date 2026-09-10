@@ -1,5 +1,5 @@
 import { Controller, Post, Get, Body, Param, UseGuards, BadRequestException } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CalculationValidatorService } from '../services/calculation-validator.service';
 import { ValidateCalculationDto } from '../dto';
 
@@ -15,7 +15,6 @@ export class ValidationsController {
   @Post('calculate')
   async validateCalculation(@Body() dto: ValidateCalculationDto) {
     try {
-      // 1️⃣ Executar validação
       const validation = this.validatorService.validateCalculation({
         consumptionKwh: dto.consumptionKwh,
         regulatedCost: dto.regulatedCost,
@@ -27,7 +26,6 @@ export class ValidationsController {
         finalValue: dto.finalValue,
       });
 
-      // 2️⃣ Se houver erros, retornar imediatamente
       if (!validation.isValid) {
         return {
           success: false,
@@ -38,7 +36,6 @@ export class ValidationsController {
         };
       }
 
-      // 3️⃣ Salvar validação
       const result = await this.validatorService.saveValidation({
         settlementId: dto.settlementId,
         energyContractId: dto.energyContractId,
@@ -60,7 +57,7 @@ export class ValidationsController {
       });
 
       if (!result.success) {
-        throw new BadRequestException(result.error);
+        throw new BadRequestException(result.error || 'Erro ao salvar validação');
       }
 
       return {
@@ -72,7 +69,8 @@ export class ValidationsController {
       };
     } catch (error) {
       console.error('Erro na validação:', error);
-      throw new BadRequestException('Erro ao validar cálculo: ' + error.message);
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
+      throw new BadRequestException('Erro ao validar cálculo: ' + message);
     }
   }
 
@@ -92,7 +90,8 @@ export class ValidationsController {
       };
     } catch (error) {
       console.error('Erro ao recuperar validações:', error);
-      throw new BadRequestException('Erro ao recuperar validações: ' + error.message);
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
+      throw new BadRequestException('Erro ao recuperar validações: ' + message);
     }
   }
 
@@ -113,7 +112,8 @@ export class ValidationsController {
       };
     } catch (error) {
       console.error('Erro ao calcular economia:', error);
-      throw new BadRequestException('Erro ao calcular economia: ' + error.message);
+      const message = error instanceof Error ? error.message : 'Erro desconhecido';
+      throw new BadRequestException('Erro ao calcular economia: ' + message);
     }
   }
 }

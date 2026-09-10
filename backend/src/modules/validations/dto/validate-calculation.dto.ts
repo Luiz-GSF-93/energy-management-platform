@@ -2,37 +2,37 @@ import { IsString, IsNumber, IsUUID, IsOptional } from 'class-validator';
 
 export class ValidateCalculationDto {
   @IsUUID()
-  settlementId: string;
+  settlementId!: string;
 
   @IsString()
-  energyContractId: string;
+  energyContractId!: string;
 
   @IsString()
-  organizationId: string;
+  organizationId!: string;
 
   @IsNumber()
-  consumptionKwh: number;
+  consumptionKwh!: number;
 
   @IsNumber()
-  regulatedCost: number;
+  regulatedCost!: number;
 
   @IsNumber()
-  aclCost: number;
+  aclCost!: number;
 
   @IsNumber()
-  grossSavings: number;
+  grossSavings!: number;
 
   @IsNumber()
-  netSavings: number;
+  netSavings!: number;
 
   @IsNumber()
-  honorarie: number;
+  honorarie!: number;
 
   @IsNumber()
-  totalCost: number;
+  totalCost!: number;
 
   @IsNumber()
-  finalValue: number;
+  finalValue!: number;
 
   @IsOptional()
   @IsString()
