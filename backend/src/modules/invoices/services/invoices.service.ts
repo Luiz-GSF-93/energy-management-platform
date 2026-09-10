@@ -23,68 +23,50 @@ export class InvoicesService {
     try {
       const client = this.supabaseService.getClient();
 
-      // Calcular energyCost
       const energyCost = dto.consumptionKwh * dto.energyTariff;
-
-      // Calcular demandCost se houver demanda
       const demandCost = dto.demandTariff && dto.demandKw ? dto.demandKw * dto.demandTariff : 0;
 
-      // Subtotal antes de impostos
-      const subtotal =
-        energyCost +
-        demandCost +
-        dto.distributionCost +
-        dto.transmissionCost +
-        dto.tusd +
-        dto.te;
-
-      // Calcular impostos
+      const subtotal = energyCost + demandCost + dto.distributionCost + dto.transmissionCost + (dto.tusd || 0) + (dto.te || 0);
       const taxes = dto.pis + dto.cofins + dto.icms;
-
-      // Total
       const totalAmount = subtotal + taxes;
 
       const { data, error } = await client
         .from('invoices')
-        .insert([
-          {
-            organization_id: dto.organizationId,
-            consumer_unit_id: dto.consumerUnitId,
-            energy_contract_id: dto.energyContractId,
-            invoice_number: dto.invoiceNumber,
-            issue_date: new Date(dto.issueDate).toISOString(),
-            due_date: new Date(dto.dueDate).toISOString(),
-            reference_month: new Date(dto.referenceMonth).toISOString(),
-            status: 'draft',
-            invoice_type: dto.invoiceType,
-            consumption_kwh: dto.consumptionKwh,
-            demand_kw: dto.demandKw || null,
-            energy_tariff: dto.energyTariff,
-            demand_tariff: dto.demandTariff || null,
-            energy_cost: energyCost,
-            demand_cost: demandCost || null,
-            distribution_cost: dto.distributionCost,
-            transmission_cost: dto.transmissionCost,
-            pis: dto.pis,
-            cofins: dto.cofins,
-            icms: dto.icms,
-            tusd: dto.tusd,
-            te: dto.te,
-            subtotal,
-            taxes,
-            total_amount: totalAmount,
-            invoice_url: dto.invoiceUrl || null,
-            notes: dto.notes || null,
-            created_by: userId,
-          },
-        ])
+        .insert([{
+          organization_id: dto.organizationId,
+          consumer_unit_id: dto.consumerUnitId,
+          energy_contract_id: dto.energyContractId,
+          invoice_number: dto.invoiceNumber,
+          issue_date: new Date(dto.issueDate).toISOString(),
+          due_date: new Date(dto.dueDate).toISOString(),
+          reference_month: new Date(dto.referenceMonth).toISOString(),
+          status: 'draft',
+          invoice_type: dto.invoiceType,
+          consumption_kwh: dto.consumptionKwh,
+          demand_kw: dto.demandKw || null,
+          energy_tariff: dto.energyTariff,
+          demand_tariff: dto.demandTariff || null,
+          energy_cost: energyCost,
+          demand_cost: demandCost || null,
+          distribution_cost: dto.distributionCost,
+          transmission_cost: dto.transmissionCost,
+          pis: dto.pis,
+          cofins: dto.cofins,
+          icms: dto.icms,
+          tusd: dto.tusd || 0,
+          te: dto.te || 0,
+          subtotal,
+          taxes,
+          total_amount: totalAmount,
+          invoice_url: dto.invoiceUrl || null,
+          notes: dto.notes || null,
+          created_by: userId,
+        }])
         .select()
         .single();
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
+      console.log('✅ Fatura criada:', data.id);
       return this.mapInvoice(data);
     } catch (exception) {
       console.error('❌ Erro ao criar fatura:', exception);
@@ -104,33 +86,16 @@ export class InvoicesService {
         .select('*')
         .eq('organization_id', organizationId);
 
-      if (filters.consumerUnitId) {
-        query = query.eq('consumer_unit_id', filters.consumerUnitId);
-      }
-
-      if (filters.status) {
-        query = query.eq('status', filters.status);
-      }
-
-      if (filters.startDate) {
-        query = query.gte('reference_month', filters.startDate);
-      }
-
-      if (filters.endDate) {
-        query = query.lte('reference_month', filters.endDate);
-      }
+      if (filters.consumerUnitId) query = query.eq('consumer_unit_id', filters.consumerUnitId);
+      if (filters.status) query = query.eq('status', filters.status);
+      if (filters.startDate) query = query.gte('reference_month', filters.startDate);
+      if (filters.endDate) query = query.lte('reference_month', filters.endDate);
 
       const limit = filters.limit ? parseInt(filters.limit, 10) : 50;
+      const { data, error } = await query.order('reference_month', { ascending: false }).limit(limit);
 
-      const { data, error } = await query
-        .order('reference_month', { ascending: false })
-        .limit(limit);
-
-      if (error) {
-        throw error;
-      }
-
-      return ((data || []) as any[]).map((inv: any) => this.mapInvoice(inv));
+      if (error) throw error;
+      return ((data || []) as any[]).map(inv => this.mapInvoice(inv));
     } catch (exception) {
       console.error('❌ Erro ao buscar faturas:', exception);
       return [];
@@ -143,17 +108,9 @@ export class InvoicesService {
   async getInvoiceById(invoiceId: string): Promise<Invoice | null> {
     try {
       const client = this.supabaseService.getClient();
+      const { data, error } = await client.from('invoices').select('*').eq('id', invoiceId).single();
 
-      const { data, error } = await client
-        .from('invoices')
-        .select('*')
-        .eq('id', invoiceId)
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return this.mapInvoice(data);
     } catch (exception) {
       console.error('❌ Erro ao buscar fatura:', exception);
@@ -167,13 +124,12 @@ export class InvoicesService {
   async updateInvoice(invoiceId: string, dto: UpdateInvoiceDto): Promise<Invoice | null> {
     try {
       const client = this.supabaseService.getClient();
-
       const updateData: any = {};
+
       if (dto.status) updateData.status = dto.status;
       if (dto.paidAmount !== undefined) updateData.paid_amount = dto.paidAmount;
       if (dto.paidDate) updateData.paid_date = new Date(dto.paidDate).toISOString();
       if (dto.notes) updateData.notes = dto.notes;
-      updateData.updated_at = new Date().toISOString();
 
       const { data, error } = await client
         .from('invoices')
@@ -182,10 +138,8 @@ export class InvoicesService {
         .select()
         .single();
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
+      console.log('✅ Fatura atualizada:', invoiceId);
       return this.mapInvoice(data);
     } catch (exception) {
       console.error('❌ Erro ao atualizar fatura:', exception);
@@ -196,33 +150,41 @@ export class InvoicesService {
   /**
    * Simular Mercado Regulado
    */
-  async simulateRegulatedMarket(
-    dto: SimulateRegulatedMarketDto
-  ): Promise<RegulatedMarketSimulation> {
+  async simulateRegulatedMarket(dto: SimulateRegulatedMarketDto): Promise<RegulatedMarketSimulation> {
     try {
-      // Cálculos base
-      const energyCostCalculated = dto.consumptionKwh * ((dto.peakRate + dto.offPeakRate) / 2);
-      const demandCostCalculated = dto.demandKw && dto.demandRate ? dto.demandKw * dto.demandRate : 0;
+      console.log('⚡ Simulando mercado regulado:', dto);
 
-      // Distribuição e transmissão (estimados como % do consumo)
-      const distributionCalculated = energyCostCalculated * 0.15;
-      const transmissionCalculated = energyCostCalculated * 0.10;
+      // Cálculo de energia (pico + fora de pico)
+      const peakConsumption = dto.consumptionKwh * 0.4; // 40% em pico
+      const offPeakConsumption = dto.consumptionKwh * 0.6; // 60% fora de pico
 
-      // Subtotal
-      const subtotalBeforeTaxes =
-        energyCostCalculated + demandCostCalculated + distributionCalculated + transmissionCalculated;
+      const energyCostCalculated = 
+        peakConsumption * dto.peakRate + 
+        offPeakConsumption * dto.offPeakRate;
 
-      // Encargos
-      const pis = subtotalBeforeTaxes * dto.pisPercentage;
-      const cofins = subtotalBeforeTaxes * dto.cofinsPercentage;
-      const icms = subtotalBeforeTaxes * dto.icmsPercentage;
-      const tusd = subtotalBeforeTaxes * dto.tusdPercentage;
-      const te = subtotalBeforeTaxes * dto.tePercentage;
+      // Cálculo de demanda
+      const demandCostCalculated = dto.demandRate && dto.demandKw 
+        ? dto.demandKw * dto.demandRate 
+        : 0;
+
+      // Encargos sobre distribuição/transmissão (valores fixos estimados)
+      const distributionCalculated = dto.consumptionKwh * 0.35; // R$ 0.35/kWh
+      const transmissionCalculated = dto.consumptionKwh * 0.12; // R$ 0.12/kWh
+
+      // Subtotal antes de impostos
+      const subtotalBeforeTaxes = energyCostCalculated + demandCostCalculated + distributionCalculated + transmissionCalculated;
+
+      // Cálcular encargos percentuais
+      const pis = subtotalBeforeTaxes * (dto.pisPercentage || 0.0765);
+      const cofins = subtotalBeforeTaxes * (dto.cofinsPercentage || 0.076);
+      const icms = subtotalBeforeTaxes * (dto.icmsPercentage || 0.18);
+      const tusd = subtotalBeforeTaxes * (dto.tusdPercentage || 0.15);
+      const te = subtotalBeforeTaxes * (dto.tePercentage || 0.12);
 
       const chargesTotal = pis + cofins + icms + tusd + te;
       const totalEstimated = subtotalBeforeTaxes + chargesTotal;
 
-      return {
+      const simulation: RegulatedMarketSimulation = {
         consumerUnitId: dto.consumerUnitId,
         referenceMonth: new Date(dto.referenceMonth),
         consumptionKwh: dto.consumptionKwh,
@@ -236,15 +198,18 @@ export class InvoicesService {
         demandCostCalculated,
         distributionCalculated,
         transmissionCalculated,
-        pisPercentage: dto.pisPercentage,
-        cofinsPercentage: dto.cofinsPercentage,
-        icmsPercentage: dto.icmsPercentage,
-        tusdPercentage: dto.tusdPercentage,
-        tePercentage: dto.tePercentage,
+        pisPercentage: dto.pisPercentage || 0.0765,
+        cofinsPercentage: dto.cofinsPercentage || 0.076,
+        icmsPercentage: dto.icmsPercentage || 0.18,
+        tusdPercentage: dto.tusdPercentage || 0.15,
+        tePercentage: dto.tePercentage || 0.12,
         subtotalBeforeTaxes,
         chargesTotal,
         totalEstimated,
       };
+
+      console.log('✅ Simulação concluída:', simulation);
+      return simulation;
     } catch (exception) {
       console.error('❌ Erro ao simular mercado regulado:', exception);
       throw exception;
@@ -254,36 +219,32 @@ export class InvoicesService {
   /**
    * Comparar fatura com simulação
    */
-  async compareInvoiceWithSimulation(
-    invoiceId: string,
-    simulation: RegulatedMarketSimulation
-  ): Promise<InvoiceComparison> {
+  async compareInvoiceWithSimulation(invoiceId: string, simulation: RegulatedMarketSimulation): Promise<InvoiceComparison> {
     try {
       const invoice = await this.getInvoiceById(invoiceId);
-      if (!invoice) {
-        throw new Error('Fatura não encontrada');
-      }
+      if (!invoice) throw new Error('Fatura não encontrada');
 
-      const regulatedMarketTotal = invoice.totalAmount;
-      const freeMarketEstimated = simulation.totalEstimated;
-      const potentialSavings = regulatedMarketTotal - freeMarketEstimated;
-      const savingsPercentage =
-        regulatedMarketTotal > 0 ? (potentialSavings / regulatedMarketTotal) * 100 : 0;
+      const potentialSavings = invoice.totalAmount - simulation.totalEstimated;
+      const savingsPercentage = (potentialSavings / invoice.totalAmount) * 100;
 
-      const recommendation =
-        potentialSavings > 0
-          ? `Economia potencial de R$ ${potentialSavings.toFixed(2)} (${savingsPercentage.toFixed(1)}%)`
-          : 'Mercado regulado é mais vantajoso';
+      const recommendation = savingsPercentage > 10 
+        ? 'Alto potencial de economia no mercado livre'
+        : savingsPercentage > 0
+        ? 'Potencial moderado de economia'
+        : 'Sem benefício em migração para mercado livre';
 
-      return {
+      const comparison: InvoiceComparison = {
         invoiceId,
-        referenceMonth: new Date(invoice.referenceMonth),
-        regulatedMarketTotal: regulatedMarketTotal,
-        freeMarketEstimated,
+        referenceMonth: invoice.referenceMonth,
+        regulatedMarketTotal: invoice.totalAmount,
+        freeMarketEstimated: simulation.totalEstimated,
         potentialSavings,
         savingsPercentage,
         recommendation,
       };
+
+      console.log('✅ Comparação realizada:', comparison);
+      return comparison;
     } catch (exception) {
       console.error('❌ Erro ao comparar fatura:', exception);
       throw exception;
