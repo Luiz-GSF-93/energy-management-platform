@@ -1,33 +1,40 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('teste@expertenergy.com.br');
   const [password, setPassword] = useState('ExpertEnergy@2026!');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     setError('');
-    setIsLoading(true);
-
+    
     try {
-      await login(email, password);
-      router.push('/dashboard');
+      const response = await fetch('https://energy-management-platform.onrender.com/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.data?.access_token) {
+        localStorage.setItem('authToken', data.data.access_token);
+        window.location.href = '/dashboard';
+      } else {
+        setError('Erro ao fazer login');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao fazer login');
+      setError('Erro de conexão');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -40,51 +47,36 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="flex items-center space-x-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-red-600" />
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
+          {error && <p className="text-red-600 text-sm">{error}</p>}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full"
-              placeholder="seu@email.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Senha
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
             <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full"
-              placeholder="Sua senha"
             />
           </div>
 
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700"
           >
-            {isLoading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Entrando...' : 'Entrar'}
           </Button>
         </form>
-
-        <p className="text-center text-sm text-gray-600 mt-6">
-          Credenciais de teste fornecidas
-        </p>
       </Card>
     </div>
   );
