@@ -137,7 +137,7 @@ export class CalculationValidatorService {
     userOrganizationId: string
   ): Promise<ValidationResult> {
     try {
-      console.log('💾 saveValidation() - RLS protection via Supabase');
+      console.log('💾 saveValidation() com RLS via Supabase');
 
       if (validation.organizationId !== userOrganizationId) {
         return { 
@@ -168,17 +168,20 @@ export class CalculationValidatorService {
         validated_at: new Date().toISOString(),
       };
 
-      // RLS do Supabase vai validar se o usuário pode inserir (organization_id match)
+      console.log('📝 INSERT com RLS protection...');
+      
+      // Use .select(false) to prevent implicit SELECT after INSERT
       const { error: insertError } = await client
         .from('calculation_validations')
-        .insert([insertData]);
+        .insert([insertData])
+        .select(false);
 
       if (insertError) {
-        console.error('❌ Erro ao inserir (RLS bloqueou?):', insertError);
+        console.error('❌ Erro ao inserir:', insertError);
         return { success: false, error: insertError.message };
       }
 
-      console.log('✅ Validação inserida com sucesso via RLS!');
+      console.log('✅ Validação inserida com sucesso!');
 
       return { 
         success: true, 
