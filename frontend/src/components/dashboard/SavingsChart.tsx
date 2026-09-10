@@ -1,7 +1,6 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface SavingsChartProps {
   data: Array<{
@@ -29,36 +28,17 @@ export function SavingsChart({ data, isLoading }: SavingsChartProps) {
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold mb-4">Economia ao Longo do Tempo</h2>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="month" />
-          <YAxis />
-          <Tooltip formatter={(value) => `R$ ${(value as number).toFixed(2)}`} />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey="savings"
-            stroke="#10b981"
-            name="Economia"
-            strokeWidth={2}
-          />
-          <Line
-            type="monotone"
-            dataKey="originalCost"
-            stroke="#ef4444"
-            name="Custo Original"
-            strokeWidth={2}
-          />
-          <Line
-            type="monotone"
-            dataKey="finalCost"
-            stroke="#3b82f6"
-            name="Custo Final"
-            strokeWidth={2}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+      <div className="space-y-4">
+        {data.map((item, idx) => (
+          <div key={idx} className="flex justify-between items-center p-4 border-b">
+            <span className="font-medium">{item.month}</span>
+            <div className="text-right">
+              <p className="text-green-600 font-semibold">R$ {item.savings.toFixed(2)}</p>
+              <p className="text-sm text-gray-500">Economia</p>
+            </div>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
