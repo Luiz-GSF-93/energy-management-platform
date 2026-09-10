@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { SupabaseService } from './services/supabase.service';
+
+// Módulos compartilhados
+import { SharedModule } from './modules/shared/shared.module';
 
 // Módulos de funcionalidades
 import { AuthModule } from './modules/auth/auth.module';
@@ -19,6 +21,7 @@ import { ValidationsModule } from './modules/validations/validations.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    SharedModule,
     AuthModule,
     CustomersModule,
     ConsumerUnitsModule,
@@ -28,6 +31,6 @@ import { ValidationsModule } from './modules/validations/validations.module';
     ValidationsModule,
   ],
   controllers: [AppController],
-  providers: [AppService, SupabaseService],
+  providers: [AppService],
 })
 export class AppModule {}
