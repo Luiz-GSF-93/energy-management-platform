@@ -13,15 +13,11 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { AuditService } from '../services/audit.service';
 import { GetAuditLogsDto, ApproveSettlementDto } from '../dtos/audit.dto';
 
-@Controller('api/v1/audit')
+@Controller('audit')
 @UseGuards(JwtAuthGuard)
 export class AuditController {
   constructor(private auditService: AuditService) {}
 
-  /**
-   * GET /api/v1/audit/logs
-   * Obter logs de auditoria filtrados
-   */
   @Get('logs')
   async getAuditLogs(
     @Request() req: any,
@@ -34,10 +30,7 @@ export class AuditController {
       }
 
       console.log('📊 Buscando logs de auditoria para usuário:', userId);
-
-      // TODO: Obter organizationId do usuário via RPC
       const organizationId = 'org-expertev-test-001';
-
       const logs = await this.auditService.getAuditLogs(organizationId, filters);
 
       return {
@@ -54,10 +47,6 @@ export class AuditController {
     }
   }
 
-  /**
-   * GET /api/v1/audit/settlements/:settlementId/history
-   * Obter timeline completa de uma apuração
-   */
   @Get('settlements/:settlementId/history')
   async getSettlementHistory(
     @Request() req: any,
@@ -70,9 +59,7 @@ export class AuditController {
       }
 
       console.log('📅 Buscando histórico da apuração:', settlementId);
-
       const organizationId = 'org-expertev-test-001';
-
       const timeline = await this.auditService.getSettlementTimeline(
         organizationId,
         settlementId
@@ -91,10 +78,6 @@ export class AuditController {
     }
   }
 
-  /**
-   * GET /api/v1/audit/settlements/:settlementId/adjustments
-   * Obter histórico de ajustes de uma apuração
-   */
   @Get('settlements/:settlementId/adjustments')
   async getAdjustmentHistory(
     @Request() req: any,
@@ -107,9 +90,7 @@ export class AuditController {
       }
 
       console.log('🔧 Buscando ajustes da apuração:', settlementId);
-
       const organizationId = 'org-expertev-test-001';
-
       const adjustments = await this.auditService.getAdjustmentHistory(
         organizationId,
         settlementId
@@ -129,10 +110,6 @@ export class AuditController {
     }
   }
 
-  /**
-   * GET /api/v1/audit/settlements/:settlementId/versions
-   * Obter histórico de versões de uma apuração
-   */
   @Get('settlements/:settlementId/versions')
   async getSettlementVersions(
     @Request() req: any,
@@ -145,7 +122,6 @@ export class AuditController {
       }
 
       console.log('📦 Buscando versões da apuração:', settlementId);
-
       const versions = await this.auditService.getSettlementVersions(
         settlementId
       );
@@ -164,10 +140,6 @@ export class AuditController {
     }
   }
 
-  /**
-   * POST /api/v1/audit/settlements/:settlementId/approve
-   * Aprovar uma apuração
-   */
   @Post('settlements/:settlementId/approve')
   async approveSetting(
     @Request() req: any,
@@ -181,9 +153,7 @@ export class AuditController {
       }
 
       console.log('✅ Aprovando apuração:', settlementId, 'Tipo:', body.approvalType);
-
       const organizationId = 'org-expertev-test-001';
-
       const result = await this.auditService.approveSetting(
         organizationId,
         userId,
