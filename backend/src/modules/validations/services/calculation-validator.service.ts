@@ -137,11 +137,7 @@ export class CalculationValidatorService {
     userOrganizationId: string
   ): Promise<ValidationResult> {
     try {
-      console.log('💾 saveValidation() chamado com:', {
-        settlementId: validation.settlementId,
-        organizationId: validation.organizationId,
-        userOrganizationId,
-      });
+      console.log('💾 saveValidation() - RLS protection via Supabase');
 
       if (validation.organizationId !== userOrganizationId) {
         return { 
@@ -172,24 +168,21 @@ export class CalculationValidatorService {
         validated_at: new Date().toISOString(),
       };
 
-      console.log('📦 Dados para INSERT:', JSON.stringify(insertData, null, 2));
-
-      // Tentar insert SEM .select()
+      // RLS do Supabase vai validar se o usuário pode inserir (organization_id match)
       const { error: insertError } = await client
         .from('calculation_validations')
         .insert([insertData]);
 
       if (insertError) {
-        console.error('❌ Erro ao inserir:', insertError);
+        console.error('❌ Erro ao inserir (RLS bloqueou?):', insertError);
         return { success: false, error: insertError.message };
       }
 
-      console.log('✅ Validação inserida com sucesso!');
+      console.log('✅ Validação inserida com sucesso via RLS!');
 
-      // Se insert funcionou, retornar sucesso
       return { 
         success: true, 
-        validation: { ...validation, id: 'generated' } 
+        validation: { ...validation, id: 'success' } 
       };
     } catch (exception) {
       console.error('❌ Exceção ao salvar validação:', exception);
@@ -201,6 +194,7 @@ export class CalculationValidatorService {
     try {
       const client = this.supabaseService.getClient();
 
+      // RLS vai filtrar apenas validações da organização do usuário
       const { data, error } = await client
         .from('calculation_validations')
         .select('*')
