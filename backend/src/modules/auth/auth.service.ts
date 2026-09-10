@@ -59,10 +59,19 @@ export class AuthService {
 
       console.log('✅ Login bem-sucedido, gerando token JWT');
 
-      const token = this.jwtService.sign({
-        sub: data.user.id,
-        email: data.user.email,
-      });
+      // Gerar JWT com signOptions explícitos
+      const token = this.jwtService.sign(
+        {
+          sub: data.user.id,
+          email: data.user.email,
+        },
+        {
+          expiresIn: '7d', // Explicitamente 7 dias
+          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        }
+      );
+
+      console.log('✅ Token JWT gerado com sucesso');
 
       return {
         access_token: token,
