@@ -2,17 +2,13 @@ export interface ValidationError {
   field: string;
   code: string;
   message: string;
-  value: any;
+  value?: any;
 }
 
 export interface CalculationValidation {
-  id?: string;
   settlementId: string;
   energyContractId: string;
   organizationId: string;
-  isValid: boolean;
-  errors: ValidationError[];
-  warnings: string[];
   consumptionKwh: number;
   regulatedCost: number;
   aclCost: number;
@@ -21,13 +17,17 @@ export interface CalculationValidation {
   honorarie: number;
   totalCost: number;
   finalValue: number;
+  isValid: boolean;
+  errors: ValidationError[];
+  warnings: string[];
   validatedAt: Date;
-  validatedBy?: string;
+  validatedBy: string;
   metadata?: Record<string, any>;
+  id?: string;
 }
 
 export interface ValidationResult {
   success: boolean;
-  validation?: CalculationValidation;
   error?: string;
+  validation?: CalculationValidation & { id?: string };
 }
