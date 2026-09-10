@@ -22,7 +22,6 @@ export class ValidationsController {
 
   /**
    * POST /api/v1/validations/calculate
-   * Valida um cálculo financeiro
    */
   @Post('calculate')
   async validateCalculation(
@@ -30,19 +29,27 @@ export class ValidationsController {
     @CurrentUser() user: JwtPayload
   ) {
     try {
+      console.log('=== INICIANDO VALIDAÇÃO ===');
       console.log('👤 @CurrentUser recebido:', JSON.stringify(user, null, 2));
 
-      // 1️⃣ Extrair userId do JWT (sub)
       const userId = user?.sub;
-      console.log('🔍 userId extraído:', userId);
+      console.log('🔍 userId do JWT (sub):', userId);
+      console.log('📝 tipo de userId:', typeof userId);
 
       if (!userId) {
-        console.error('❌ userId vazio!');
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      // 2️⃣ Debug: Consultar usuário no Supabase
-      console.log('🔎 Buscando usuário com id:', userId);
+      // Debug: Listar todos os usuários
+      console.log('🔎 Listando TODOS os usuários para debug...');
+      const { data: allUsers } = await this.supabaseService
+        .getClient()
+        .from('users')
+        .select('id, auth_user_id, email, organization_id');
+      console.log('📋 Usuários no banco:', JSON.stringify(allUsers, null, 2));
+
+      // Tentar buscar por id exato
+      console.log(`🔄 Buscando usuário com id = '${userId}'`);
       const { data: userData, error: userError } = await this.supabaseService
         .getClient()
         .from('users')
@@ -50,36 +57,38 @@ export class ValidationsController {
         .eq('id', userId)
         .single();
 
-      if (userError) {
-        console.error('❌ Erro ao buscar usuário:', userError);
-        
-        // Tentar buscar por auth_user_id
-        console.log('🔄 Tentando buscar por auth_user_id:', userId);
+      console.log('Resultado da busca por id:', { userData, userError });
+
+      if (!userData) {
+        console.log('❌ Usuário não encontrado por id, tentando por auth_user_id...');
         const { data: userData2, error: userError2 } = await this.supabaseService
           .getClient()
           .from('users')
           .select('id, auth_user_id, email, organization_id')
           .eq('auth_user_id', userId)
           .single();
-        
-        if (userError2 || !userData2) {
-          console.error('❌ Usuário não encontrado por auth_user_id:', userError2);
+
+        console.log('Resultado da busca por auth_user_id:', { userData2, userError2 });
+
+        if (!userData2) {
+          console.error('❌ Usuário não encontrado em nenhuma busca!');
           throw new BadRequestException('Usuário não encontrado no banco de dados');
         }
 
-        console.log('✅ Usuário encontrado por auth_user_id:', userData2);
         var userOrganizationId = userData2.organization_id;
+        console.log('✅ Usuário encontrado por auth_user_id:', userData2);
       } else {
-        console.log('✅ Usuário encontrado por id:', userData);
         var userOrganizationId = userData.organization_id;
+        console.log('✅ Usuário encontrado por id:', userData);
       }
 
-      // 3️⃣ Validar que a organização do payload corresponde à do usuário
+      console.log('✅ organizationId do usuário:', userOrganizationId);
+      console.log('📋 organizationId do DTO:', dto.organizationId);
+
       if (userOrganizationId !== dto.organizationId) {
         throw new BadRequestException('Usuário não tem permissão para esta organização');
       }
 
-      // 4️⃣ Validar cálculo
       const validation = this.validatorService.validateCalculation({
         consumptionKwh: dto.consumptionKwh,
         regulatedCost: dto.regulatedCost,
@@ -101,7 +110,6 @@ export class ValidationsController {
         };
       }
 
-      // 5️⃣ Salvar validação
       const result = await this.validatorService.saveValidation(
         {
           settlementId: dto.settlementId,
