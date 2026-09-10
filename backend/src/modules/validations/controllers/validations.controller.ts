@@ -1,8 +1,16 @@
-import { Controller, Post, Get, Body, Param, UseGuards, BadRequestException, Request } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { CalculationValidatorService } from '../services/calculation-validator.service';
 import { ValidateCalculationDto } from '../dto';
 import { SupabaseService } from '../../../services/supabase.service';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  iat: number;
+  exp: number;
+}
 
 @Controller('validations')
 @UseGuards(JwtAuthGuard)
@@ -17,16 +25,16 @@ export class ValidationsController {
    * Valida um cálculo financeiro
    */
   @Post('calculate')
-  async validateCalculation(@Body() dto: ValidateCalculationDto, @Request() req: any) {
+  async validateCalculation(
+    @Body() dto: ValidateCalculationDto,
+    @CurrentUser() user: JwtPayload
+  ) {
     try {
-      console.log('👤 req.user:', JSON.stringify(req.user, null, 2));
+      console.log('👤 Usuário autenticado:', user.email);
 
-      // 1️⃣ Extrair userId do JWT
-      const userId = req.user?.sub;
-      console.log('🔍 userId:', userId);
-
+      // 1️⃣ Extrair userId do JWT (sub)
+      const userId = user.sub;
       if (!userId) {
-        console.error('❌ userId vazio. req.user:', req.user);
         throw new BadRequestException('Usuário não autenticado');
       }
 
@@ -117,15 +125,14 @@ export class ValidationsController {
 
   /**
    * GET /api/v1/validations/:settlementId
+   * Recupera validações de uma apuração
    */
   @Get(':settlementId')
-  async getValidations(@Param('settlementId') settlementId: string, @Request() req: any) {
+  async getValidations(
+    @Param('settlementId') settlementId: string,
+    @CurrentUser() user: JwtPayload
+  ) {
     try {
-      const userId = req.user?.sub;
-      if (!userId) {
-        throw new BadRequestException('Usuário não autenticado');
-      }
-
       const validations = await this.validatorService.getValidationsBySettlement(settlementId);
 
       return {
@@ -142,18 +149,14 @@ export class ValidationsController {
 
   /**
    * POST /api/v1/validations/savings
+   * Calcula economia entre períodos
    */
   @Post('savings')
   async calculateSavings(
     @Body() dto: { previousBill: number; currentBill: number },
-    @Request() req: any,
+    @CurrentUser() user: JwtPayload,
   ) {
     try {
-      const userId = req.user?.sub;
-      if (!userId) {
-        throw new BadRequestException('Usuário não autenticado');
-      }
-
       const result = this.validatorService.calculateSavings(dto.previousBill, dto.currentBill);
 
       return {
