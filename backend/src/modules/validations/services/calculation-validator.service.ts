@@ -137,8 +137,9 @@ export class CalculationValidatorService {
     userOrganizationId: string
   ): Promise<ValidationResult> {
     try {
-      console.log('💾 saveValidation() com RLS via Supabase');
+      console.log('💾 saveValidation() via SECURITY DEFINER RPC');
 
+      // Validação de segurança no NestJS (defesa em profundidade)
       if (validation.organizationId !== userOrganizationId) {
         return { 
           success: false, 
@@ -148,44 +149,40 @@ export class CalculationValidatorService {
 
       const client = this.supabaseService.getClient();
 
-      const insertData = {
-        settlement_id: validation.settlementId,
-        energy_contract_id: validation.energyContractId,
-        organization_id: validation.organizationId,
-        is_valid: validation.isValid,
-        errors: validation.errors,
-        warnings: validation.warnings,
-        consumption_kwh: validation.consumptionKwh,
-        regulated_cost: validation.regulatedCost,
-        acl_cost: validation.aclCost,
-        gross_savings: validation.grossSavings,
-        net_savings: validation.netSavings,
-        honorarie: validation.honorarie,
-        total_cost: validation.totalCost,
-        final_value: validation.finalValue,
-        validated_by: validation.validatedBy,
-        metadata: validation.metadata || {},
-        validated_at: new Date().toISOString(),
-      };
-
-      console.log('📝 INSERT com RLS protection...');
+      console.log('📞 Chamando RPC insert_calculation_validation...');
       
-      // Use .select(false) to prevent implicit SELECT after INSERT
-      const { error: insertError } = await client
-        .from('calculation_validations')
-        .insert([insertData])
-        .select(false);
+      // Chamar stored procedure com SECURITY DEFINER
+      const { data, error } = await client.rpc('insert_calculation_validation', {
+        p_settlement_id: validation.settlementId,
+        p_energy_contract_id: validation.energyContractId,
+        p_organization_id: validation.organizationId,
+        p_is_valid: validation.isValid,
+        p_errors: JSON.stringify(validation.errors),
+        p_warnings: JSON.stringify(validation.warnings),
+        p_consumption_kwh: validation.consumptionKwh,
+        p_regulated_cost: validation.regulatedCost,
+        p_acl_cost: validation.aclCost,
+        p_gross_savings: validation.grossSavings,
+        p_net_savings: validation.netSavings,
+        p_honorarie: validation.honorarie,
+        p_total_cost: validation.totalCost,
+        p_final_value: validation.finalValue,
+        p_validated_by: validation.validatedBy,
+        p_metadata: JSON.stringify(validation.metadata || {}),
+        p_validated_at: new Date().toISOString(),
+      });
 
-      if (insertError) {
-        console.error('❌ Erro ao inserir:', insertError);
-        return { success: false, error: insertError.message };
+      if (error) {
+        console.error('❌ Erro ao chamar RPC:', error);
+        return { success: false, error: error.message };
       }
 
-      console.log('✅ Validação inserida com sucesso!');
+      const validationId = data && data.length > 0 ? data[0].validation_id : 'success';
+      console.log('✅ Validação inserida com sucesso! ID:', validationId);
 
       return { 
         success: true, 
-        validation: { ...validation, id: 'success' } 
+        validation: { ...validation, id: validationId } 
       };
     } catch (exception) {
       console.error('❌ Exceção ao salvar validação:', exception);
@@ -215,8 +212,8 @@ export class CalculationValidatorService {
         energyContractId: v.energy_contract_id,
         organizationId: v.organization_id,
         isValid: v.is_valid,
-        errors: v.errors,
-        warnings: v.warnings,
+        errors: Array.isArray(v.errors) ? v.errors : JSON.parse(v.errors || '[]'),
+        warnings: Array.isArray(v.warnings) ? v.warnings : JSON.parse(v.warnings || '[]'),
         consumptionKwh: v.consumption_kwh,
         regulatedCost: v.regulated_cost,
         aclCost: v.acl_cost,
@@ -227,7 +224,7 @@ export class CalculationValidatorService {
         finalValue: v.final_value,
         validatedAt: new Date(v.validated_at),
         validatedBy: v.validated_by,
-        metadata: v.metadata,
+        metadata: typeof v.metadata === 'string' ? JSON.parse(v.metadata || '{}') : v.metadata,
       }));
     } catch (exception) {
       console.error('❌ Exceção ao recuperar validações:', exception);
