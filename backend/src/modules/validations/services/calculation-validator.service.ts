@@ -148,12 +148,21 @@ export class CalculationValidatorService {
   }
 
   /**
-   * Salva validação no Supabase
+   * Salva validação no Supabase com validação de organização
    */
   async saveValidation(
-    validation: CalculationValidation & { validatedBy: string }
+    validation: CalculationValidation & { validatedBy: string },
+    userOrganizationId: string
   ): Promise<ValidationResult> {
     try {
+      // ✅ VALIDAÇÃO DE SEGURANÇA: Verificar que o usuário pertence à organização
+      if (validation.organizationId !== userOrganizationId) {
+        return { 
+          success: false, 
+          error: 'Usuário não autorizado para esta organização' 
+        };
+      }
+
       const client = this.supabaseService.getClient();
 
       const { data, error } = await client

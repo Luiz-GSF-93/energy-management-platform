@@ -1,20 +1,50 @@
-import { Controller, Post, Get, Body, Param, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, BadRequestException, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CalculationValidatorService } from '../services/calculation-validator.service';
 import { ValidateCalculationDto } from '../dto';
+import { SupabaseService } from '../../../services/supabase.service';
 
 @Controller('validations')
 @UseGuards(JwtAuthGuard)
 export class ValidationsController {
-  constructor(private validatorService: CalculationValidatorService) {}
+  constructor(
+    private validatorService: CalculationValidatorService,
+    private supabaseService: SupabaseService,
+  ) {}
 
   /**
    * POST /api/v1/validations/calculate
    * Valida um cálculo financeiro
    */
   @Post('calculate')
-  async validateCalculation(@Body() dto: ValidateCalculationDto) {
+  async validateCalculation(@Body() dto: ValidateCalculationDto, @Request() req: any) {
     try {
+      // 1️⃣ Extrair userId do JWT
+      const userId = req.user?.sub || req.user?.id;
+      if (!userId) {
+        throw new BadRequestException('Usuário não autenticado');
+      }
+
+      // 2️⃣ Buscar organização do usuário no Supabase
+      const { data: userData, error: userError } = await this.supabaseService
+        .getClient()
+        .from('users')
+        .select('organization_id')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !userData) {
+        throw new BadRequestException('Usuário não encontrado no banco de dados');
+      }
+
+      const userOrganizationId = userData.organization_id;
+
+      // 3️⃣ Validar que a organização do payload corresponde à do usuário
+      if (userOrganizationId !== dto.organizationId) {
+        throw new BadRequestException('Usuário não tem permissão para esta organização');
+      }
+
+      // 4️⃣ Validar cálculo
       const validation = this.validatorService.validateCalculation({
         consumptionKwh: dto.consumptionKwh,
         regulatedCost: dto.regulatedCost,
@@ -36,10 +66,11 @@ export class ValidationsController {
         };
       }
 
+      // 5️⃣ Salvar validação com organização confirmada
       const result = await this.validatorService.saveValidation({
         settlementId: dto.settlementId,
         energyContractId: dto.energyContractId,
-        organizationId: dto.organizationId,
+        organizationId: userOrganizationId,
         consumptionKwh: dto.consumptionKwh,
         regulatedCost: dto.regulatedCost,
         aclCost: dto.aclCost,
@@ -52,7 +83,7 @@ export class ValidationsController {
         errors: [],
         warnings: validation.warnings,
         validatedAt: new Date(),
-        validatedBy: dto.validatedBy || 'system',
+        validatedBy: userId,
         metadata: dto.metadata,
       });
 
@@ -68,7 +99,7 @@ export class ValidationsController {
         message: 'Cálculo validado com sucesso',
       };
     } catch (error) {
-      console.error('Erro na validação:', error);
+      console.error('❌ Erro na validação:', error);
       const message = error instanceof Error ? error.message : 'Erro desconhecido';
       throw new BadRequestException('Erro ao validar cálculo: ' + message);
     }
@@ -79,8 +110,13 @@ export class ValidationsController {
    * Recupera validações de uma apuração
    */
   @Get(':settlementId')
-  async getValidations(@Param('settlementId') settlementId: string) {
+  async getValidations(@Param('settlementId') settlementId: string, @Request() req: any) {
     try {
+      const userId = req.user?.sub || req.user?.id;
+      if (!userId) {
+        throw new BadRequestException('Usuário não autenticado');
+      }
+
       const validations = await this.validatorService.getValidationsBySettlement(settlementId);
 
       return {
@@ -89,7 +125,7 @@ export class ValidationsController {
         validations,
       };
     } catch (error) {
-      console.error('Erro ao recuperar validações:', error);
+      console.error('❌ Erro ao recuperar validações:', error);
       const message = error instanceof Error ? error.message : 'Erro desconhecido';
       throw new BadRequestException('Erro ao recuperar validações: ' + message);
     }
@@ -101,9 +137,15 @@ export class ValidationsController {
    */
   @Post('savings')
   async calculateSavings(
-    @Body() dto: { previousBill: number; currentBill: number }
+    @Body() dto: { previousBill: number; currentBill: number },
+    @Request() req: any,
   ) {
     try {
+      const userId = req.user?.sub || req.user?.id;
+      if (!userId) {
+        throw new BadRequestException('Usuário não autenticado');
+      }
+
       const result = this.validatorService.calculateSavings(dto.previousBill, dto.currentBill);
 
       return {
@@ -111,7 +153,7 @@ export class ValidationsController {
         ...result,
       };
     } catch (error) {
-      console.error('Erro ao calcular economia:', error);
+      console.error('❌ Erro ao calcular economia:', error);
       const message = error instanceof Error ? error.message : 'Erro desconhecido';
       throw new BadRequestException('Erro ao calcular economia: ' + message);
     }
