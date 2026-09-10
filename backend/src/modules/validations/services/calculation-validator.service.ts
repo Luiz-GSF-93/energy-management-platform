@@ -6,9 +6,6 @@ import { CalculationValidation, ValidationError, ValidationResult } from '../int
 export class CalculationValidatorService {
   constructor(private supabaseService: SupabaseService) {}
 
-  /**
-   * Valida cálculo financeiro completo
-   */
   validateCalculation(data: {
     consumptionKwh: number;
     regulatedCost: number;
@@ -22,7 +19,6 @@ export class CalculationValidatorService {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
-    // 1️⃣ Validações obrigatórias
     if (data.consumptionKwh <= 0) {
       errors.push({
         field: 'consumptionKwh',
@@ -50,7 +46,6 @@ export class CalculationValidatorService {
       });
     }
 
-    // 2️⃣ Validação de totalCost = regulatedCost + aclCost
     const expectedTotal = data.regulatedCost + data.aclCost;
     const tolerance = expectedTotal * 0.01;
     if (Math.abs(data.totalCost - expectedTotal) > tolerance) {
@@ -62,18 +57,15 @@ export class CalculationValidatorService {
       });
     }
 
-    // 3️⃣ Validação de grossSavings
     if (data.grossSavings < 0) {
       warnings.push(`Economia bruta negativa: ${data.grossSavings.toFixed(2)}`);
     }
 
-    // 4️⃣ Validação de netSavings
     const deductions = data.grossSavings - data.netSavings;
     if (deductions < 0 || deductions > data.grossSavings) {
       warnings.push(`Deduções fora do intervalo esperado: ${deductions.toFixed(2)}`);
     }
 
-    // 5️⃣ Validação de honorários
     const expectedHonorarie = data.netSavings * 0.15;
     if (Math.abs(data.honorarie - expectedHonorarie) > expectedHonorarie * 0.5) {
       warnings.push(
@@ -81,7 +73,6 @@ export class CalculationValidatorService {
       );
     }
 
-    // 6️⃣ Validação do valor final
     const expectedFinal = data.netSavings - data.honorarie;
     if (Math.abs(data.finalValue - expectedFinal) > 0.01) {
       errors.push({
@@ -99,9 +90,6 @@ export class CalculationValidatorService {
     };
   }
 
-  /**
-   * Calcula economia entre dois períodos
-   */
   calculateSavings(
     previousBill: number,
     currentBill: number
@@ -114,9 +102,6 @@ export class CalculationValidatorService {
     return { savings, percentage };
   }
 
-  /**
-   * Detecta anomalias em histórico de cálculos
-   */
   detectAnomalies(
     calculations: Array<{ finalValue: number; month: Date }>
   ): {
@@ -147,15 +132,17 @@ export class CalculationValidatorService {
     return { anomalyCount: anomalies.length, anomalies };
   }
 
-  /**
-   * Salva validação no Supabase com validação de organização
-   */
   async saveValidation(
     validation: CalculationValidation & { validatedBy: string },
     userOrganizationId: string
   ): Promise<ValidationResult> {
     try {
-      // ✅ VALIDAÇÃO DE SEGURANÇA: Verificar que o usuário pertence à organização
+      console.log('💾 saveValidation() chamado com:', {
+        settlementId: validation.settlementId,
+        organizationId: validation.organizationId,
+        userOrganizationId,
+      });
+
       if (validation.organizationId !== userOrganizationId) {
         return { 
           success: false, 
@@ -165,47 +152,51 @@ export class CalculationValidatorService {
 
       const client = this.supabaseService.getClient();
 
-      const { data, error } = await client
-        .from('calculation_validations')
-        .insert([
-          {
-            settlement_id: validation.settlementId,
-            energy_contract_id: validation.energyContractId,
-            organization_id: validation.organizationId,
-            is_valid: validation.isValid,
-            errors: validation.errors,
-            warnings: validation.warnings,
-            consumption_kwh: validation.consumptionKwh,
-            regulated_cost: validation.regulatedCost,
-            acl_cost: validation.aclCost,
-            gross_savings: validation.grossSavings,
-            net_savings: validation.netSavings,
-            honorarie: validation.honorarie,
-            total_cost: validation.totalCost,
-            final_value: validation.finalValue,
-            validated_by: validation.validatedBy,
-            metadata: validation.metadata || {},
-            validated_at: new Date().toISOString(),
-          },
-        ])
-        .select('id')
-        .single();
+      const insertData = {
+        settlement_id: validation.settlementId,
+        energy_contract_id: validation.energyContractId,
+        organization_id: validation.organizationId,
+        is_valid: validation.isValid,
+        errors: validation.errors,
+        warnings: validation.warnings,
+        consumption_kwh: validation.consumptionKwh,
+        regulated_cost: validation.regulatedCost,
+        acl_cost: validation.aclCost,
+        gross_savings: validation.grossSavings,
+        net_savings: validation.netSavings,
+        honorarie: validation.honorarie,
+        total_cost: validation.totalCost,
+        final_value: validation.finalValue,
+        validated_by: validation.validatedBy,
+        metadata: validation.metadata || {},
+        validated_at: new Date().toISOString(),
+      };
 
-      if (error) {
-        console.error('❌ Erro ao salvar validação:', error);
-        return { success: false, error: error.message };
+      console.log('📦 Dados para INSERT:', JSON.stringify(insertData, null, 2));
+
+      // Tentar insert SEM .select()
+      const { error: insertError } = await client
+        .from('calculation_validations')
+        .insert([insertData]);
+
+      if (insertError) {
+        console.error('❌ Erro ao inserir:', insertError);
+        return { success: false, error: insertError.message };
       }
 
-      return { success: true, validation: { ...validation, id: data?.id } };
+      console.log('✅ Validação inserida com sucesso!');
+
+      // Se insert funcionou, retornar sucesso
+      return { 
+        success: true, 
+        validation: { ...validation, id: 'generated' } 
+      };
     } catch (exception) {
       console.error('❌ Exceção ao salvar validação:', exception);
       return { success: false, error: String(exception) };
     }
   }
 
-  /**
-   * Recupera validações de uma apuração
-   */
   async getValidationsBySettlement(settlementId: string): Promise<CalculationValidation[]> {
     try {
       const client = this.supabaseService.getClient();
