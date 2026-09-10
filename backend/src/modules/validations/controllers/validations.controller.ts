@@ -30,49 +30,28 @@ export class ValidationsController {
   ) {
     try {
       const userId = user?.sub;
-      console.log('✅ userId do JWT:', userId);
+      console.log('✅ userId (sub):', userId);
 
       if (!userId) {
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      // Buscar usuário - tentar ambos id (text) e id (uuid)
-      let userData = null;
-      
-      // Primeira tentativa: buscar como text
-      const { data: userDataText } = await this.supabaseService
+      // Buscar organização - selecionar apenas colunas que existem
+      console.log('🔎 Buscando usuário...');
+      const { data: userData, error: userError } = await this.supabaseService
         .getClient()
         .from('users')
-        .select('organization_id')
-        .eq('id', userId)
+        .select('auth_user_id, organization_id, email')
+        .eq('auth_user_id', userId)
         .single();
 
-      if (userDataText) {
-        userData = userDataText;
-        console.log('✅ Usuário encontrado por id (text)');
-      }
-
-      // Se não encontrou, tentar como UUID
-      if (!userData) {
-        const { data: userDataUuid } = await this.supabaseService
-          .getClient()
-          .from('users')
-          .select('organization_id')
-          .eq('auth_user_id', userId)
-          .single();
-
-        if (userDataUuid) {
-          userData = userDataUuid;
-          console.log('✅ Usuário encontrado por auth_user_id');
-        }
-      }
-
-      if (!userData) {
-        console.error('❌ Usuário não encontrado');
+      if (userError || !userData) {
+        console.error('❌ Usuário não encontrado:', userError);
         throw new BadRequestException('Usuário não encontrado no banco de dados');
       }
 
       const userOrganizationId = userData.organization_id;
+      console.log('✅ Usuário encontrado. Org:', userOrganizationId);
 
       if (userOrganizationId !== dto.organizationId) {
         throw new BadRequestException('Usuário não tem permissão para esta organização');
