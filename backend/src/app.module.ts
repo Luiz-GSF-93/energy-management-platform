@@ -16,6 +16,7 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
 import { ValidationsModule } from './modules/validations/validations.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     ValidationsModule,
     AuditModule,
     ReportsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
