@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { SupabaseService } from '../../services/supabase.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
@@ -13,52 +13,79 @@ export class AuthService {
   async register(registerDto: RegisterDto) {
     const { email, password, name } = registerDto;
 
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .auth.signUp({
-        email,
-        password,
-        options: {
-          data: { name },
-        },
-      });
+    try {
+      const { data, error } = await this.supabaseService
+        .getClient()
+        .auth.signUp({
+          email,
+          password,
+          options: {
+            data: { name },
+          },
+        });
 
-    if (error) throw new UnauthorizedException(error.message);
+      if (error) {
+        console.error('❌ Erro ao registrar:', error);
+        throw new UnauthorizedException(error.message);
+      }
 
-    return {
-      message: 'Usuário criado com sucesso. Verifique seu email.',
-      user: data.user,
-    };
+      return {
+        message: 'Usuário criado com sucesso. Verifique seu email.',
+        user: data.user,
+      };
+    } catch (exception) {
+      console.error('❌ Exceção ao registrar:', exception);
+      throw new InternalServerErrorException('Erro ao registrar usuário');
+    }
   }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .auth.signInWithPassword({
-        email,
-        password,
+    try {
+      console.log(`🔐 Tentando login com email: ${email}`);
+      
+      const { data, error } = await this.supabaseService
+        .getClient()
+        .auth.signInWithPassword({
+          email,
+          password,
+        });
+
+      if (error) {
+        console.error('❌ Erro ao fazer login:', error);
+        throw new UnauthorizedException('Credenciais inválidas');
+      }
+
+      console.log('✅ Login bem-sucedido, gerando token JWT');
+
+      const token = this.jwtService.sign({
+        sub: data.user.id,
+        email: data.user.email,
       });
 
-    if (error) throw new UnauthorizedException('Credenciais inválidas');
-
-    const token = this.jwtService.sign({
-      sub: data.user.id,
-      email: data.user.email,
-    });
-
-    return {
-      access_token: token,
-      user: data.user,
-    };
+      return {
+        access_token: token,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+        },
+      };
+    } catch (exception) {
+      console.error('❌ Exceção ao fazer login:', exception);
+      if (exception instanceof UnauthorizedException) {
+        throw exception;
+      }
+      throw new InternalServerErrorException('Erro ao fazer login: ' + String(exception));
+    }
   }
 
   async validateToken(token: string) {
     try {
       const payload = this.jwtService.verify(token);
       return payload;
-    } catch {
+    } catch (exception) {
+      console.error('❌ Erro ao validar token:', exception);
       throw new UnauthorizedException('Token inválido');
     }
   }
