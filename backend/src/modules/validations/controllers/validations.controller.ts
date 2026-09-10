@@ -29,61 +29,50 @@ export class ValidationsController {
     @CurrentUser() user: JwtPayload
   ) {
     try {
-      console.log('=== INICIANDO VALIDAÇÃO ===');
-      console.log('👤 @CurrentUser recebido:', JSON.stringify(user, null, 2));
-
       const userId = user?.sub;
-      console.log('🔍 userId do JWT (sub):', userId);
-      console.log('📝 tipo de userId:', typeof userId);
+      console.log('✅ userId do JWT:', userId);
 
       if (!userId) {
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      // Debug: Listar todos os usuários
-      console.log('🔎 Listando TODOS os usuários para debug...');
-      const { data: allUsers } = await this.supabaseService
+      // Buscar usuário - tentar ambos id (text) e id (uuid)
+      let userData = null;
+      
+      // Primeira tentativa: buscar como text
+      const { data: userDataText } = await this.supabaseService
         .getClient()
         .from('users')
-        .select('id, auth_user_id, email, organization_id');
-      console.log('📋 Usuários no banco:', JSON.stringify(allUsers, null, 2));
-
-      // Tentar buscar por id exato
-      console.log(`🔄 Buscando usuário com id = '${userId}'`);
-      const { data: userData, error: userError } = await this.supabaseService
-        .getClient()
-        .from('users')
-        .select('id, auth_user_id, email, organization_id')
+        .select('organization_id')
         .eq('id', userId)
         .single();
 
-      console.log('Resultado da busca por id:', { userData, userError });
+      if (userDataText) {
+        userData = userDataText;
+        console.log('✅ Usuário encontrado por id (text)');
+      }
 
+      // Se não encontrou, tentar como UUID
       if (!userData) {
-        console.log('❌ Usuário não encontrado por id, tentando por auth_user_id...');
-        const { data: userData2, error: userError2 } = await this.supabaseService
+        const { data: userDataUuid } = await this.supabaseService
           .getClient()
           .from('users')
-          .select('id, auth_user_id, email, organization_id')
+          .select('organization_id')
           .eq('auth_user_id', userId)
           .single();
 
-        console.log('Resultado da busca por auth_user_id:', { userData2, userError2 });
-
-        if (!userData2) {
-          console.error('❌ Usuário não encontrado em nenhuma busca!');
-          throw new BadRequestException('Usuário não encontrado no banco de dados');
+        if (userDataUuid) {
+          userData = userDataUuid;
+          console.log('✅ Usuário encontrado por auth_user_id');
         }
-
-        var userOrganizationId = userData2.organization_id;
-        console.log('✅ Usuário encontrado por auth_user_id:', userData2);
-      } else {
-        var userOrganizationId = userData.organization_id;
-        console.log('✅ Usuário encontrado por id:', userData);
       }
 
-      console.log('✅ organizationId do usuário:', userOrganizationId);
-      console.log('📋 organizationId do DTO:', dto.organizationId);
+      if (!userData) {
+        console.error('❌ Usuário não encontrado');
+        throw new BadRequestException('Usuário não encontrado no banco de dados');
+      }
+
+      const userOrganizationId = userData.organization_id;
 
       if (userOrganizationId !== dto.organizationId) {
         throw new BadRequestException('Usuário não tem permissão para esta organização');
