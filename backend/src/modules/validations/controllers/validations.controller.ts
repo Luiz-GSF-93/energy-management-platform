@@ -30,28 +30,35 @@ export class ValidationsController {
   ) {
     try {
       const userId = user?.sub;
+      const userEmail = user?.email;
       console.log('✅ userId (sub):', userId);
+      console.log('✅ email:', userEmail);
 
       if (!userId) {
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      // Buscar organização - selecionar apenas colunas que existem
-      console.log('🔎 Buscando usuário...');
+      // Tentar buscar por email (mais confiável que auth_user_id)
+      console.log('🔎 Buscando usuário por email:', userEmail);
       const { data: userData, error: userError } = await this.supabaseService
         .getClient()
         .from('users')
         .select('auth_user_id, organization_id, email')
-        .eq('auth_user_id', userId)
-        .single();
+        .eq('email', userEmail)
+        .maybeSingle();
 
-      if (userError || !userData) {
-        console.error('❌ Usuário não encontrado:', userError);
+      if (userError) {
+        console.error('❌ Erro na busca por email:', userError);
+        throw new BadRequestException('Erro ao buscar usuário: ' + userError.message);
+      }
+
+      if (!userData) {
+        console.error('❌ Usuário não encontrado com email:', userEmail);
         throw new BadRequestException('Usuário não encontrado no banco de dados');
       }
 
       const userOrganizationId = userData.organization_id;
-      console.log('✅ Usuário encontrado. Org:', userOrganizationId);
+      console.log('✅ Usuário encontrado. Email:', userData.email, ' Org:', userOrganizationId);
 
       if (userOrganizationId !== dto.organizationId) {
         throw new BadRequestException('Usuário não tem permissão para esta organização');
