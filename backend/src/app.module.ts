@@ -14,6 +14,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
 import { ValidationsModule } from './modules/validations/validations.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ValidationsModule } from './modules/validations/validations.module';
     DocumentsModule,
     SettlementsModule,
     ValidationsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],
