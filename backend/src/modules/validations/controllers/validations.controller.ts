@@ -66,26 +66,29 @@ export class ValidationsController {
         };
       }
 
-      // 5️⃣ Salvar validação com organização confirmada
-      const result = await this.validatorService.saveValidation({
-        settlementId: dto.settlementId,
-        energyContractId: dto.energyContractId,
-        organizationId: userOrganizationId,
-        consumptionKwh: dto.consumptionKwh,
-        regulatedCost: dto.regulatedCost,
-        aclCost: dto.aclCost,
-        grossSavings: dto.grossSavings,
-        netSavings: dto.netSavings,
-        honorarie: dto.honorarie,
-        totalCost: dto.totalCost,
-        finalValue: dto.finalValue,
-        isValid: true,
-        errors: [],
-        warnings: validation.warnings,
-        validatedAt: new Date(),
-        validatedBy: userId,
-        metadata: dto.metadata,
-      });
+      // 5️⃣ Salvar validação com organização confirmada e userOrganizationId
+      const result = await this.validatorService.saveValidation(
+        {
+          settlementId: dto.settlementId,
+          energyContractId: dto.energyContractId,
+          organizationId: userOrganizationId,
+          consumptionKwh: dto.consumptionKwh,
+          regulatedCost: dto.regulatedCost,
+          aclCost: dto.aclCost,
+          grossSavings: dto.grossSavings,
+          netSavings: dto.netSavings,
+          honorarie: dto.honorarie,
+          totalCost: dto.totalCost,
+          finalValue: dto.finalValue,
+          isValid: true,
+          errors: [],
+          warnings: validation.warnings,
+          validatedAt: new Date(),
+          validatedBy: userId,
+          metadata: dto.metadata,
+        },
+        userOrganizationId
+      );
 
       if (!result.success) {
         throw new BadRequestException(result.error || 'Erro ao salvar validação');
