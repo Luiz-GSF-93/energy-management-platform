@@ -8,6 +8,7 @@ import { SharedModule } from './modules/shared/shared.module';
 
 // Módulos de funcionalidades
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { ConsumerUnitsModule } from './modules/consumer-units/consumer-units.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
@@ -30,6 +31,7 @@ import { BackofficeModule } from './modules/backoffice/backoffice.module';
     }),
     SharedModule,
     AuthModule,
+    UsersModule,
     CustomersModule,
     ConsumerUnitsModule,
     ContractsModule,
