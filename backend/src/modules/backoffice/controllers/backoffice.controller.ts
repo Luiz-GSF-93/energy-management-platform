@@ -1,27 +1,29 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { BackofficeService } from '../services/backoffice.service';
 
 @Controller('api/v1/backoffice')
+@UseGuards(JwtAuthGuard)
 export class BackofficeController {
   constructor(private readonly backofficeService: BackofficeService) {}
 
   @Get('dashboard')
-  async getDashboard() {
+  getDashboard() {
     return this.backofficeService.getDashboardOverview();
   }
 
   @Get('revenue-report')
-  async getRevenueReport() {
+  getRevenueReport() {
     return this.backofficeService.getRevenueReport();
   }
 
   @Get('contract-performance')
-  async getContractPerformance() {
+  getContractPerformance() {
     return this.backofficeService.getContractPerformance();
   }
 
   @Get('publication-readiness')
-  async getPublicationReadiness() {
+  getPublicationReadiness() {
     return this.backofficeService.getPublicationReadiness();
   }
 }

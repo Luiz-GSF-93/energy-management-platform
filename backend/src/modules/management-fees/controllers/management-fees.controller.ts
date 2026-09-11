@@ -1,44 +1,43 @@
-import { Controller, Get, Post, Body, Param, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ManagementFeesService } from '../services/management-fees.service';
-import { CreateFeeDto, UpdateFeeDto } from '../dtos/create-fee.dto';
+import { CreateFeeDto } from '../dtos/create-fee.dto';
 
 @Controller('api/v1/fees')
+@UseGuards(JwtAuthGuard)
 export class ManagementFeesController {
   constructor(private readonly feesService: ManagementFeesService) {}
 
   @Post()
-  async create(@Body() createFeeDto: CreateFeeDto) {
-    return this.feesService.createFee(createFeeDto);
+  create(@Body() createFeeDto: CreateFeeDto) {
+    return this.feesService.create(createFeeDto);
   }
 
   @Get()
-  async findAll() {
-    return this.feesService.findAllFees();
+  findAll(@Query('status') status?: string) {
+    if (status && ['PENDING', 'APPROVED', 'REJECTED', 'PAID'].includes(status)) {
+      return this.feesService.findByStatus(status as any);
+    }
+    return this.feesService.findAll();
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.feesService.findFeeById(id);
-  }
-
-  @Put(':id')
-  async update(@Param('id') id: string, @Body() updateFeeDto: UpdateFeeDto) {
-    return this.feesService.updateFeeStatus(id, updateFeeDto);
+  findOne(@Param('id') id: string) {
+    return this.feesService.findOne(id);
   }
 
   @Get('contract/:contractId')
-  async getFeesByContract(@Param('contractId') contractId: string) {
-    return this.feesService.findFeesByContract(contractId);
-  }
-
-  @Get('status/:status')
-  async getFeesByStatus(@Param('status') status: string) {
-    const validStatus = status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
-    return this.feesService.findFeesByStatus(validStatus);
+  getContractFees(@Param('contractId') contractId: string) {
+    return this.feesService.findByContractId(contractId);
   }
 
   @Get('analytics/overview')
-  async getAnalytics() {
-    return this.feesService.getFeesAnalytics();
+  getAnalytics() {
+    return this.feesService.getAnalytics();
+  }
+
+  @Put(':id/status')
+  updateStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.feesService.updateStatus(id, status as any);
   }
 }

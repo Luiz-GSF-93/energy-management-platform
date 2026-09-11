@@ -1,46 +1,48 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ContractsService } from '../services/contracts.service';
-import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
+import { CreateContractDto } from '../dto/create-contract.dto';
 
 @Controller('api/v1/contracts')
+@UseGuards(JwtAuthGuard)
 export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}
 
   @Post()
-  async create(@Body() createContractDto: CreateContractDto) {
+  create(@Body() createContractDto: CreateContractDto) {
     return this.contractsService.create(createContractDto);
   }
 
   @Get()
-  async findAll() {
+  findAll(@Query('status') status?: string) {
+    if (status) {
+      return this.contractsService.findByStatus(status as any);
+    }
     return this.contractsService.findAll();
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string) {
     return this.contractsService.findOne(id);
   }
 
+  @Get(':id/fees')
+  getContractFees(@Param('id') id: string) {
+    return this.contractsService.getContractFees(id);
+  }
+
+  @Get('analytics/overview')
+  getAnalytics() {
+    return this.contractsService.getAnalytics();
+  }
+
   @Put(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() updateContractDto: UpdateContractDto,
-  ) {
+  update(@Param('id') id: string, @Body() updateContractDto: any) {
     return this.contractsService.update(id, updateContractDto);
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  remove(@Param('id') id: string) {
     return this.contractsService.remove(id);
-  }
-
-  @Get(':id/fees')
-  async getContractFees(@Param('id') id: string) {
-    return this.contractsService.getContractFees(id);
-  }
-
-  @Get('status/:status')
-  async findByStatus(@Param('status') status: string) {
-    return this.contractsService.findByStatus(status);
   }
 }
