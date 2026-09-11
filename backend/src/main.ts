@@ -3,10 +3,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
   app.setGlobalPrefix('api/v1');
   
-  const corsOrigins: string[] = [
+  const corsOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
     'https://app.expertenergy.com.br',
