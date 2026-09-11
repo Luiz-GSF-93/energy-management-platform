@@ -1,32 +1,33 @@
-import { Controller, Post, Body, Get, Request, UseGuards } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { Controller, Post, Body, UseGuards, Get, Request } from '@nestjs/common';
+import { AuthService } from './services/auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
-interface AuthRequest {
-  user: {
-    userId: string;
-    email: string;
-  };
-}
-
-@Controller('auth')
+@Controller('api/v1/auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
-
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
-  }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() body: { email: string; password: string }) {
+    return this.authService.login(body.email, body.password);
   }
 
-  @Get('profile')
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email: string }) {
+    return this.authService.resetPassword(body.email);
+  }
+
   @UseGuards(JwtAuthGuard)
-  async getProfile(@Request() req: AuthRequest) {
-    return req.user;
+  @Post('change-password')
+  async changePassword(
+    @Request() req,
+    @Body() body: { oldPassword: string; newPassword: string },
+  ) {
+    return this.authService.changePassword(req.user.sub, body.oldPassword, body.newPassword);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async getProfile(@Request() req) {
+    return this.authService.getProfile(req.user.sub);
   }
 }

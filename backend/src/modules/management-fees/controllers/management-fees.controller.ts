@@ -9,35 +9,35 @@ export class ManagementFeesController {
   constructor(private readonly feesService: ManagementFeesService) {}
 
   @Post()
-  create(@Body() createFeeDto: CreateFeeDto) {
-    return this.feesService.create(createFeeDto);
+  createFee(@Body() createFeeDto: CreateFeeDto) {
+    return this.feesService.createFee(createFeeDto);
   }
 
   @Get()
-  findAll(@Query('status') status?: string) {
+  async findAllFees(@Query('status') status?: string) {
     if (status && ['PENDING', 'APPROVED', 'REJECTED', 'PAID'].includes(status)) {
-      return this.feesService.findByStatus(status as any);
+      return this.feesService.findFeesByStatus(status as any);
     }
-    return this.feesService.findAll();
+    return this.feesService.findAllFees();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.feesService.findOne(id);
+  findFeeById(@Param('id') id: string) {
+    return this.feesService.findFeeById(id);
   }
 
   @Get('contract/:contractId')
-  getContractFees(@Param('contractId') contractId: string) {
-    return this.feesService.findByContractId(contractId);
+  getFeesByContract(@Param('contractId') contractId: string) {
+    return this.feesService.findFeesByContract(contractId);
   }
 
   @Get('analytics/overview')
-  getAnalytics() {
-    return this.feesService.getAnalytics();
+  getFeesAnalytics() {
+    return this.feesService.getFeesAnalytics();
   }
 
   @Put(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.feesService.updateStatus(id, status as any);
+  updateFeeStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.feesService.updateFeeStatus(id, { status } as any);
   }
 }

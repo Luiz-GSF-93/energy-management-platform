@@ -1,111 +1,61 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Approval } from '../entities/approval.entity';
-import { Fee } from '../../management-fees/entities/fee.entity';
-import { CreateApprovalDto, ApproveApprovalDto } from '../dtos/create-approval.dto';
+import { Injectable } from '@nestjs/common';
+import { ApproveApprovalDto } from '../dtos/approve-approval.dto';
 
 @Injectable()
 export class ApprovalsService {
-  constructor(
-    @InjectRepository(Approval)
-    private approvalRepository: Repository<Approval>,
-    @InjectRepository(Fee)
-    private feeRepository: Repository<Fee>,
-  ) {}
+  private approvals: any[] = [];
 
-  async createApproval(createApprovalDto: CreateApprovalDto): Promise<Approval> {
-    const fee = await this.feeRepository.findOne({
-      where: { id: createApprovalDto.feeId },
-    });
-
-    if (!fee) {
-      throw new NotFoundException('Fee não encontrada');
-    }
-
-    const approval = this.approvalRepository.create({
-      fee,
-      approverName: createApprovalDto.approverName,
-      approverEmail: createApprovalDto.approverEmail,
+  async createApproval(createApprovalDto: any) {
+    const approval = {
+      id: Math.random().toString(36).substr(2, 9),
+      ...createApprovalDto,
       status: 'PENDING_REVIEW',
-    });
-
-    return this.approvalRepository.save(approval);
-  }
-
-  async findAllApprovals(): Promise<Approval[]> {
-    return this.approvalRepository.find({
-      relations: { fee: { contract: true } },
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async findApprovalById(id: string): Promise<Approval> {
-    const approval = await this.approvalRepository.findOne({
-      where: { id },
-      relations: { fee: { contract: true } },
-    });
-
-    if (!approval) {
-      throw new NotFoundException('Aprovação não encontrada');
-    }
-
+      createdAt: new Date(),
+    };
+    this.approvals.push(approval);
     return approval;
   }
 
-  async findApprovalsByFee(feeId: string): Promise<Approval[]> {
-    return this.approvalRepository.find({
-      where: { fee: { id: feeId } },
-      relations: { fee: { contract: true } },
-      order: { createdAt: 'DESC' },
-    });
+  async findAllApprovals() {
+    return this.approvals;
   }
 
-  async findApprovalsByStatus(status: 'APPROVED' | 'REJECTED' | 'PENDING_REVIEW'): Promise<Approval[]> {
-    return this.approvalRepository.find({
-      where: { status },
-      relations: { fee: { contract: true } },
-      order: { createdAt: 'DESC' },
-    });
+  async findApprovalById(id: string) {
+    return this.approvals.find(a => a.id === id);
   }
 
-  async approveApproval(
-    id: string,
-    approveDto: ApproveApprovalDto,
-  ): Promise<Approval> {
-    const approval = await this.findApprovalById(id);
+  async findApprovalsByStatus(status: string) {
+    return this.approvals.filter(a => a.status === status);
+  }
 
-    approval.status = approveDto.status;
-    approval.comments = approveDto.comments;
-    approval.approvedAt = new Date();
+  async findApprovalsByFee(feeId: string) {
+    return this.approvals.filter(a => a.feeId === feeId);
+  }
 
-    if (approveDto.status === 'APPROVED') {
-      approval.fee.status = 'APPROVED';
-      await this.feeRepository.save(approval.fee);
-    } else if (approveDto.status === 'REJECTED') {
-      approval.fee.status = 'REJECTED';
-      await this.feeRepository.save(approval.fee);
+  async approveApproval(id: string, approveApprovalDto: ApproveApprovalDto) {
+    const approval = this.approvals.find(a => a.id === id);
+    if (approval) {
+      approval.status = approveApprovalDto.status;
+      approval.comments = approveApprovalDto.comments;
+      approval.approvedAt = new Date();
     }
-
-    return this.approvalRepository.save(approval);
+    return approval;
   }
 
-  async getApprovalsAnalytics(): Promise<any> {
-    const approvals = await this.approvalRepository.find();
+  async getApprovalsAnalytics() {
+    const total = this.approvals.length;
+    const approved = this.approvals.filter(a => a.status === 'APPROVED').length;
+    const rejected = this.approvals.filter(a => a.status === 'REJECTED').length;
+    const pending = this.approvals.filter(a => a.status === 'PENDING_REVIEW').length;
 
-    const analytics = {
-      totalApprovals: approvals.length,
-      pendingCount: approvals.filter((a) => a.status === 'PENDING_REVIEW').length,
-      approvedCount: approvals.filter((a) => a.status === 'APPROVED').length,
-      rejectedCount: approvals.filter((a) => a.status === 'REJECTED').length,
-      approvalRate:
-        approvals.length > 0
-          ? (approvals.filter((a) => a.status === 'APPROVED').length /
-              approvals.length) *
-            100
-          : 0,
+    const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(2) : '0.00';
+
+    return {
+      total,
+      approved,
+      rejected,
+      pending,
+      approvalRate: `${approvalRate}%`,
     };
-
-    return analytics;
   }
 }

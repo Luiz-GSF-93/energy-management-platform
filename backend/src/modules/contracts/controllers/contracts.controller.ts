@@ -14,7 +14,7 @@ export class ContractsController {
   }
 
   @Get()
-  findAll(@Query('status') status?: string) {
+  async findAll(@Query('status') status?: string) {
     if (status) {
       return this.contractsService.findByStatus(status as any);
     }
@@ -33,7 +33,7 @@ export class ContractsController {
 
   @Get('analytics/overview')
   getAnalytics() {
-    return this.contractsService.getAnalytics();
+    return this.contractsService.getContractsAnalytics();
   }
 
   @Put(':id')
