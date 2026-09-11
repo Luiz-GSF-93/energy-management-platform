@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Download, Filter, FileText, ChevronRight } from 'lucide-react';
+import { Download, Filter, FileText, ChevronRight, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 interface Invoice {
@@ -139,68 +139,59 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
+      {/* Back Button */}
+      <Link href="/dashboard">
+        <button className="flex items-center gap-2 mb-6 text-orange-400 hover:text-orange-300 transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+          <span className="font-medium">Voltar ao Dashboard</span>
+        </button>
+      </Link>
+
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Faturas</h1>
-            <p className="text-gray-400">Histórico completo de consumo e custos</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Faturas</h1>
+            <p className="text-gray-400 text-sm sm:text-base">Histórico completo de consumo e custos</p>
           </div>
           <button
             onClick={exportToCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-lg font-semibold transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white rounded-lg font-semibold transition-all text-sm sm:text-base"
           >
-            <Download className="w-5 h-5" />
+            <Download className="w-4 sm:w-5 h-4 sm:h-5" />
             Exportar CSV
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all"></div>
-            <div className="relative p-4">
-              <p className="text-gray-400 text-sm mb-2">Total Gasto</p>
-              <p className="text-2xl font-bold text-white">
-                R$ {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </p>
-              <p className="text-gray-500 text-xs mt-2">{sortedInvoices.length} faturas</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          {[
+            { label: 'Total Gasto', value: `R$ ${totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, detail: `${sortedInvoices.length} faturas` },
+            { label: 'Média Mensal', value: `R$ ${avgAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, detail: 'Por mês' },
+            { label: 'Consumo Total', value: `${totalConsumption.toLocaleString('pt-BR')} kWh`, detail: 'Últimas faturas' },
+          ].map((card, i) => (
+            <div key={i} className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all"></div>
+              <div className="relative p-3 sm:p-4">
+                <p className="text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">{card.label}</p>
+                <p className="text-lg sm:text-2xl font-bold text-white break-words">{card.value}</p>
+                <p className="text-gray-500 text-xs sm:text-xs mt-1 sm:mt-2">{card.detail}</p>
+              </div>
             </div>
-          </div>
-
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all"></div>
-            <div className="relative p-4">
-              <p className="text-gray-400 text-sm mb-2">Média Mensal</p>
-              <p className="text-2xl font-bold text-white">
-                R$ {avgAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </p>
-              <p className="text-gray-500 text-xs mt-2">Por mês</p>
-            </div>
-          </div>
-
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all"></div>
-            <div className="relative p-4">
-              <p className="text-gray-400 text-sm mb-2">Consumo Total</p>
-              <p className="text-2xl font-bold text-white">
-                {totalConsumption.toLocaleString('pt-BR')} kWh
-              </p>
-              <p className="text-gray-500 text-xs mt-2">Últimas faturas</p>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 sm:gap-4 mb-6">
         <div className="flex items-center gap-2">
-          <Filter className="w-5 h-5 text-gray-400" />
-          <span className="text-gray-300 font-medium">Status:</span>
+          <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+          <span className="text-gray-300 font-medium text-sm sm:text-base">Status:</span>
         </div>
         {['todas', 'paga', 'pendente', 'vencida'].map((status) => (
           <button
             key={status}
             onClick={() => setSelectedStatus(status)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+            className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-xs sm:text-sm ${
               selectedStatus === status
                 ? 'bg-orange-500 text-white'
                 : 'bg-white/5 text-gray-300 hover:bg-white/10'
@@ -211,9 +202,10 @@ export default function InvoicesPage() {
         ))}
       </div>
 
+      {/* Table */}
       <div className="relative group">
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
-        <div className="relative p-6 overflow-x-auto">
+        <div className="relative p-4 sm:p-6 overflow-x-auto">
           {loading ? (
             <div className="flex justify-center items-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
@@ -224,14 +216,14 @@ export default function InvoicesPage() {
               <p className="text-gray-400">Nenhuma fatura encontrada</p>
             </div>
           ) : (
-            <table className="w-full">
+            <table className="w-full text-sm sm:text-base">
               <thead>
                 <tr className="border-b border-white/10">
-                  <th className="text-left py-4 px-4 text-gray-300 font-semibold">Período</th>
-                  <th className="text-left py-4 px-4 text-gray-300 font-semibold">Consumo</th>
-                  <th className="text-left py-4 px-4 text-gray-300 font-semibold">Valor</th>
-                  <th className="text-left py-4 px-4 text-gray-300 font-semibold">Status</th>
-                  <th className="text-left py-4 px-4 text-gray-300 font-semibold">Vencimento</th>
+                  <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-gray-300 font-semibold">Período</th>
+                  <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-gray-300 font-semibold">Consumo</th>
+                  <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-gray-300 font-semibold">Valor</th>
+                  <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-gray-300 font-semibold">Status</th>
+                  <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-gray-300 font-semibold">Vencimento</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,17 +232,17 @@ export default function InvoicesPage() {
                     key={invoice.id}
                     className="border-b border-white/5 hover:bg-white/5 transition-colors"
                   >
-                    <td className="py-4 px-4 text-white font-medium">{invoice.month}</td>
-                    <td className="py-4 px-4 text-gray-300">{invoice.consumption} kWh</td>
-                    <td className="py-4 px-4 text-white font-semibold">
+                    <td className="py-3 sm:py-4 px-2 sm:px-4 text-white font-medium text-xs sm:text-sm">{invoice.month}</td>
+                    <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm">{invoice.consumption} kWh</td>
+                    <td className="py-3 sm:py-4 px-2 sm:px-4 text-white font-semibold text-xs sm:text-sm">
                       R$ {invoice.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-4 px-4">
-                      <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-500/20 text-green-400">
+                    <td className="py-3 sm:py-4 px-2 sm:px-4">
+                      <span className="px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400">
                         {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-gray-300">{invoice.dueDate}</td>
+                    <td className="py-3 sm:py-4 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm">{invoice.dueDate}</td>
                   </tr>
                 ))}
               </tbody>
