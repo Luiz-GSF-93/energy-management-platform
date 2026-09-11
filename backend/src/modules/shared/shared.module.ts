@@ -1,40 +1,20 @@
-import { Module, Logger } from '@nestjs/common';
-import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { Module, Logger, Global } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
 
 const logger = new Logger('SharedModule');
 
+@Global()
 @Module({
-  imports: [
-    TypeOrmModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: async (config: ConfigService): Promise<TypeOrmModuleOptions> => {
-        const databaseUrl = config.get<string>('DATABASE_URL');
-        
-        logger.log(`DATABASE_URL: ${databaseUrl ? '✅ Configurado' : '❌ Não configurado'}`);
-
-        // ✅ KEY: Usar configuração que NÃO falha na inicialização
-        return {
-          type: 'postgres',
-          url: databaseUrl || 'postgresql://localhost:5432/test', // Fallback localhost
-          entities: [],
-          synchronize: false,
-          logging: false,
-          // ✅ Não tentar conectar na inicialização
-          dropSchema: false,
-          replication: undefined,
-          // Usar um pool mínimo
-          extra: {
-            max: 1,
-            min: 0,
-            acquireTimeoutMillis: 1000,
-          },
-        } as TypeOrmModuleOptions;
-      },
-    }),
-  ],
+  // ✅ Não usar TypeOrmModule.forRootAsync aqui
+  // Deixar cada módulo que precisar de DB registrar suas entities
   providers: [SupabaseService],
-  exports: [SupabaseService, TypeOrmModule],
+  exports: [SupabaseService],
 })
-export class SharedModule {}
+export class SharedModule {
+  constructor(private config: ConfigService) {
+    const dbUrl = this.config.get<string>('DATABASE_URL');
+    logger.log(`DATABASE_URL: ${dbUrl ? '✅ Configurado' : '❌ Não configurado'}`);
+    logger.log('✅ SharedModule - TypeORM será adicionado quando DB estiver pronto');
+  }
+}
