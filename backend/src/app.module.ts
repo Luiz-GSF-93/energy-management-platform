@@ -12,7 +12,6 @@ import { ConsumerUnitsModule } from './modules/consumer-units/consumer-units.mod
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
-import { AuditModule } from './modules/audit/audit.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
@@ -56,7 +55,6 @@ import { AppService } from './app.service';
     ApprovalsModule,
     
     // Operations
-    AuditModule,
     ReportsModule,
     NotificationsModule,
     BackofficeModule,
