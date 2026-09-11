@@ -1,143 +1,115 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  LogOut,
-  Menu,
-  X,
-  Bell,
-  Home,
-  Receipt,
-  Brain,
-  TrendingUp,
-  Cog,
-  Zap,
-} from 'lucide-react';
+import { Menu, LogOut, Settings, CreditCard, TrendingDown, Zap, BarChart3, Brain } from 'lucide-react';
 
-const navItems = [
-  { icon: Home, label: 'Dashboard', href: '/dashboard', id: 'dashboard' },
-  { icon: Receipt, label: 'Minhas Faturas', href: '/dashboard/invoices', id: 'invoices' },
-  { icon: TrendingUp, label: 'Minha Análise', href: '/dashboard/analysis', id: 'analysis' },
-  { icon: Zap, label: 'Economia', href: '/dashboard/savings', id: 'savings' },
-  { icon: Brain, label: 'IA', href: '#', id: 'ai', disabled: true },
-  { icon: Cog, label: 'Configurações', href: '/dashboard/settings', id: 'settings' },
-];
-
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav, setActiveNav] = useState('dashboard');
-  const [mounted, setMounted] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
+  const [userName, setUserName] = useState('Cliente');
 
   useEffect(() => {
-    setMounted(true);
+    // Só executar no cliente
+    const token = localStorage.getItem('auth_token');
     const name = localStorage.getItem('user_name');
-    setUserName(name);
-
-    const path = window.location.pathname.split('/').pop() || 'dashboard';
-    const navItem = navItems.find(item => item.href.includes(path));
-    if (navItem) setActiveNav(navItem.id);
-  }, []);
+    
+    if (!token) {
+      router.push('/auth/login');
+      return;
+    }
+    
+    setUserName(name || 'Cliente');
+    
+    const path = window.location.pathname;
+    if (path.includes('/dashboard/invoices')) setActiveNav('invoices');
+    else if (path.includes('/dashboard/analysis')) setActiveNav('analysis');
+    else if (path.includes('/dashboard/savings')) setActiveNav('savings');
+    else if (path.includes('/dashboard/settings')) setActiveNav('settings');
+    else setActiveNav('dashboard');
+  }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
-    localStorage.removeItem('tenant_id');
     localStorage.removeItem('user_role');
     localStorage.removeItem('user_name');
     router.push('/auth/login');
   };
 
-  if (!mounted) return null;
+  const navItems = [
+    { icon: BarChart3, label: 'Dashboard', href: '/dashboard', id: 'dashboard' },
+    { icon: CreditCard, label: 'Minhas Faturas', href: '/dashboard/invoices', id: 'invoices' },
+    { icon: TrendingDown, label: 'Minha Análise', href: '/dashboard/analysis', id: 'analysis' },
+    { icon: Zap, label: 'Economia', href: '/dashboard/savings', id: 'savings' },
+    { icon: Brain, label: 'IA', href: '/dashboard/ai', id: 'ai', disabled: true },
+    { icon: Settings, label: 'Configurações', href: '/dashboard/settings', id: 'settings' },
+  ];
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100">
       {/* Sidebar */}
-      <aside
-        className={`${
-          sidebarOpen ? 'w-64' : 'w-20'
-        } bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 overflow-y-auto`}
-      >
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
-          {sidebarOpen && (
-            <div className="flex items-center gap-2">
-              <Zap className="w-6 h-6 text-blue-600" />
-              <span className="font-bold text-gray-900 dark:text-white">Expert Energy</span>
-            </div>
-          )}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+      <div className={`fixed left-0 top-0 h-full bg-white border-r border-blue-200 shadow-lg transition-all ${sidebarOpen ? 'w-64' : 'w-20'} z-50`}>
+        {/* Logo */}
+        <div className="h-20 bg-blue-600 flex items-center justify-center border-b border-blue-200">
+          <span className={`font-bold text-xl text-white ${sidebarOpen ? '' : 'text-sm'}`}>EE</span>
         </div>
 
+        {/* Navigation */}
         <nav className="p-4 space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeNav === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  if (!item.disabled) {
-                    setActiveNav(item.id);
-                    router.push(item.href);
-                  }
-                }}
-                disabled={item.disabled}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
-                  isActive
-                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                } ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Icon size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
-              </button>
-            );
-          })}
+          {navItems.map((item) => (
+            <a
+              key={item.id}
+              href={item.disabled ? '#' : item.href}
+              onClick={(e) => {
+                if (item.disabled) e.preventDefault();
+                else setActiveNav(item.id);
+              }}
+              className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all ${
+                item.disabled
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : activeNav === item.id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-blue-50'
+              }`}
+            >
+              <item.icon size={20} />
+              {sidebarOpen && <span>{item.label}</span>}
+            </a>
+          ))}
         </nav>
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>Bem-vindo</p>
-            <p className="font-semibold text-gray-700 dark:text-gray-300">{userName || 'Cliente'}</p>
-          </div>
+        {/* Logout */}
+        <div className="absolute bottom-6 left-0 right-0 px-4">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-gray-600 hover:bg-blue-50 transition-all"
+          >
+            <LogOut size={20} />
+            {sidebarOpen && <span>Sair</span>}
+          </button>
         </div>
-      </aside>
+      </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`transition-all ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
         {/* Header */}
-        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {navItems.find(item => item.id === activeNav)?.label || 'Dashboard'}
-          </h1>
-          <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-              <Bell size={20} className="text-gray-600 dark:text-gray-400" />
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-            >
-              <LogOut size={20} />
-              <span className="text-sm font-medium">Sair</span>
-            </button>
+        <div className="h-20 bg-white border-b border-blue-200 shadow-sm flex items-center justify-between px-6">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="text-blue-600 hover:text-blue-700"
+          >
+            <Menu size={24} />
+          </button>
+          <div className="text-sm text-gray-600">
+            Bem-vindo, {userName}
           </div>
-        </header>
+        </div>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
+        <div className="min-h-[calc(100vh-80px)] p-6">
           {children}
-        </main>
+        </div>
       </div>
     </div>
   );

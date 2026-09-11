@@ -1,22 +1,17 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 
-@Controller()
+@Controller('api/v1')
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get('health')
-  getHealth() {
-    return {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      message: '✅ Backend is running!',
-      environment: process.env.NODE_ENV || 'development',
-    };
-  }
-
   @Get()
-  getHello() {
+  getHello(): string {
     return this.appService.getHello();
+  }
+  
+  @Get('health')
+  health() {
+    return this.appService.getHealth();
   }
 }
