@@ -1,10 +1,16 @@
-import type { Metadata } from 'next';
-import { AuthProvider } from '@/context/AuthContext';
-import './globals.css';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
-  title: 'Energy Management Platform',
-  description: 'Plataforma de Gerenciamento de Energia',
+  title: "Expert Energy",
+  description: "Plataforma de Gestão de Energia",
 };
 
 export default function RootLayout({
@@ -14,10 +20,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className="bg-gray-50">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+      <head>
+        <style>{`
+          :root {
+            --font-family: 'Inter', sans-serif;
+          }
+        `}</style>
+      </head>
+      <body className={`${inter.variable} bg-gray-950 text-white`}>
+        {children}
       </body>
     </html>
   );

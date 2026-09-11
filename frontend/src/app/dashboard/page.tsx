@@ -1,211 +1,177 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, FileText, AlertCircle, DollarSign, Zap, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import { TrendingUp, AlertCircle, Zap, Activity } from "lucide-react";
+import { Chart } from "@/components/dashboard/Chart";
 
 export default function DashboardHome() {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [kpis, setKpis] = useState({
-    totalSavings: 0,
-    totalInvoices: 0,
-    avgConsumption: 1250,
-    alerts: 2,
-    savingsChange: 12.5,
-    consumptionChange: -3.2,
-    thisMonthCost: 0,
-    projectedSavings: 0
-  });
-
   useEffect(() => {
-    setTimeout(() => {
-      setKpis({
-        totalSavings: 2847.50,
-        totalInvoices: 12,
-        avgConsumption: 1250,
-        alerts: 2,
-        savingsChange: 12.5,
-        consumptionChange: -3.2,
-        thisMonthCost: 487.92,
-        projectedSavings: 562.34
-      });
-      setInvoices([
-        { id: 1, month: 'Setembro', amount: 487.92, status: 'paga', consumption: 1250 },
-        { id: 2, month: 'Agosto', amount: 512.45, status: 'paga', consumption: 1380 },
-        { id: 3, month: 'Julho', amount: 498.34, status: 'paga', consumption: 1200 }
-      ]);
-      setLoading(false);
-    }, 1000);
+    const fetchInvoices = async () => {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(
+          "https://energy-management-platform.onrender.com/api/v1/invoices",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setInvoices(data.slice(0, 5));
+        }
+      } catch (error) {
+        console.error("Erro ao buscar faturas:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInvoices();
   }, []);
 
-  const StatCard = ({ title, value, unit, icon: Icon, change, changeType = 'positive' }: any) => (
-    <div className="relative group h-40">
-      <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all duration-300"></div>
-      
-      <div className="relative p-4 sm:p-6 flex flex-col justify-between h-full">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-gray-400 text-xs sm:text-sm font-medium mb-2">{title}</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl sm:text-3xl font-bold text-white">{value}</span>
-              <span className="text-gray-500 text-xs sm:text-sm">{unit}</span>
-            </div>
-          </div>
-          <div className={`p-2 sm:p-3 rounded-lg ${
-            changeType === 'positive' 
-              ? 'bg-green-500/20' 
-              : changeType === 'negative'
-              ? 'bg-red-500/20'
-              : 'bg-blue-500/20'
-          }`}>
-            <Icon className={`w-4 sm:w-5 h-4 sm:h-5 ${
-              changeType === 'positive' 
-                ? 'text-green-400' 
-                : changeType === 'negative'
-                ? 'text-red-400'
-                : 'text-blue-400'
-            }`} />
-          </div>
-        </div>
-        
-        {change !== undefined && (
-          <div className="flex items-center gap-1 mt-2 sm:mt-4">
-            {changeType === 'positive' ? (
-              <TrendingUp className="w-3 sm:w-4 h-3 sm:h-4 text-green-400" />
-            ) : (
-              <TrendingDown className="w-3 sm:w-4 h-3 sm:h-4 text-red-400" />
-            )}
-            <span className={`text-xs sm:text-sm font-semibold ${
-              changeType === 'positive' 
-                ? 'text-green-400' 
-                : 'text-red-400'
-            }`}>
-              {Math.abs(change)}%
-            </span>
-            <span className="text-gray-400 text-xs">vs. mês anterior</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const kpis = [
+    {
+      label: "Economia Total",
+      value: "R$ 2,450.00",
+      trend: "+12%",
+      icon: TrendingUp,
+      color: "from-green-500 to-emerald-600",
+    },
+    {
+      label: "Total de Faturas",
+      value: "24",
+      trend: "↑ 3 este mês",
+      icon: Zap,
+      color: "from-blue-500 to-cyan-600",
+    },
+    {
+      label: "Consumo Médio",
+      value: "1,240 kWh",
+      trend: "-8% vs mês anterior",
+      icon: Activity,
+      color: "from-purple-500 to-pink-600",
+    },
+    {
+      label: "Alertas Ativos",
+      value: "2",
+      trend: "Atenção necessária",
+      icon: AlertCircle,
+      color: "from-orange-500 to-red-600",
+    },
+  ];
 
   return (
-    <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
-      {/* Welcome Section */}
+    <div className="min-h-screen bg-gray-950 p-4 md:p-8">
+      {/* Dashboard Title */}
       <div className="mb-8">
-        <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-          Bem-vindo de volta! 👋
-        </h2>
-        <p className="text-gray-400 text-sm sm:text-base">Aqui está um resumo do seu consumo e economia.</p>
+        <h1 className="dashboard-title text-white mb-2">Dashboard</h1>
+        <p className="subtitle text-gray-400">
+          Bem-vindo de volta! Aqui está seu resumo de consumo e economia.
+        </p>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
-        <StatCard 
-          title="Economia Total"
-          value={`R$ ${kpis.totalSavings.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`}
-          unit=""
-          icon={TrendingUp}
-          change={kpis.savingsChange}
-          changeType="positive"
-        />
-        
-        <StatCard 
-          title="Total de Faturas"
-          value={kpis.totalInvoices}
-          unit="faturas"
-          icon={FileText}
-          changeType="neutral"
-        />
-        
-        <StatCard 
-          title="Consumo Médio"
-          value={kpis.avgConsumption}
-          unit="kWh"
-          icon={Zap}
-          change={kpis.consumptionChange}
-          changeType="positive"
-        />
-        
-        <StatCard 
-          title="Alertas Ativos"
-          value={kpis.alerts}
-          unit="itens"
-          icon={AlertCircle}
-          changeType="neutral"
-        />
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {kpis.map((kpi, idx) => {
+          const Icon = kpi.icon;
+          return (
+            <div
+              key={idx}
+              className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700 hover:border-gray-600 transition-all duration-300"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="menu-text text-gray-400 mb-2">{kpi.label}</p>
+                  <p className="card-kpi text-white">{kpi.value}</p>
+                </div>
+                <div
+                  className={`bg-gradient-to-br ${kpi.color} p-3 rounded-lg`}
+                >
+                  <Icon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <p className="chart-legend text-gray-500">{kpi.trend}</p>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Secondary Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-8">
-        {/* Cost This Month */}
-        <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all duration-300"></div>
-          <div className="relative p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-300 font-semibold text-sm sm:text-base">Custo Este Mês</h3>
-              <DollarSign className="w-5 h-5 text-blue-400" />
-            </div>
-            <div className="text-2xl sm:text-4xl font-bold text-white mb-2">
-              R$ {kpis.thisMonthCost.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-            </div>
-            <p className="text-gray-400 text-xs sm:text-sm">Setembro de 2026</p>
-          </div>
+      {/* Cost & Forecast Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Custo Este Mês */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <h2 className="section-title text-white mb-4">Custo Este Mês</h2>
+          <p className="card-kpi text-green-400">R$ 1,890.50</p>
+          <p className="subtitle text-gray-400 mt-2">
+            ↓ 15% vs mês anterior
+          </p>
         </div>
 
-        {/* Projected Savings */}
-        <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all duration-300"></div>
-          <div className="relative p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-gray-300 font-semibold text-sm sm:text-base">Economia Projetada</h3>
-              <TrendingUp className="w-5 h-5 text-green-400" />
-            </div>
-            <div className="text-2xl sm:text-4xl font-bold text-white mb-2">
-              R$ {kpis.projectedSavings.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-            </div>
-            <p className="text-gray-400 text-xs sm:text-sm">Próximos 30 dias</p>
-          </div>
+        {/* Economia Projetada */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <h2 className="section-title text-white mb-4">Economia Projetada</h2>
+          <p className="card-kpi text-blue-400">R$ 560.00</p>
+          <p className="subtitle text-gray-400 mt-2">
+            Com implementação de recomendações
+          </p>
         </div>
       </div>
 
       {/* Recent Invoices */}
-      <div className="relative group">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all duration-300"></div>
-        <div className="relative p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base sm:text-lg font-semibold text-white">Faturas Recentes</h3>
-            <Link href="/dashboard/invoices" className="text-orange-400 hover:text-orange-300 text-xs sm:text-sm font-medium flex items-center gap-1">
-              Ver tudo <ChevronRight className="w-4 h-4" />
-            </Link>
+      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+        <h2 className="section-title text-white mb-4">Faturas Recentes</h2>
+        {loading ? (
+          <p className="table-text text-gray-400">Carregando...</p>
+        ) : invoices.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="table-text text-gray-400 text-left py-3">
+                    Data
+                  </th>
+                  <th className="table-text text-gray-400 text-left py-3">
+                    Valor
+                  </th>
+                  <th className="table-text text-gray-400 text-left py-3">
+                    Consumo
+                  </th>
+                  <th className="table-text text-gray-400 text-left py-3">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((invoice: any, idx) => (
+                  <tr key={idx} className="border-b border-gray-700 hover:bg-gray-700/20 transition-colors">
+                    <td className="table-text text-gray-300 py-3">
+                      {new Date(invoice.date).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="table-text text-gray-300 py-3">
+                      R$ {invoice.amount.toFixed(2)}
+                    </td>
+                    <td className="table-text text-gray-300 py-3">
+                      {invoice.consumption} kWh
+                    </td>
+                    <td className="py-3">
+                      <span className="table-text bg-green-900 text-green-200 px-3 py-1 rounded-full text-xs font-medium">
+                        Pago
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          
-          {invoices.length === 0 ? (
-            <p className="text-gray-400 text-sm">Nenhuma fatura disponível</p>
-          ) : (
-            <div className="space-y-3">
-              {invoices.map((invoice) => (
-                <div key={invoice.id} className="flex items-center justify-between py-2 sm:py-3 px-3 sm:px-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/5">
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg bg-gradient-to-br from-blue-500/30 to-blue-600/20 flex items-center justify-center">
-                      <FileText className="w-4 sm:w-5 h-4 sm:h-5 text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-white font-medium text-xs sm:text-sm">{invoice.month}</p>
-                      <p className="text-gray-400 text-xs">{invoice.consumption} kWh</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white font-semibold text-xs sm:text-sm">R$ {invoice.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                    <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">{invoice.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (
+          <p className="table-text text-gray-400">Nenhuma fatura encontrada</p>
+        )}
       </div>
     </div>
   );

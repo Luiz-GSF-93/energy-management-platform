@@ -17,33 +17,44 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://energy-management-platform.onrender.com/api/v1';
+      console.log('🔐 API URL:', apiUrl);
+      console.log('📧 Email:', email);
+
       const response = await fetch(`${apiUrl}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Falha ao fazer login');
-      }
+      console.log('📡 Response status:', response.status);
+      console.log('📡 Response headers:', Object.fromEntries(response.headers));
 
       const data = await response.json();
+      console.log('📦 Response data:', data);
+
+      if (!response.ok) {
+        throw new Error(data.message || `Erro ${response.status}`);
+      }
+
       const token = data.access_token;
+      console.log('🎫 Token recebido:', token ? '✅' : '❌');
 
       if (!token) {
         throw new Error('Token não recebido do servidor');
       }
 
       localStorage.setItem('authToken', token);
+      console.log('💾 Token armazenado no localStorage');
       window.location.href = '/dashboard';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao fazer login. Tente novamente.');
-      console.error('Login error:', err);
+      const message = err instanceof Error ? err.message : 'Erro ao fazer login';
+      console.error('❌ Erro completo:', err);
+      setError(message);
     } finally {
       setIsLoading(false);
     }

@@ -1,138 +1,133 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Calendar } from 'lucide-react';
+import { useState } from "react";
+import { TrendingDown, Zap } from "lucide-react";
+import { Chart } from "@/components/dashboard/Chart";
 
 export default function AnalysisPage() {
-  const [consumptionData, setConsumptionData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [timeframe, setTimeframe] = useState("month");
 
-  useEffect(() => {
-    const mockData = [
-      { month: 'Abril', consumption: 1100, cost: 450 },
-      { month: 'Maio', consumption: 1200, cost: 490 },
-      { month: 'Junho', consumption: 1350, cost: 550 },
-      { month: 'Julho', consumption: 1200, cost: 498 },
-      { month: 'Agosto', consumption: 1380, cost: 512 },
-      { month: 'Setembro', consumption: 1250, cost: 488 },
-    ];
-    setConsumptionData(mockData);
-    setLoading(false);
-  }, []);
+  const consumptionData = {
+    labels: ["Sem 1", "Sem 2", "Sem 3", "Sem 4"],
+    datasets: [
+      {
+        label: "Consumo (kWh)",
+        data: [280, 310, 290, 250],
+        borderColor: "rgb(59, 130, 246)",
+        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        tension: 0.4,
+      },
+    ],
+  };
 
-  const avgConsumption = consumptionData.reduce((sum, d) => sum + d.consumption, 0) / consumptionData.length;
-  const maxConsumption = Math.max(...consumptionData.map(d => d.consumption));
-  const minConsumption = Math.min(...consumptionData.map(d => d.consumption));
-  const consumptionDifference = ((maxConsumption - minConsumption) / minConsumption * 100).toFixed(1);
+  const costData = {
+    labels: ["Sem 1", "Sem 2", "Sem 3", "Sem 4"],
+    datasets: [
+      {
+        label: "Custo (R$)",
+        data: [420, 465, 435, 375],
+        backgroundColor: ["rgba(34, 197, 94, 0.2)", "rgba(34, 197, 94, 0.3)", "rgba(34, 197, 94, 0.2)", "rgba(34, 197, 94, 0.25)"],
+        borderColor: "rgb(34, 197, 94)",
+        borderWidth: 1,
+      },
+    ],
+  };
 
   return (
-    <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
+    <div className="min-h-screen bg-gray-950 p-4 md:p-8">
+      {/* Title */}
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Análise de Consumo</h1>
-        <p className="text-gray-400 text-sm sm:text-base">Tendências e insights sobre seu consumo de energia</p>
+        <h1 className="dashboard-title text-white mb-2">Análise de Consumo</h1>
+        <p className="subtitle text-gray-400">
+          Visualize suas tendências e economia de energia
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
-        {[
-          { title: 'Média de Consumo', value: Math.round(avgConsumption), unit: 'kWh' },
-          { title: 'Pico de Consumo', value: maxConsumption, unit: 'kWh' },
-          { title: 'Menor Consumo', value: minConsumption, unit: 'kWh' },
-          { title: 'Variação', value: consumptionDifference, unit: '%' },
-        ].map((kpi, i) => (
-          <div key={i} className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10 group-hover:border-white/20 transition-all"></div>
-            <div className="relative p-3 sm:p-4">
-              <p className="text-gray-400 text-xs sm:text-sm mb-1 sm:mb-2">{kpi.title}</p>
-              <p className="text-lg sm:text-2xl font-bold text-white break-words">{kpi.value} {kpi.unit}</p>
-            </div>
-          </div>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <p className="menu-text text-gray-400 mb-2">Consumo Médio</p>
+          <p className="card-kpi text-blue-400">1,130 kWh</p>
+          <p className="chart-legend text-gray-500 mt-2">
+            ↑ 5% vs período anterior
+          </p>
+        </div>
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <p className="menu-text text-gray-400 mb-2">Custo Médio</p>
+          <p className="card-kpi text-green-400">R$ 424.25</p>
+          <p className="chart-legend text-gray-500 mt-2">
+            ↓ 3% vs período anterior
+          </p>
+        </div>
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <p className="menu-text text-gray-400 mb-2">Pico de Consumo</p>
+          <p className="card-kpi text-orange-400">310 kWh</p>
+          <p className="chart-legend text-gray-500 mt-2">
+            Segunda semana do mês
+          </p>
+        </div>
+      </div>
+
+      {/* Timeframe Selector */}
+      <div className="flex gap-2 mb-6">
+        {["week", "month", "quarter"].map((tf) => (
+          <button
+            key={tf}
+            onClick={() => setTimeframe(tf)}
+            className={`menu-text px-4 py-2 rounded-lg transition-all ${
+              timeframe === tf
+                ? "bg-blue-600 text-white"
+                : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+            }`}
+          >
+            {tf === "week" ? "Semana" : tf === "month" ? "Mês" : "Trimestre"}
+          </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
-          <div className="relative p-4 sm:p-6">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-4 sm:mb-6">Consumo por Mês</h3>
-            {loading ? (
-              <div className="flex justify-center h-80">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-              </div>
-            ) : (
-              <div className="h-60 sm:h-80 flex items-end gap-1 sm:gap-2">
-                {consumptionData.map((data, idx) => {
-                  const maxVal = 1500;
-                  const height = (data.consumption / maxVal) * 100;
-                  return (
-                    <div key={idx} className="flex-1 flex flex-col items-center">
-                      <div
-                        className="w-full bg-gradient-to-t from-orange-500 to-red-600 rounded-t-lg hover:from-orange-600 hover:to-red-700 transition-all"
-                        style={{ height: `${height}%`, minHeight: '20px' }}
-                        title={`${data.month}: ${data.consumption} kWh`}
-                      ></div>
-                      <p className="text-xs text-gray-400 mt-2">{data.month.slice(0, 3)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <h2 className="section-title text-white mb-4">
+            Consumo por Semana
+          </h2>
+          <Chart type="line" data={consumptionData} />
         </div>
-
-        <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
-          <div className="relative p-4 sm:p-6">
-            <h3 className="text-base sm:text-lg font-semibold text-white mb-4 sm:mb-6">Custo por Mês</h3>
-            {loading ? (
-              <div className="flex justify-center h-80">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-              </div>
-            ) : (
-              <div className="h-60 sm:h-80 flex items-end gap-1 sm:gap-2">
-                {consumptionData.map((data, idx) => {
-                  const maxCost = 600;
-                  const height = (data.cost / maxCost) * 100;
-                  return (
-                    <div key={idx} className="flex-1 flex flex-col items-center">
-                      <div
-                        className="w-full bg-gradient-to-t from-blue-500 to-cyan-400 rounded-t-lg hover:from-blue-600 hover:to-cyan-500 transition-all"
-                        style={{ height: `${height}%`, minHeight: '20px' }}
-                        title={`${data.month}: R$ ${data.cost}`}
-                      ></div>
-                      <p className="text-xs text-gray-400 mt-2">{data.month.slice(0, 3)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+          <h2 className="section-title text-white mb-4">Custo por Semana</h2>
+          <Chart type="bar" data={costData} />
         </div>
       </div>
 
-      <div className="relative group mt-6 sm:mt-8">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
-        <div className="relative p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold text-white mb-4">Insights</h3>
-          <ul className="space-y-3">
-            <li className="flex items-start gap-3 p-3 sm:p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <span className="text-lg sm:text-2xl flex-shrink-0">💡</span>
-              <p className="text-gray-300 text-xs sm:text-sm">
-                Seu consumo pico é às <strong>18h</strong>. Tente usar aparelhos de alto consumo fora deste horário.
+      {/* Insights */}
+      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
+        <h2 className="section-title text-white mb-4 flex items-center gap-2">
+          <Zap className="w-5 h-5 text-yellow-400" />
+          Insights e Recomendações
+        </h2>
+        <div className="space-y-3">
+          <div className="flex gap-3 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+            <TrendingDown className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="subtitle text-white">
+                Economia detectada na semana 4
               </p>
-            </li>
-            <li className="flex items-start gap-3 p-3 sm:p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <span className="text-lg sm:text-2xl flex-shrink-0">✓</span>
-              <p className="text-gray-300 text-xs sm:text-sm">
-                Seu consumo <strong>diminuiu 3.2%</strong> em relação ao mês anterior.
+              <p className="chart-legend text-gray-400">
+                Redução de 14% em relação à semana anterior
               </p>
-            </li>
-            <li className="flex items-start gap-3 p-3 sm:p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <span className="text-lg sm:text-2xl flex-shrink-0">⚠️</span>
-              <p className="text-gray-300 text-xs sm:text-sm">
-                Setembro teve um consumo <strong>9% acima da média</strong> de seus últimos 6 meses.
+            </div>
+          </div>
+          <div className="flex gap-3 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+            <Zap className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="subtitle text-white">
+                Pico de consumo na semana 2
               </p>
-            </li>
-          </ul>
+              <p className="chart-legend text-gray-400">
+                Considere revisar uso de equipamentos neste período
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
