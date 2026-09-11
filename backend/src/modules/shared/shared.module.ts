@@ -10,14 +10,21 @@ import { SupabaseService } from '../../services/supabase.service';
       useFactory: (config: ConfigService) => {
         const databaseUrl = config.get<string>('DATABASE_URL');
         
+        // Se não tiver DATABASE_URL, NÃO conectar ao banco
         if (!databaseUrl) {
-          console.log('⚠️ DATABASE_URL não encontrada. Usando modo de desenvolvimento.');
+          console.log('⚠️ DATABASE_URL não configurado. TypeORM desabilidato.');
           return {
-            type: 'better-sqlite3',
-            database: ':memory:',
+            type: 'postgres',
+            host: 'localhost',
+            port: 5432,
+            username: 'postgres',
+            password: 'postgres',
+            database: 'test',
             entities: [],
-            synchronize: true,
+            synchronize: false,
             logging: false,
+            retryAttempts: 0, // ✅ Não tentar reconectar
+            retryDelay: 1000,
           };
         }
 
@@ -27,6 +34,8 @@ import { SupabaseService } from '../../services/supabase.service';
           entities: [],
           synchronize: false,
           logging: false,
+          retryAttempts: 3,
+          retryDelay: 5000,
         };
       },
     }),
