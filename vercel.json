@@ -1,7 +1,10 @@
 {
-  "buildCommand": "cd frontend && npm install jiti && npm run build",
+  "version": 2,
+  "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/.next",
+  "installCommand": "npm install --legacy-peer-deps",
+  "framework": "nextjs",
   "env": {
-    "NEXT_PUBLIC_API_URL": "@next-public-api-url"
+    "NEXT_PUBLIC_API_URL": "https://energy-management-platform.onrender.com"
   }
 }
