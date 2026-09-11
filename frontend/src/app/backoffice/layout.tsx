@@ -1,118 +1,179 @@
-'use client';
+"use client";
 
-import { ReactNode } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  BarChart3,
-  Users,
-  FileText,
-  CheckCircle,
-  Settings,
   LogOut,
   Menu,
+  X,
+  Bell,
+  LayoutDashboard,
+  Users,
+  FileText,
+  DollarSign,
+  CheckCircle,
+  BarChart3,
+  ChevronRight,
+  Zap,
 } from 'lucide-react';
-import { useState } from 'react';
+
+interface BackofficeNavItem {
+  icon: any;
+  label: string;
+  href: string;
+  id: string;
+  adminOnly?: boolean;
+}
+
+const navItems: BackofficeNavItem[] = [
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/backoffice/dashboard', id: 'dashboard' },
+  { icon: Users, label: 'Usuários', href: '/backoffice/users', id: 'users', adminOnly: true },
+  { icon: FileText, label: 'Contratos', href: '/backoffice/contracts', id: 'contracts' },
+  { icon: DollarSign, label: 'Honorários', href: '/backoffice/fees', id: 'fees' },
+  { icon: CheckCircle, label: 'Aprovações', href: '/backoffice/approvals', id: 'approvals' },
+  { icon: BarChart3, label: 'Relatórios', href: '/backoffice/reports', id: 'reports' },
+];
 
 export default function BackofficeLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeNav, setActiveNav] = useState('dashboard');
+  const [mounted, setMounted] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    
+    // Obter role do token (decodificado)
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      router.push('/auth/login');
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setUserRole(payload.role || 'CLIENT');
+    } catch (e) {
+      console.error('Erro ao decodificar token:', e);
+      setUserRole('CLIENT');
+    }
+
+    const path = window.location.pathname.split('/').pop() || 'dashboard';
+    const navItem = navItems.find(item => item.href.includes(path));
+    if (navItem) setActiveNav(navItem.id);
+  }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
     router.push('/auth/login');
   };
 
-  const menuItems = [
-    {
-      label: 'Dashboard',
-      href: '/backoffice/dashboard',
-      icon: BarChart3,
-    },
-    {
-      label: 'Usuários',
-      href: '/backoffice/users',
-      icon: Users,
-    },
-    {
-      label: 'Contratos',
-      href: '/backoffice/contracts',
-      icon: FileText,
-    },
-    {
-      label: 'Honorários',
-      href: '/backoffice/fees',
-      icon: FileText,
-    },
-    {
-      label: 'Aprovações',
-      href: '/backoffice/approvals',
-      icon: CheckCircle,
-    },
-    {
-      label: 'Relatórios',
-      href: '/backoffice/reports',
-      icon: BarChart3,
-    },
-  ];
+  if (!mounted) return null;
+
+  // Filtrar itens do menu baseado no role
+  const filteredNavItems = navItems.filter(item => {
+    if (item.adminOnly && userRole !== 'ADMIN') {
+      return false;
+    }
+    return true;
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Top Bar */}
-      <div className="fixed top-0 left-0 right-0 bg-slate-900 border-b border-slate-800 px-6 py-4 z-40">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-slate-400 hover:text-white transition"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <h1 className="text-2xl font-bold text-white">
-              Expert Energy - Backoffice
-            </h1>
-          </div>
+    <div className="flex min-h-screen bg-gray-950">
+      {/* Sidebar - Mesmo do Dashboard */}
+      <aside className={`${
+        sidebarOpen ? 'w-64' : 'w-20'
+      } bg-gradient-to-b from-gray-900 to-gray-800 border-r border-gray-700 transition-all duration-300 flex flex-col`}>
+        {/* Logo */}
+        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+          {sidebarOpen && (
+            <div className="flex items-center gap-2">
+              <Zap className="w-6 h-6 text-blue-400" />
+              <span className="text-lg font-bold text-white">Expert</span>
+            </div>
+          )}
           <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
           >
-            <LogOut className="w-4 h-4" />
-            Sair
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
-      </div>
 
-      {/* Sidebar */}
-      <div
-        className={`fixed left-0 top-16 bottom-0 bg-slate-900 border-r border-slate-800 w-64 transition-transform duration-300 z-30 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <nav className="p-6 space-y-2">
-          {menuItems.map((item) => {
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-2">
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             return (
-              <Link
-                key={item.href}
+              <a
+                key={item.id}
                 href={item.href}
-                className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition group"
+                onClick={() => setActiveNav(item.id)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                  activeNav === item.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-700'
+                }`}
               >
-                <Icon className="w-5 h-5 group-hover:text-blue-500 transition" />
-                <span>{item.label}</span>
-              </Link>
+                <Icon className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
+              </a>
             );
           })}
         </nav>
-      </div>
+
+        {/* Logout */}
+        <div className="p-4 border-t border-gray-700">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-700 transition-all"
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="text-sm font-medium">Sair</span>}
+          </button>
+        </div>
+      </aside>
 
       {/* Main Content */}
-      <main className={`pt-20 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
-        <div className="p-6">{children}</div>
-      </main>
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <header className="bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 hover:bg-gray-700 rounded-lg lg:hidden transition-colors"
+          >
+            <Menu className="w-6 h-6 text-gray-300" />
+          </button>
+
+          <div className="flex items-center gap-4">
+            <button className="relative p-2 hover:bg-gray-700 rounded-lg transition-colors">
+              <Bell className="w-6 h-6 text-gray-300" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+
+            <div className="flex items-center gap-3 pl-4 border-l border-gray-700">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
+                <span className="text-white font-semibold text-sm">BO</span>
+              </div>
+              <div className="hidden md:block">
+                <p className="text-sm font-medium text-white">Backoffice</p>
+                <p className="text-xs text-gray-400 capitalize">{userRole?.toLowerCase() || 'Usuario'}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
