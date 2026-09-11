@@ -1,61 +1,67 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { FeeRepository, Fee } from '../repositories/fee.repository';
 
 @Injectable()
 export class ManagementFeesService {
-  private fees: any[] = [];
+  private readonly logger = new Logger('ManagementFeesService');
 
-  async createFee(createFeeDto: any) {
-    const fee = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...createFeeDto,
-      createdAt: new Date(),
-    };
-    this.fees.push(fee);
+  constructor(private readonly feeRepository: FeeRepository) {}
+
+  async create(dto: Partial<Fee>): Promise<Fee> {
+    this.logger.log('Creating new fee for contract: ' + dto.contractId);
+    const fee = await this.feeRepository.create(dto);
     return fee;
   }
 
-  async findAllFees() {
-    return this.fees;
+  async findAll(): Promise<Fee[]> {
+    return this.feeRepository.findAll();
   }
 
-  async findFeeById(id: string) {
-    return this.fees.find(f => f.id === id);
-  }
-
-  async findFeesByStatus(status: string) {
-    return this.fees.filter(f => f.status === status);
-  }
-
-  async findFeesByContract(contractId: string) {
-    return this.fees.filter(f => f.contractId === contractId);
-  }
-
-  async updateFeeStatus(id: string, updateFeeDto: any) {
-    const fee = this.fees.find(f => f.id === id);
-    if (fee) {
-      fee.status = updateFeeDto.status;
-    }
+  async findById(id: string): Promise<Fee> {
+    const fee = await this.feeRepository.findById(id);
+    if (!fee) throw new Error('Fee not found');
     return fee;
   }
 
-  async getFeesAnalytics() {
-    const total = this.fees.length;
-    const pending = this.fees.filter(f => f.status === 'PENDING').length;
-    const approved = this.fees.filter(f => f.status === 'APPROVED').length;
-    const paid = this.fees.filter(f => f.status === 'PAID').length;
-    const rejected = this.fees.filter(f => f.status === 'REJECTED').length;
+  async update(id: string, dto: Partial<Fee>): Promise<Fee> {
+    return this.feeRepository.update(id, dto);
+  }
 
-    const totalValue = this.fees.reduce((sum, f) => sum + (f.totalFee || 0), 0);
-    const paidValue = this.fees.filter(f => f.status === 'PAID').reduce((sum, f) => sum + (f.totalFee || 0), 0);
+  async delete(id: string): Promise<boolean> {
+    return this.feeRepository.delete(id);
+  }
+
+  async findByStatus(status: string): Promise<Fee[]> {
+    const all = await this.feeRepository.findAll();
+    return all.filter(f => f.status === status);
+  }
+
+  async findByContractId(contractId: string): Promise<Fee[]> {
+    const all = await this.feeRepository.findAll();
+    return all.filter(f => f.contractId === contractId);
+  }
+
+  async getAnalytics() {
+    const all = await this.feeRepository.findAll();
+    const pending = all.filter(f => f.status === 'PENDING');
+    const approved = all.filter(f => f.status === 'APPROVED');
+    const rejected = all.filter(f => f.status === 'REJECTED');
+    const paid = all.filter(f => f.status === 'PAID');
 
     return {
-      total,
-      pending,
-      approved,
-      paid,
-      rejected,
-      totalValue,
-      paidValue,
+      total: all.length,
+      pending: pending.length,
+      approved: approved.length,
+      rejected: rejected.length,
+      paid: paid.length,
+      totalValue: all.reduce((sum, f) => sum + f.totalFee, 0),
+      pendingValue: pending.reduce((sum, f) => sum + f.totalFee, 0),
+      approvedValue: approved.reduce((sum, f) => sum + f.totalFee, 0),
+      paidValue: paid.reduce((sum, f) => sum + f.totalFee, 0),
     };
+  }
+
+  async updateStatus(id: string, status: string): Promise<Fee> {
+    return this.feeRepository.update(id, { status });
   }
 }

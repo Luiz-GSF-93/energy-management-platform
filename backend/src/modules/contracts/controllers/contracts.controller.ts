@@ -1,48 +1,45 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
 import { ContractsService } from '../services/contracts.service';
-import { CreateContractDto } from '../dto/create-contract.dto';
+import { Contract } from '../repositories/contract.repository';
+import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 
-@Controller('api/v1/contracts')
+@Controller('contracts')
 @UseGuards(JwtAuthGuard)
 export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}
 
   @Post()
-  create(@Body() createContractDto: CreateContractDto) {
-    return this.contractsService.create(createContractDto);
+  async create(@Body() dto: Partial<Contract>) {
+    return this.contractsService.create(dto);
   }
 
   @Get()
-  async findAll(@Query('status') status?: string) {
-    if (status) {
-      return this.contractsService.findByStatus(status as any);
-    }
+  async findAll() {
     return this.contractsService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.contractsService.findOne(id);
-  }
-
-  @Get(':id/fees')
-  getContractFees(@Param('id') id: string) {
-    return this.contractsService.getContractFees(id);
-  }
-
-  @Get('analytics/overview')
-  getAnalytics() {
-    return this.contractsService.getContractsAnalytics();
+  async findById(@Param('id') id: string) {
+    return this.contractsService.findById(id);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateContractDto: any) {
-    return this.contractsService.update(id, updateContractDto);
+  async update(@Param('id') id: string, @Body() dto: Partial<Contract>) {
+    return this.contractsService.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.contractsService.remove(id);
+  async delete(@Param('id') id: string) {
+    return this.contractsService.delete(id);
+  }
+
+  @Get('status/:status')
+  async findByStatus(@Param('status') status: string) {
+    return this.contractsService.findByStatus(status);
+  }
+
+  @Get('analytics/overview')
+  async getAnalytics() {
+    return this.contractsService.getAnalytics();
   }
 }

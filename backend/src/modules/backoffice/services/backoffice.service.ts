@@ -1,138 +1,85 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Contract } from '../../contracts/entities/contract.entity';
-import { Fee } from '../../management-fees/entities/fee.entity';
-import { Approval } from '../../approvals/entities/approval.entity';
+import { Injectable, Logger } from '@nestjs/common';
+import { ContractsService } from '../../contracts/services/contracts.service';
+import { ManagementFeesService } from '../../management-fees/services/management-fees.service';
+import { ApprovalsService } from '../../approvals/services/approvals.service';
 
 @Injectable()
 export class BackofficeService {
+  private readonly logger = new Logger('BackofficeService');
+
   constructor(
-    @InjectRepository(Contract)
-    private contractRepository: Repository<Contract>,
-    @InjectRepository(Fee)
-    private feeRepository: Repository<Fee>,
-    @InjectRepository(Approval)
-    private approvalRepository: Repository<Approval>,
+    private readonly contractsService: ContractsService,
+    private readonly feesService: ManagementFeesService,
+    private readonly approvalsService: ApprovalsService,
   ) {}
 
-  async getDashboardOverview(): Promise<any> {
-    const contracts = await this.contractRepository.find();
-    const fees = await this.feeRepository.find();
-    const approvals = await this.approvalRepository.find();
+  async getDashboard() {
+    const contracts = await this.contractsService.findAll();
+    const fees = await this.feesService.findAll();
+    const approvals = await this.approvalsService.findAll();
 
     return {
       contracts: {
         total: contracts.length,
-        active: contracts.filter((c) => c.status === 'ACTIVE').length,
-        inactive: contracts.filter((c) => c.status === 'INACTIVE').length,
-        totalMonthlyFees: contracts.reduce(
-          (sum, c) => sum + Number(c.monthlyFee),
-          0,
-        ),
+        active: contracts.filter(c => c.status === 'ACTIVE').length,
+        inactive: contracts.filter(c => c.status === 'INACTIVE').length,
       },
       fees: {
         total: fees.length,
-        pending: fees.filter((f) => f.status === 'PENDING').length,
-        approved: fees.filter((f) => f.status === 'APPROVED').length,
-        rejected: fees.filter((f) => f.status === 'REJECTED').length,
-        paid: fees.filter((f) => f.status === 'PAID').length,
-        totalAmount: fees.reduce((sum, f) => sum + Number(f.totalFee), 0),
+        pending: fees.filter(f => f.status === 'PENDING').length,
+        approved: fees.filter(f => f.status === 'APPROVED').length,
+        paid: fees.filter(f => f.status === 'PAID').length,
       },
       approvals: {
         total: approvals.length,
-        pending: approvals.filter((a) => a.status === 'PENDING_REVIEW').length,
-        approved: approvals.filter((a) => a.status === 'APPROVED').length,
-        rejected: approvals.filter((a) => a.status === 'REJECTED').length,
+        pending: approvals.filter(a => a.status === 'PENDING_REVIEW').length,
+        approved: approvals.filter(a => a.status === 'APPROVED').length,
       },
-      timestamp: new Date(),
     };
   }
 
-  async getRevenueReport(): Promise<any> {
-    const fees = await this.feeRepository.find({
-      relations: { contract: true },
-    });
-
-    const byMonth: Record<string, any> = {};
-    fees.forEach((fee) => {
-      const month = new Date(fee.referenceMonth).toISOString().split('T')[0];
-      if (!byMonth[month]) {
-        byMonth[month] = {
-          month,
-          baseFees: 0,
-          commissions: 0,
-          total: 0,
-          count: 0,
-        };
-      }
-      byMonth[month].baseFees += Number(fee.baseFee);
-      byMonth[month].commissions += Number(fee.commission);
-      byMonth[month].total += Number(fee.totalFee);
-      byMonth[month].count += 1;
-    });
-
-    return Object.values(byMonth);
-  }
-
-  async getContractPerformance(): Promise<any> {
-    const contracts = await this.contractRepository.find();
-    const fees = await this.feeRepository.find({
-      relations: { contract: true },
-    });
-
-    const performance = contracts.map((contract) => {
-      const contractFees = fees.filter((f) => f.contract.id === contract.id);
-      const totalEarned = contractFees.reduce(
-        (sum, f) => sum + Number(f.totalFee),
-        0,
-      );
-      const totalSavings = contractFees.reduce(
-        (sum, f) => sum + Number(f.energySavings),
-        0,
-      );
-
-      return {
-        contractId: contract.id,
-        contractNumber: contract.contractNumber,
-        contractTitle: contract.contractTitle,
-        status: contract.status,
-        monthlyFee: contract.monthlyFee,
-        totalEarned,
-        totalSavings,
-        feeCount: contractFees.length,
-        averageFee:
-          contractFees.length > 0
-            ? totalEarned / contractFees.length
-            : 0,
-      };
-    });
-
-    return performance;
-  }
-
-  async getPublicationReadiness(): Promise<any> {
-    const fees = await this.feeRepository.find({
-      relations: { contract: true },
-    });
-
-    const approvals = await this.approvalRepository.find({
-      relations: { fee: true },
-    });
-
-    const readyForPublication = fees.filter((fee) => {
-      const approval = approvals.find((a) => a.fee.id === fee.id);
-      return fee.status === 'APPROVED' && approval?.status === 'APPROVED';
-    });
+  async getRevenueReport() {
+    const fees = await this.feesService.findAll();
+    const approved = fees.filter(f => f.status === 'APPROVED');
+    const paid = fees.filter(f => f.status === 'PAID');
 
     return {
-      totalReadyForPublication: readyForPublication.length,
-      readyFees: readyForPublication.map((f) => ({
-        id: f.id,
-        referenceMonth: f.referenceMonth,
-        totalFee: f.totalFee,
-        contract: f.contract.contractNumber,
-      })),
+      totalRevenue: fees.reduce((sum, f) => sum + f.totalFee, 0),
+      approvedRevenue: approved.reduce((sum, f) => sum + f.totalFee, 0),
+      paidRevenue: paid.reduce((sum, f) => sum + f.totalFee, 0),
+      pendingRevenue: fees
+        .filter(f => f.status === 'PENDING')
+        .reduce((sum, f) => sum + f.totalFee, 0),
+    };
+  }
+
+  async getContractPerformance() {
+    const contracts = await this.contractsService.findAll();
+    const fees = await this.feesService.findAll();
+
+    return contracts.map(contract => ({
+      contractId: contract.id,
+      contractNumber: contract.contractNumber,
+      totalFees: fees
+        .filter(f => f.contractId === contract.id)
+        .reduce((sum, f) => sum + f.totalFee, 0),
+      feeCount: fees.filter(f => f.contractId === contract.id).length,
+    }));
+  }
+
+  async getPublicationReadiness() {
+    const contracts = await this.contractsService.findAll();
+    const fees = await this.feesService.findAll();
+    const approvals = await this.approvalsService.findAll();
+
+    const readyForPublication = fees.filter(
+      f => f.status === 'APPROVED' && approvals.find(a => a.feeId === f.id && a.status === 'APPROVED'),
+    ).length;
+
+    return {
+      readyCount: readyForPublication,
+      totalCount: fees.length,
+      readinessPercentage: fees.length > 0 ? ((readyForPublication / fees.length) * 100).toFixed(2) : '0',
     };
   }
 }

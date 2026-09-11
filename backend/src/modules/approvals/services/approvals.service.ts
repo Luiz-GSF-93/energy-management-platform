@@ -1,61 +1,73 @@
-import { Injectable } from '@nestjs/common';
-import { ApproveApprovalDto } from '../dtos/approve-approval.dto';
+import { Injectable, Logger } from '@nestjs/common';
+import { ApprovalRepository, Approval } from '../repositories/approval.repository';
 
 @Injectable()
 export class ApprovalsService {
-  private approvals: any[] = [];
+  private readonly logger = new Logger('ApprovalsService');
 
-  async createApproval(createApprovalDto: any) {
-    const approval = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...createApprovalDto,
-      status: 'PENDING_REVIEW',
-      createdAt: new Date(),
-    };
-    this.approvals.push(approval);
+  constructor(private readonly approvalRepository: ApprovalRepository) {}
+
+  async create(dto: Partial<Approval>): Promise<Approval> {
+    this.logger.log('Creating new approval for fee: ' + dto.feeId);
+    return this.approvalRepository.create(dto);
+  }
+
+  async findAll(): Promise<Approval[]> {
+    return this.approvalRepository.findAll();
+  }
+
+  async findById(id: string): Promise<Approval> {
+    const approval = await this.approvalRepository.findById(id);
+    if (!approval) throw new Error('Approval not found');
     return approval;
   }
 
-  async findAllApprovals() {
-    return this.approvals;
+  async update(id: string, dto: Partial<Approval>): Promise<Approval> {
+    return this.approvalRepository.update(id, dto);
   }
 
-  async findApprovalById(id: string) {
-    return this.approvals.find(a => a.id === id);
+  async delete(id: string): Promise<boolean> {
+    return this.approvalRepository.delete(id);
   }
 
-  async findApprovalsByStatus(status: string) {
-    return this.approvals.filter(a => a.status === status);
+  async findByFeeId(feeId: string): Promise<Approval[]> {
+    const all = await this.approvalRepository.findAll();
+    return all.filter(a => a.feeId === feeId);
   }
 
-  async findApprovalsByFee(feeId: string) {
-    return this.approvals.filter(a => a.feeId === feeId);
+  async findByStatus(status: string): Promise<Approval[]> {
+    const all = await this.approvalRepository.findAll();
+    return all.filter(a => a.status === status);
   }
 
-  async approveApproval(id: string, approveApprovalDto: ApproveApprovalDto) {
-    const approval = this.approvals.find(a => a.id === id);
-    if (approval) {
-      approval.status = approveApprovalDto.status;
-      approval.comments = approveApprovalDto.comments;
-      approval.approvedAt = new Date();
-    }
-    return approval;
+  async approve(id: string, comments?: string): Promise<Approval> {
+    return this.approvalRepository.update(id, {
+      status: 'APPROVED',
+      comments,
+      approvedAt: new Date(),
+    });
   }
 
-  async getApprovalsAnalytics() {
-    const total = this.approvals.length;
-    const approved = this.approvals.filter(a => a.status === 'APPROVED').length;
-    const rejected = this.approvals.filter(a => a.status === 'REJECTED').length;
-    const pending = this.approvals.filter(a => a.status === 'PENDING_REVIEW').length;
+  async reject(id: string, comments?: string): Promise<Approval> {
+    return this.approvalRepository.update(id, {
+      status: 'REJECTED',
+      comments,
+      approvedAt: new Date(),
+    });
+  }
 
-    const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(2) : '0.00';
+  async getAnalytics() {
+    const all = await this.approvalRepository.findAll();
+    const approved = all.filter(a => a.status === 'APPROVED');
+    const rejected = all.filter(a => a.status === 'REJECTED');
+    const pending = all.filter(a => a.status === 'PENDING_REVIEW');
 
     return {
-      total,
-      approved,
-      rejected,
-      pending,
-      approvalRate: `${approvalRate}%`,
+      total: all.length,
+      approved: approved.length,
+      rejected: rejected.length,
+      pending: pending.length,
+      approvalRate: all.length > 0 ? ((approved.length / all.length) * 100).toFixed(2) : '0',
     };
   }
 }

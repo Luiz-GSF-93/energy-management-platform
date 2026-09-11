@@ -1,47 +1,50 @@
-import { Controller, Get, Post, Body, Param, Put, Query, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { Controller, Get, Post, Body, Param, Put, UseGuards } from '@nestjs/common';
 import { ApprovalsService } from '../services/approvals.service';
-import { CreateApprovalDto } from '../dtos/create-approval.dto';
-import { ApproveApprovalDto } from '../dtos/approve-approval.dto';
+import { Approval } from '../repositories/approval.repository';
+import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 
-@Controller('api/v1/approvals')
+@Controller('approvals')
 @UseGuards(JwtAuthGuard)
 export class ApprovalsController {
   constructor(private readonly approvalsService: ApprovalsService) {}
 
   @Post()
-  async create(@Body() createApprovalDto: CreateApprovalDto) {
-    return this.approvalsService.createApproval(createApprovalDto);
+  async create(@Body() dto: Partial<Approval>) {
+    return this.approvalsService.create(dto);
   }
 
   @Get()
-  async findAll(@Query('status') status?: string) {
-    if (status && ['APPROVED', 'REJECTED', 'PENDING_REVIEW'].includes(status)) {
-      return this.approvalsService.findApprovalsByStatus(status as any);
-    }
-    return this.approvalsService.findAllApprovals();
+  async findAll() {
+    return this.approvalsService.findAll();
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.approvalsService.findApprovalById(id);
+  async findById(@Param('id') id: string) {
+    return this.approvalsService.findById(id);
   }
 
   @Get('fee/:feeId')
-  async getFeeApprovals(@Param('feeId') feeId: string) {
-    return this.approvalsService.findApprovalsByFee(feeId);
+  async findByFeeId(@Param('feeId') feeId: string) {
+    return this.approvalsService.findByFeeId(feeId);
+  }
+
+  @Get('status/:status')
+  async findByStatus(@Param('status') status: string) {
+    return this.approvalsService.findByStatus(status);
+  }
+
+  @Put(':id/approve')
+  async approve(@Param('id') id: string, @Body() body: { comments?: string }) {
+    return this.approvalsService.approve(id, body.comments);
+  }
+
+  @Put(':id/reject')
+  async reject(@Param('id') id: string, @Body() body: { comments?: string }) {
+    return this.approvalsService.reject(id, body.comments);
   }
 
   @Get('analytics/overview')
   async getAnalytics() {
-    return this.approvalsService.getApprovalsAnalytics();
-  }
-
-  @Put(':id/approve')
-  async approve(
-    @Param('id') id: string,
-    @Body() approveApprovalDto: ApproveApprovalDto,
-  ) {
-    return this.approvalsService.approveApproval(id, approveApprovalDto);
+    return this.approvalsService.getAnalytics();
   }
 }

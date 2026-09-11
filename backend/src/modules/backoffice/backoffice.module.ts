@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Contract } from '../contracts/entities/contract.entity';
-import { Fee } from '../management-fees/entities/fee.entity';
-import { Approval } from '../approvals/entities/approval.entity';
-import { BackofficeController } from './controllers/backoffice.controller';
 import { BackofficeService } from './services/backoffice.service';
+import { BackofficeController } from './controllers/backoffice.controller';
+import { ContractsModule } from '../contracts/contracts.module';
+import { ManagementFeesModule } from '../management-fees/management-fees.module';
+import { ApprovalsModule } from '../approvals/approvals.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Contract, Fee, Approval])],
+  imports: [ContractsModule, ManagementFeesModule, ApprovalsModule],
   controllers: [BackofficeController],
   providers: [BackofficeService],
   exports: [BackofficeService],

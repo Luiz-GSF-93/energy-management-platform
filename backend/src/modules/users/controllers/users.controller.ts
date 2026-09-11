@@ -1,59 +1,55 @@
-import { Controller, Get, Post, Body, Param, Put, UseGuards } from '@nestjs/common';
-import { UserManagementService } from '../services/user-management.service';
-import { CreateUserDto, UpdateUserDto, AssignRoleDto } from '../dtos/create-user.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { UserRole } from '../../auth/enums/role.enum';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
+import { UsersService } from '../services/users.service';
+import { User } from '../repositories/user.repository';
+import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 
-@Controller('api/v1/users')
+@Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private readonly userManagementService: UserManagementService) {}
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  async create(@Body() dto: Partial<User>) {
+    return this.usersService.create(dto);
+  }
 
   @Get()
-  async getAllUsers() {
-    return this.userManagementService.getAllUsers();
+  async findAll() {
+    return this.usersService.findAll();
   }
 
   @Get(':id')
-  async getUserById(@Param('id') id: string) {
-    return this.userManagementService.getUserById(id);
+  async findById(@Param('id') id: string) {
+    return this.usersService.findById(id);
   }
 
   @Get('role/:role')
-  async getUsersByRole(@Param('role') role: string) {
-    const validRole = role as UserRole;
-    return this.userManagementService.getUsersByRole(validRole);
+  async findByRole(@Param('role') role: string) {
+    return this.usersService.findByRole(role);
   }
 
-  @Put(':id/profile')
-  async updateUserProfile(
-    @Param('id') id: string,
-    @Body() updates: UpdateUserDto,
-  ) {
-    return this.userManagementService.updateUserProfile(id, updates);
-  }
-
-  @Put(':id/role')
-  async assignRole(
-    @Param('id') id: string,
-    @Body() { role }: AssignRoleDto,
-  ) {
-    const validRole = role as UserRole;
-    return this.userManagementService.updateUserRole(id, validRole);
+  @Put(':id')
+  async update(@Param('id') id: string, @Body() dto: Partial<User>) {
+    return this.usersService.update(id, dto);
   }
 
   @Put(':id/activate')
-  async activateUser(@Param('id') id: string) {
-    return this.userManagementService.activateUser(id);
+  async activate(@Param('id') id: string) {
+    return this.usersService.activate(id);
   }
 
   @Put(':id/deactivate')
-  async deactivateUser(@Param('id') id: string) {
-    return this.userManagementService.deactivateUser(id);
+  async deactivate(@Param('id') id: string) {
+    return this.usersService.deactivate(id);
+  }
+
+  @Delete(':id')
+  async delete(@Param('id') id: string) {
+    return this.usersService.delete(id);
   }
 
   @Get('analytics/overview')
-  async getUsersAnalytics() {
-    return this.userManagementService.getUsersAnalytics();
+  async getAnalytics() {
+    return this.usersService.getAnalytics();
   }
 }

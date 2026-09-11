@@ -1,85 +1,48 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Contract } from '../entities/contract.entity';
-import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
+import { Injectable, Logger } from '@nestjs/common';
+import { ContractRepository, Contract } from '../repositories/contract.repository';
 
 @Injectable()
 export class ContractsService {
-  constructor(
-    @InjectRepository(Contract)
-    private contractRepository: Repository<Contract>,
-  ) {}
+  private readonly logger = new Logger('ContractsService');
 
-  async create(createContractDto: CreateContractDto): Promise<Contract> {
-    const contract = this.contractRepository.create(createContractDto);
-    return this.contractRepository.save(contract);
+  constructor(private readonly contractRepository: ContractRepository) {}
+
+  async create(dto: Partial<Contract>): Promise<Contract> {
+    this.logger.log('Creating new contract: ' + dto.contractNumber);
+    return this.contractRepository.create(dto);
   }
 
   async findAll(): Promise<Contract[]> {
-    return this.contractRepository.find({
-      order: { createdAt: 'DESC' },
-    });
+    return this.contractRepository.findAll();
   }
 
-  async findOne(id: string): Promise<Contract> {
-    const contract = await this.contractRepository.findOne({
-      where: { id },
-    });
-
-    if (!contract) {
-      throw new NotFoundException('Contrato não encontrado');
-    }
-
+  async findById(id: string): Promise<Contract> {
+    const contract = await this.contractRepository.findById(id);
+    if (!contract) throw new Error('Contract not found');
     return contract;
   }
 
-  async update(
-    id: string,
-    updateContractDto: UpdateContractDto,
-  ): Promise<Contract> {
-    const contract = await this.findOne(id);
-    Object.assign(contract, updateContractDto);
-    return this.contractRepository.save(contract);
+  async update(id: string, dto: Partial<Contract>): Promise<Contract> {
+    return this.contractRepository.update(id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    const contract = await this.findOne(id);
-    await this.contractRepository.remove(contract);
+  async delete(id: string): Promise<boolean> {
+    return this.contractRepository.delete(id);
   }
 
   async findByStatus(status: string): Promise<Contract[]> {
-    return this.contractRepository.find({
-      where: { status: status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TERMINATED' },
-      order: { createdAt: 'DESC' },
-    });
+    const all = await this.contractRepository.findAll();
+    return all.filter(c => c.status === status);
   }
 
-  async getContractFees(contractId: string): Promise<any> {
-    const contract = await this.findOne(contractId);
-    return contract;
-  }
-
-  async getContractsAnalytics(): Promise<any> {
-    const contracts = await this.contractRepository.find();
-
-    const analytics = {
-      totalContracts: contracts.length,
-      activeContracts: contracts.filter((c) => c.status === 'ACTIVE').length,
-      inactiveContracts: contracts.filter((c) => c.status === 'INACTIVE').length,
-      suspendedContracts: contracts.filter((c) => c.status === 'SUSPENDED').length,
-      terminatedContracts: contracts.filter((c) => c.status === 'TERMINATED').length,
-      totalMonthlyFees: contracts.reduce(
-        (sum, c) => sum + Number(c.monthlyFee),
-        0,
-      ),
-      averageMonthlyFee:
-        contracts.length > 0
-          ? contracts.reduce((sum, c) => sum + Number(c.monthlyFee), 0) /
-            contracts.length
-          : 0,
+  async getAnalytics() {
+    const all = await this.contractRepository.findAll();
+    return {
+      total: all.length,
+      active: all.filter(c => c.status === 'ACTIVE').length,
+      inactive: all.filter(c => c.status === 'INACTIVE').length,
+      suspended: all.filter(c => c.status === 'SUSPENDED').length,
+      totalValue: all.reduce((sum, c) => sum + c.monthlyFee, 0),
     };
-
-    return analytics;
   }
 }
