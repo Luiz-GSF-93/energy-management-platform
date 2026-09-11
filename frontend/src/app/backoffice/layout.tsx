@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, LogOut, Settings, FileText, DollarSign, CheckCircle, BarChart3, Home, Users as UsersIcon } from 'lucide-react';
+import { Menu, LogOut, Settings, FileText, Receipt, CheckCircle, BarChart3, Home, Users as UsersIcon } from 'lucide-react';
 
 export default function BackofficeLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -12,10 +12,7 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    // Marcar como cliente
     setIsClient(true);
-    
-    // Só executar no cliente
     const token = localStorage.getItem('auth_token');
     const name = localStorage.getItem('user_name');
     
@@ -28,7 +25,7 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
     
     const path = window.location.pathname;
     if (path.includes('/backoffice/contracts')) setActiveNav('contracts');
-    else if (path.includes('/backoffice/fees')) setActiveNav('fees');
+    else if (path.includes('/backoffice/invoices')) setActiveNav('invoices');
     else if (path.includes('/backoffice/approvals')) setActiveNav('approvals');
     else if (path.includes('/backoffice/reports')) setActiveNav('reports');
     else if (path.includes('/backoffice/users')) setActiveNav('users');
@@ -46,25 +43,22 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
   const navItems = [
     { icon: Home, label: 'Dashboard', href: '/backoffice', id: 'dashboard' },
     { icon: FileText, label: 'Contratos', href: '/backoffice/contracts', id: 'contracts' },
-    { icon: DollarSign, label: 'Faturas', href: '/backoffice/fees', id: 'fees' },
+    { icon: Receipt, label: 'Faturas', href: '/backoffice/invoices', id: 'invoices' },
     { icon: CheckCircle, label: 'Aprovações', href: '/backoffice/approvals', id: 'approvals' },
     { icon: UsersIcon, label: 'Usuários', href: '/backoffice/users', id: 'users' },
     { icon: BarChart3, label: 'Relatórios', href: '/backoffice/reports', id: 'reports' },
     { icon: Settings, label: 'Configurações', href: '/backoffice/settings', id: 'settings' },
   ];
 
-  if (!isClient) return null; // Evita renderização do servidor
+  if (!isClient) return null;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Sidebar */}
       <div className={`fixed left-0 top-0 h-full bg-gray-950 border-r border-gray-800 transition-all ${sidebarOpen ? 'w-64' : 'w-20'} z-50`}>
-        {/* Logo */}
         <div className="h-20 bg-orange-600 flex items-center justify-center border-b border-gray-800">
           <span className={`font-bold text-xl ${sidebarOpen ? '' : 'text-sm'}`}>EE</span>
         </div>
 
-        {/* Navigation */}
         <nav className="p-4 space-y-2">
           {navItems.map((item) => (
             <a
@@ -83,7 +77,6 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
           ))}
         </nav>
 
-        {/* Logout */}
         <div className="absolute bottom-6 left-0 right-0 px-4">
           <button
             onClick={handleLogout}
@@ -95,9 +88,7 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
         </div>
       </div>
 
-      {/* Main Content */}
       <div className={`transition-all ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
-        {/* Header */}
         <div className="h-20 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-6">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -110,7 +101,6 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
           </div>
         </div>
 
-        {/* Page Content */}
         <div className="bg-gray-900 min-h-[calc(100vh-80px)]">
           {children}
         </div>
