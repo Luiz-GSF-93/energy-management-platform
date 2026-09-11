@@ -17,17 +17,15 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        'https://energy-management-platform.onrender.com/api/v1/auth/login',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const response = await fetch(`${apiUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -35,7 +33,7 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      const token = data.data?.access_token;
+      const token = data.access_token;
 
       if (!token) {
         throw new Error('Token não recebido do servidor');
@@ -53,16 +51,13 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      {/* Background decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl"></div>
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        {/* Card Container */}
         <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl p-8">
-          {/* Logo and Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
               <Image
@@ -78,7 +73,6 @@ export default function LoginPage() {
             <p className="text-gray-300 text-sm">Plataforma de Gestão de Energia</p>
           </div>
 
-          {/* Error Alert */}
           {error && (
             <div className="mb-6 flex items-start space-x-3 p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -86,9 +80,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email Input */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-200 mb-2">
                 Email
@@ -105,7 +97,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password Input */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">
                 Senha
@@ -132,7 +123,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
@@ -149,13 +139,11 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Footer */}
           <p className="text-center text-xs text-gray-400 mt-6">
             Credenciais de teste fornecidas para demonstração
           </p>
         </div>
 
-        {/* Support Text */}
         <p className="text-center text-gray-400 text-sm mt-6">
           Problemas ao acessar? Entre em contato com o suporte
         </p>
