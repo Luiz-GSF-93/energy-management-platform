@@ -1,8 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
 
 export default function SavingsPage() {
   const [selectedSimulation, setSelectedSimulation] = useState<string>('default');
@@ -59,20 +57,11 @@ export default function SavingsPage() {
 
   return (
     <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
-      {/* Back Button */}
-      <Link href="/dashboard">
-        <button className="flex items-center gap-2 mb-6 text-orange-400 hover:text-orange-300 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Voltar ao Dashboard</span>
-        </button>
-      </Link>
-
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Economia</h1>
         <p className="text-gray-400 text-sm sm:text-base">Visualize e simule suas economias</p>
       </div>
 
-      {/* Summary Cards - Responsivo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
         {[
           { label: 'Total Economizado', value: `R$ ${savingsData.totalSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` },
@@ -90,7 +79,6 @@ export default function SavingsPage() {
         ))}
       </div>
 
-      {/* Simulation Section */}
       <div className="mb-8">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">Simule suas economias</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
@@ -111,9 +99,7 @@ export default function SavingsPage() {
           ))}
         </div>
 
-        {/* Details and Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          {/* Details */}
           <div className="relative group">
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
             <div className="relative p-4 sm:p-6">
@@ -135,7 +121,6 @@ export default function SavingsPage() {
             </div>
           </div>
 
-          {/* Comparison */}
           <div className="relative group">
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
             <div className="relative p-4 sm:p-6">
@@ -170,7 +155,6 @@ export default function SavingsPage() {
         </div>
       </div>
 
-      {/* Strategies */}
       <div className="relative group">
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
         <div className="relative p-4 sm:p-6">

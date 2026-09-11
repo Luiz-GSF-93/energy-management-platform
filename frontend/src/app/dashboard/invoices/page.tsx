@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Download, Filter, FileText, ChevronRight, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { Download, Filter, FileText } from 'lucide-react';
 
 interface Invoice {
   id: string;
@@ -140,14 +139,6 @@ export default function InvoicesPage() {
 
   return (
     <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
-      {/* Back Button */}
-      <Link href="/dashboard">
-        <button className="flex items-center gap-2 mb-6 text-orange-400 hover:text-orange-300 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Voltar ao Dashboard</span>
-        </button>
-      </Link>
-
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -181,7 +172,6 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-2 sm:gap-4 mb-6">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
@@ -202,7 +192,6 @@ export default function InvoicesPage() {
         ))}
       </div>
 
-      {/* Table */}
       <div className="relative group">
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
         <div className="relative p-4 sm:p-6 overflow-x-auto">

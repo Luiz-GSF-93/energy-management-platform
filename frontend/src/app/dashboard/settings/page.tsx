@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Save, Bell, Lock, User, LogOut, ArrowLeft } from 'lucide-react';
+import { Save, Bell, Lock, User, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 interface FormData {
   fullName: string;
@@ -61,14 +60,6 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
-      {/* Back Button */}
-      <Link href="/dashboard">
-        <button className="flex items-center gap-2 mb-6 text-orange-400 hover:text-orange-300 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Voltar ao Dashboard</span>
-        </button>
-      </Link>
-
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Configurações</h1>
         <p className="text-gray-400 text-sm sm:text-base">Gerencie seu perfil e preferências</p>

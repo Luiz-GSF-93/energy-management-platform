@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Calendar, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { BarChart3, TrendingUp, Calendar } from 'lucide-react';
 
 export default function AnalysisPage() {
   const [consumptionData, setConsumptionData] = useState<any[]>([]);
@@ -28,14 +27,6 @@ export default function AnalysisPage() {
 
   return (
     <div className="p-6 sm:p-8 bg-gray-950 min-h-full">
-      {/* Back Button */}
-      <Link href="/dashboard">
-        <button className="flex items-center gap-2 mb-6 text-orange-400 hover:text-orange-300 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-medium">Voltar ao Dashboard</span>
-        </button>
-      </Link>
-
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Análise de Consumo</h1>
         <p className="text-gray-400 text-sm sm:text-base">Tendências e insights sobre seu consumo de energia</p>
@@ -59,7 +50,6 @@ export default function AnalysisPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Consumption Chart */}
         <div className="relative group">
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
           <div className="relative p-4 sm:p-6">
@@ -89,7 +79,6 @@ export default function AnalysisPage() {
           </div>
         </div>
 
-        {/* Cost Chart */}
         <div className="relative group">
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
           <div className="relative p-4 sm:p-6">
@@ -120,7 +109,6 @@ export default function AnalysisPage() {
         </div>
       </div>
 
-      {/* Insights */}
       <div className="relative group mt-6 sm:mt-8">
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl backdrop-blur-md border border-white/10"></div>
         <div className="relative p-4 sm:p-6">
