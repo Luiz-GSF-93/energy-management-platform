@@ -3,8 +3,16 @@
 import { useState, useEffect } from "react";
 import { Download, Filter } from "lucide-react";
 
+interface Invoice {
+  id: string;
+  date: string;
+  period?: string;
+  consumption: number;
+  amount: number;
+}
+
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
@@ -145,7 +153,7 @@ export default function InvoicesPage() {
               </tr>
             </thead>
             <tbody>
-              {invoices.map((invoice: any, idx) => (
+              {invoices.map((invoice: Invoice, idx: number) => (
                 <tr
                   key={idx}
                   className="border-b border-gray-700 hover:bg-gray-700/20 transition-colors"
