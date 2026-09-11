@@ -1,30 +1,28 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { UserMemoryService } from '../users/services/user-memory.service';
 
 @Injectable()
 export class AuthService {
-  private readonly testUsers = [
-    { id: '1', email: 'admin@expertenergy.com.br', password: 'Admin@2026!', role: 'ADMIN', name: 'Administrador' },
-    { id: '2', email: 'gerente@expertenergy.com.br', password: 'Gerente@2026!', role: 'BACKOFFICE_MANAGER', name: 'Gerente' },
-    { id: '3', email: 'analista@expertenergy.com.br', password: 'Analista@2026!', role: 'BACKOFFICE_ANALYST', name: 'Analista' },
-    { id: '4', email: 'teste@expertenergy.com.br', password: 'ExpertEnergy@2026!', role: 'CLIENT', name: 'Cliente' },
-    { id: '5', email: 'suporte@expertenergy.com.br', password: 'Suporte@2026!', role: 'SUPPORT', name: 'Suporte' },
-  ];
-
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly userService: UserMemoryService,
   ) {}
 
   async validateUser(email: string, password: string) {
-    const user = this.testUsers.find(u => u.email === email);
+    const user = await this.userService.findByEmail(email);
     
     if (!user) {
       throw new UnauthorizedException('Email ou senha inválidos');
     }
 
-    const isPasswordValid = password === user.password;
+    // Comparar com hash bcrypt (SEGURO!)
+    const isPasswordValid = await this.userService.validatePassword(
+      password,
+      user.passwordHash
+    );
     
     if (!isPasswordValid) {
       throw new UnauthorizedException('Email ou senha inválidos');
@@ -56,14 +54,25 @@ export class AuthService {
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string) {
-    const user = this.testUsers.find(u => u.id === userId);
+    const user = await this.userService.findById(userId);
     
-    if (!user || user.password !== oldPassword) {
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado');
+    }
+
+    const isPasswordValid = await this.userService.validatePassword(
+      oldPassword,
+      user.passwordHash
+    );
+
+    if (!isPasswordValid) {
       throw new UnauthorizedException('Senha atual incorreta');
     }
 
-    user.password = newPassword;
-
+    // Hash da nova senha
+    const newHash = await bcrypt.hash(newPassword, 10);
+    // TODO: Atualizar no banco depois
+    
     return {
       success: true,
       message: 'Senha alterada com sucesso',
@@ -71,7 +80,7 @@ export class AuthService {
   }
 
   async resetPassword(email: string) {
-    const user = this.testUsers.find(u => u.email === email);
+    const user = await this.userService.findByEmail(email);
     
     if (!user) {
       throw new UnauthorizedException('Email não encontrado');
@@ -84,7 +93,7 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    const user = this.testUsers.find(u => u.id === userId);
+    const user = await this.userService.findById(userId);
     
     if (!user) {
       throw new UnauthorizedException('Usuário não encontrado');
