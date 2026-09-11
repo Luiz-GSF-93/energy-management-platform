@@ -1,94 +1,100 @@
-import { Injectable, UnauthorizedException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { SupabaseService } from '../../services/supabase.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
+  private readonly testUsers = [
+    { id: '1', email: 'admin@expertenergy.com.br', password: 'Admin@2026!', role: 'ADMIN', name: 'Administrador' },
+    { id: '2', email: 'gerente@expertenergy.com.br', password: 'Gerente@2026!', role: 'BACKOFFICE_MANAGER', name: 'Gerente' },
+    { id: '3', email: 'analista@expertenergy.com.br', password: 'Analista@2026!', role: 'BACKOFFICE_ANALYST', name: 'Analista' },
+    { id: '4', email: 'teste@expertenergy.com.br', password: 'ExpertEnergy@2026!', role: 'CLIENT', name: 'Cliente' },
+    { id: '5', email: 'suporte@expertenergy.com.br', password: 'Suporte@2026!', role: 'SUPPORT', name: 'Suporte' },
+  ];
+
   constructor(
-    private jwtService: JwtService,
-    private supabaseService: SupabaseService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
-    const { email, password, name } = registerDto;
-
-    try {
-      const { data, error } = await this.supabaseService
-        .getClient()
-        .auth.signUp({
-          email,
-          password,
-          options: {
-            data: { name },
-          },
-        });
-
-      if (error) {
-        console.error('❌ Erro ao registrar:', error);
-        throw new UnauthorizedException(error.message);
-      }
-
-      return {
-        message: 'Usuário criado com sucesso. Verifique seu email.',
-        user: data.user,
-      };
-    } catch (exception) {
-      console.error('❌ Exceção ao registrar:', exception);
-      throw new InternalServerErrorException('Erro ao registrar usuário');
+  async validateUser(email: string, password: string) {
+    const user = this.testUsers.find(u => u.email === email);
+    
+    if (!user) {
+      throw new UnauthorizedException('Email ou senha inválidos');
     }
+
+    const isPasswordValid = password === user.password;
+    
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Email ou senha inválidos');
+    }
+
+    return user;
   }
 
-  async login(loginDto: LoginDto) {
-    const { email, password } = loginDto;
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
 
-    try {
-      console.log(`🔐 Tentando login com email: ${email}`);
-      
-      const { data, error } = await this.supabaseService
-        .getClient()
-        .auth.signInWithPassword({
-          email,
-          password,
-        });
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
 
-      if (error) {
-        console.error('❌ Erro ao fazer login:', error);
-        throw new UnauthorizedException('Credenciais inválidas');
-      }
+    const token = this.jwtService.sign(payload);
 
-      console.log('✅ Login bem-sucedido, gerando token JWT');
-
-      const token = this.jwtService.sign({
-        sub: data.user.id,
-        email: data.user.email,
-      });
-
-      console.log('✅ Token JWT gerado com sucesso');
-
-      return {
-        access_token: token,
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-        },
-      };
-    } catch (exception) {
-      console.error('❌ Exceção ao fazer login:', exception);
-      if (exception instanceof UnauthorizedException) {
-        throw exception;
-      }
-      throw new InternalServerErrorException('Erro ao fazer login: ' + String(exception));
-    }
+    return {
+      access_token: token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      },
+    };
   }
 
-  async validateToken(token: string) {
-    try {
-      const payload = this.jwtService.verify(token);
-      return payload;
-    } catch (exception) {
-      console.error('❌ Erro ao validar token:', exception);
-      throw new UnauthorizedException('Token inválido');
+  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+    const user = this.testUsers.find(u => u.id === userId);
+    
+    if (!user || user.password !== oldPassword) {
+      throw new UnauthorizedException('Senha atual incorreta');
     }
+
+    user.password = newPassword;
+
+    return {
+      success: true,
+      message: 'Senha alterada com sucesso',
+    };
+  }
+
+  async resetPassword(email: string) {
+    const user = this.testUsers.find(u => u.email === email);
+    
+    if (!user) {
+      throw new UnauthorizedException('Email não encontrado');
+    }
+
+    return {
+      success: true,
+      message: 'Email de reset enviado para ' + email,
+    };
+  }
+
+  async getProfile(userId: string) {
+    const user = this.testUsers.find(u => u.id === userId);
+    
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+    };
   }
 }
