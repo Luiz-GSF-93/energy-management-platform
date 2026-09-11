@@ -1,261 +1,192 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, Loader } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('admin@expertenergy.com.br');
+  const [password, setPassword] = useState('Admin@2026!');
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  const testCredentials = [
+    { role: 'Admin', email: 'admin@expertenergy.com.br', password: 'Admin@2026!' },
+    { role: 'Cliente', email: 'teste@expertenergy.com.br', password: 'ExpertEnergy@2026!' },
+    { role: 'Gerente', email: 'gerente@expertenergy.com.br', password: 'Gerente@2026!' },
+  ];
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError('');
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "https://energy-management-platform.onrender.com/api/v1/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const response = await fetch('https://energy-management-platform.onrender.com/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-      if (response.ok) {
-        const data = await response.json();
-        localStorage.setItem("auth_token", data.access_token);
-        router.push("/dashboard");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Credenciais inválidas');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('auth_token', data.access_token);
+
+      if (data.user.role === 'CLIENT') {
+        router.push('/dashboard');
       } else {
-        const errorData = await response.json();
-        setError(errorData.message || "Email ou senha inválidos");
+        router.push('/backoffice/dashboard');
       }
     } catch (err) {
-      setError("Erro ao conectar ao servidor. Tente novamente.");
-      console.error(err);
+      setError(err instanceof Error ? err.message : 'Erro ao fazer login');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setForgotLoading(true);
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setForgotSuccess(true);
-      setForgotEmail("");
-      setTimeout(() => {
-        setShowForgotPassword(false);
-        setForgotSuccess(false);
-      }, 3000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setForgotLoading(false);
-    }
+  const fillCredentials = (cred: typeof testCredentials[0]) => {
+    setEmail(cred.email);
+    setPassword(cred.password);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex items-center justify-center p-4">
-      {/* Background blur effect */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl"></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center p-4">
+      {/* Background Effect */}
+      <div className="absolute inset-0 opacity-30">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-cyan-500 rounded-full mix-blend-multiply filter blur-3xl"></div>
       </div>
 
-      {/* Login Card */}
       <div className="relative w-full max-w-md">
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 backdrop-blur-sm border border-gray-700 shadow-2xl">
+        {/* Main Card */}
+        <div className="bg-gradient-to-b from-slate-900/80 to-slate-800/80 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-8">
           {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                Expert Energy
-              </h1>
-            </div>
-          </div>
-
-          {/* Title */}
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-white mb-2">Bem-vindo</h2>
-            <p className="text-sm text-gray-400">
-              Plataforma de Gestão de Energia
-            </p>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full mb-4">
+              <span className="text-2xl font-bold text-white">⚡</span>
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+              Expert Energy
+            </h1>
+            <p className="text-slate-400 text-sm">Bem-vindo de volta</p>
           </div>
 
-          {!showForgotPassword ? (
-            <>
-              {/* Login Form */}
-              <form onSubmit={handleLogin} className="space-y-4">
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="seu@email.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Senha
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3 text-gray-500 hover:text-gray-400 transition-colors"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-5 h-5" />
-                      ) : (
-                        <Eye className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Error Message */}
-                {error && (
-                  <div className="p-3 bg-red-900/20 border border-red-700 rounded-lg">
-                    <p className="text-sm text-red-400">{error}</p>
-                  </div>
-                )}
-
-                {/* Forgot Password Link */}
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotPassword(true)}
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    Esqueci a senha
-                  </button>
-                </div>
-
-                {/* Login Button */}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Conectando...
-                    </>
-                  ) : (
-                    <>
-                      Entrar
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Footer */}
-              <p className="text-center text-xs text-gray-500 mt-6">
-                © 2026 Expert Energy. Todos os direitos reservados.
-              </p>
-            </>
-          ) : (
-            <>
-              {/* Forgot Password Form */}
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <p className="text-sm text-gray-400 mb-4">
-                  Digite seu email para receber um link de recuperação de senha.
-                </p>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
-                    <input
-                      type="email"
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="seu@email.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {forgotSuccess && (
-                  <div className="p-3 bg-green-900/20 border border-green-700 rounded-lg">
-                    <p className="text-sm text-green-400">
-                      Email enviado com sucesso! Verifique sua caixa de entrada.
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={forgotLoading}
-                    className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-lg transition-all"
-                  >
-                    {forgotLoading ? "Enviando..." : "Enviar"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotPassword(false)}
-                    className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all"
-                  >
-                    Voltar
-                  </button>
-                </div>
-              </form>
-            </>
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-900/20 border border-red-700 rounded-lg flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
           )}
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-5">
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
+                  placeholder="seu@email.com"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-slate-300">Senha</label>
+                <Link href="/auth/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 transition">
+                  Esqueceu a senha?
+                </Link>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-12 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition transform hover:scale-105 active:scale-95"
+            >
+              {loading ? (
+                <>
+                  <Loader className="w-5 h-5 animate-spin" />
+                  Entrando...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  Entrar
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="my-6 flex items-center gap-3">
+            <div className="flex-1 h-px bg-slate-700"></div>
+            <span className="text-xs text-slate-500">Credenciais de Teste</span>
+            <div className="flex-1 h-px bg-slate-700"></div>
+          </div>
+
+          {/* Test Credentials */}
+          <div className="space-y-2 mb-6">
+            {testCredentials.map((cred, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => fillCredentials(cred)}
+                className="w-full p-3 bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600 rounded-lg text-left transition text-sm"
+              >
+                <div className="font-medium text-slate-300">{cred.role}</div>
+                <div className="text-xs text-slate-500">{cred.email}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <p className="text-center text-xs text-slate-500">
+            © 2026 Expert Energy. Todos os direitos reservados.
+          </p>
         </div>
 
         {/* Support Link */}
-        <div className="text-center mt-6">
-          <p className="text-sm text-gray-500">
-            Problemas ao acessar?{" "}
-            <a
-              href="mailto:suporte@expertenergy.com.br"
-              className="text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Entre em contato
-            </a>
-          </p>
-        </div>
+        <p className="text-center mt-6 text-sm text-slate-400">
+          Problemas ao acessar?{' '}
+          <a href="mailto:suporte@expertenergy.com.br" className="text-blue-400 hover:text-blue-300 transition">
+            Entre em contato
+          </a>
+        </p>
       </div>
     </div>
   );
