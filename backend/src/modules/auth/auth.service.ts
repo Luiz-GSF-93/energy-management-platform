@@ -1,11 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
-  // Dados em memória (MVP - depois integrar com DB)
+  private readonly logger = new Logger('AuthService');
+
   private readonly testUsers = [
     { 
       id: '1', 
@@ -47,22 +47,34 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.logger.log(`✅ AuthService initialized`);
+    this.logger.log(`📋 Available users: ${this.testUsers.map(u => u.email).join(', ')}`);
+  }
 
   async validateUser(email: string, password: string) {
+    this.logger.log(`🔍 Validating user: ${email}`);
+    
     const user = this.testUsers.find(u => u.email === email);
     
     if (!user) {
+      this.logger.warn(`❌ User not found: ${email}`);
+      this.logger.warn(`📋 Available users: ${this.testUsers.map(u => u.email).join(', ')}`);
       throw new UnauthorizedException('Email ou senha inválidos');
     }
 
-    // Comparação simples por enquanto (depois usar bcrypt com DB)
+    this.logger.log(`✅ User found: ${email}`);
+    this.logger.debug(`Expected password: "${user.password}"`);
+    this.logger.debug(`Received password: "${password}"`);
+
     const isPasswordValid = password === user.password;
     
     if (!isPasswordValid) {
+      this.logger.warn(`❌ Invalid password for: ${email}`);
       throw new UnauthorizedException('Email ou senha inválidos');
     }
 
+    this.logger.log(`✅ Authentication successful for: ${email}`);
     return user;
   }
 
@@ -95,7 +107,6 @@ export class AuthService {
       throw new UnauthorizedException('Senha atual incorreta');
     }
 
-    // TODO: Atualizar no banco quando implementar
     user.password = newPassword;
 
     return {
@@ -111,7 +122,6 @@ export class AuthService {
       throw new UnauthorizedException('Email não encontrado');
     }
 
-    // TODO: Enviar email com token de reset
     return {
       success: true,
       message: 'Email de reset enviado para ' + email,
