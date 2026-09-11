@@ -39,9 +39,13 @@ export async function apiClient<T = any>(
     }
   }
 
-  const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${endpoint}`;
+  // Remover /api/v1 do endpoint se já estiver lá
+  const cleanEndpoint = endpoint.replace(/^\/api\/v1/, '');
+  
+  const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1${cleanEndpoint}`;
 
   try {
+    console.log('📡 Fetch:', url);
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
@@ -65,7 +69,7 @@ export async function apiClient<T = any>(
 
     return data;
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('❌ API Error:', error);
     throw error;
   }
 }
@@ -73,7 +77,7 @@ export async function apiClient<T = any>(
 export const api = {
   contracts: {
     create: (payload: any) =>
-      apiClient('/api/v1/contracts', {
+      apiClient('/contracts', {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
@@ -82,26 +86,26 @@ export const api = {
       if (params?.status) query.append('status', params.status);
       if (params?.page) query.append('page', params.page.toString());
       if (params?.limit) query.append('limit', params.limit.toString());
-      return apiClient(`/api/v1/contracts?${query.toString()}`);
+      return apiClient(`/contracts?${query.toString()}`);
     },
     get: (id: string) =>
-      apiClient(`/api/v1/contracts/${id}`),
+      apiClient(`/contracts/${id}`),
     update: (id: string, payload: any) =>
-      apiClient(`/api/v1/contracts/${id}`, {
+      apiClient(`/contracts/${id}`, {
         method: 'PUT',
         body: JSON.stringify(payload),
       }),
     delete: (id: string) =>
-      apiClient(`/api/v1/contracts/${id}`, {
+      apiClient(`/contracts/${id}`, {
         method: 'DELETE',
       }),
     analytics: () =>
-      apiClient('/api/v1/contracts/analytics/overview'),
+      apiClient('/contracts/analytics/overview'),
   },
 
   fees: {
     create: (payload: any) =>
-      apiClient('/api/v1/fees', {
+      apiClient('/fees', {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
@@ -109,31 +113,31 @@ export const api = {
       const query = new URLSearchParams();
       if (params?.status) query.append('status', params.status);
       if (params?.contractId) query.append('contractId', params.contractId);
-      return apiClient(`/api/v1/fees?${query.toString()}`);
+      return apiClient(`/fees?${query.toString()}`);
     },
     get: (id: string) =>
-      apiClient(`/api/v1/fees/${id}`),
+      apiClient(`/fees/${id}`),
     update: (id: string, payload: any) =>
-      apiClient(`/api/v1/fees/${id}`, {
+      apiClient(`/fees/${id}`, {
         method: 'PUT',
         body: JSON.stringify(payload),
       }),
     updateStatus: (id: string, status: string) =>
-      apiClient(`/api/v1/fees/${id}/status`, {
+      apiClient(`/fees/${id}/status`, {
         method: 'PUT',
         body: JSON.stringify({ status }),
       }),
     delete: (id: string) =>
-      apiClient(`/api/v1/fees/${id}`, {
+      apiClient(`/fees/${id}`, {
         method: 'DELETE',
       }),
     analytics: () =>
-      apiClient('/api/v1/fees/analytics/overview'),
+      apiClient('/fees/analytics/overview'),
   },
 
   approvals: {
     create: (payload: any) =>
-      apiClient('/api/v1/approvals', {
+      apiClient('/approvals', {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
@@ -141,31 +145,31 @@ export const api = {
       const query = new URLSearchParams();
       if (params?.status) query.append('status', params.status);
       if (params?.feeId) query.append('feeId', params.feeId);
-      return apiClient(`/api/v1/approvals?${query.toString()}`);
+      return apiClient(`/approvals?${query.toString()}`);
     },
     get: (id: string) =>
-      apiClient(`/api/v1/approvals/${id}`),
+      apiClient(`/approvals/${id}`),
     approve: (id: string) =>
-      apiClient(`/api/v1/approvals/${id}/approve`, {
+      apiClient(`/approvals/${id}/approve`, {
         method: 'PUT',
       }),
     reject: (id: string, reason: string) =>
-      apiClient(`/api/v1/approvals/${id}/reject`, {
+      apiClient(`/approvals/${id}/reject`, {
         method: 'PUT',
         body: JSON.stringify({ reason }),
       }),
     analytics: () =>
-      apiClient('/api/v1/approvals/analytics/overview'),
+      apiClient('/approvals/analytics/overview'),
   },
 
   auth: {
     login: (email: string, password: string) =>
-      apiClient('/api/v1/auth/login', {
+      apiClient('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
         skipAuth: true,
       }),
     profile: () =>
-      apiClient('/api/v1/auth/me'),
+      apiClient('/auth/me'),
   },
 };
