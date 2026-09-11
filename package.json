@@ -1,18 +1,5 @@
 {
   "name": "energy-management-platform",
   "version": "1.0.0",
-  "description": "Energy Management Platform",
-  "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
-    "start": "cd frontend && npm start",
-    "lint": "cd frontend && npm run lint"
-  },
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
-  "dependencies": {
-    "jiti": "^2.7.0"
-  }
+  "private": true
 }
