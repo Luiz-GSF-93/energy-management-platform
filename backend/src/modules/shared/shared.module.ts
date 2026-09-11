@@ -1,31 +1,39 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { SupabaseService } from '../../services/supabase.service';
-
-// Importar apenas as entidades que existem
-import { Contract } from '../contracts/entities/contract.entity';
-import { Fee } from '../management-fees/entities/fee.entity';
-import { Approval } from '../approvals/entities/approval.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const databaseUrl = configService.get('DATABASE_URL');
+      useFactory: (config: ConfigService) => {
+        // Se não tiver DATABASE_URL, usar um banco mock/em memória
+        const databaseUrl = config.get<string>('DATABASE_URL');
+        
+        if (!databaseUrl) {
+          console.log('⚠️ DATABASE_URL não encontrada. Usando modo de desenvolvimento.');
+          // Modo desenvolvimento: sem conexão ao banco
+          return {
+            type: 'better-sqlite3',
+            database: ':memory:',
+            entities: [],
+            synchronize: true,
+            logging: false,
+          };
+        }
+
+        // Modo produção: conecta ao Supabase
         return {
           type: 'postgres',
           url: databaseUrl,
-          entities: [Contract, Fee, Approval],
-          synchronize: process.env.NODE_ENV !== 'production',
-          logging: process.env.NODE_ENV === 'development',
-          ssl: { rejectUnauthorized: false },
+          entities: [],
+          synchronize: false,
+          logging: false,
         };
       },
     }),
   ],
-  providers: [SupabaseService],
-  exports: [SupabaseService],
+  providers: [],
+  exports: [],
 })
 export class SharedModule {}

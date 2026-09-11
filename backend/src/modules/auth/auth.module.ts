@@ -6,7 +6,6 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { SharedModule } from '../shared/shared.module';
 
 @Module({
   imports: [
@@ -18,13 +17,12 @@ import { SharedModule } from '../shared/shared.module';
         signOptions: { expiresIn: '7d' },
       }),
     }),
-    SharedModule,
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
-    JwtStrategy,    // ✅ Estratégia registrada
-    JwtAuthGuard,   // ✅ Guard registrado
+    JwtStrategy,
+    JwtAuthGuard,
   ],
   exports: [
     AuthService,
