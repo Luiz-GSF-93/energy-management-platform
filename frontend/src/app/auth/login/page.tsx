@@ -1,163 +1,297 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Image from 'next/image';
-import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
+import Image from "next/image";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('teste@expertenergy.com.br');
-  const [password, setPassword] = useState('ExpertEnergy@2026!');
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
+    setError("");
+    setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://energy-management-platform.onrender.com/api/v1';
-      console.log('🔐 API URL:', apiUrl);
-      console.log('📧 Email:', email);
+      const response = await fetch(
+        "https://energy-management-platform.onrender.com/api/v1/auth/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
-      const response = await fetch(`${apiUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ email, password }),
-      });
-
-      console.log('📡 Response status:', response.status);
-      console.log('📡 Response headers:', Object.fromEntries(response.headers));
-
-      const data = await response.json();
-      console.log('📦 Response data:', data);
-
-      if (!response.ok) {
-        throw new Error(data.message || `Erro ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem("auth_token", data.access_token);
+        router.push("/dashboard");
+      } else {
+        const errorData = await response.json();
+        setError(errorData.message || "Email ou senha inválidos");
       }
-
-      const token = data.access_token;
-      console.log('🎫 Token recebido:', token ? '✅' : '❌');
-
-      if (!token) {
-        throw new Error('Token não recebido do servidor');
-      }
-
-      localStorage.setItem('authToken', token);
-      console.log('💾 Token armazenado no localStorage');
-      window.location.href = '/dashboard';
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao fazer login';
-      console.error('❌ Erro completo:', err);
-      setError(message);
+      setError("Erro ao conectar ao servidor. Tente novamente.");
+      console.error(err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+
+    try {
+      // Simular envio de email de recuperação
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      setForgotSuccess(true);
+      setForgotEmail("");
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setForgotSuccess(false);
+      }, 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setForgotLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl"></div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex items-center justify-center p-4">
+      {/* Background blur effect */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl"></div>
       </div>
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl p-8">
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-6">
-              <Image
-                src="https://www.expertenergy.com.br/images/logo-expert-energy.png"
-                alt="Expert Energy Logo"
-                width={180}
-                height={60}
-                priority
-                className="h-auto w-auto"
-              />
+      {/* Login Card */}
+      <div className="relative w-full max-w-md">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 backdrop-blur-sm border border-gray-700 shadow-2xl">
+          {/* Logo */}
+          <div className="flex justify-center mb-8">
+            <div className="relative w-32 h-12">
+              <svg
+                viewBox="0 0 120 45"
+                className="w-full h-full"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* Lightning bolt icon */}
+                <path
+                  d="M15 8L20 18H12L22 35L8 20H16L15 8Z"
+                  fill="url(#gradient)"
+                  stroke="url(#gradient)"
+                  strokeWidth="1"
+                />
+                {/* Expert Energy text */}
+                <text
+                  x="35"
+                  y="28"
+                  fontFamily="Inter, sans-serif"
+                  fontSize="18"
+                  fontWeight="700"
+                  fill="#ffffff"
+                >
+                  Expert Energy
+                </text>
+                <defs>
+                  <linearGradient
+                    id="gradient"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="100%"
+                  >
+                    <stop offset="0%" stopColor="#3b82f6" />
+                    <stop offset="100%" stopColor="#06b6d4" />
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Bem-vindo</h1>
-            <p className="text-gray-300 text-sm">Plataforma de Gestão de Energia</p>
           </div>
 
-          {error && (
-            <div className="mb-6 flex items-start space-x-3 p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-300">{error}</p>
-            </div>
-          )}
+          {/* Title */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-white mb-2">Bem-vindo</h1>
+            <p className="text-sm text-gray-400">
+              Plataforma de Gestão de Energia
+            </p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-200 mb-2">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-                className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
-                placeholder="seu@email.com"
-              />
-            </div>
+          {!showForgotPassword ? (
+            <>
+              {/* Login Form */}
+              <form onSubmit={handleLogin} className="space-y-4">
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                      required
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">
-                Senha
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
-                  placeholder="Sua senha"
-                />
+                {/* Password */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-10 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 text-gray-500 hover:text-gray-400 transition-colors"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Error Message */}
+                {error && (
+                  <div className="p-3 bg-red-900/20 border border-red-700 rounded-lg">
+                    <p className="text-sm text-red-400">{error}</p>
+                  </div>
+                )}
+
+                {/* Forgot Password Link */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    Esqueci a senha
+                  </button>
+                </div>
+
+                {/* Login Button */}
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition disabled:opacity-50"
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
                 >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Conectando...
+                    </>
+                  ) : (
+                    <>
+                      Entrar
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
-              </div>
-            </div>
+              </form>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full mt-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Entrando...</span>
-                </>
-              ) : (
-                <span>Entrar</span>
-              )}
-            </button>
-          </form>
+              {/* Footer */}
+              <p className="text-center text-xs text-gray-500 mt-6">
+                © 2026 Expert Energy. Todos os direitos reservados.
+              </p>
+            </>
+          ) : (
+            <>
+              {/* Forgot Password Form */}
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <p className="text-sm text-gray-400 mb-4">
+                  Digite seu email para receber um link de recuperação de senha.
+                </p>
 
-          <p className="text-center text-xs text-gray-400 mt-6">
-            Credenciais de teste fornecidas para demonstração
-          </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {forgotSuccess && (
+                  <div className="p-3 bg-green-900/20 border border-green-700 rounded-lg">
+                    <p className="text-sm text-green-400">
+                      Email enviado com sucesso! Verifique sua caixa de entrada.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-semibold rounded-lg transition-all"
+                  >
+                    {forgotLoading ? "Enviando..." : "Enviar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(false)}
+                    className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all"
+                  >
+                    Voltar
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
 
-        <p className="text-center text-gray-400 text-sm mt-6">
-          Problemas ao acessar? Entre em contato com o suporte
-        </p>
+        {/* Support Link */}
+        <div className="text-center mt-6">
+          <p className="text-sm text-gray-500">
+            Problemas ao acessar?{" "}
+            <a
+              href="mailto:suporte@expertenergy.com.br"
+              className="text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Entre em contato
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );

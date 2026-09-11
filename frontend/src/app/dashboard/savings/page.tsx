@@ -38,7 +38,6 @@ export default function SavingsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 p-4 md:p-8">
-      {/* Title */}
       <div className="mb-8">
         <h1 className="dashboard-title text-white mb-2">Simulador de Economia</h1>
         <p className="subtitle text-gray-400">
@@ -46,7 +45,6 @@ export default function SavingsPage() {
         </p>
       </div>
 
-      {/* Scenario Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {[10, 20, 30].map((pct) => (
           <button
@@ -67,13 +65,11 @@ export default function SavingsPage() {
         ))}
       </div>
 
-      {/* Comparison Chart */}
       <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700 mb-8">
         <h2 className="section-title text-white mb-4">Comparação de Cenários</h2>
         <Chart type="bar" data={scenarioData} />
       </div>
 
-      {/* Strategies */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
           <div className="flex items-center gap-2 mb-4">
@@ -81,15 +77,9 @@ export default function SavingsPage() {
             <h3 className="section-title text-white">Estratégia -10%</h3>
           </div>
           <ul className="space-y-2">
-            <li className="table-text text-gray-300">
-              ✓ Otimizar uso de horários fora de pico
-            </li>
-            <li className="table-text text-gray-300">
-              ✓ Revisar equipamentos antigos
-            </li>
-            <li className="table-text text-gray-300">
-              ✓ Desligar standby desnecessário
-            </li>
+            <li className="table-text text-gray-300">✓ Otimizar uso de horários fora de pico</li>
+            <li className="table-text text-gray-300">✓ Revisar equipamentos antigos</li>
+            <li className="table-text text-gray-300">✓ Desligar standby desnecessário</li>
           </ul>
         </div>
 
@@ -99,20 +89,13 @@ export default function SavingsPage() {
             <h3 className="section-title text-white">Estratégia -30%</h3>
           </div>
           <ul className="space-y-2">
-            <li className="table-text text-gray-300">
-              ✓ Instalar energia solar (painéis)
-            </li>
-            <li className="table-text text-gray-300">
-              ✓ Trocar iluminação por LED
-            </li>
-            <li className="table-text text-gray-300">
-              ✓ Implementar sistema de controle inteligente
-            </li>
+            <li className="table-text text-gray-300">✓ Instalar energia solar (painéis)</li>
+            <li className="table-text text-gray-300">✓ Trocar iluminação por LED</li>
+            <li className="table-text text-gray-300">✓ Implementar sistema de controle inteligente</li>
           </ul>
         </div>
       </div>
 
-      {/* Summary */}
       <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-lg p-6 backdrop-blur-sm border border-blue-700/50">
         <h2 className="section-title text-white mb-3">Economia Anual Potencial</h2>
         <p className="card-kpi text-green-400 mb-2">
