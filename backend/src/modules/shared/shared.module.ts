@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
+
+const logger = new Logger('SharedModule');
 
 @Module({
   imports: [
@@ -10,32 +12,19 @@ import { SupabaseService } from '../../services/supabase.service';
       useFactory: (config: ConfigService) => {
         const databaseUrl = config.get<string>('DATABASE_URL');
         
-        // Se não tiver DATABASE_URL, NÃO conectar ao banco
-        if (!databaseUrl) {
-          console.log('⚠️ DATABASE_URL não configurado. TypeORM desabilidato.');
-          return {
-            type: 'postgres',
-            host: 'localhost',
-            port: 5432,
-            username: 'postgres',
-            password: 'postgres',
-            database: 'test',
-            entities: [],
-            synchronize: false,
-            logging: false,
-            retryAttempts: 0, // ✅ Não tentar reconectar
-            retryDelay: 1000,
-          };
-        }
+        logger.log(`DATABASE_URL: ${databaseUrl ? 'Configurado' : 'Não configurado'}`);
 
         return {
           type: 'postgres',
-          url: databaseUrl,
+          url: databaseUrl || 'postgresql://localhost/test', // Fallback para localhost
           entities: [],
           synchronize: false,
           logging: false,
-          retryAttempts: 3,
-          retryDelay: 5000,
+          // ✅ KEY FIX: Não tentar conectar na inicialização
+          retryAttempts: 0,
+          keepConnectionAlive: false,
+          // Se falhar, continuar assim mesmo
+          dropSchema: false,
         };
       },
     }),
