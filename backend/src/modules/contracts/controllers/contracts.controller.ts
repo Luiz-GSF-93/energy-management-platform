@@ -36,6 +36,7 @@ export class ContractsController {
       ...createContractDto,
       startDate: new Date(createContractDto.startDate),
       endDate: createContractDto.endDate ? new Date(createContractDto.endDate) : undefined,
+      adjustmentDate: createContractDto.adjustmentDate ? new Date(createContractDto.adjustmentDate) : undefined,
     };
 
     const contract = await this.contractsService.create(contractData);
@@ -101,6 +102,7 @@ export class ContractsController {
       ...updateContractDto,
       startDate: updateContractDto.startDate ? new Date(updateContractDto.startDate) : undefined,
       endDate: updateContractDto.endDate ? new Date(updateContractDto.endDate) : undefined,
+      adjustmentDate: updateContractDto.adjustmentDate ? new Date(updateContractDto.adjustmentDate) : undefined,
     };
 
     const contract = await this.contractsService.update(id, contractData);

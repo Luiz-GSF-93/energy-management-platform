@@ -21,7 +21,7 @@ export class AuditLog {
   entityId: string;
 
   @Column({ type: 'varchar', length: 50 })
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT' | 'ARCHIVE';
+  action: string;
 
   @Column({ type: 'uuid', nullable: true })
   userId: string;
@@ -39,7 +39,7 @@ export class AuditLog {
   newValues: Record<string, any>;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvalStatus: string;
 
   @Column({ type: 'text', nullable: true })
   rejectionReason: string;
@@ -53,7 +53,7 @@ export class AuditLog {
   @Column({ type: 'timestamp', nullable: true })
   approvedAt: Date;
 
-  @Column({ type: 'varchar', max: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   ipAddress: string;
 
   @Column({ type: 'text', nullable: true })
