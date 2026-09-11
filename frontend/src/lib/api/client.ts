@@ -70,11 +70,22 @@ class ApiClient {
   delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, 'DELETE');
   }
+
+  patch<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'PATCH', body);
+  }
 }
 
 const apiClient = new ApiClient(API_BASE_URL);
 
 export const api = {
+  // Métodos genéricos
+  get: <T>(endpoint: string) => apiClient.get<T>(endpoint),
+  post: <T>(endpoint: string, data: any) => apiClient.post<T>(endpoint, data),
+  put: <T>(endpoint: string, data: any) => apiClient.put<T>(endpoint, data),
+  delete: <T>(endpoint: string) => apiClient.delete<T>(endpoint),
+  patch: <T>(endpoint: string, data: any) => apiClient.patch<T>(endpoint, data),
+
   auth: {
     login: (email: string, password: string) =>
       apiClient.post('/auth/login', { email, password }),
@@ -88,6 +99,25 @@ export const api = {
     update: (id: string, data: any) => apiClient.put(`/contracts/${id}`, data),
     delete: (id: string) => apiClient.delete(`/contracts/${id}`),
     analytics: () => apiClient.get('/contracts/analytics/overview'),
+  },
+
+  invoices: {
+    create: (data: any) => apiClient.post('/invoices', data),
+    list: (params?: any) => apiClient.get('/invoices'),
+    get: (id: string) => apiClient.get(`/invoices/${id}`),
+    update: (id: string, data: any) => apiClient.put(`/invoices/${id}`, data),
+    delete: (id: string) => apiClient.delete(`/invoices/${id}`),
+    compare: (id: string, data: any) => apiClient.post(`/invoices/${id}/compare`, data),
+    metrics: (consumerUnitId: string, params?: any) => 
+      apiClient.get(`/invoices/metrics/${consumerUnitId}`),
+  },
+
+  consumerUnits: {
+    list: () => apiClient.get('/consumer-units'),
+    get: (id: string) => apiClient.get(`/consumer-units/${id}`),
+    create: (data: any) => apiClient.post('/consumer-units', data),
+    update: (id: string, data: any) => apiClient.put(`/consumer-units/${id}`, data),
+    delete: (id: string) => apiClient.delete(`/consumer-units/${id}`),
   },
 
   settlements: {
