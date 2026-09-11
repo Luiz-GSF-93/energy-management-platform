@@ -1,69 +1,85 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { SupabaseService } from '../../../services/supabase.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Contract } from '../entities/contract.entity';
 import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
 
 @Injectable()
 export class ContractsService {
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    @InjectRepository(Contract)
+    private contractRepository: Repository<Contract>,
+  ) {}
 
-  async create(createContractDto: CreateContractDto) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('energy_contracts')
-      .insert([{ ...createContractDto, status: 'ACTIVE' }])
-      .select()
-      .single();
-
-    if (error) throw new BadRequestException(error.message);
-    return data;
+  async create(createContractDto: CreateContractDto): Promise<Contract> {
+    const contract = this.contractRepository.create(createContractDto);
+    return this.contractRepository.save(contract);
   }
 
-  async findByConsumerUnit(consumerUnitId: string) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('energy_contracts')
-      .select('*')
-      .eq('consumerUnitId', consumerUnitId)
-      .is('deletedAt', null);
-
-    if (error) throw new BadRequestException(error.message);
-    return data;
+  async findAll(): Promise<Contract[]> {
+    return this.contractRepository.find({
+      order: { createdAt: 'DESC' },
+    });
   }
 
-  async findOne(id: string) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('energy_contracts')
-      .select('*')
-      .eq('id', id)
-      .is('deletedAt', null)
-      .single();
+  async findOne(id: string): Promise<Contract> {
+    const contract = await this.contractRepository.findOne({
+      where: { id },
+    });
 
-    if (error || !data) throw new NotFoundException('Contract not found');
-    return data;
+    if (!contract) {
+      throw new NotFoundException('Contrato não encontrado');
+    }
+
+    return contract;
   }
 
-  async update(id: string, updateContractDto: UpdateContractDto) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('energy_contracts')
-      .update(updateContractDto)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw new BadRequestException(error.message);
-    return data;
+  async update(
+    id: string,
+    updateContractDto: UpdateContractDto,
+  ): Promise<Contract> {
+    const contract = await this.findOne(id);
+    Object.assign(contract, updateContractDto);
+    return this.contractRepository.save(contract);
   }
 
-  async delete(id: string) {
-    const { error } = await this.supabaseService
-      .getClient()
-      .from('energy_contracts')
-      .update({ deletedAt: new Date().toISOString() })
-      .eq('id', id);
+  async remove(id: string): Promise<void> {
+    const contract = await this.findOne(id);
+    await this.contractRepository.remove(contract);
+  }
 
-    if (error) throw new BadRequestException(error.message);
-    return { message: 'Contract deleted successfully' };
+  async findByStatus(status: string): Promise<Contract[]> {
+    return this.contractRepository.find({
+      where: { status: status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TERMINATED' },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getContractFees(contractId: string): Promise<any> {
+    const contract = await this.findOne(contractId);
+    return contract;
+  }
+
+  async getContractsAnalytics(): Promise<any> {
+    const contracts = await this.contractRepository.find();
+
+    const analytics = {
+      totalContracts: contracts.length,
+      activeContracts: contracts.filter((c) => c.status === 'ACTIVE').length,
+      inactiveContracts: contracts.filter((c) => c.status === 'INACTIVE').length,
+      suspendedContracts: contracts.filter((c) => c.status === 'SUSPENDED').length,
+      terminatedContracts: contracts.filter((c) => c.status === 'TERMINATED').length,
+      totalMonthlyFees: contracts.reduce(
+        (sum, c) => sum + Number(c.monthlyFee),
+        0,
+      ),
+      averageMonthlyFee:
+        contracts.length > 0
+          ? contracts.reduce((sum, c) => sum + Number(c.monthlyFee), 0) /
+            contracts.length
+          : 0,
+    };
+
+    return analytics;
   }
 }

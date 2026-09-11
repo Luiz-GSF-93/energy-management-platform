@@ -1,49 +1,21 @@
-import { IsString, IsOptional, IsUUID, IsDate, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
-
 export class CreateContractDto {
-  @IsUUID()
-  consumerUnitId!: string;
-
-  @IsString()
-  contractNumber!: string;
-
-  @IsDate()
-  @Type(() => Date)
-  startDate!: Date;
-
-  @IsDate()
-  @Type(() => Date)
-  endDate!: Date;
-
-  @IsOptional()
-  @IsNumber()
-  minimumSavings?: number;
-
-  @IsOptional()
-  @IsNumber()
-  honorariePercentage?: number;
-
-  @IsOptional()
-  @IsString()
-  status?: string;
-
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  contractNumber: string;
+  customerId: string;
+  contractTitle: string;
+  description: string;
+  monthlyFee: number;
+  commissionPercentage: number;
+  startDate: Date;
+  endDate?: Date;
+  contractType: string;
+  terms?: string;
 }
 
 export class UpdateContractDto {
-  @IsOptional()
-  @IsDate()
-  @Type(() => Date)
-  endDate?: Date;
-
-  @IsOptional()
-  @IsNumber()
-  minimumSavings?: number;
-
-  @IsOptional()
-  @IsString()
-  status?: string;
+  contractTitle?: string;
+  description?: string;
+  monthlyFee?: number;
+  commissionPercentage?: number;
+  status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TERMINATED';
+  terms?: string;
 }

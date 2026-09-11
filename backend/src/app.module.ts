@@ -19,6 +19,8 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { ManagementFeesModule } from './modules/management-fees/management-fees.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { BackofficeModule } from './modules/backoffice/backoffice.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { ManagementFeesModule } from './modules/management-fees/management-fees.
     NotificationsModule,
     InvoicesModule,
     ManagementFeesModule,
+    ApprovalsModule,
+    BackofficeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

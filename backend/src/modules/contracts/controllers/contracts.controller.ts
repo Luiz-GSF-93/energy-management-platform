@@ -1,35 +1,46 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
 import { ContractsService } from '../services/contracts.service';
 import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
-@Controller('contracts')
-@UseGuards(JwtAuthGuard)
+@Controller('api/v1/contracts')
 export class ContractsController {
-  constructor(private contractsService: ContractsService) {}
+  constructor(private readonly contractsService: ContractsService) {}
 
   @Post()
-  create(@Body() createContractDto: CreateContractDto) {
+  async create(@Body() createContractDto: CreateContractDto) {
     return this.contractsService.create(createContractDto);
   }
 
   @Get()
-  findByConsumerUnit(@Query('consumerUnitId') consumerUnitId: string) {
-    return this.contractsService.findByConsumerUnit(consumerUnitId);
+  async findAll() {
+    return this.contractsService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string) {
     return this.contractsService.findOne(id);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateContractDto: UpdateContractDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateContractDto: UpdateContractDto,
+  ) {
     return this.contractsService.update(id, updateContractDto);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.contractsService.delete(id);
+  async remove(@Param('id') id: string) {
+    return this.contractsService.remove(id);
+  }
+
+  @Get(':id/fees')
+  async getContractFees(@Param('id') id: string) {
+    return this.contractsService.getContractFees(id);
+  }
+
+  @Get('status/:status')
+  async findByStatus(@Param('status') status: string) {
+    return this.contractsService.findByStatus(status);
   }
 }
