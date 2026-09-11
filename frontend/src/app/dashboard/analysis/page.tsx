@@ -1,25 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { TrendingDown, Zap, Loader } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Chart } from "@/components/dashboard/Chart";
+import { AlertCircle, TrendingUp, Zap, DollarSign } from "lucide-react";
 
-interface ConsumptionData {
-  month: string;
+interface Report {
+  period: string;
   consumption: number;
   cost: number;
 }
 
 export default function AnalysisPage() {
-  const [timeframe, setTimeframe] = useState("month");
-  const [data, setData] = useState<ConsumptionData[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeframe, setTimeframe] = useState("week");
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchReports = async () => {
       try {
+        setLoading(true);
+        setError(null);
+
         const token = localStorage.getItem("auth_token");
+        if (!token) {
+          setError("Autenticação necessária");
+          return;
+        }
+
         const response = await fetch(
           "https://energy-management-platform.onrender.com/api/v1/reports",
           {
@@ -30,191 +38,206 @@ export default function AnalysisPage() {
           }
         );
 
-        if (response.ok) {
-          const reportData = await response.json();
-          // Formatar dados para os charts
-          const formatted = reportData.slice(0, 4).map((report: any) => ({
-            month: new Date(report.date).toLocaleDateString("pt-BR", {
-              month: "short",
-            }),
-            consumption: report.consumption || 0,
-            cost: report.amount || 0,
-          }));
-          setData(formatted);
-        } else {
-          setError("Erro ao carregar dados");
+        if (!response.ok) {
+          throw new Error(`Erro da API: ${response.status}`);
         }
+
+        const data = await response.json();
+
+        // Validar dados
+        if (!Array.isArray(data)) {
+          setReports([]);
+          setError("Formato de dados inválido da API");
+          return;
+        }
+
+        // Validar cada item
+        const validReports = data.filter(
+          (item: any) =>
+            item &&
+            typeof item.consumption === "number" &&
+            typeof item.cost === "number"
+        );
+
+        if (validReports.length === 0) {
+          setReports([]);
+          setError("Nenhum dado de relatório disponível");
+          return;
+        }
+
+        setReports(validReports);
       } catch (err) {
-        console.error(err);
-        setError("Erro ao conectar ao servidor");
+        console.error("Erro ao carregar relatórios:", err);
+        setError(
+          err instanceof Error ? err.message : "Erro ao carregar dados"
+        );
+        setReports([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    fetchReports();
   }, []);
 
-  const consumptionData = {
-    labels: data.map((d) => d.month),
+  // Preparar dados para o gráfico
+  const chartData = {
+    labels: reports.map((r) => r.period || "Sem data"),
     datasets: [
       {
         label: "Consumo (kWh)",
-        data: data.map((d) => d.consumption),
-        borderColor: "rgb(59, 130, 246)",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        data: reports.map((r) => r.consumption || 0),
+        borderColor: "#06b6d4",
+        backgroundColor: "rgba(6, 182, 212, 0.1)",
         tension: 0.4,
       },
     ],
   };
 
-  const costData = {
-    labels: data.map((d) => d.month),
+  const costChartData = {
+    labels: reports.map((r) => r.period || "Sem data"),
     datasets: [
       {
         label: "Custo (R$)",
-        data: data.map((d) => d.cost),
-        backgroundColor: data.map((_, i) =>
-          i === 0
-            ? "rgba(34, 197, 94, 0.2)"
-            : i === 1
-            ? "rgba(34, 197, 94, 0.3)"
-            : i === 2
-            ? "rgba(34, 197, 94, 0.2)"
-            : "rgba(34, 197, 94, 0.25)"
-        ),
-        borderColor: "rgb(34, 197, 94)",
-        borderWidth: 1,
+        data: reports.map((r) => r.cost || 0),
+        backgroundColor: "#10b981",
+        borderColor: "#10b981",
       },
     ],
   };
 
+  // KPIs calculados
   const avgConsumption =
-    data.length > 0
-      ? Math.round(data.reduce((sum, d) => sum + d.consumption, 0) / data.length)
+    reports.length > 0
+      ? Math.round(
+          reports.reduce((sum, r) => sum + (r.consumption || 0), 0) /
+            reports.length
+        )
       : 0;
-  const avgCost =
-    data.length > 0
-      ? (
-          data.reduce((sum, d) => sum + d.cost, 0) / data.length
-        ).toFixed(2)
-      : "0";
+
+  const totalCost =
+    reports.length > 0
+      ? reports.reduce((sum, r) => sum + (r.cost || 0), 0)
+      : 0;
+
   const maxConsumption =
-    data.length > 0
-      ? Math.max(...data.map((d) => d.consumption))
+    reports.length > 0
+      ? Math.max(...reports.map((r) => r.consumption || 0))
       : 0;
 
   return (
-    <div className="min-h-screen bg-gray-950 p-4 md:p-8">
-      <div className="mb-8">
-        <h1 className="dashboard-title text-white mb-2">Análise de Consumo</h1>
-        <p className="subtitle text-gray-400">
-          Visualize suas tendências e economia de energia
-        </p>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
-          <p className="menu-text text-gray-400 mb-2">Consumo Médio</p>
-          <p className="card-kpi text-blue-400">
-            {loading ? <Loader className="w-6 h-6 animate-spin" /> : `${avgConsumption} kWh`}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Cabeçalho */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">
+            Análise de Consumo
+          </h1>
+          <p className="text-slate-400">
+            Visualize suas tendências e economia de energia
           </p>
-          <p className="chart-legend text-gray-500 mt-2">↑ 5% vs período anterior</p>
         </div>
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
-          <p className="menu-text text-gray-400 mb-2">Custo Médio</p>
-          <p className="card-kpi text-green-400">
-            {loading ? <Loader className="w-6 h-6 animate-spin" /> : `R$ ${avgCost}`}
-          </p>
-          <p className="chart-legend text-gray-500 mt-2">↓ 3% vs período anterior</p>
-        </div>
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
-          <p className="menu-text text-gray-400 mb-2">Pico de Consumo</p>
-          <p className="card-kpi text-orange-400">
-            {loading ? (
-              <Loader className="w-6 h-6 animate-spin" />
-            ) : (
-              `${maxConsumption} kWh`
-            )}
-          </p>
-          <p className="chart-legend text-gray-500 mt-2">Semana com maior consumo</p>
-        </div>
-      </div>
 
-      {/* Timeframe Selector */}
-      <div className="flex gap-2 mb-6">
-        {["week", "month", "quarter"].map((tf) => (
-          <button
-            key={tf}
-            onClick={() => setTimeframe(tf)}
-            className={`menu-text px-4 py-2 rounded-lg transition-all ${
-              timeframe === tf
-                ? "bg-blue-600 text-white"
-                : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-            }`}
-          >
-            {tf === "week" ? "Semana" : tf === "month" ? "Mês" : "Trimestre"}
-          </button>
-        ))}
-      </div>
-
-      {/* Charts */}
-      {error ? (
-        <div className="p-4 bg-red-900/20 border border-red-700 rounded-lg text-red-400">
-          {error}
+        {/* Seletor de período */}
+        <div className="mb-6 flex gap-2">
+          {["Semana", "Mês", "Trimestre"].map((label, idx) => (
+            <button
+              key={idx}
+              onClick={() => setTimeframe(["week", "month", "quarter"][idx])}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                timeframe === ["week", "month", "quarter"][idx]
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
-            <h2 className="section-title text-white mb-4">Consumo por Período</h2>
-            {loading ? (
-              <div className="h-64 flex items-center justify-center">
-                <Loader className="w-8 h-8 animate-spin text-blue-400" />
+
+        {/* Mensagem de erro */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-700/50 rounded-lg flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            <p className="text-red-300">{error}</p>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <p className="text-slate-400 mt-4">Carregando dados...</p>
+          </div>
+        )}
+
+        {/* KPI Cards */}
+        {!loading && !error && reports.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 backdrop-blur">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-slate-400 text-sm">Consumo Médio</p>
+                  <Zap className="w-5 h-5 text-yellow-500" />
+                </div>
+                <p className="text-3xl font-bold text-white">{avgConsumption}</p>
+                <p className="text-slate-500 text-xs mt-1">kWh</p>
               </div>
-            ) : (
-              <Chart type="line" data={consumptionData} />
-            )}
-          </div>
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
-            <h2 className="section-title text-white mb-4">Custo por Período</h2>
-            {loading ? (
-              <div className="h-64 flex items-center justify-center">
-                <Loader className="w-8 h-8 animate-spin text-green-400" />
-              </div>
-            ) : (
-              <Chart type="bar" data={costData} />
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Insights */}
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg p-6 backdrop-blur-sm border border-gray-700">
-        <h2 className="section-title text-white mb-4 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-yellow-400" />
-          Insights e Recomendações
-        </h2>
-        <div className="space-y-3">
-          <div className="flex gap-3 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-            <TrendingDown className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="subtitle text-white">Economia detectada</p>
-              <p className="chart-legend text-gray-400">
-                Redução consistente de consumo nas últimas semanas
-              </p>
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 backdrop-blur">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-slate-400 text-sm">Custo Total</p>
+                  <DollarSign className="w-5 h-5 text-green-500" />
+                </div>
+                <p className="text-3xl font-bold text-white">
+                  R$ {totalCost.toFixed(2)}
+                </p>
+                <p className="text-slate-500 text-xs mt-1">período</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 backdrop-blur">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-slate-400 text-sm">Pico de Consumo</p>
+                  <TrendingUp className="w-5 h-5 text-cyan-500" />
+                </div>
+                <p className="text-3xl font-bold text-white">{maxConsumption}</p>
+                <p className="text-slate-500 text-xs mt-1">kWh</p>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-3 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-            <Zap className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="subtitle text-white">Pico de consumo detectado</p>
-              <p className="chart-legend text-gray-400">
-                Considere revisar uso de equipamentos em horários de pico
-              </p>
+
+            {/* Gráficos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 backdrop-blur">
+                <h3 className="text-lg font-semibold text-white mb-4">
+                  Consumo (kWh)
+                </h3>
+                <Chart
+                  type="line"
+                  data={chartData}
+                  options={{ responsive: true }}
+                />
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 backdrop-blur">
+                <h3 className="text-lg font-semibold text-white mb-4">
+                  Custo (R$)
+                </h3>
+                <Chart
+                  type="bar"
+                  data={costChartData}
+                  options={{ responsive: true }}
+                />
+              </div>
             </div>
+          </>
+        )}
+
+        {/* Sem dados */}
+        {!loading && !error && reports.length === 0 && (
+          <div className="text-center py-12 text-slate-400">
+            <p>Nenhum dado disponível para este período.</p>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
