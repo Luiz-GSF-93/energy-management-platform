@@ -12,5 +12,7 @@
     "frontend",
     "backend"
   ],
-  "devDependencies": {}
+  "dependencies": {
+    "jiti": "^2.7.0"
+  }
 }

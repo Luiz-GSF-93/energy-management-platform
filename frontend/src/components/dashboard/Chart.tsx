@@ -1,6 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import React from "react";
+import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,21 +25,13 @@ ChartJS.register(
   Legend
 );
 
-const Line = dynamic(() => import("react-chartjs-2").then((mod) => mod.Line), {
-  ssr: false,
-});
-
-const Bar = dynamic(() => import("react-chartjs-2").then((mod) => mod.Bar), {
-  ssr: false,
-});
-
 interface ChartProps {
   type: "line" | "bar";
   data: any;
   options?: any;
 }
 
-export function Chart({ type, data, options }: ChartProps) {
+export const Chart: React.FC<ChartProps> = ({ type, data, options }) => {
   const defaultOptions = {
     responsive: true,
     maintainAspectRatio: true,
@@ -47,11 +40,7 @@ export function Chart({ type, data, options }: ChartProps) {
         display: true,
         labels: {
           color: "#9ca3af",
-          font: {
-            family: "'Inter', sans-serif",
-            size: 12,
-            weight: "500" as const,
-          },
+          font: { family: "'Inter', sans-serif", size: 12, weight: 500 as any },
           padding: 15,
         },
       },
@@ -62,57 +51,28 @@ export function Chart({ type, data, options }: ChartProps) {
         borderColor: "#374151",
         borderWidth: 1,
         padding: 12,
-        titleFont: {
-          family: "'Inter', sans-serif",
-          size: 13,
-          weight: "600" as const,
-        },
-        bodyFont: {
-          family: "'Inter', sans-serif",
-          size: 12,
-          weight: "400" as const,
-        },
+        titleFont: { family: "'Inter', sans-serif", size: 13, weight: 600 as any },
+        bodyFont: { family: "'Inter', sans-serif", size: 12, weight: 400 as any },
       },
     },
     scales: {
       y: {
         beginAtZero: true,
-        grid: {
-          color: "rgba(75, 85, 99, 0.2)",
-          drawBorder: false,
-        },
-        ticks: {
-          color: "#9ca3af",
-          font: {
-            family: "'Inter', sans-serif",
-            size: 12,
-          },
-        },
+        grid: { color: "rgba(75, 85, 99, 0.2)", drawBorder: false },
+        ticks: { color: "#9ca3af", font: { family: "'Inter', sans-serif", size: 12 } },
       },
       x: {
-        grid: {
-          display: false,
-          drawBorder: false,
-        },
-        ticks: {
-          color: "#9ca3af",
-          font: {
-            family: "'Inter', sans-serif",
-            size: 12,
-          },
-        },
+        grid: { display: false, drawBorder: false },
+        ticks: { color: "#9ca3af", font: { family: "'Inter', sans-serif", size: 12 } },
       },
     },
   };
 
-  const mergedOptions = {
-    ...defaultOptions,
-    ...options,
-  };
+  const mergedOptions = { ...defaultOptions, ...(options || {}) };
 
-  if (type === "line") {
-    return <Line data={data} options={mergedOptions} />;
-  }
-
-  return <Bar data={data} options={mergedOptions} />;
-}
+  return type === "line" ? (
+    <Line data={data} options={mergedOptions} />
+  ) : (
+    <Bar data={data} options={mergedOptions} />
+  );
+};

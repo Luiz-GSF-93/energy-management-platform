@@ -1,51 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 interface UseApiOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  headers?: Record<string, string>;
   body?: any;
-  skip?: boolean;
 }
 
-export function useApi<T>(
-  url: string,
-  options: UseApiOptions = {}
-) {
+export function useApi<T>(url: string, options?: UseApiOptions) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (options.skip) return;
-
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('authToken');
+        const token = localStorage.getItem("auth_token");
+        const headers = {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+          ...(options?.headers || {}),
+        };
+
         const response = await fetch(url, {
-          method: options.method || 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: options.body ? JSON.stringify(options.body) : undefined,
+          method: options?.method || "GET",
+          headers,
+          body: options?.body ? JSON.stringify(options.body) : undefined,
         });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error("Failed to fetch data");
 
         const result = await response.json();
         setData(result);
-        setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
-        setData(null);
+        setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [url, options.method, options.skip]);
+  }, [url]);
 
   return { data, loading, error };
 }
