@@ -1,175 +1,114 @@
-'use client';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-export interface ApiResponse<T> {
+export interface ApiResponse<T = any> {
   statusCode: number;
-  message?: string;
+  message: string;
   data?: T;
   error?: string;
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-  };
 }
 
-interface FetchOptions extends RequestInit {
-  skipAuth?: boolean;
-}
+class ApiClient {
+  private baseUrl: string;
 
-export async function apiClient<T = any>(
-  endpoint: string,
-  options: FetchOptions = {},
-): Promise<ApiResponse<T>> {
-  const { skipAuth = false, ...fetchOptions } = options;
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(fetchOptions.headers as Record<string, string>),
-  };
+  private async request<T>(
+    endpoint: string,
+    method: string,
+    body?: any
+  ): Promise<ApiResponse<T>> {
+    try {
+      const token =
+        typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
 
-  if (!skipAuth) {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    } else {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/auth/login';
+      const options: RequestInit = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      };
+
+      if (body) {
+        options.body = JSON.stringify(body);
       }
-      throw new Error('Não autenticado');
+
+      const response = await fetch(`${this.baseUrl}/api/v1${endpoint}`, options);
+
+      if (response.status === 401) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth_token');
+          window.location.href = '/auth/login';
+        }
+      }
+
+      const data = await response.json();
+      return data as ApiResponse<T>;
+    } catch (error: any) {
+      return {
+        statusCode: 500,
+        message: error.message,
+        error: 'Request failed',
+      };
     }
   }
 
-  // Remover /api/v1 do endpoint se já estiver lá
-  const cleanEndpoint = endpoint.replace(/^\/api\/v1/, '');
-  
-  const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1${cleanEndpoint}`;
+  post<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'POST', body);
+  }
 
-  try {
-    console.log('📡 Fetch:', url);
-    const response = await fetch(url, {
-      ...fetchOptions,
-      headers,
-    });
+  get<T>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'GET');
+  }
 
-    if (response.status === 401) {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('tenant_id');
-      localStorage.removeItem('user_role');
-      if (typeof window !== 'undefined') {
-        window.location.href = '/auth/login';
-      }
-      throw new Error('Sessão expirada');
-    }
+  put<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'PUT', body);
+  }
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || `Erro ${response.status}`);
-    }
-
-    return data;
-  } catch (error) {
-    console.error('❌ API Error:', error);
-    throw error;
+  delete<T>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'DELETE');
   }
 }
+
+const apiClient = new ApiClient(API_BASE_URL);
 
 export const api = {
+  auth: {
+    login: (email: string, password: string) =>
+      apiClient.post('/auth/login', { email, password }),
+    logout: () => localStorage.removeItem('auth_token'),
+  },
+
   contracts: {
-    create: (payload: any) =>
-      apiClient('/contracts', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    list: (params?: { status?: string; page?: number; limit?: number }) => {
-      const query = new URLSearchParams();
-      if (params?.status) query.append('status', params.status);
-      if (params?.page) query.append('page', params.page.toString());
-      if (params?.limit) query.append('limit', params.limit.toString());
-      return apiClient(`/contracts?${query.toString()}`);
-    },
-    get: (id: string) =>
-      apiClient(`/contracts/${id}`),
-    update: (id: string, payload: any) =>
-      apiClient(`/contracts/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      }),
-    delete: (id: string) =>
-      apiClient(`/contracts/${id}`, {
-        method: 'DELETE',
-      }),
-    analytics: () =>
-      apiClient('/contracts/analytics/overview'),
+    create: (data: any) => apiClient.post('/contracts', data),
+    list: (params?: any) => apiClient.get('/contracts'),
+    get: (id: string) => apiClient.get(`/contracts/${id}`),
+    update: (id: string, data: any) => apiClient.put(`/contracts/${id}`, data),
+    delete: (id: string) => apiClient.delete(`/contracts/${id}`),
+    analytics: () => apiClient.get('/contracts/analytics/overview'),
+  },
+
+  settlements: {
+    calculate: (data: any) => apiClient.post('/settlements/calculate', data),
   },
 
   fees: {
-    create: (payload: any) =>
-      apiClient('/fees', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    list: (params?: { status?: string; contractId?: string }) => {
-      const query = new URLSearchParams();
-      if (params?.status) query.append('status', params.status);
-      if (params?.contractId) query.append('contractId', params.contractId);
-      return apiClient(`/fees?${query.toString()}`);
-    },
-    get: (id: string) =>
-      apiClient(`/fees/${id}`),
-    update: (id: string, payload: any) =>
-      apiClient(`/fees/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      }),
-    updateStatus: (id: string, status: string) =>
-      apiClient(`/fees/${id}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      }),
-    delete: (id: string) =>
-      apiClient(`/fees/${id}`, {
-        method: 'DELETE',
-      }),
-    analytics: () =>
-      apiClient('/fees/analytics/overview'),
+    create: (data: any) => apiClient.post('/fees', data),
+    list: () => apiClient.get('/fees'),
+    get: (id: string) => apiClient.get(`/fees/${id}`),
+    update: (id: string, data: any) => apiClient.put(`/fees/${id}`, data),
+    delete: (id: string) => apiClient.delete(`/fees/${id}`),
   },
 
   approvals: {
-    create: (payload: any) =>
-      apiClient('/approvals', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    list: (params?: { status?: string; feeId?: string }) => {
-      const query = new URLSearchParams();
-      if (params?.status) query.append('status', params.status);
-      if (params?.feeId) query.append('feeId', params.feeId);
-      return apiClient(`/approvals?${query.toString()}`);
-    },
-    get: (id: string) =>
-      apiClient(`/approvals/${id}`),
-    approve: (id: string) =>
-      apiClient(`/approvals/${id}/approve`, {
-        method: 'PUT',
-      }),
-    reject: (id: string, reason: string) =>
-      apiClient(`/approvals/${id}/reject`, {
-        method: 'PUT',
-        body: JSON.stringify({ reason }),
-      }),
-    analytics: () =>
-      apiClient('/approvals/analytics/overview'),
-  },
-
-  auth: {
-    login: (email: string, password: string) =>
-      apiClient('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-        skipAuth: true,
-      }),
-    profile: () =>
-      apiClient('/auth/me'),
+    create: (data: any) => apiClient.post('/approvals', data),
+    list: () => apiClient.get('/approvals'),
+    get: (id: string) => apiClient.get(`/approvals/${id}`),
+    approve: (id: string) => apiClient.put(`/approvals/${id}/approve`, {}),
+    reject: (id: string) => apiClient.put(`/approvals/${id}/reject`, {}),
   },
 };
+
+export { apiClient };
