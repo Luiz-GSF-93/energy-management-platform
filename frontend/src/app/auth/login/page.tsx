@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
-import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -55,7 +54,6 @@ export default function LoginPage() {
     setForgotLoading(true);
 
     try {
-      // Simular envio de email de recuperação
       await new Promise((resolve) => setTimeout(resolve, 1500));
       setForgotSuccess(true);
       setForgotEmail("");
@@ -83,50 +81,16 @@ export default function LoginPage() {
         <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 backdrop-blur-sm border border-gray-700 shadow-2xl">
           {/* Logo */}
           <div className="flex justify-center mb-8">
-            <div className="relative w-32 h-12">
-              <svg
-                viewBox="0 0 120 45"
-                className="w-full h-full"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                {/* Lightning bolt icon */}
-                <path
-                  d="M15 8L20 18H12L22 35L8 20H16L15 8Z"
-                  fill="url(#gradient)"
-                  stroke="url(#gradient)"
-                  strokeWidth="1"
-                />
-                {/* Expert Energy text */}
-                <text
-                  x="35"
-                  y="28"
-                  fontFamily="Inter, sans-serif"
-                  fontSize="18"
-                  fontWeight="700"
-                  fill="#ffffff"
-                >
-                  Expert Energy
-                </text>
-                <defs>
-                  <linearGradient
-                    id="gradient"
-                    x1="0%"
-                    y1="0%"
-                    x2="100%"
-                    y2="100%"
-                  >
-                    <stop offset="0%" stopColor="#3b82f6" />
-                    <stop offset="100%" stopColor="#06b6d4" />
-                  </linearGradient>
-                </defs>
-              </svg>
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                Expert Energy
+              </h1>
             </div>
           </div>
 
           {/* Title */}
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">Bem-vindo</h1>
+            <h2 className="text-2xl font-bold text-white mb-2">Bem-vindo</h2>
             <p className="text-sm text-gray-400">
               Plataforma de Gestão de Energia
             </p>
