@@ -2,15 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, LogOut, Settings, FileText, DollarSign, CheckCircle, BarChart3, Home } from 'lucide-react';
+import { Menu, LogOut, Settings, FileText, DollarSign, CheckCircle, BarChart3, Home, Users as UsersIcon } from 'lucide-react';
 
 export default function BackofficeLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [userName, setUserName] = useState('Admin');
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    // Marcar como cliente
+    setIsClient(true);
+    
     // Só executar no cliente
     const token = localStorage.getItem('auth_token');
     const name = localStorage.getItem('user_name');
@@ -27,6 +31,7 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
     else if (path.includes('/backoffice/fees')) setActiveNav('fees');
     else if (path.includes('/backoffice/approvals')) setActiveNav('approvals');
     else if (path.includes('/backoffice/reports')) setActiveNav('reports');
+    else if (path.includes('/backoffice/users')) setActiveNav('users');
     else if (path.includes('/backoffice/settings')) setActiveNav('settings');
     else setActiveNav('dashboard');
   }, [router]);
@@ -43,9 +48,12 @@ export default function BackofficeLayout({ children }: { children: React.ReactNo
     { icon: FileText, label: 'Contratos', href: '/backoffice/contracts', id: 'contracts' },
     { icon: DollarSign, label: 'Faturas', href: '/backoffice/fees', id: 'fees' },
     { icon: CheckCircle, label: 'Aprovações', href: '/backoffice/approvals', id: 'approvals' },
+    { icon: UsersIcon, label: 'Usuários', href: '/backoffice/users', id: 'users' },
     { icon: BarChart3, label: 'Relatórios', href: '/backoffice/reports', id: 'reports' },
     { icon: Settings, label: 'Configurações', href: '/backoffice/settings', id: 'settings' },
   ];
+
+  if (!isClient) return null; // Evita renderização do servidor
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
