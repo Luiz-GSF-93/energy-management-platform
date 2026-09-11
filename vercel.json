@@ -1,6 +1,7 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install --legacy-peer-deps"
+  "buildCommand": "cd frontend && npm install jiti && npm run build",
+  "outputDirectory": "frontend/.next",
+  "env": {
+    "NEXT_PUBLIC_API_URL": "@next-public-api-url"
+  }
 }
