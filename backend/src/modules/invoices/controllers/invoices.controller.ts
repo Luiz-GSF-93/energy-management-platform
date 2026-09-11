@@ -1,119 +1,93 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Param,
-  Query,
-  Body,
-  UseGuards,
-  Request,
-  BadRequestException,
-} from '@nestjs/common';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { Controller, Post, Get, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { InvoicesService } from '../services/invoices.service';
-import {
-  CreateInvoiceDto,
-  SimulateRegulatedMarketDto,
-  UpdateInvoiceDto,
-  GetInvoicesDto,
-} from '../dtos/invoices.dto';
+import { CreateInvoiceDto, UpdateInvoiceDto, GetInvoicesDto, SimulateRegulatedMarketDto } from '../dtos/invoices.dto';
 
-@Controller('invoices')
-@UseGuards(JwtAuthGuard)
+@Controller('api/v1/invoices')
 export class InvoicesController {
   constructor(private invoicesService: InvoicesService) {}
 
+  /**
+   * POST /api/v1/invoices
+   * Criar fatura
+   */
   @Post()
-  async createInvoice(@Request() req: any, @Body() dto: CreateInvoiceDto) {
-    try {
-      const userId = req.user?.sub;
-      if (!userId) throw new BadRequestException('Usuário não autenticado');
-      console.log('📄 Criando fatura:', dto.invoiceNumber);
-      const invoice = await this.invoicesService.createInvoice(dto, userId);
-      return { success: true, data: invoice, message: 'Fatura criada com sucesso' };
-    } catch (exception) {
-      console.error('❌ Erro ao criar fatura:', exception);
-      return { success: false, error: String(exception) };
-    }
+  async createInvoice(@Body() dto: CreateInvoiceDto) {
+    const userId = 'system'; // Substitua por autenticação real
+    return await this.invoicesService.createInvoiceFromContract(
+      dto.energyContractId,
+      dto.consumerUnitId,
+      new Date(dto.referenceMonth),
+      {
+        kwhPeak: dto.consumptionKwhPeak,
+        kwhOffPeak: dto.consumptionKwhOffPeak,
+        demandKwPeak: dto.demandKwPeak,
+        demandKwOffPeak: dto.demandKwOffPeak,
+        demandKwBilled: dto.demandKwBilled,
+        chargesCost: dto.chargesCost,
+        municipalTax: dto.municipalTax,
+      },
+      userId,
+    );
   }
 
+  /**
+   * GET /api/v1/invoices
+   * Listar faturas
+   */
   @Get()
-  async getInvoices(@Request() req: any, @Query() filters: GetInvoicesDto) {
-    try {
-      const userId = req.user?.sub;
-      if (!userId) throw new BadRequestException('Usuário não autenticado');
-      console.log('📋 Buscando faturas...');
-      const organizationId = 'org-expertev-test-001';
-      const invoices = await this.invoicesService.getInvoices(organizationId, filters);
-      return { success: true, count: invoices.length, data: invoices };
-    } catch (exception) {
-      console.error('❌ Erro ao buscar faturas:', exception);
-      return { success: false, error: String(exception) };
-    }
+  async getInvoices(
+    @Query('organizationId') organizationId: string,
+    @Query() filters: GetInvoicesDto,
+  ) {
+    return await this.invoicesService.getInvoices(organizationId, filters);
   }
 
-  @Get(':invoiceId')
-  async getInvoice(@Request() req: any, @Param('invoiceId') invoiceId: string) {
-    try {
-      const userId = req.user?.sub;
-      if (!userId) throw new BadRequestException('Usuário não autenticado');
-      console.log('🔍 Buscando fatura:', invoiceId);
-      const invoice = await this.invoicesService.getInvoiceById(invoiceId);
-      if (!invoice) throw new BadRequestException('Fatura não encontrada');
-      return { success: true, data: invoice };
-    } catch (exception) {
-      console.error('❌ Erro ao buscar fatura:', exception);
-      return { success: false, error: String(exception) };
-    }
+  /**
+   * GET /api/v1/invoices/:id
+   * Obter fatura por ID
+   */
+  @Get(':id')
+  async getInvoiceById(@Param('id') id: string) {
+    return await this.invoicesService.getInvoiceById(id);
   }
 
-  @Put(':invoiceId')
-  async updateInvoice(@Request() req: any, @Param('invoiceId') invoiceId: string, @Body() dto: UpdateInvoiceDto) {
-    try {
-      const userId = req.user?.sub;
-      if (!userId) throw new BadRequestException('Usuário não autenticado');
-      console.log('✏️ Atualizando fatura:', invoiceId);
-      const invoice = await this.invoicesService.updateInvoice(invoiceId, dto);
-      if (!invoice) throw new BadRequestException('Erro ao atualizar fatura');
-      return { success: true, data: invoice, message: 'Fatura atualizada com sucesso' };
-    } catch (exception) {
-      console.error('❌ Erro ao atualizar fatura:', exception);
-      return { success: false, error: String(exception) };
-    }
+  /**
+   * PUT /api/v1/invoices/:id
+   * Atualizar fatura
+   */
+  @Put(':id')
+  async updateInvoice(@Param('id') id: string, @Body() dto: UpdateInvoiceDto) {
+    return await this.invoicesService.updateInvoice(id, dto);
   }
 
-  @Post('simulate/regulated-market')
-  async simulateRegulatedMarket(@Request() req: any, @Body() dto: SimulateRegulatedMarketDto) {
-    try {
-      const userId = req.user?.sub;
-      if (!userId) throw new BadRequestException('Usuário não autenticado');
-      console.log('⚡ DTO recebido:', JSON.stringify(dto));
-      const simulation = await this.invoicesService.simulateRegulatedMarket(dto);
-      console.log('⚡ Simulation result:', JSON.stringify(simulation));
-      return {
-        success: true,
-        ...simulation,
-        message: 'Simulação realizada com sucesso',
-      };
-    } catch (exception) {
-      console.error('❌ Erro ao simular mercado regulado:', exception);
-      return { success: false, error: String(exception) };
-    }
+  /**
+   * POST /api/v1/invoices/:id/compare
+   * Comparar fatura com mercado regulado
+   */
+  @Post(':id/compare')
+  async compareWithRegulatedMarket(
+    @Param('id') invoiceId: string,
+    @Body() dto: SimulateRegulatedMarketDto,
+  ) {
+    return await this.invoicesService.compareWithRegulatedMarket(invoiceId, dto);
   }
 
-  @Post(':invoiceId/compare')
-  async compareInvoice(@Request() req: any, @Param('invoiceId') invoiceId: string, @Body() body: any) {
-    try {
-      const userId = req.user?.sub;
-      if (!userId) throw new BadRequestException('Usuário não autenticado');
-      console.log('⚖️ Comparando fatura com simulação:', invoiceId);
-      const simulation = await this.invoicesService.simulateRegulatedMarket(body.simulation);
-      const comparison = await this.invoicesService.compareInvoiceWithSimulation(invoiceId, simulation);
-      return { success: true, ...comparison, message: 'Comparação realizada com sucesso' };
-    } catch (exception) {
-      console.error('❌ Erro ao comparar fatura:', exception);
-      return { success: false, error: String(exception) };
-    }
+  /**
+   * GET /api/v1/invoices/metrics/:consumerUnitId
+   * Obter métricas de performance
+   */
+  @Get('metrics/:consumerUnitId')
+  async getPerformanceMetrics(
+    @Param('consumerUnitId') consumerUnitId: string,
+    @Query('organizationId') organizationId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return await this.invoicesService.getPerformanceMetrics(
+      consumerUnitId,
+      organizationId,
+      new Date(startDate),
+      new Date(endDate),
+    );
   }
 }

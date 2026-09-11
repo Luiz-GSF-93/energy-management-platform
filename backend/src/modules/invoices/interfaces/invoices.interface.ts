@@ -1,3 +1,6 @@
+/**
+ * Interface completa de Fatura de Energia
+ */
 export interface Invoice {
   id: string;
   organizationId: string;
@@ -8,100 +11,116 @@ export interface Invoice {
   dueDate: Date;
   referenceMonth: Date;
   status: 'draft' | 'issued' | 'paid' | 'cancelled';
-  invoiceType: 'regulated' | 'free_market' | 'adjustment';
-  
-  // Dados de consumo
-  consumptionKwh: number;
-  demandKw?: number;
-  
+  invoiceType: 'regulated' | 'free_market';
+
+  // Concessionária
+  distributorName: string;
+  distributorCnpj: string;
+  consumerUnitNumber: string;
+  meterNumber: string;
+
+  // Modalidade tarifária
+  tariffModality: 'green' | 'blue' | 'white' | 'conventional';
+
+  // Consumo
+  consumptionKwhPeak: number;
+  consumptionKwhOffPeak: number;
+  totalConsumptionKwh: number;
+
+  // Demanda
+  demandKwPeak?: number;
+  demandKwOffPeak?: number;
+  demandKwBilled?: number;
+
   // Tarifas
-  energyTariff: number; // R$/kWh
-  demandTariff?: number; // R$/kW
-  
-  // Custos regulados
-  energyCost: number; // consumptionKwh * energyTariff
-  demandCost?: number;
-  distributionCost: number;
-  transmissionCost: number;
-  
+  tusdEnergyRatePeak: number;
+  tusdEnergyRateOffPeak: number;
+  teEnergyRatePeak: number;
+  teEnergyRateOffPeak: number;
+  demandRatePeak?: number;
+  demandRateOffPeak?: number;
+
+  // Custos
+  tusdEnergyCostPeak: number;
+  tusdEnergyCostOffPeak: number;
+  teEnergyCostPeak: number;
+  teEnergyCostOffPeak: number;
+  demandCostPeak?: number;
+  demandCostOffPeak?: number;
+
   // Encargos
-  pis: number;
-  cofins: number;
-  icms: number;
-  tusd: number; // Taxa de Uso do Sistema de Distribuição
-  te: number; // Taxa de Energia
-  
-  // Subtotais
+  reservedEnergyCost?: number;
+  chargesCost?: number;
+  municipalTax?: number;
+
+  // Impostos
+  icmsRate: number;
+  icmsValue: number;
+  pisRate: number;
+  pisValue: number;
+  cofinsRate: number;
+  cofinsValue: number;
+
+  // Crédito e descontos
+  previousCredit?: number;
+  discount?: number;
+  fine?: number;
+  interest?: number;
+
+  // Totalizações
   subtotal: number;
   taxes: number;
-  
-  // Total
   totalAmount: number;
-  
+
   // Pagamento
   paidAmount?: number;
   paidDate?: Date;
-  
-  // Metadata
+
+  // Documentos e observações
   invoiceUrl?: string;
   notes?: string;
+
+  // Comparativa
+  regulatedComparison?: number;
+  marketComparison?: string;
+
+  // Auditoria
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
 }
 
+/**
+ * Simulação de mercado regulado
+ */
 export interface RegulatedMarketSimulation {
   consumerUnitId: string;
   referenceMonth: Date;
+  consumptionKwhPeak: number;
+  consumptionKwhOffPeak: number;
+  demandKwPeak?: number;
+  demandKwOffPeak?: number;
   
-  // Dados de entrada
-  consumptionKwh: number;
-  demandKw?: number;
+  tusdEnergyCostPeak: number;
+  tusdEnergyCostOffPeak: number;
+  teEnergyCostPeak: number;
+  teEnergyCostOffPeak: number;
+  demandCostPeak?: number;
+  demandCostOffPeak?: number;
   
-  // Tarifas base
-  energyTariffsBase: {
-    peakRate: number; // R$/kWh horário de pico
-    offPeakRate: number; // R$/kWh horário fora de pico
-    demandRate?: number; // R$/kW
-  };
+  icmsValue: number;
+  pisValue: number;
+  cofinsValue: number;
+  chargesCost: number;
   
-  // Cálculos
-  energyCostCalculated: number;
-  demandCostCalculated?: number;
-  distributionCalculated: number;
-  transmissionCalculated: number;
-  
-  // Encargos (% aplicados)
-  pisPercentage: number;
-  cofinsPercentage: number;
-  icmsPercentage: number;
-  tusdPercentage: number;
-  tePercentage: number;
-  
-  // Totais
   subtotalBeforeTaxes: number;
   chargesTotal: number;
   totalEstimated: number;
-  
-  // Comparação
-  comparison?: {
-    currentBill: number;
-    simulatedBill: number;
-    savings: number;
-    savingsPercentage: number;
-  };
 }
 
-export interface InvoiceItem {
-  id: string;
-  invoiceId: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  itemType: 'energy' | 'demand' | 'distribution' | 'transmission' | 'charge' | 'tax';
-}
-
+/**
+ * Comparação entre faturas
+ */
 export interface InvoiceComparison {
   invoiceId: string;
   referenceMonth: Date;
@@ -110,4 +129,17 @@ export interface InvoiceComparison {
   potentialSavings: number;
   savingsPercentage: number;
   recommendation: string;
+}
+
+/**
+ * Métrica de performance (gráficos)
+ */
+export interface PerformanceMetrics {
+  period: string; // YYYY-MM-DD
+  consumption: number;
+  regulatedCost: number;
+  freeMarketCost: number;
+  savings: number;
+  savingsPercentage: number;
+  roi: number;
 }
