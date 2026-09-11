@@ -1,127 +1,154 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Eye, Trash2, Edit } from 'lucide-react';
+import { api } from '@/lib/api/client';
+import { Contract, ContractAnalytics } from '@/types/api';
+import { CreateContractForm } from '@/components/forms/CreateContractForm';
 
-export default function ContractsPage() {
-  const [contracts, setContracts] = useState([]);
+export default function ContratosPage() {
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [analytics, setAnalytics] = useState<ContractAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
-    const fetchContracts = async () => {
-      try {
-        const token = localStorage.getItem('auth_token');
-        const response = await fetch('https://energy-management-platform.onrender.com/api/v1/contracts', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!response.ok) throw new Error('Falha ao carregar contratos');
-        
-        const data = await response.json();
-        setContracts(Array.isArray(data) ? data : data.data || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro ao carregar contratos');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchContracts();
+    loadData();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="p-6 flex justify-center items-center h-full">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400">Carregando contratos...</p>
-        </div>
-      </div>
-    );
-  }
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [contractsRes, analyticsRes] = await Promise.all([
+        api.contracts.list(),
+        api.contracts.analytics(),
+      ]);
+
+      if (contractsRes.data) {
+        setContracts(Array.isArray(contractsRes.data) ? contractsRes.data : []);
+      }
+      if (analyticsRes.data) {
+        setAnalytics(analyticsRes.data as ContractAnalytics);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateSuccess = (newContract: Contract) => {
+    setContracts([newContract, ...contracts]);
+    setShowForm(false);
+    loadData(); // Recarregar analytics
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            <FileText className="w-8 h-8 text-blue-400" />
-            Gestão de Contratos
-          </h1>
-          <p className="text-gray-400 mt-1">Total: {contracts.length} contratos</p>
-        </div>
-        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition">
-          <Plus className="w-5 h-5" />
-          Novo Contrato
+        <h1 className="text-3xl font-bold text-gray-800">Contratos</h1>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium transition"
+        >
+          {showForm ? 'Cancelar' : '+ Novo Contrato'}
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 text-red-400 flex items-center gap-2">
-          <span>❌</span>
-          <span>{error}</span>
+      {/* Analytics Cards */}
+      {analytics && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow">
+            <p className="text-gray-500 text-sm">Total</p>
+            <p className="text-2xl font-bold text-gray-800">{analytics.total}</p>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg shadow border-l-4 border-green-500">
+            <p className="text-gray-500 text-sm">Ativos</p>
+            <p className="text-2xl font-bold text-green-600">{analytics.active}</p>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-lg shadow border-l-4 border-gray-500">
+            <p className="text-gray-500 text-sm">Inativos</p>
+            <p className="text-2xl font-bold text-gray-600">{analytics.inactive}</p>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-lg shadow border-l-4 border-yellow-500">
+            <p className="text-gray-500 text-sm">Suspensos</p>
+            <p className="text-2xl font-bold text-yellow-600">{analytics.suspended}</p>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg shadow border-l-4 border-blue-500">
+            <p className="text-gray-500 text-sm">Valor Total</p>
+            <p className="text-2xl font-bold text-blue-600">R$ {analytics.totalValue.toLocaleString('pt-BR')}</p>
+          </div>
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-800 border-b border-gray-700">
+      {/* Formulário */}
+      {showForm && (
+        <CreateContractForm onSuccess={handleCreateSuccess} />
+      )}
+
+      {/* Tabela de Contratos */}
+      {loading ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">Carregando contratos...</p>
+        </div>
+      ) : contracts.length === 0 ? (
+        <div className="bg-white p-12 rounded-lg shadow text-center">
+          <p className="text-gray-500">Nenhum contrato encontrado</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left font-semibold text-gray-300">Contrato</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-300">Cliente</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-300">Valor Mensal</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-300">Comissão</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-300">Status</th>
-                <th className="px-6 py-3 text-center font-semibold text-gray-300">Ações</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Número</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Título</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Taxa Mensal</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Comissão</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Tipo</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Ações</th>
               </tr>
             </thead>
-            <tbody>
-              {contracts.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
-                    Nenhum contrato encontrado
+            <tbody className="divide-y divide-gray-200">
+              {contracts.map((contract) => (
+                <tr key={contract.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{contract.contractNumber}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{contract.contractTitle}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">R$ {contract.monthlyFee.toLocaleString('pt-BR')}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{contract.commissionPercentage}%</td>
+                  <td className="px-6 py-4 text-sm">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      contract.contractType === 'STANDARD'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
+                    }`}>
+                      {contract.contractType}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      contract.status === 'ACTIVE'
+                        ? 'bg-green-100 text-green-800'
+                        : contract.status === 'INACTIVE'
+                          ? 'bg-gray-100 text-gray-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {contract.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <button className="text-blue-600 hover:text-blue-800 font-medium mr-4">
+                      Editar
+                    </button>
+                    <button className="text-red-600 hover:text-red-800 font-medium">
+                      Deletar
+                    </button>
                   </td>
                 </tr>
-              ) : (
-                contracts.map((contract: any) => (
-                  <tr key={contract.id} className="border-b border-gray-700 hover:bg-gray-800/50 transition">
-                    <td className="px-6 py-3 text-white font-medium">{contract.contractNumber}</td>
-                    <td className="px-6 py-3 text-gray-300">{contract.customerId || 'N/A'}</td>
-                    <td className="px-6 py-3 text-green-400 font-semibold">
-                      R$ {contract.monthlyFee?.toFixed(2) || '0.00'}
-                    </td>
-                    <td className="px-6 py-3 text-blue-400">{contract.commissionPercentage}%</td>
-                    <td className="px-6 py-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        contract.status === 'ACTIVE' 
-                          ? 'bg-green-900/30 text-green-400' 
-                          : 'bg-gray-700 text-gray-300'
-                      }`}>
-                        {contract.status || 'Ativo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3 flex justify-center gap-2">
-                      <button className="p-2 hover:bg-gray-700 rounded transition text-blue-400">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button className="p-2 hover:bg-gray-700 rounded transition text-yellow-400">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button className="p-2 hover:bg-gray-700 rounded transition text-red-400">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   );
 }

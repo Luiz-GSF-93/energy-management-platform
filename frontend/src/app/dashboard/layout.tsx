@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   LogOut,
@@ -13,14 +12,13 @@ import {
   Brain,
   TrendingUp,
   Cog,
-  ChevronRight,
   Zap,
 } from 'lucide-react';
 
 const navItems = [
   { icon: Home, label: 'Dashboard', href: '/dashboard', id: 'dashboard' },
-  { icon: Receipt, label: 'Faturas', href: '/dashboard/invoices', id: 'invoices' },
-  { icon: TrendingUp, label: 'Análise', href: '/dashboard/analysis', id: 'analysis' },
+  { icon: Receipt, label: 'Minhas Faturas', href: '/dashboard/invoices', id: 'invoices' },
+  { icon: TrendingUp, label: 'Minha Análise', href: '/dashboard/analysis', id: 'analysis' },
   { icon: Zap, label: 'Economia', href: '/dashboard/savings', id: 'savings' },
   { icon: Brain, label: 'IA', href: '#', id: 'ai', disabled: true },
   { icon: Cog, label: 'Configurações', href: '/dashboard/settings', id: 'settings' },
@@ -35,9 +33,13 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [mounted, setMounted] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    const name = localStorage.getItem('user_name');
+    setUserName(name);
+
     const path = window.location.pathname.split('/').pop() || 'dashboard';
     const navItem = navItems.find(item => item.href.includes(path));
     if (navItem) setActiveNav(navItem.id);
@@ -45,111 +47,94 @@ export default function DashboardLayout({
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('tenant_id');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_name');
     router.push('/auth/login');
   };
 
   if (!mounted) return null;
 
   return (
-    <div className="flex min-h-screen bg-gray-950">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
-      <aside className={`${
-        sidebarOpen ? 'w-64' : 'w-20'
-      } bg-gradient-to-b from-gray-900 to-gray-800 border-r border-gray-700 transition-all duration-300 flex flex-col`}>
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+      <aside
+        className={`${
+          sidebarOpen ? 'w-64' : 'w-20'
+        } bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 overflow-y-auto`}
+      >
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
           {sidebarOpen && (
             <div className="flex items-center gap-2">
-              <Zap className="w-6 h-6 text-blue-400" />
-              <span className="text-lg font-bold text-white">Expert</span>
+              <Zap className="w-6 h-6 text-blue-600" />
+              <span className="font-bold text-gray-900 dark:text-white">Expert Energy</span>
             </div>
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
           >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="p-4 space-y-2">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const isActive = activeNav === item.id;
             return (
-              <a
+              <button
                 key={item.id}
-                href={item.disabled ? '#' : item.href}
-                onClick={(e) => {
+                onClick={() => {
                   if (!item.disabled) {
                     setActiveNav(item.id);
-                  } else {
-                    e.preventDefault();
+                    router.push(item.href);
                   }
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                  activeNav === item.id
-                    ? 'bg-blue-600 text-white'
-                    : item.disabled
-                    ? 'text-gray-600 cursor-not-allowed'
-                    : 'text-gray-300 hover:bg-gray-700'
-                }`}
+                disabled={item.disabled}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
+                  isActive
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                } ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon size={20} className="flex-shrink-0" />
                 {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
-                {sidebarOpen && item.disabled && (
-                  <span className="ml-auto text-xs bg-gray-700 px-2 py-1 rounded">Soon</span>
-                )}
-              </a>
+              </button>
             );
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-gray-700">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-700 transition-all"
-          >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            {sidebarOpen && <span className="text-sm font-medium">Sair</span>}
-          </button>
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            <p>Bem-vindo</p>
+            <p className="font-semibold text-gray-700 dark:text-gray-300">{userName || 'Cliente'}</p>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-700 rounded-lg lg:hidden transition-colors"
-          >
-            <Menu className="w-6 h-6 text-gray-300" />
-          </button>
-
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+            {navItems.find(item => item.id === activeNav)?.label || 'Dashboard'}
+          </h1>
           <div className="flex items-center gap-4">
-            {/* Notifications */}
-            <button className="relative p-2 hover:bg-gray-700 rounded-lg transition-colors">
-              <Bell className="w-6 h-6 text-gray-300" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <Bell size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
-
-            {/* Profile */}
-            <div className="flex items-center gap-3 pl-4 border-l border-gray-700">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">JD</span>
-              </div>
-              <div className="hidden md:block">
-                <p className="text-sm font-medium text-white">João Silva</p>
-                <p className="text-xs text-gray-400">Admin</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            >
+              <LogOut size={20} />
+              <span className="text-sm font-medium">Sair</span>
+            </button>
           </div>
         </header>
 
-        {/* Content */}
+        {/* Page Content */}
         <main className="flex-1 overflow-auto">
           {children}
         </main>

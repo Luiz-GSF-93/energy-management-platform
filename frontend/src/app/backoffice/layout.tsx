@@ -7,31 +7,24 @@ import {
   Menu,
   X,
   Bell,
-  LayoutDashboard,
-  Users,
+  Home,
+  Receipt,
+  Brain,
+  TrendingUp,
+  Cog,
   FileText,
-  DollarSign,
   CheckCircle,
-  BarChart3,
-  ChevronRight,
-  Zap,
+  DollarSign,
 } from 'lucide-react';
 
-interface BackofficeNavItem {
-  icon: any;
-  label: string;
-  href: string;
-  id: string;
-  adminOnly?: boolean;
-}
-
-const navItems: BackofficeNavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/backoffice/dashboard', id: 'dashboard' },
-  { icon: Users, label: 'Usuários', href: '/backoffice/users', id: 'users', adminOnly: true },
+const navItems = [
+  { icon: Home, label: 'Dashboard', href: '/backoffice/dashboard', id: 'dashboard' },
   { icon: FileText, label: 'Contratos', href: '/backoffice/contracts', id: 'contracts' },
-  { icon: DollarSign, label: 'Honorários', href: '/backoffice/fees', id: 'fees' },
+  { icon: Receipt, label: 'Faturas', href: '/backoffice/invoices', id: 'invoices' },
+  { icon: DollarSign, label: 'Taxas', href: '/backoffice/fees', id: 'fees' },
   { icon: CheckCircle, label: 'Aprovações', href: '/backoffice/approvals', id: 'approvals' },
-  { icon: BarChart3, label: 'Relatórios', href: '/backoffice/reports', id: 'reports' },
+  { icon: TrendingUp, label: 'Relatórios', href: '/backoffice/reports', id: 'reports' },
+  { icon: Cog, label: 'Configurações', href: '/backoffice/settings', id: 'settings' },
 ];
 
 export default function BackofficeLayout({
@@ -47,20 +40,12 @@ export default function BackofficeLayout({
 
   useEffect(() => {
     setMounted(true);
-    
-    // Obter role do token (decodificado)
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      router.push('/auth/login');
-      return;
-    }
+    const role = localStorage.getItem('user_role');
+    setUserRole(role);
 
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      setUserRole(payload.role || 'CLIENT');
-    } catch (e) {
-      console.error('Erro ao decodificar token:', e);
-      setUserRole('CLIENT');
+    // Se não for admin/backoffice, redirecionar para cliente
+    if (role && !['ADMIN', 'BACKOFFICE_MANAGER', 'BACKOFFICE_ANALYST'].includes(role)) {
+      router.push('/dashboard');
     }
 
     const path = window.location.pathname.split('/').pop() || 'dashboard';
@@ -70,106 +55,90 @@ export default function BackofficeLayout({
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('tenant_id');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_name');
     router.push('/auth/login');
   };
 
   if (!mounted) return null;
 
-  // Filtrar itens do menu baseado no role
-  const filteredNavItems = navItems.filter(item => {
-    if (item.adminOnly && userRole !== 'ADMIN') {
-      return false;
-    }
-    return true;
-  });
-
   return (
-    <div className="flex min-h-screen bg-gray-950">
-      {/* Sidebar - Mesmo do Dashboard */}
-      <aside className={`${
-        sidebarOpen ? 'w-64' : 'w-20'
-      } bg-gradient-to-b from-gray-900 to-gray-800 border-r border-gray-700 transition-all duration-300 flex flex-col`}>
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Sidebar */}
+      <aside
+        className={`${
+          sidebarOpen ? 'w-64' : 'w-20'
+        } bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 overflow-y-auto`}
+      >
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
           {sidebarOpen && (
             <div className="flex items-center gap-2">
-              <Zap className="w-6 h-6 text-blue-400" />
-              <span className="text-lg font-bold text-white">Expert</span>
+              <FileText className="w-6 h-6 text-orange-600" />
+              <span className="font-bold text-gray-900 dark:text-white">Backoffice</span>
             </div>
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
           >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          {filteredNavItems.map((item) => {
+        <nav className="p-4 space-y-2">
+          {navItems.map((item) => {
             const Icon = item.icon;
+            const isActive = activeNav === item.id;
             return (
-              <a
+              <button
                 key={item.id}
-                href={item.href}
-                onClick={() => setActiveNav(item.id)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                  activeNav === item.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-700'
+                onClick={() => {
+                  setActiveNav(item.id);
+                  router.push(item.href);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
+                  isActive
+                    ? 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon size={20} className="flex-shrink-0" />
                 {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
-              </a>
+              </button>
             );
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-gray-700">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-700 transition-all"
-          >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            {sidebarOpen && <span className="text-sm font-medium">Sair</span>}
-          </button>
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            <p>Role: {userRole}</p>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-700 rounded-lg lg:hidden transition-colors"
-          >
-            <Menu className="w-6 h-6 text-gray-300" />
-          </button>
-
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+            {navItems.find(item => item.id === activeNav)?.label || 'Backoffice'}
+          </h1>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 hover:bg-gray-700 rounded-lg transition-colors">
-              <Bell className="w-6 h-6 text-gray-300" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <Bell size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
-
-            <div className="flex items-center gap-3 pl-4 border-l border-gray-700">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">BO</span>
-              </div>
-              <div className="hidden md:block">
-                <p className="text-sm font-medium text-white">Backoffice</p>
-                <p className="text-xs text-gray-400 capitalize">{userRole?.toLowerCase() || 'Usuario'}</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-400" />
-            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            >
+              <LogOut size={20} />
+              <span className="text-sm font-medium">Sair</span>
+            </button>
           </div>
         </header>
 
-        {/* Content */}
+        {/* Page Content */}
         <main className="flex-1 overflow-auto">
           {children}
         </main>
