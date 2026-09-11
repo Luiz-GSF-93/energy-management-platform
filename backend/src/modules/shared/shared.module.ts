@@ -2,6 +2,7 @@ import { Module, Logger } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
+import { CustomTypeOrmLogger } from './typeorm-logger';
 
 const logger = new Logger('SharedModule');
 
@@ -9,22 +10,44 @@ const logger = new Logger('SharedModule');
   imports: [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
+      useFactory: async (config: ConfigService) => {
         const databaseUrl = config.get<string>('DATABASE_URL');
         
-        logger.log(`DATABASE_URL: ${databaseUrl ? 'Configurado' : 'Não configurado'}`);
+        if (!databaseUrl) {
+          logger.warn('⚠️ DATABASE_URL não configurado. Usando fallback.');
+          return {
+            type: 'postgres',
+            host: 'localhost',
+            port: 5432,
+            username: 'postgres',
+            password: 'postgres',
+            database: 'test',
+            entities: [],
+            synchronize: false,
+            logging: false,
+            logger: new CustomTypeOrmLogger(),
+          };
+        }
+
+        logger.log('✅ Conectando ao Supabase PostgreSQL...');
 
         return {
           type: 'postgres',
-          url: databaseUrl || 'postgresql://localhost/test', // Fallback para localhost
+          url: databaseUrl,
           entities: [],
           synchronize: false,
-          logging: false,
-          // ✅ KEY FIX: Não tentar conectar na inicialização
-          retryAttempts: 0,
-          keepConnectionAlive: false,
-          // Se falhar, continuar assim mesmo
-          dropSchema: false,
+          logging: ['error'],
+          logger: new CustomTypeOrmLogger(),
+          // Connection pooling
+          extra: {
+            max: 5,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
+          },
+          // SSL para Supabase
+          ssl: {
+            rejectUnauthorized: false,
+          },
         };
       },
     }),
