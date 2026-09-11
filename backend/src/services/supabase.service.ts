@@ -9,9 +9,13 @@ export class SupabaseService {
   private supabaseServiceClient: any;
 
   constructor(private configService: ConfigService) {
-    const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
-    const supabaseAnonKey = this.configService.get<string>('SUPABASE_ANON_KEY');
-    const supabaseServiceKey = this.configService.get<string>('SUPABASE_SERVICE_KEY');
+    const supabaseUrl = this.configService.get<string>('SUPABASE_URL') || '';
+    const supabaseAnonKey = this.configService.get<string>('SUPABASE_ANON_KEY') || '';
+    const supabaseServiceKey = this.configService.get<string>('SUPABASE_SERVICE_KEY') || '';
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn('⚠️ SUPABASE_URL or SUPABASE_ANON_KEY not configured');
+    }
 
     this.supabaseClient = createClient(supabaseUrl, supabaseAnonKey, { realtime: { transport: ws as any } });
     this.supabaseServiceClient = createClient(supabaseUrl, supabaseServiceKey, { realtime: { transport: ws as any } });
