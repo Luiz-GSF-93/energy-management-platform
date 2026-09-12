@@ -32,7 +32,8 @@ interface MulterFile {
   path: string;
 }
 
-@Controller('api/document-processing')
+// ✅ CORRIGIDO: Remover 'api/' - o global prefix já adiciona 'api/v1'
+@Controller('document-processing')
 export class DocumentProcessingController {
   constructor(
     private validationService: ValidationService,
@@ -73,25 +74,40 @@ export class DocumentProcessingController {
     try {
       const orgId = organizationId || 'default-org';
       console.log(`📄 Processando: ${file.originalname}`);
+      console.log(`🏢 Organização ID: ${orgId}`);
 
       const fileBuffer = await fs.readFile(file.path);
       let rawText = '';
+      
       if (file.mimetype === 'application/pdf') {
+        console.log(`📖 Extraindo texto do PDF...`);
         rawText = await this.pdfExtractor.extractText(fileBuffer);
+        console.log(`✅ Texto extraído: ${rawText.length} caracteres`);
       }
 
+      console.log(`🔎 Detectando distribuidor...`);
       const distributor = this.distributorDetectorService.detectDistributor(rawText);
-      const parsedData = this.genericParser.parse(rawText, distributor);
-      const extractionValidation = this.validationService.validateExtractedData(parsedData);
+      console.log(`✅ Distribuidor detectado: ${distributor}`);
 
+      console.log(`📊 Parseando dados da fatura...`);
+      const parsedData = this.genericParser.parse(rawText, distributor);
+      console.log(`✅ Dados parseados:`, parsedData);
+
+      console.log(`✔️ Validando extração...`);
+      const extractionValidation = this.validationService.validateExtractedData(parsedData);
+      console.log(`✅ Validação da extração:`, extractionValidation);
+
+      console.log(`🔍 Validando contrato...`);
       const contractValidation = this.contractValidationService.validateAgainstContract(
         parsedData.clientCnpj || '',
         parsedData.consumerUnit || '',
         parsedData.referenceMonth,
         parsedData.consumptionKwh,
       );
+      console.log(`✅ Validação do contrato:`, contractValidation);
 
       const isFinal = contractValidation.status === 'VALIDO';
+      console.log(`📋 Status final: ${isFinal ? 'APPROVED' : 'PENDING_REVIEW'}`);
 
       const storagePath = this.defineStoragePath(
         orgId,
@@ -99,11 +115,15 @@ export class DocumentProcessingController {
         parsedData.referenceMonth,
         file.originalname,
       );
+      
+      console.log(`💾 Movendo arquivo para: ${storagePath}`);
       await this.moveFileToStructure(file.path, storagePath);
+      console.log(`✅ Arquivo salvo com sucesso`);
 
       const documentId = uuidv4();
+      console.log(`✅ Documento ID: ${documentId}`);
 
-      return {
+      const response = {
         success: true,
         documentId,
         extraction: {
@@ -114,10 +134,10 @@ export class DocumentProcessingController {
           totalAmount: parsedData.totalAmount,
           confidenceLevel: extractionValidation.confidenceLevel,
           confidenceScore: extractionValidation.confidenceScore,
-          
           clientCnpj: parsedData.clientCnpj,
           clientName: parsedData.clientName,
           consumerUnitNumber: parsedData.consumerUnitNumber,
+          notes: extractionValidation.notes || [],
         },
         audit: {
           extraction: extractionValidation,
@@ -126,8 +146,14 @@ export class DocumentProcessingController {
         },
         storagePath,
       };
+
+      console.log(`📤 === RESPOSTA FINAL ===`);
+      console.log(response);
+
+      return response;
     } catch (error) {
-      console.error('❌ Erro:', error);
+      console.error('❌ === ERRO AO PROCESSAR FATURA ===');
+      console.error('Erro completo:', error);
       throw new InternalServerErrorException(
         error instanceof Error ? error.message : 'Erro ao processar fatura',
       );
@@ -136,11 +162,13 @@ export class DocumentProcessingController {
 
   @Get()
   async listDocuments() {
+    console.log('📋 Listando documentos...');
     return { success: true, data: [], message: 'Nenhum documento encontrado' };
   }
 
   @Get(':documentId/status')
   async getDocumentStatus(@Param('documentId') documentId: string) {
+    console.log(`🔍 Buscando status do documento: ${documentId}`);
     return { success: true, data: { documentId, status: 'PENDING' } };
   }
 
@@ -151,12 +179,24 @@ export class DocumentProcessingController {
     filename: string,
   ): string {
     const [year, month] = referenceMonth.split('-');
-    return `organization/${organizationId}/empresa/${empresaId}/ano/${year}/mes/${month}/${filename}`;
+    const path = `organization/${organizationId}/empresa/${empresaId}/ano/${year}/mes/${month}/${filename}`;
+    console.log(`📂 Storage path definido: ${path}`);
+    return path;
   }
 
   private async moveFileToStructure(sourcePath: string, targetPath: string): Promise<void> {
-    const targetDir = `./uploads/documents/${targetPath.substring(0, targetPath.lastIndexOf('/'))}`;
-    await fs.mkdir(targetDir, { recursive: true });
-    await fs.rename(sourcePath, `./uploads/documents/${targetPath}`);
+    try {
+      const targetDir = `./uploads/documents/${targetPath.substring(0, targetPath.lastIndexOf('/'))}`;
+      console.log(`📁 Criando diretório: ${targetDir}`);
+      await fs.mkdir(targetDir, { recursive: true });
+      
+      const fullTargetPath = `./uploads/documents/${targetPath}`;
+      console.log(`📤 Movendo arquivo de ${sourcePath} para ${fullTargetPath}`);
+      await fs.rename(sourcePath, fullTargetPath);
+      console.log(`✅ Arquivo movido com sucesso`);
+    } catch (error) {
+      console.error(`❌ Erro ao mover arquivo:`, error);
+      throw error;
+    }
   }
 }
