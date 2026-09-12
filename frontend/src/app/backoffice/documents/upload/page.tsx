@@ -13,13 +13,15 @@ export default function DocumentUploadPage() {
   const [organizationId, setOrganizationId] = useState('org-expertev-test-001');
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  // Remove /api/v1 if present to avoid duplication
-  const getBaseUrl = () => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-    return baseUrl.replace(/\/api\/v1\/?$/, '');
+  // ✅ CORRIGIDO: Remover /api ou /api/v1 e depois adicionar /api/v1
+  const getApiUrl = () => {
+    const env = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // Remove /api ou /api/v1 se estiverem presentes
+    return env.replace(/\/(api|api\/v1)\/?$/, '');
   };
 
-  const API_URL = getBaseUrl();
+  const API_BASE = getApiUrl();
+  const UPLOAD_ENDPOINT = `${API_BASE}/api/v1/document-processing/upload`;
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -78,17 +80,15 @@ export default function DocumentUploadPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const uploadUrl = `${API_URL}/api/document-processing/upload`;
-
       console.log(`📤 === INICIANDO UPLOAD ===`);
       console.log(`📄 Arquivo: ${file.name}`);
       console.log(`📦 Tamanho: ${file.size} bytes`);
       console.log(`📋 Tipo MIME: ${file.type}`);
       console.log(`🏢 Organização: ${organizationId}`);
-      console.log(`🌐 Endpoint: ${uploadUrl}`);
-      console.log(`🔧 Base URL: ${API_URL}`);
+      console.log(`🔧 API Base: ${API_BASE}`);
+      console.log(`🌐 Endpoint: ${UPLOAD_ENDPOINT}`);
 
-      const response = await axios.post(uploadUrl, formData, {
+      const response = await axios.post(UPLOAD_ENDPOINT, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'x-organization-id': organizationId,
@@ -144,7 +144,7 @@ export default function DocumentUploadPage() {
           Organização: <strong>{organizationId}</strong>
         </p>
         <p className="text-xs text-gray-500 mb-8">
-          API Base: {API_URL}
+          API: {UPLOAD_ENDPOINT}
         </p>
 
         {/* Dropzone */}
@@ -230,7 +230,7 @@ export default function DocumentUploadPage() {
           <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start">
             <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-red-800 font-medium">Erro no upload</p>
+              <p className="text-red-800 font-medium">❌ Erro no upload</p>
               <p className="text-red-700 text-sm mt-1">{error}</p>
               <p className="text-red-600 text-xs mt-2">
                 👉 Verifique o console (F12) para detalhes completos
@@ -247,7 +247,7 @@ export default function DocumentUploadPage() {
               <div>
                 <p className="font-medium text-green-900">✅ Upload realizado com sucesso!</p>
                 <p className="text-sm text-green-800 mt-1">
-                  ID do Documento: <code className="bg-green-100 px-2 py-1 rounded">{result.documentId}</code>
+                  ID do Documento: <code className="bg-green-100 px-2 py-1 rounded font-mono text-xs">{result.documentId}</code>
                 </p>
               </div>
             </div>
