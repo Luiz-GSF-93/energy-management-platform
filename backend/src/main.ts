@@ -23,6 +23,8 @@ async function bootstrap() {
   const corsOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
     'https://app.expertenergy.com.br',
     'https://energy-management-platform-six.vercel.app',
   ];
@@ -31,17 +33,35 @@ async function bootstrap() {
     corsOrigins.push(process.env.CORS_ORIGIN);
   }
 
+  // ✅ CORS CONFIGURADO CORRETAMENTE COM HEADERS CUSTOMIZADOS
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'x-organization-id',
+      'x-empresa-id',
+      'x-requested-with',
+      'Content-Disposition',
+    ],
+    exposedHeaders: [
+      'Content-Length',
+      'X-Total-Count',
+      'X-Page-Count',
+      'Content-Disposition',
+    ],
+    maxAge: 3600,
+    preflightContinue: false,
   });
   
   const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`✅ Application is running on: http://localhost:${port}`);
   console.log(`✅ CORS enabled for: ${corsOrigins.join(', ')}`);
+  console.log(`✅ Custom headers allowed: x-organization-id, x-empresa-id`);
   console.log(`✅ ValidationPipe enabled globally`);
 }
 
