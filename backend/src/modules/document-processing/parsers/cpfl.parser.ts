@@ -11,7 +11,8 @@ export interface ExtendedInvoiceData extends ParsedInvoiceData {
 
 export class CpflParser {
   parse(text: string): ExtendedInvoiceData {
-    console.log('🔍 Parseando fatura CPFL...');
+    console.log('🔍 CPFL Parser iniciado');
+    console.log(`📝 Texto recebido: ${text.length} caracteres`);
     
     const data: ExtendedInvoiceData = {
       invoiceNumber: this.extractInvoiceNumber(text),
@@ -26,7 +27,6 @@ export class CpflParser {
       issueDate: this.extractIssueDate(text),
       consumerUnit: this.extractConsumerUnit(text),
       
-      // NOVOS: Dados para auditoria
       clientCnpj: this.extractClientCnpj(text),
       clientName: this.extractClientName(text),
       distributorCnpj: this.extractDistributorCnpj(text),
@@ -36,73 +36,127 @@ export class CpflParser {
       rawText: text.substring(0, 500),
     };
 
-    console.log('✅ Fatura CPFL parseada:', {
+    console.log('✅ CPFL Parser resultado:', {
       numero: data.invoiceNumber,
-      clienteCnpj: data.clientCnpj,
-      uc: data.consumerUnitNumber,
+      mes: data.referenceMonth,
       consumo: data.consumptionKwh,
       total: data.totalAmount,
+      clienteCnpj: data.clientCnpj,
+      uc: data.consumerUnitNumber,
     });
 
     return data;
   }
 
   private extractInvoiceNumber(text: string): string {
-    let match = text.match(/NOTA\s+FISCAL\s+N[ºO]?\s+(\d+)/i);
-    if (match) return match[1];
+    // CPFL: "NOTA FISCAL Nº 058824507"
+    let match = text.match(/NOTA\s+FISCAL\s+N[ºO°]?\s+(\d+)/i);
+    if (match) {
+      console.log(`✅ Número fatura encontrado: ${match[1]}`);
+      return match[1];
+    }
+
+    // Fallback: procura por números de 9 dígitos após "NF"
     match = text.match(/NF[^\d]*(\d{9})/i);
-    if (match) return match[1];
+    if (match) {
+      console.log(`✅ Número fatura (fallback): ${match[1]}`);
+      return match[1];
+    }
+
+    console.log('⚠️ Número fatura não encontrado');
     return 'N/A';
   }
 
   private extractReferenceMonth(text: string): string {
+    // Procura por "AGO/2026" ou "AGO 26"
+    const monthPatterns = [
+      { regex: /\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{4})/i, format: 'SLASH' },
+      { regex: /\b(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(\d{2})\b/i, format: 'SPACE' },
+    ];
+
     const months: Record<string, string> = {
       'JAN': '01', 'FEV': '02', 'MAR': '03', 'ABR': '04',
       'MAI': '05', 'JUN': '06', 'JUL': '07', 'AGO': '08',
       'SET': '09', 'OUT': '10', 'NOV': '11', 'DEZ': '12',
     };
 
-    for (const [monthAbbr, monthNum] of Object.entries(months)) {
-      const pattern = new RegExp(`${monthAbbr}/2\\d{3}`, 'i');
-      const match = text.match(pattern);
+    for (const pattern of monthPatterns) {
+      const match = text.match(pattern.regex);
       if (match) {
-        const [, year] = match[0].split('/');
-        return `${year}-${monthNum}`;
+        const monthAbbr = match[1].toUpperCase();
+        const monthNum = months[monthAbbr];
+        const year = pattern.format === 'SLASH' ? match[2] : '20' + match[2];
+        const result = `${year}-${monthNum}`;
+        console.log(`✅ Mês de referência encontrado: ${result}`);
+        return result;
       }
     }
 
+    console.log('⚠️ Mês de referência não encontrado, usando mês atual');
     return new Date().toISOString().slice(0, 7);
   }
 
   private extractConsumption(text: string): number {
-    const energiaMatch = text.match(/Energia\s+Ativa.*?kWh\s+([\d.,]+)/i);
-    if (energiaMatch) return this.parseNumber(energiaMatch[1]);
+    // Procura por padrões de consumo
+    const patterns = [
+      /Energia\s+Ativa.*?kWh\s*([\d.,]+)/i,
+      /ENERGIA\s+ATIVA[^\n]*\n[^\n]*(\d+[\.,]\d+)/i,
+      /(?:Consumo|CONSUMO).*?(\d+[\.,]\d+)\s*kWh/i,
+      /(\d{4,}[\.,]\d{1,2})\s+kWh/i,
+    ];
 
-    const consumoMatch = text.match(/(?:Consumo|CONSUMO).*?(\d+[\.,]\d+)\s*kWh/i);
-    if (consumoMatch) return this.parseNumber(consumoMatch[1]);
-
-    const numberMatches = text.match(/(\d{4,}[\.,]\d{2})/g);
-    if (numberMatches && numberMatches.length > 0) {
-      return this.parseNumber(numberMatches[0]);
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const value = this.parseNumber(match[1]);
+        if (value > 0) {
+          console.log(`✅ Consumo encontrado: ${value} kWh`);
+          return value;
+        }
+      }
     }
 
+    console.log('⚠️ Consumo não encontrado');
     return 0;
   }
 
   private extractDemand(text: string): number | undefined {
-    const demandMatch = text.match(/Demanda\s+(?:Ativa|Ponta).*?kW\s+([\d.,]+)/i);
-    if (demandMatch) return this.parseNumber(demandMatch[1]);
+    const patterns = [
+      /Demanda\s+(?:Ativa|Ponta).*?kW\s+([\d.,]+)/i,
+      /DEMANDA[^\n]*\n[^\n]*(\d+[\.,]\d+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const value = this.parseNumber(match[1]);
+        if (value > 0) {
+          console.log(`✅ Demanda encontrada: ${value} kW`);
+          return value;
+        }
+      }
+    }
+
     return undefined;
   }
 
   private extractCharges(text: string): number {
-    const chargesMatch = text.match(/(?:Encargos|TUSD|Uso\s+Sist.*Distr).*?R?\$?\s*([\d.,]+)/i);
-    if (chargesMatch) return this.parseNumber(chargesMatch[1]);
+    const patterns = [
+      /(?:Encargos|TUSD|Uso\s+Sist.*?Distr).*?R?\$?\s*([\d.,]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return this.parseNumber(match[1]);
+      }
+    }
     return 0;
   }
 
   private extractTaxes(text: string): number {
     let total = 0;
+
     const icmsMatch = text.match(/ICMS\s+([\d.,]+)/);
     if (icmsMatch) total += this.parseNumber(icmsMatch[1]);
 
@@ -112,21 +166,32 @@ export class CpflParser {
     const cofinsMatch = text.match(/COFINS\s+([\d.,]+)/);
     if (cofinsMatch) total += this.parseNumber(cofinsMatch[1]);
 
+    if (total > 0) {
+      console.log(`✅ Impostos encontrados: R$ ${total.toFixed(2)}`);
+    }
     return total;
   }
 
   private extractTotal(text: string): number {
-    let match = text.match(/Total\s+a\s+Pagar\s+R?\$?\s*([\d.,]+)/i);
-    if (match) return this.parseNumber(match[1]);
+    const patterns = [
+      /Total\s+a\s+Pagar\s+R?\$?\s*([\d.,]+)/i,
+      /TOTAL\s+A\s+PAGAR[^\n]*(\d+[\.,]\d+)/i,
+      /Total\s+Distribuidora\s+([\d.,]+)/i,
+      /(?:Total|TOTAL).*?R?\$?\s*([\d.,]+)/i,
+    ];
 
-    match = text.match(/Total\s+Distribuidora\s+([\d.,]+)/i);
-    if (match) return this.parseNumber(match[1]);
-
-    const bigNumbers = text.match(/R?\$?\s+(\d{2,}[\.,]\d{2})/g);
-    if (bigNumbers && bigNumbers.length > 0) {
-      return this.parseNumber(bigNumbers[bigNumbers.length - 1]);
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const value = this.parseNumber(match[1]);
+        if (value > 0) {
+          console.log(`✅ Total encontrado: R$ ${value.toFixed(2)}`);
+          return value;
+        }
+      }
     }
 
+    console.log('⚠️ Total não encontrado');
     return 0;
   }
 
@@ -150,7 +215,11 @@ export class CpflParser {
 
   private extractClientCnpj(text: string): string | undefined {
     const match = text.match(/CNPJ[:\s]+([0-9]{2}\.?[0-9]{3}\.?[0-9]{3}\/0001-?[0-9]{2})/i);
-    if (match) return match[1].replace(/\./g, '').replace(/-/g, '');
+    if (match) {
+      const cnpj = match[1].replace(/\./g, '').replace(/-/g, '');
+      console.log(`✅ CNPJ Cliente encontrado: ${cnpj}`);
+      return cnpj;
+    }
     return undefined;
   }
 
