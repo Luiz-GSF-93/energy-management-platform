@@ -1,10 +1,11 @@
 import { Distributor } from '../enums/distributor.enum';
+import { CpflParser } from './cpfl.parser';
 
 export interface ParsedInvoiceData {
   organizationId?: string;
   empresaId?: string;
   invoiceNumber: string;
-  referenceMonth: string; // YYYY-MM
+  referenceMonth: string;
   distributor: Distributor;
   consumptionKwh: number;
   demandKw?: number;
@@ -18,10 +19,19 @@ export interface ParsedInvoiceData {
 }
 
 export class EnergyInvoiceParser {
-  /**
-   * Extrai dados estruturados de uma fatura de energia
-   */
+  private cpflParser = new CpflParser();
+
   parse(text: string, distributor: Distributor): ParsedInvoiceData {
+    // Se for CPFL, usa o parser especializado
+    if (distributor === Distributor.CPFL) {
+      return this.cpflParser.parse(text);
+    }
+
+    // Fallback: parser genérico
+    return this.parseGeneric(text, distributor);
+  }
+
+  private parseGeneric(text: string, distributor: Distributor): ParsedInvoiceData {
     const data: ParsedInvoiceData = {
       invoiceNumber: this.extractInvoiceNumber(text),
       referenceMonth: this.extractReferenceMonth(text),
@@ -41,7 +51,6 @@ export class EnergyInvoiceParser {
   }
 
   private extractInvoiceNumber(text: string): string {
-    // Padrão comum: "Fatura nº 123456", "Nº da Fatura: 789012"
     const patterns = [
       /fatura\s+n[º°]?\s*(\d+)/gi,
       /n[º°]\s+(?:da\s+)?fatura\s*:?\s*(\d+)/gi,
@@ -58,17 +67,9 @@ export class EnergyInvoiceParser {
   }
 
   private extractReferenceMonth(text: string): string {
-    // Padrão: "Mês de referência: 09/2026" ou "Referência: setembro/2026"
     const patterns = [
       /(?:mês\s+de\s+)?referência\s*:?\s*(\d{1,2})\/(\d{4})/gi,
-      /referência\s*:?\s*(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro).*?(\d{4})/gi,
     ];
-
-    const monthMap: Record<string, string> = {
-      janeiro: '01', fevereiro: '02', março: '03', abril: '04',
-      maio: '05', junho: '06', julho: '07', agosto: '08',
-      setembro: '09', outubro: '10', novembro: '11', dezembro: '12',
-    };
 
     for (const pattern of patterns) {
       const match = text.match(pattern);
@@ -81,17 +82,10 @@ export class EnergyInvoiceParser {
       }
     }
 
-    // Fallback: tenta encontrar data no formato MM/YYYY
-    const dateMatch = text.match(/(\d{1,2})\/(\d{4})/);
-    if (dateMatch) {
-      return `${dateMatch[2]}-${dateMatch[1].padStart(2, '0')}`;
-    }
-
-    return new Date().toISOString().slice(0, 7); // Padrão: ano-mês atual
+    return new Date().toISOString().slice(0, 7);
   }
 
   private extractConsumption(text: string): number {
-    // Padrão: "Consumo: 450 kWh", "Energia Elétrica: 450"
     const patterns = [
       /consumo\s*:?\s*([\d.,]+)\s*(?:kWh|kwh|kw\/h)/i,
       /energia\s+elétrica\s*:?\s*([\d.,]+)/i,
@@ -113,14 +107,12 @@ export class EnergyInvoiceParser {
   }
 
   private extractCharges(text: string): number {
-    // Padrão: "Encargos: R$ 150,50"
     const pattern = /encargos\s*:?\s*r?\$?\s*([\d.,]+)/i;
     const match = text.match(pattern);
     return match ? this.parseNumber(match[1]) : 0;
   }
 
   private extractTaxes(text: string): number {
-    // Padrão: "Impostos: R$ 45,23", "ICMS: R$ 35,10"
     const patterns = [
       /impostos?\s*:?\s*r?\$?\s*([\d.,]+)/i,
       /icms\s*:?\s*r?\$?\s*([\d.,]+)/i,
@@ -136,7 +128,6 @@ export class EnergyInvoiceParser {
   }
 
   private extractTotal(text: string): number {
-    // Padrão: "Total: R$ 595,73", "Valor Total: 595,73"
     const patterns = [
       /valor\s+total\s*:?\s*r?\$?\s*([\d.,]+)/i,
       /total\s+a\s+pagar\s*:?\s*r?\$?\s*([\d.,]+)/i,
@@ -153,21 +144,18 @@ export class EnergyInvoiceParser {
   }
 
   private extractDueDate(text: string): string | undefined {
-    // Padrão: "Vencimento: 25/09/2026"
     const pattern = /vencimento\s*:?\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i;
     const match = text.match(pattern);
     return match ? `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}` : undefined;
   }
 
   private extractIssueDate(text: string): string | undefined {
-    // Padrão: "Emissão: 05/09/2026"
     const pattern = /emissão\s*:?\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i;
     const match = text.match(pattern);
     return match ? `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}` : undefined;
   }
 
   private extractConsumerUnit(text: string): string | undefined {
-    // Padrão: "UC: 1234567", "Unidade Consumidora: 1234567"
     const patterns = [
       /u\.?c\.?\s*:?\s*(\d+)/i,
       /unidade\s+consumidora\s*:?\s*(\d+)/i,
@@ -182,11 +170,7 @@ export class EnergyInvoiceParser {
     return undefined;
   }
 
-  /**
-   * Converte string numérica com . ou , para número
-   */
   private parseNumber(value: string): number {
-    // Remove espaços e converte . ou , para .
     const cleaned = value.trim().replace(/\./g, '').replace(',', '.');
     return parseFloat(cleaned) || 0;
   }
