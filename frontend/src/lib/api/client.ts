@@ -1,5 +1,3 @@
-import { getSession } from '@/auth';
-
 interface RequestOptions extends RequestInit {
   params?: Record<string, any>;
 }
@@ -29,14 +27,17 @@ class ApiClient {
     const fullUrl = `${this.baseUrl}${url}`;
     console.log(`[API] ${method} ${fullUrl}`);
 
-    const session = await getSession();
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options?.headers,
     };
 
-    if (session?.access_token) {
-      headers.Authorization = `Bearer ${session.access_token}`;
+    // Adicionar token se disponível (client-side only)
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     const response = await fetch(fullUrl, {
@@ -49,11 +50,12 @@ class ApiClient {
     if (response.status === 401) {
       // Handle logout
       if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
         window.location.href = '/auth/login';
       }
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       console.error(`[API Error] ${response.status}`, data);
