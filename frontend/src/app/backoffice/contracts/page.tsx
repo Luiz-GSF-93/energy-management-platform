@@ -4,55 +4,46 @@ import { useState } from 'react';
 import { FileText, Save, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ContractData {
-  // IDENTIFICAÇÃO
   contractNumber: string;
   clientName: string;
   cnpj: string;
   distributor: string;
-  
-  // UNIDADES CONSUMIDORAS
   consumerUnits: string;
   modalidade: 'AZUL' | 'VERDE' | 'BRANCA';
-  
-  // TUSD - TARIFA DE USO DO SISTEMA DE DISTRIBUIÇÃO
   tusdPeakRate: number;
   tusdOffPeakRate: number;
   tusdDemandPeak: number;
   tusdDemandOffPeak: number;
-  
-  // TE - TARIFA DE ENERGIA
   tePeakRate: number;
   teOffPeakRate: number;
-  
-  // ENCARGOS SETORIAIS
   bandeiraPeak: number;
   bandeiraOffPeak: number;
   ccee: number;
   onu: number;
   pes: number;
   rge: number;
-  
-  // MERCADO LIVRE - ACL
   acePeakRate: number;
   aceOffPeakRate: number;
   aclDistributionPeak: number;
   aclDistributionOffPeak: number;
   aclDemandPeak: number;
   aclDemandOffPeak: number;
-  
-  // IMPOSTOS
   icms: number;
   pis: number;
   cofins: number;
-  
-  // TAXAS MUNICIPAIS
   taxMunicipality: number;
-  
-  // CRÉDITO DE ENERGIA (para geração própria)
   creditRate: number;
-  
-  // PERDAS TÉCNICAS
   technicalLoss: number;
+}
+
+type SectionKey = 'identification' | 'tusd' | 'te' | 'acl' | 'taxes';
+
+interface ExpandedSections {
+  identification: boolean;
+  tusd: boolean;
+  te: boolean;
+  acl: boolean;
+  taxes: boolean;
 }
 
 const initialData: ContractData = {
@@ -88,9 +79,17 @@ const initialData: ContractData = {
   technicalLoss: 0.03,
 };
 
+interface FieldConfig {
+  name: keyof ContractData;
+  label: string;
+  type?: string;
+  placeholder?: string;
+  step?: string;
+}
+
 export default function ContractsPage() {
   const [formData, setFormData] = useState<ContractData>(initialData);
-  const [expandedSections, setExpandedSections] = useState({
+  const [expandedSections, setExpandedSections] = useState<ExpandedSections>({
     identification: true,
     tusd: true,
     te: true,
@@ -98,7 +97,7 @@ export default function ContractsPage() {
     taxes: false,
   });
 
-  const toggleSection = (section: string) => {
+  const toggleSection = (section: SectionKey) => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -112,31 +111,31 @@ export default function ContractsPage() {
     }));
   };
 
-  const renderSection = (title: string, key: string, fields: any[]) => (
-    <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+  const renderSection = (title: string, key: SectionKey, fields: FieldConfig[]) => (
+    <div key={key} className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       <button
         onClick={() => toggleSection(key)}
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700 transition"
       >
         <h3 className="font-bold text-white">{title}</h3>
-        {expandedSections[key as keyof typeof expandedSections] ? 
+        {expandedSections[key] ? 
           <ChevronUp size={20} className="text-blue-400" /> : 
           <ChevronDown size={20} className="text-slate-400" />
         }
       </button>
       
-      {expandedSections[key as keyof typeof expandedSections] && (
+      {expandedSections[key] && (
         <div className="px-4 py-4 space-y-3 border-t border-slate-700">
           {fields.map((field) => (
-            <div key={field.name}>
+            <div key={String(field.name)}>
               <label className="text-sm text-slate-400 block mb-1">{field.label}</label>
               <input
                 type={field.type || 'text'}
                 placeholder={field.placeholder}
-                value={formData[field.name as keyof ContractData]}
-                onChange={(e) => handleChange(field.name as keyof ContractData, e.target.value)}
+                value={String(formData[field.name])}
+                onChange={(e) => handleChange(field.name, e.target.value)}
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:border-blue-500"
-                step={field.step || undefined}
+                step={field.step}
               />
             </div>
           ))}
@@ -145,6 +144,69 @@ export default function ContractsPage() {
     </div>
   );
 
+  const sections = [
+    {
+      title: '📋 Identificação do Contrato',
+      key: 'identification' as SectionKey,
+      fields: [
+        { name: 'contractNumber' as const, label: 'Número do Contrato', type: 'text', placeholder: 'CT-2026-001' },
+        { name: 'clientName' as const, label: 'Nome do Cliente', type: 'text', placeholder: 'Empresa XYZ LTDA' },
+        { name: 'cnpj' as const, label: 'CNPJ', type: 'text', placeholder: '12.345.678/0001-99' },
+        { name: 'distributor' as const, label: 'Distribuidora', type: 'text', placeholder: 'CPFL Energia' },
+        { name: 'consumerUnits' as const, label: 'Quantidade de UCs', type: 'number', placeholder: '5' },
+        { name: 'modalidade' as const, label: 'Modalidade', type: 'text', placeholder: 'AZUL' },
+      ] as FieldConfig[]
+    },
+    {
+      title: '⚡ TUSD - Tarifa de Uso do Sistema de Distribuição',
+      key: 'tusd' as SectionKey,
+      fields: [
+        { name: 'tusdPeakRate' as const, label: 'TUSD Ponta (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'tusdOffPeakRate' as const, label: 'TUSD Fora Ponta (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'tusdDemandPeak' as const, label: 'Demanda Ponta (R$/kW)', type: 'number', step: '0.01' },
+        { name: 'tusdDemandOffPeak' as const, label: 'Demanda Fora Ponta (R$/kW)', type: 'number', step: '0.01' },
+      ] as FieldConfig[]
+    },
+    {
+      title: '🔌 TE - Tarifa de Energia',
+      key: 'te' as SectionKey,
+      fields: [
+        { name: 'tePeakRate' as const, label: 'TE Ponta (R$/MWh)', type: 'number', step: '0.01' },
+        { name: 'teOffPeakRate' as const, label: 'TE Fora Ponta (R$/MWh)', type: 'number', step: '0.01' },
+        { name: 'bandeiraPeak' as const, label: 'Bandeira Ponta (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'bandeiraOffPeak' as const, label: 'Bandeira Fora Ponta (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'ccee' as const, label: 'CCEE (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'onu' as const, label: 'ONU (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'pes' as const, label: 'PES (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'rge' as const, label: 'RGE (R$/kWh)', type: 'number', step: '0.01' },
+      ] as FieldConfig[]
+    },
+    {
+      title: '🟢 ACL - Mercado Livre',
+      key: 'acl' as SectionKey,
+      fields: [
+        { name: 'acePeakRate' as const, label: 'ACE Ponta (R$/MWh)', type: 'number', step: '0.01' },
+        { name: 'aceOffPeakRate' as const, label: 'ACE Fora Ponta (R$/MWh)', type: 'number', step: '0.01' },
+        { name: 'aclDistributionPeak' as const, label: 'Distribuição Ponta (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'aclDistributionOffPeak' as const, label: 'Distribuição Fora Ponta (R$/kWh)', type: 'number', step: '0.01' },
+        { name: 'aclDemandPeak' as const, label: 'Demanda Ponta (R$/kW)', type: 'number', step: '0.01' },
+        { name: 'aclDemandOffPeak' as const, label: 'Demanda Fora Ponta (R$/kW)', type: 'number', step: '0.01' },
+      ] as FieldConfig[]
+    },
+    {
+      title: '💰 Impostos e Taxas',
+      key: 'taxes' as SectionKey,
+      fields: [
+        { name: 'icms' as const, label: 'ICMS (%)', type: 'number', step: '0.01' },
+        { name: 'pis' as const, label: 'PIS (%)', type: 'number', step: '0.01' },
+        { name: 'cofins' as const, label: 'COFINS (%)', type: 'number', step: '0.01' },
+        { name: 'taxMunicipality' as const, label: 'Taxa Municipal (%)', type: 'number', step: '0.01' },
+        { name: 'creditRate' as const, label: 'Taxa de Crédito (%)', type: 'number', step: '0.01' },
+        { name: 'technicalLoss' as const, label: 'Perda Técnica (%)', type: 'number', step: '0.01' },
+      ] as FieldConfig[]
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-6xl mx-auto">
@@ -152,60 +214,11 @@ export default function ContractsPage() {
           <FileText size={32} className="text-blue-400" />
           Contratos
         </h1>
-        <p className="text-slate-400 mb-8">Cadastre todos os dados de tarifa e estrutura tarifária para simulação</p>
+        <p className="text-slate-400 mb-8">Cadastre todos os dados de tarifa para simulação</p>
 
         <div className="space-y-4">
-          {/* IDENTIFICAÇÃO */}
-          {renderSection('📋 Identificação do Contrato', 'identification', [
-            { name: 'contractNumber', label: 'Número do Contrato', type: 'text', placeholder: 'CT-2026-001' },
-            { name: 'clientName', label: 'Nome do Cliente', type: 'text', placeholder: 'Empresa XYZ LTDA' },
-            { name: 'cnpj', label: 'CNPJ', type: 'text', placeholder: '12.345.678/0001-99' },
-            { name: 'distributor', label: 'Distribuidora', type: 'text', placeholder: 'CPFL Energia' },
-            { name: 'consumerUnits', label: 'Quantidade de UCs', type: 'number', placeholder: '5' },
-            { name: 'modalidade', label: 'Modalidade', type: 'select', options: ['AZUL', 'VERDE', 'BRANCA'] },
-          ])}
+          {sections.map((section) => renderSection(section.title, section.key, section.fields))}
 
-          {/* TUSD */}
-          {renderSection('⚡ TUSD - Tarifa de Uso do Sistema de Distribuição (R$/kWh)', 'tusd', [
-            { name: 'tusdPeakRate', label: 'TUSD Ponta', type: 'number', step: '0.01' },
-            { name: 'tusdOffPeakRate', label: 'TUSD Fora Ponta', type: 'number', step: '0.01' },
-            { name: 'tusdDemandPeak', label: 'Demanda Ponta (R$/kW)', type: 'number', step: '0.01' },
-            { name: 'tusdDemandOffPeak', label: 'Demanda Fora Ponta (R$/kW)', type: 'number', step: '0.01' },
-          ])}
-
-          {/* TE */}
-          {renderSection('🔌 TE - Tarifa de Energia (R$/MWh)', 'te', [
-            { name: 'tePeakRate', label: 'TE Ponta', type: 'number', step: '0.01' },
-            { name: 'teOffPeakRate', label: 'TE Fora Ponta', type: 'number', step: '0.01' },
-            { name: 'bandeiraPeak', label: 'Bandeira Ponta (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'bandeiraOffPeak', label: 'Bandeira Fora Ponta (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'ccee', label: 'CCEE (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'onu', label: 'ONU (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'pes', label: 'PES (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'rge', label: 'RGE (R$/kWh)', type: 'number', step: '0.01' },
-          ])}
-
-          {/* ACL */}
-          {renderSection('🟢 ACL - Ambiente de Contratação Livre (Mercado Livre)', 'acl', [
-            { name: 'acePeakRate', label: 'ACE Ponta (R$/MWh)', type: 'number', step: '0.01' },
-            { name: 'aceOffPeakRate', label: 'ACE Fora Ponta (R$/MWh)', type: 'number', step: '0.01' },
-            { name: 'aclDistributionPeak', label: 'Distribuição ACL Ponta (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'aclDistributionOffPeak', label: 'Distribuição ACL Fora Ponta (R$/kWh)', type: 'number', step: '0.01' },
-            { name: 'aclDemandPeak', label: 'Demanda ACL Ponta (R$/kW)', type: 'number', step: '0.01' },
-            { name: 'aclDemandOffPeak', label: 'Demanda ACL Fora Ponta (R$/kW)', type: 'number', step: '0.01' },
-          ])}
-
-          {/* IMPOSTOS */}
-          {renderSection('💰 Impostos e Taxas', 'taxes', [
-            { name: 'icms', label: 'ICMS (%)', type: 'number', step: '0.01' },
-            { name: 'pis', label: 'PIS (%)', type: 'number', step: '0.01' },
-            { name: 'cofins', label: 'COFINS (%)', type: 'number', step: '0.01' },
-            { name: 'taxMunicipality', label: 'Taxa Municipal (%)', type: 'number', step: '0.01' },
-            { name: 'creditRate', label: 'Taxa de Crédito (%)', type: 'number', step: '0.01' },
-            { name: 'technicalLoss', label: 'Perda Técnica (%)', type: 'number', step: '0.01' },
-          ])}
-
-          {/* BOTÕES */}
           <div className="flex gap-4 mt-8">
             <button className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded flex items-center justify-center gap-2">
               <Save size={20} />
