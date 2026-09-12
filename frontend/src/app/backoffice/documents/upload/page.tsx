@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import axios from 'axios';
 
@@ -10,6 +10,8 @@ export default function DocumentUploadPage() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState('org-expertev-test-001');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -33,7 +35,7 @@ export default function DocumentUploadPage() {
 
   const validateAndSetFile = (selectedFile: File) => {
     const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
 
     if (!validTypes.includes(selectedFile.type)) {
       setError('Formato inválido. Aceitos: PDF, JPEG, PNG');
@@ -64,38 +66,76 @@ export default function DocumentUploadPage() {
 
     setUploading(true);
     setError(null);
+    setUploadProgress(0);
 
     try {
       const formData = new FormData();
       formData.append('file', file);
 
+      console.log(`📤 === INICIANDO UPLOAD ===`);
+      console.log(`📄 Arquivo: ${file.name}`);
+      console.log(`📦 Tamanho: ${file.size} bytes`);
+      console.log(`📋 Tipo MIME: ${file.mimetype}`);
+      console.log(`🏢 Organization: ${organizationId}`);
+      console.log(`🌐 Endpoint: ${API_URL}/api/document-processing/upload`);
+
       const response = await axios.post(
         `${API_URL}/api/document-processing/upload`,
         formData,
         {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'x-organization-id': organizationId,
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / (progressEvent.total || 1)
+            );
+            setUploadProgress(percentCompleted);
+            console.log(`📊 Progresso: ${percentCompleted}%`);
+          },
         }
       );
 
+      console.log(`✅ === UPLOAD BEM-SUCEDIDO ===`);
+      console.log(`📥 Resposta do servidor:`, response.data);
+      
       setResult(response.data);
       setFile(null);
     } catch (err: any) {
-      setError(
+      console.error('❌ === ERRO NO UPLOAD ===');
+      console.error('Erro completo:', err);
+      
+      if (err.response) {
+        console.error('Status:', err.response.status);
+        console.error('Data:', err.response.data);
+      } else if (err.request) {
+        console.error('Sem resposta do servidor:', err.request);
+      } else {
+        console.error('Erro na configuração:', err.message);
+      }
+
+      const errorMsg =
         err.response?.data?.message ||
+        err.response?.data?.error ||
         err.message ||
-        'Erro ao fazer upload'
-      );
+        'Erro ao fazer upload';
+      setError(errorMsg);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Upload de Faturas
         </h1>
+        <p className="text-gray-600 mb-8">
+          Organização: <strong>{organizationId}</strong>
+        </p>
 
         {/* Dropzone */}
         <div
@@ -159,6 +199,22 @@ export default function DocumentUploadPage() {
           </div>
         )}
 
+        {/* Progress Bar */}
+        {uploading && uploadProgress > 0 && (
+          <div className="mt-6">
+            <div className="flex justify-between mb-2">
+              <p className="text-sm font-medium text-gray-900">Enviando...</p>
+              <p className="text-sm font-medium text-gray-900">{uploadProgress}%</p>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all"
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
         {/* Erros */}
         {error && (
           <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start">
@@ -182,37 +238,69 @@ export default function DocumentUploadPage() {
 
             {result.extraction && (
               <div className="mt-4 pt-4 border-t border-green-200">
-                <p className="font-medium text-gray-900 mb-2">
+                <p className="font-medium text-gray-900 mb-3">
                   Dados Extraídos:
                 </p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-gray-600">Número da Fatura:</p>
-                    <p className="font-mono text-gray-900">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="bg-white p-3 rounded border border-green-100">
+                    <p className="text-gray-600 text-xs uppercase">Número da Fatura</p>
+                    <p className="font-mono text-gray-900 font-semibold">
                       {result.extraction.invoiceNumber || '—'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-600">Confiança:</p>
-                    <p className="font-mono text-gray-900">
-                      {result.extraction.confidenceLevel || '—'}
+                  <div className="bg-white p-3 rounded border border-green-100">
+                    <p className="text-gray-600 text-xs uppercase">Distribuidor</p>
+                    <p className="font-mono text-gray-900 font-semibold">
+                      {result.extraction.distributor || '—'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-600">Consumo (kWh):</p>
-                    <p className="font-mono text-gray-900">
+                  <div className="bg-white p-3 rounded border border-green-100">
+                    <p className="text-gray-600 text-xs uppercase">Mês</p>
+                    <p className="font-mono text-gray-900 font-semibold">
+                      {result.extraction.referenceMonth || '—'}
+                    </p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-green-100">
+                    <p className="text-gray-600 text-xs uppercase">Consumo (kWh)</p>
+                    <p className="font-mono text-gray-900 font-semibold">
                       {result.extraction.consumptionKwh || '—'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-600">Total:</p>
-                    <p className="font-mono text-gray-900">
+                  <div className="bg-white p-3 rounded border border-green-100">
+                    <p className="text-gray-600 text-xs uppercase">Total</p>
+                    <p className="font-mono text-gray-900 font-semibold">
                       {result.extraction.totalAmount
                         ? `R$ ${result.extraction.totalAmount.toFixed(2)}`
                         : '—'}
                     </p>
                   </div>
+                  <div className="bg-white p-3 rounded border border-green-100">
+                    <p className="text-gray-600 text-xs uppercase">Confiança</p>
+                    <p className={`font-semibold ${
+                      result.extraction.confidenceLevel === 'HIGH' ? 'text-green-600' :
+                      result.extraction.confidenceLevel === 'MEDIUM' ? 'text-yellow-600' :
+                      'text-red-600'
+                    }`}>
+                      {result.extraction.confidenceLevel} ({result.extraction.confidenceScore}%)
+                    </p>
+                  </div>
                 </div>
+
+                {result.audit?.contract && (
+                  <div className="mt-4 p-3 bg-white border border-green-100 rounded">
+                    <p className="text-sm font-medium text-gray-900 mb-2">Validação de Contrato:</p>
+                    <p className="text-sm text-gray-600">
+                      Status: <strong>{result.audit.contract.status}</strong>
+                    </p>
+                    {result.audit.contract.observacoes && result.audit.contract.observacoes.length > 0 && (
+                      <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
+                        {result.audit.contract.observacoes.map((obs: string, i: number) => (
+                          <li key={i}>{obs}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -223,9 +311,9 @@ export default function DocumentUploadPage() {
           <button
             onClick={handleUpload}
             disabled={uploading}
-            className="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {uploading ? 'Enviando...' : 'Fazer Upload'}
+            {uploading ? `Enviando (${uploadProgress}%)...` : 'Fazer Upload'}
           </button>
         )}
 
@@ -236,7 +324,7 @@ export default function DocumentUploadPage() {
               setFile(null);
               setError(null);
             }}
-            className="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
+            className="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Fazer Novo Upload
           </button>
