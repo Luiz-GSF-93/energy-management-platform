@@ -26,15 +26,39 @@ export class DistributorDetectorService {
       /Equatorial/i,
       /equatorialenergia\.com\.br/i,
     ],
+    [Distributor.CEMIG]: [
+      /CEMIG/i,
+      /cemig\.com\.br/i,
+    ],
+    [Distributor.LIGHT]: [
+      /Light Energia/i,
+      /light\.com\.br/i,
+    ],
+    [Distributor.AES]: [
+      /AES/i,
+      /aes\.com\.br/i,
+    ],
+    [Distributor.COPEL]: [
+      /COPEL/i,
+      /copel\.com\.br/i,
+    ],
+    [Distributor.ELETROPAULO]: [
+      /Eletropaulo/i,
+      /eletropaulo\.com\.br/i,
+    ],
     [Distributor.GENERIC]: [/./], // Always matches as fallback
   };
 
   detectDistributor(text: string): Distributor {
-    for (const [distributor, patterns] of Object.entries(this.patterns)) {
+    // Testa cada distribuidor exceto GENERIC
+    for (const distributor of Object.values(Distributor)) {
       if (distributor === Distributor.GENERIC) continue;
+      const patterns = this.patterns[distributor];
+      if (!patterns) continue;
+      
       for (const pattern of patterns) {
         if (pattern.test(text)) {
-          return distributor as Distributor;
+          return distributor;
         }
       }
     }

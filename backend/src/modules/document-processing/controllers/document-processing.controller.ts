@@ -6,7 +6,6 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
-  Inject,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -14,12 +13,22 @@ import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { extname } from 'path';
 import * as fs from 'fs/promises';
-import * as pdfParse from 'pdf-parse';
 
 import { ValidationService } from '../services/validation.service';
 import { DistributorDetectorService } from '../services/distributor-detector.service';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { GenericParser } from '../parsers/generic.parser';
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  destination: string;
+  filename: string;
+  path: string;
+}
 
 @Controller('api/document-processing')
 export class DocumentProcessingController {
@@ -54,7 +63,7 @@ export class DocumentProcessingController {
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     }),
   )
-  async uploadDocument(@UploadedFile() file: Express.Multer.File) {
+  async uploadDocument(@UploadedFile() file: MulterFile) {
     if (!file) {
       throw new BadRequestException('Nenhum arquivo enviado');
     }
@@ -66,8 +75,7 @@ export class DocumentProcessingController {
       // 2. Extrair texto (PDF ou OCR para imagens)
       let rawText = '';
       if (file.mimetype === 'application/pdf') {
-        const pdfData = await pdfParse(fileBuffer);
-        rawText = pdfData.text;
+        rawText = await this.pdfExtractor.extractText(fileBuffer);
       } else {
         // TODO: Implementar OCR para imagens (Tesseract)
         rawText = '[OCR não implementado] - Salve como PDF para extração';
@@ -85,8 +93,8 @@ export class DocumentProcessingController {
       // 6. Definir caminho de armazenamento estruturado
       // organization/{org_id}/empresa/{empresa_id}/ano/{year}/mes/{month}/{filename}
       const storagePath = this.defineStoragePath(
-        parsedData.organizationId,
-        parsedData.empresaId,
+        'default-org',
+        'default-empresa',
         parsedData.referenceMonth,
         file.originalname,
       );
@@ -121,8 +129,6 @@ export class DocumentProcessingController {
    */
   @Get()
   async listDocuments() {
-    // TODO: Implementar consulta ao banco
-    // SELECT * FROM document_uploads WHERE organization_id = :orgId
     return {
       success: true,
       data: [],
@@ -136,8 +142,6 @@ export class DocumentProcessingController {
    */
   @Get(':documentId/status')
   async getDocumentStatus(@Param('documentId') documentId: string) {
-    // TODO: Implementar consulta ao banco
-    // SELECT * FROM document_uploads WHERE id = :documentId
     return {
       success: true,
       data: { documentId, status: 'PENDING' },
@@ -158,7 +162,7 @@ export class DocumentProcessingController {
   }
 
   private async moveFileToStructure(sourcePath: string, targetPath: string): Promise<void> {
-    const targetDir = targetPath.substring(0, targetPath.lastIndexOf('/'));
+    const targetDir = `./uploads/documents/${targetPath.substring(0, targetPath.lastIndexOf('/'))}`;
     await fs.mkdir(targetDir, { recursive: true });
     await fs.rename(sourcePath, `./uploads/documents/${targetPath}`);
   }
