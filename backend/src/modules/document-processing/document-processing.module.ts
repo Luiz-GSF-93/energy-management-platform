@@ -4,6 +4,7 @@ import { ValidationService } from './services/validation.service';
 import { DistributorDetectorService } from './services/distributor-detector.service';
 import { PdfExtractorService } from './services/pdf-extractor.service';
 import { GenericParser } from './parsers/generic.parser';
+import { EnergyInvoiceParser } from './parsers/energy-invoice.parser';
 
 @Module({
   controllers: [DocumentProcessingController],
@@ -12,10 +13,8 @@ import { GenericParser } from './parsers/generic.parser';
     DistributorDetectorService,
     PdfExtractorService,
     GenericParser,
+    EnergyInvoiceParser,
   ],
-  exports: [
-    ValidationService,
-    GenericParser,
-  ],
+  exports: [ValidationService, EnergyInvoiceParser],
 })
 export class DocumentProcessingModule {}

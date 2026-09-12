@@ -1,20 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-
-// Usar require com tipagem correta
-const pdfParse = require('pdf-parse');
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class PdfExtractorService {
-  private readonly logger = new Logger(PdfExtractorService.name);
-
-  async extractTextFromPdf(filePath: string): Promise<string> {
+  async extractText(buffer: Buffer): Promise<string> {
     try {
-      const buffer = fs.readFileSync(filePath);
-      const pdfData = await pdfParse(buffer);
-      return pdfData.text || '';
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(buffer);
+      return data.text || '';
     } catch (error) {
-      this.logger.error(`Erro ao extrair PDF: ${error.message}`);
+      console.error('Erro ao extrair PDF:', error);
       return '';
     }
   }

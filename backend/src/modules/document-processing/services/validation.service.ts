@@ -1,61 +1,65 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfidenceLevel } from '../enums/extraction-status.enum';
-
-interface ValidationResult {
-  isValid: boolean;
-  issues: string[];
-  confidenceScore: number;
-  confidenceLevel: ConfidenceLevel;
-}
+import { Injectable } from '@nestjs/common';
+import { ConfidenceLevel } from '../enums/confidence-level.enum';
+import { ParsedInvoiceData } from '../parsers/energy-invoice.parser';
 
 @Injectable()
 export class ValidationService {
-  private readonly logger = new Logger(ValidationService.name);
+  validateExtractedData(data: ParsedInvoiceData): {
+    confidenceLevel: ConfidenceLevel;
+    confidenceScore: number;
+    notes: string[];
+  } {
+    let score = 100;
+    const notes: string[] = [];
 
-  async validateExtractedData(data: any): Promise<ValidationResult> {
-    const issues: string[] = [];
-    let confidenceScore = 100;
-
-    if (!data.invoiceNumber || data.invoiceNumber.toString().length < 3) {
-      issues.push('❌ Número da fatura inválido');
-      confidenceScore -= 20;
+    // Validar campo por campo
+    if (!data.invoiceNumber || data.invoiceNumber === 'N/A') {
+      score -= 15;
+      notes.push('Número de fatura não identificado');
     }
 
-    if (!data.referenceMonth || !/^\d{4}-\d{2}$/.test(data.referenceMonth)) {
-      issues.push('❌ Período de referência inválido');
-      confidenceScore -= 15;
+    if (!data.referenceMonth) {
+      score -= 20;
+      notes.push('Mês de referência não encontrado');
     }
 
-    if (!data.consumptionKwh || data.consumptionKwh <= 0) {
-      issues.push('❌ Consumo em kWh inválido');
-      confidenceScore -= 25;
+    if (data.consumptionKwh === 0) {
+      score -= 15;
+      notes.push('Consumo não identificado');
     }
 
-    if (!data.totalAmount || data.totalAmount <= 0) {
-      issues.push('❌ Valor total inválido');
-      confidenceScore -= 25;
+    if (data.totalAmount === 0) {
+      score -= 15;
+      notes.push('Valor total não identificado');
     }
 
+    if (!data.consumerUnit) {
+      score -= 10;
+      notes.push('UC (Unidade Consumidora) não encontrada');
+    }
+
+    // Validar consistência
+    if (data.chargesAmount + data.taxesAmount > data.totalAmount * 1.1) {
+      score -= 10;
+      notes.push('Soma de encargos e impostos inconsistente com o total');
+    }
+
+    // Definir nível de confiança
     let confidenceLevel: ConfidenceLevel;
-    if (confidenceScore >= 95) {
+    if (score >= 85) {
       confidenceLevel = ConfidenceLevel.HIGH;
-    } else if (confidenceScore >= 80) {
+    } else if (score >= 70) {
       confidenceLevel = ConfidenceLevel.MEDIUM;
-    } else if (confidenceScore >= 60) {
+    } else if (score >= 50) {
       confidenceLevel = ConfidenceLevel.LOW;
     } else {
       confidenceLevel = ConfidenceLevel.CRITICAL_LOW;
     }
 
-    this.logger.log(
-      `📊 Validação: Score ${confidenceScore}% | Level ${confidenceLevel}`,
-    );
-
     return {
-      isValid: issues.length === 0,
-      issues,
-      confidenceScore: Math.max(0, confidenceScore),
       confidenceLevel,
+      confidenceScore: score,
+      notes,
     };
   }
 }
