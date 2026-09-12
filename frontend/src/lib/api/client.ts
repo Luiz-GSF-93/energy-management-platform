@@ -7,7 +7,6 @@ class ApiClient {
 
   constructor() {
     this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    // Garantir que não há /api/v1 duplicado
     this.baseUrl = this.baseUrl.replace(/\/api\/v1\/?$/, '');
   }
 
@@ -16,10 +15,7 @@ class ApiClient {
     method: string = 'GET',
     options?: RequestOptions
   ): Promise<T> {
-    // Garantir que o path começa com /
     let url = path.startsWith('/') ? path : `/${path}`;
-    
-    // Se o path já tem /api/v1, não duplicar
     if (!url.includes('/api/v1')) {
       url = `/api/v1${url}`;
     }
@@ -27,16 +23,15 @@ class ApiClient {
     const fullUrl = `${this.baseUrl}${url}`;
     console.log(`[API] ${method} ${fullUrl}`);
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options?.headers,
+      ...(typeof options?.headers === 'object' ? options.headers : {}),
     };
 
-    // Adicionar token se disponível (client-side only)
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('auth_token');
       if (token) {
-        headers.Authorization = `Bearer ${token}`;
+        headers['Authorization'] = `Bearer ${token}`;
       }
     }
 
@@ -48,7 +43,6 @@ class ApiClient {
     });
 
     if (response.status === 401) {
-      // Handle logout
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token');
         window.location.href = '/auth/login';
@@ -59,10 +53,10 @@ class ApiClient {
 
     if (!response.ok) {
       console.error(`[API Error] ${response.status}`, data);
-      throw new Error(data?.message || 'API request failed');
+      throw new Error((data as any)?.message || 'API request failed');
     }
 
-    return data;
+    return data as T;
   }
 
   get<T>(path: string, options?: RequestOptions) {
@@ -85,7 +79,6 @@ class ApiClient {
     return this.request<T>(path, 'PATCH', { ...options, body });
   }
 
-  // Grouped endpoints
   auth = {
     login: (credentials: any) => this.post('/auth/login', credentials),
     logout: () => this.post('/auth/logout'),
@@ -93,49 +86,47 @@ class ApiClient {
 
   contracts = {
     list: () => this.get<any[]>('/contracts'),
-    create: (data: any) => this.post('/contracts', data),
-    get: (id: string) => this.get(`/contracts/${id}`),
-    update: (id: string, data: any) => this.put(`/contracts/${id}`, data),
-    delete: (id: string) => this.delete(`/contracts/${id}`),
-    analytics: () => this.get('/contracts/analytics/overview'),
+    create: (data: any) => this.post<any>('/contracts', data),
+    get: (id: string) => this.get<any>(`/contracts/${id}`),
+    update: (id: string, data: any) => this.put<any>(`/contracts/${id}`, data),
+    delete: (id: string) => this.delete<any>(`/contracts/${id}`),
+    analytics: () => this.get<any>('/contracts/analytics/overview'),
   };
 
   invoices = {
     list: () => this.get<any[]>('/invoices'),
-    create: (data: any) => this.post('/invoices', data),
-    get: (id: string) => this.get(`/invoices/${id}`),
-    update: (id: string, data: any) => this.put(`/invoices/${id}`, data),
-    delete: (id: string) => this.delete(`/invoices/${id}`),
-    compare: (data: any) => this.post('/invoices/compare', data),
-    metrics: (consumerUnitId: string) =>
-      this.get(`/invoices/metrics/${consumerUnitId}`),
+    create: (data: any) => this.post<any>('/invoices', data),
+    get: (id: string) => this.get<any>(`/invoices/${id}`),
+    update: (id: string, data: any) => this.put<any>(`/invoices/${id}`, data),
+    delete: (id: string) => this.delete<any>(`/invoices/${id}`),
+    compare: (data: any) => this.post<any>('/invoices/compare', data),
+    metrics: (consumerUnitId: string) => this.get<any>(`/invoices/metrics/${consumerUnitId}`),
   };
 
   consumerUnits = {
     list: () => this.get<any[]>('/consumer-units'),
-    get: (id: string) => this.get(`/consumer-units/${id}`),
-    create: (data: any) => this.post('/consumer-units', data),
-    update: (id: string, data: any) => this.put(`/consumer-units/${id}`, data),
-    delete: (id: string) => this.delete(`/consumer-units/${id}`),
+    get: (id: string) => this.get<any>(`/consumer-units/${id}`),
+    create: (data: any) => this.post<any>('/consumer-units', data),
+    update: (id: string, data: any) => this.put<any>(`/consumer-units/${id}`, data),
+    delete: (id: string) => this.delete<any>(`/consumer-units/${id}`),
   };
 
   settlements = {
-    calculate: (data: any) => this.post('/settlements/calculate', data),
+    calculate: (data: any) => this.post<any>('/settlements/calculate', data),
   };
 
   fees = {
-    list: () => this.get('/fees'),
-    create: (data: any) => this.post('/fees', data),
-    update: (id: string, data: any) => this.put(`/fees/${id}`, data),
-    delete: (id: string) => this.delete(`/fees/${id}`),
+    list: () => this.get<any>('/fees'),
+    create: (data: any) => this.post<any>('/fees', data),
+    update: (id: string, data: any) => this.put<any>(`/fees/${id}`, data),
+    delete: (id: string) => this.delete<any>(`/fees/${id}`),
   };
 
   approvals = {
-    list: () => this.get('/approvals'),
-    create: (data: any) => this.post('/approvals', data),
-    approve: (id: string) => this.post(`/approvals/${id}/approve`),
-    reject: (id: string, reason: string) =>
-      this.post(`/approvals/${id}/reject`, { reason }),
+    list: () => this.get<any>('/approvals'),
+    create: (data: any) => this.post<any>('/approvals', data),
+    approve: (id: string) => this.post<any>(`/approvals/${id}/approve`),
+    reject: (id: string, reason: string) => this.post<any>(`/approvals/${id}/reject`, { reason }),
   };
 }
 
