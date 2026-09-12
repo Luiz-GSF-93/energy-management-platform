@@ -11,10 +11,6 @@ const invoiceSchema = z.object({
   consumerUnitId: z.string().min(1, 'UC obrigatória'),
   contractId: z.string().min(1, 'Contrato obrigatório'),
   referenceMonth: z.string().min(1, 'Período obrigatório'),
-  // CAMPOS REMOVIDOS (já estão na fatura simulada):
-  // - tusdEnergy
-  // - tusdDemand
-  // - mwhVolume
 });
 
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
@@ -29,40 +25,26 @@ export default function CreateInvoiceForm() {
     register,
     handleSubmit,
     formState: { errors },
-    watch,
   } = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
   });
-
-  const consumerUnitId = watch('consumerUnitId');
-  const contractId = watch('contractId');
 
   const onSubmit = async (data: InvoiceFormData) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Buscar contrato com tarifa configurada
-      const contract = await api.contracts.get(contractId);
-
-      if (!contract?.tariffConfig) {
-        throw new Error('Contrato sem tarifa configurada');
-      }
-
-      // Chamar settlement engine com dados do contrato
       const settlementData = {
-        consumerUnitId,
+        consumerUnitId: data.consumerUnitId,
         referenceMonth: new Date(data.referenceMonth),
-        // Dados já vêm da tarifa do contrato
-        ...contract.tariffConfig,
+        contractId: data.contractId,
       };
 
       const result = await api.settlements.calculate(settlementData);
 
-      // Salvar fatura com resultado do cálculo
       await api.invoices.create({
-        contractId,
-        consumerUnitId,
+        contractId: data.contractId,
+        consumerUnitId: data.consumerUnitId,
         referenceMonth: data.referenceMonth,
         status: 'EMITIDA',
         ...result,
@@ -100,50 +82,50 @@ export default function CreateInvoiceForm() {
         </div>
       )}
 
-      {/* Resultado do Cálculo - 5 Cards */}
       {calculationResult && (
         <div className="mb-8 grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-slate-700/50 p-4 rounded-lg">
             <p className="text-slate-400 text-sm mb-1">Custo Regulado</p>
             <p className="text-blue-400 text-xl font-bold">
-              R$ {calculationResult.regulatedCost?.toLocaleString('pt-BR') || '0.00'}
+              R$ {(calculationResult.regulatedCost || 0).toLocaleString('pt-BR')}
             </p>
           </div>
 
           <div className="bg-slate-700/50 p-4 rounded-lg">
             <p className="text-slate-400 text-sm mb-1">Custo ACL</p>
             <p className="text-purple-400 text-xl font-bold">
-              R$ {calculationResult.aclCost?.toLocaleString('pt-BR') || '0.00'}
+              R$ {(calculationResult.aclCost || 0).toLocaleString('pt-BR')}
             </p>
           </div>
 
           <div className="bg-slate-700/50 p-4 rounded-lg">
             <p className="text-slate-400 text-sm mb-1">Economia Bruta</p>
             <p className="text-green-400 text-xl font-bold">
-              R$ {calculationResult.savings?.toLocaleString('pt-BR') || '0.00'}
+              R$ {(calculationResult.savings || 0).toLocaleString('pt-BR')}
             </p>
           </div>
 
           <div className="bg-slate-700/50 p-4 rounded-lg">
             <p className="text-slate-400 text-sm mb-1">% Economia</p>
             <p className="text-yellow-400 text-xl font-bold">
-              {((calculationResult.savings / calculationResult.regulatedCost) * 100).toFixed(2)}%
+              {calculationResult.regulatedCost > 0
+                ? ((calculationResult.savings / calculationResult.regulatedCost) * 100).toFixed(2)
+                : '0.00'}
+              %
             </p>
           </div>
 
           <div className="bg-slate-700/50 p-4 rounded-lg">
             <p className="text-slate-400 text-sm mb-1">ROI Anual</p>
             <p className="text-indigo-400 text-xl font-bold">
-              {calculationResult.roi?.toFixed(2)}%
+              {(calculationResult.roi || 0).toFixed(2)}%
             </p>
           </div>
         </div>
       )}
 
-      {/* Formulário Simplificado */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* UC */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Unidade Consumidora *
@@ -159,7 +141,6 @@ export default function CreateInvoiceForm() {
             )}
           </div>
 
-          {/* Contrato */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Contrato *
@@ -175,7 +156,6 @@ export default function CreateInvoiceForm() {
             )}
           </div>
 
-          {/* Período */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Período (Mês/Ano) *
@@ -191,7 +171,6 @@ export default function CreateInvoiceForm() {
           </div>
         </div>
 
-        {/* Botão Calcular */}
         <button
           type="submit"
           disabled={loading}
@@ -210,11 +189,10 @@ export default function CreateInvoiceForm() {
           )}
         </button>
 
-        {/* Informação */}
         <div className="p-3 bg-slate-700/30 rounded text-slate-300 text-sm">
           <p>
-            💡 <strong>Nota:</strong> Os dados de tarifa (TUSD, TE, MWh, etc.) são automaticamente
-            carregados do contrato selecionado. Apenas selecione UC, Contrato e Período para calcular.
+            💡 <strong>Nota:</strong> Os dados de tarifa são automaticamente carregados do contrato.
+            Apenas selecione UC, Contrato e Período.
           </p>
         </div>
       </form>
