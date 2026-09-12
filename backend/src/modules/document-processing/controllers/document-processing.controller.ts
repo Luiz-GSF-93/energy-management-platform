@@ -11,37 +11,35 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { v4 as uuidv4 } from 'uuid';
 import { extname } from 'path';
-import * as fs from 'fs/promises';
-
+import { v4 as uuidv4 } from 'uuid';
+import * as multer from 'multer';
+import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { ValidationService } from '../services/validation.service';
 import { ContractValidationService } from '../services/contract-validation.service';
 import { DistributorDetectorService } from '../services/distributor-detector.service';
-import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { GenericParser } from '../parsers/generic.parser';
+import { ConfidenceLevel } from '../enums/confidence-level.enum';
 
-interface MulterFile {
-  fieldname: string;
-  originalname: string;
-  encoding: string;
-  mimetype: string;
-  size: number;
-  destination: string;
-  filename: string;
-  path: string;
-}
-
-// ✅ CORRIGIDO: Remover 'api/' - o global prefix já adiciona 'api/v1'
 @Controller('document-processing')
 export class DocumentProcessingController {
   constructor(
+    private pdfExtractorService: PdfExtractorService,
     private validationService: ValidationService,
     private contractValidationService: ContractValidationService,
     private distributorDetectorService: DistributorDetectorService,
-    private pdfExtractor: PdfExtractorService,
     private genericParser: GenericParser,
   ) {}
+
+  private readonly ALLOWED_MIME_TYPES = [
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+  ];
+
+  private readonly ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg'];
+  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024;
 
   @Post('upload')
   @UseInterceptors(
@@ -50,78 +48,150 @@ export class DocumentProcessingController {
         destination: './uploads/documents',
         filename: (req, file, cb) => {
           const uniqueSuffix = `${Date.now()}-${uuidv4()}`;
-          cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
+          const ext = extname(file.originalname);
+          cb(null, `${uniqueSuffix}${ext}`);
         },
       }),
-      fileFilter: (req, file, cb) => {
-        const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-        if (!validTypes.includes(file.mimetype)) {
-          return cb(new BadRequestException('Formato inválido'), false);
-        }
-        cb(null, true);
+      limits: {
+        fileSize: 10 * 1024 * 1024,
       },
-      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
   async uploadDocument(
-    @UploadedFile() file: MulterFile,
-    @Headers('x-organization-id') organizationId?: string,
+    @UploadedFile() file: multer.File,
+    @Headers('x-organization-id') organizationId: string,
+    @Headers('x-empresa-id') empresaId: string = 'default-empresa',
   ) {
-    if (!file) {
-      throw new BadRequestException('Nenhum arquivo enviado');
-    }
-
     try {
-      const orgId = organizationId || 'default-org';
-      console.log(`📄 Processando: ${file.originalname}`);
-      console.log(`🏢 Organização ID: ${orgId}`);
+      console.log(`📤 === UPLOAD DE FATURA DE ENERGIA ===`);
+      console.log(`📄 Arquivo: ${file.originalname}`);
+      console.log(`📦 Tamanho: ${file.size} bytes`);
+      console.log(`📋 MIME Type: ${file.mimetype}`);
+      console.log(`🏢 Org: ${organizationId}, Empresa: ${empresaId}`);
 
-      const fileBuffer = await fs.readFile(file.path);
-      let rawText = '';
-      
-      if (file.mimetype === 'application/pdf') {
-        console.log(`📖 Extraindo texto do PDF...`);
-        rawText = await this.pdfExtractor.extractText(fileBuffer);
-        console.log(`✅ Texto extraído: ${rawText.length} caracteres`);
+      // ============================================
+      // 1️⃣ VALIDAÇÕES DE ARQUIVO
+      // ============================================
+
+      const fileExtension = extname(file.originalname).toLowerCase();
+      if (!this.ALLOWED_EXTENSIONS.includes(fileExtension)) {
+        console.error(`❌ Extensão não permitida: ${fileExtension}`);
+        throw new BadRequestException(
+          `Extensão não permitida. Aceitos: ${this.ALLOWED_EXTENSIONS.join(', ')}`,
+        );
       }
 
+      if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        console.error(`❌ MIME type não permitido: ${file.mimetype}`);
+        throw new BadRequestException(
+          `Tipo de arquivo não permitido. Aceitos: PDF, PNG, JPEG. Recebido: ${file.mimetype}`,
+        );
+      }
+
+      if (file.size > this.MAX_FILE_SIZE) {
+        console.error(`❌ Arquivo muito grande: ${file.size} bytes`);
+        throw new BadRequestException(
+          `Arquivo muito grande. Máximo: 10 MB. Recebido: ${(file.size / 1024 / 1024).toFixed(2)} MB`,
+        );
+      }
+
+      const isValidInvoiceFile = await this.validateInvoiceFile(
+        file.buffer,
+        file.mimetype,
+      );
+      if (!isValidInvoiceFile) {
+        console.error(`❌ Arquivo não parece ser uma fatura de energia`);
+        throw new BadRequestException(
+          `Arquivo não parece ser uma fatura de energia. Por favor, envie um PDF ou imagem válido(a) de fatura.`,
+        );
+      }
+
+      console.log(`✅ Validações de arquivo passaram`);
+
+      // ============================================
+      // 2️⃣ EXTRAÇÃO DE TEXTO
+      // ============================================
+
+      console.log(`📖 Extraindo texto...`);
+      const extractedText = await this.pdfExtractorService.extractText(
+        file.buffer,
+      );
+      console.log(`✅ Texto extraído: ${extractedText.length} caracteres`);
+
+      // ============================================
+      // 3️⃣ DETECÇÃO DE DISTRIBUIDORA
+      // ============================================
+
       console.log(`🔎 Detectando distribuidor...`);
-      const distributor = this.distributorDetectorService.detectDistributor(rawText);
+      const distributor = this.distributorDetectorService.detectDistributor(
+        extractedText,
+      );
       console.log(`✅ Distribuidor detectado: ${distributor}`);
 
+      // ============================================
+      // 4️⃣ PARSING DE DADOS
+      // ============================================
+
       console.log(`📊 Parseando dados da fatura...`);
-      const parsedData = this.genericParser.parse(rawText, distributor);
+      const parsedData = this.genericParser.parse(extractedText, distributor);
       console.log(`✅ Dados parseados:`, parsedData);
 
+      // ============================================
+      // 5️⃣ VALIDAÇÃO DE EXTRAÇÃO
+      // ============================================
+
       console.log(`✔️ Validando extração...`);
-      const extractionValidation = this.validationService.validateExtractedData(parsedData);
-      console.log(`✅ Validação da extração:`, extractionValidation);
+      const validationResult =
+        this.validationService.validateExtractedData(parsedData);
+      console.log(`✅ Validação da extração:`, validationResult);
+
+      // ============================================
+      // 6️⃣ VALIDAÇÃO DE CONTRATO
+      // ============================================
 
       console.log(`🔍 Validando contrato...`);
-      const contractValidation = this.contractValidationService.validateAgainstContract(
-        parsedData.clientCnpj || '',
-        parsedData.consumerUnit || '',
-        parsedData.referenceMonth,
-        parsedData.consumptionKwh,
-      );
+      const contractValidation =
+        this.contractValidationService.validateAgainstContract(
+          parsedData.clientCnpj || '',
+          parsedData.consumerUnit || '',
+          parsedData.referenceMonth,
+          parsedData.consumptionKwh,
+        );
       console.log(`✅ Validação do contrato:`, contractValidation);
 
-      const isFinal = contractValidation.status === 'VALIDO';
-      console.log(`📋 Status final: ${isFinal ? 'APPROVED' : 'PENDING_REVIEW'}`);
+      // ============================================
+      // 7️⃣ DETERMINAR STATUS FINAL
+      // ============================================
+
+      const finalStatus =
+        validationResult.confidenceLevel === ConfidenceLevel.HIGH &&
+        contractValidation.status === 'VALIDO'
+          ? 'APPROVED'
+          : 'PENDING_REVIEW';
+
+      console.log(`📋 Status final: ${finalStatus}`);
+
+      // ============================================
+      // 8️⃣ ARMAZENAR ARQUIVO
+      // ============================================
 
       const storagePath = this.defineStoragePath(
-        orgId,
-        'default-empresa',
+        organizationId,
+        empresaId,
         parsedData.referenceMonth,
         file.originalname,
       );
-      
-      console.log(`💾 Movendo arquivo para: ${storagePath}`);
+
+      console.log(`📂 Storage path definido: ${storagePath}`);
+
       await this.moveFileToStructure(file.path, storagePath);
-      console.log(`✅ Arquivo salvo com sucesso`);
+      console.log(`✅ Arquivo movido com sucesso`);
+
+      // ============================================
+      // 9️⃣ GERAR RESPONSE
+      // ============================================
 
       const documentId = uuidv4();
-      console.log(`✅ Documento ID: ${documentId}`);
 
       const response = {
         success: true,
@@ -132,71 +202,107 @@ export class DocumentProcessingController {
           distributor,
           consumptionKwh: parsedData.consumptionKwh,
           totalAmount: parsedData.totalAmount,
-          confidenceLevel: extractionValidation.confidenceLevel,
-          confidenceScore: extractionValidation.confidenceScore,
+          confidenceLevel: validationResult.confidenceLevel,
+          confidenceScore: validationResult.confidenceScore,
           clientCnpj: parsedData.clientCnpj,
           clientName: parsedData.clientName,
-          consumerUnitNumber: parsedData.consumerUnitNumber,
-          notes: extractionValidation.notes || [],
+          consumerUnitNumber: parsedData.consumerUnit,
+          notes: validationResult.notes,
         },
         audit: {
-          extraction: extractionValidation,
+          extraction: validationResult,
           contract: contractValidation,
-          status: isFinal ? 'APPROVED' : 'PENDING_REVIEW',
+          status: finalStatus,
         },
         storagePath,
       };
 
+      console.log(`✅ Arquivo salvo com sucesso`);
+      console.log(`✅ Documento ID: ${documentId}`);
       console.log(`📤 === RESPOSTA FINAL ===`);
       console.log(response);
 
       return response;
     } catch (error) {
-      console.error('❌ === ERRO AO PROCESSAR FATURA ===');
-      console.error('Erro completo:', error);
+      console.error(`❌ === ERRO NO UPLOAD ===`);
+      if (error instanceof BadRequestException) {
+        console.error(`Erro de validação: ${error.message}`);
+        throw error;
+      }
+      console.error(`Erro:`, error);
       throw new InternalServerErrorException(
-        error instanceof Error ? error.message : 'Erro ao processar fatura',
+        'Erro ao processar fatura. Por favor, tente novamente.',
       );
     }
   }
 
-  @Get()
-  async listDocuments() {
-    console.log('📋 Listando documentos...');
-    return { success: true, data: [], message: 'Nenhum documento encontrado' };
+  @Get('/')
+  listDocuments() {
+    return { documents: [] };
   }
 
-  @Get(':documentId/status')
-  async getDocumentStatus(@Param('documentId') documentId: string) {
-    console.log(`🔍 Buscando status do documento: ${documentId}`);
-    return { success: true, data: { documentId, status: 'PENDING' } };
+  @Get('/:documentId/status')
+  getDocumentStatus(@Param('documentId') documentId: string) {
+    return {
+      documentId,
+      status: 'PENDING',
+    };
+  }
+
+  private async validateInvoiceFile(
+    buffer: Buffer,
+    mimeType: string,
+  ): Promise<boolean> {
+    try {
+      console.log(`🔍 Validando se é arquivo de fatura...`);
+
+      if (mimeType === 'application/pdf') {
+        const header = buffer.toString('ascii', 0, 4);
+        const isPDF = header === '%PDF';
+        console.log(`  ✓ Validação PDF: ${isPDF ? 'VÁLIDO' : 'INVÁLIDO'}`);
+        return isPDF;
+      }
+
+      if (['image/png', 'image/jpeg', 'image/jpg'].includes(mimeType)) {
+        const isPNG = buffer[0] === 0x89 && buffer[1] === 0x50;
+        const isJPEG = buffer[0] === 0xff && buffer[1] === 0xd8;
+        const isValid = isPNG || isJPEG;
+        console.log(`  ✓ Validação Imagem: ${isValid ? 'VÁLIDO' : 'INVÁLIDO'}`);
+        return isValid;
+      }
+
+      return false;
+    } catch (error) {
+      console.error(`⚠️ Erro na validação de arquivo:`, error);
+      return false;
+    }
   }
 
   private defineStoragePath(
     organizationId: string,
     empresaId: string,
     referenceMonth: string,
-    filename: string,
+    originalFilename: string,
   ): string {
     const [year, month] = referenceMonth.split('-');
-    const path = `organization/${organizationId}/empresa/${empresaId}/ano/${year}/mes/${month}/${filename}`;
-    console.log(`📂 Storage path definido: ${path}`);
-    return path;
+    const filename = originalFilename.replace(/\s+/g, '_');
+    return `organization/${organizationId}/empresa/${empresaId}/ano/${year}/mes/${month}/${filename}`;
   }
 
-  private async moveFileToStructure(sourcePath: string, targetPath: string): Promise<void> {
-    try {
-      const targetDir = `./uploads/documents/${targetPath.substring(0, targetPath.lastIndexOf('/'))}`;
-      console.log(`📁 Criando diretório: ${targetDir}`);
-      await fs.mkdir(targetDir, { recursive: true });
-      
-      const fullTargetPath = `./uploads/documents/${targetPath}`;
-      console.log(`📤 Movendo arquivo de ${sourcePath} para ${fullTargetPath}`);
-      await fs.rename(sourcePath, fullTargetPath);
-      console.log(`✅ Arquivo movido com sucesso`);
-    } catch (error) {
-      console.error(`❌ Erro ao mover arquivo:`, error);
-      throw error;
-    }
+  private async moveFileToStructure(
+    sourcePath: string,
+    destinationPath: string,
+  ): Promise<void> {
+    const fs = require('fs').promises;
+    const path = require('path');
+
+    const fullDestPath = `./uploads/documents/${destinationPath}`;
+    const destDir = path.dirname(fullDestPath);
+
+    console.log(`📁 Criando diretório: ${destDir}`);
+    await fs.mkdir(destDir, { recursive: true });
+
+    console.log(`📤 Movendo arquivo de ${sourcePath} para ${fullDestPath}`);
+    await fs.rename(sourcePath, fullDestPath);
   }
 }
