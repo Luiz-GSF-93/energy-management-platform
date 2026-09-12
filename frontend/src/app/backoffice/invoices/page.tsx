@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, Calculator, TrendingUp } from 'lucide-react';
+import { FileText, Calculator, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface InvoiceData {
   // IDENTIFICAÇÃO
@@ -9,39 +9,62 @@ interface InvoiceData {
   consumerUnit: string;
   referenceMonth: string;
   contractNumber: string;
+  distributor: string;
   
-  // CONSUMO
+  // CONSUMO - PONTA
   consumptionPeakHours: number;
+  consumptionPeakkWh: number;
+  
+  // CONSUMO - FORA PONTA
   consumptionOffPeakHours: number;
+  consumptionOffPeakkWh: number;
+  
+  // DEMANDA - MODALIDADE AZUL
   demandPeak: number;
   demandOffPeak: number;
   
-  // TARIFAS (vinculadas do contrato)
+  // DEMANDA - MODALIDADE VERDE (única)
+  demandUnique: number;
+  
+  // TARIFAS TUSD
   tusdPeakRate: number;
   tusdOffPeakRate: number;
   tusdDemandPeak: number;
   tusdDemandOffPeak: number;
+  
+  // TARIFAS TE
   tePeakRate: number;
   teOffPeakRate: number;
   
-  // ENCARGOS
+  // ENCARGOS SETORIAIS
   bandeiraPeak: number;
   bandeiraOffPeak: number;
   ccee: number;
   onu: number;
   pes: number;
+  rge: number;
+  
+  // ENERGIA DE RESERVA
+  reserveEnergyRate: number;
+  reserveEnergyConsumption: number;
   
   // IMPOSTOS
   icms: number;
   pis: number;
   cofins: number;
   
+  // TAXA MUNICIPAL
+  taxMunicipality: number;
+  
   // CRÉDITOS
   creditAmount: number;
+  creditDescription: string;
   
-  // COMPARATIVO ACL
+  // ACL COMPARATIVO
   aclPeakRate: number;
   aclOffPeakRate: number;
+  aclDemandPeak: number;
+  aclDemandOffPeak: number;
 }
 
 const initialData: InvoiceData = {
@@ -49,10 +72,14 @@ const initialData: InvoiceData = {
   consumerUnit: '123456789',
   referenceMonth: '2026-09',
   contractNumber: 'CT-2026-001',
+  distributor: 'CPFL Energia',
   consumptionPeakHours: 500,
+  consumptionPeakkWh: 500,
   consumptionOffPeakHours: 1500,
+  consumptionOffPeakkWh: 1500,
   demandPeak: 50,
   demandOffPeak: 30,
+  demandUnique: 0,
   tusdPeakRate: 0.85,
   tusdOffPeakRate: 0.50,
   tusdDemandPeak: 25.00,
@@ -64,72 +91,111 @@ const initialData: InvoiceData = {
   ccee: 2.50,
   onu: 0.15,
   pes: 0.45,
+  rge: 0.20,
+  reserveEnergyRate: 0.50,
+  reserveEnergyConsumption: 0,
   icms: 0.18,
   pis: 0.0765,
   cofins: 0.076,
+  taxMunicipality: 0.05,
   creditAmount: 0,
+  creditDescription: '',
   aclPeakRate: 120.00,
   aclOffPeakRate: 80.00,
+  aclDemandPeak: 22.00,
+  aclDemandOffPeak: 12.00,
 };
 
 export default function InvoicesPage() {
   const [formData, setFormData] = useState<InvoiceData>(initialData);
   const [results, setResults] = useState<any>(null);
+  const [expandedSections, setExpandedSections] = useState({
+    identification: true,
+    consumption: true,
+    demand: false,
+    charges: false,
+    taxes: false,
+    acl: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   const calculateInvoice = () => {
-    // REGULADO - Cálculo de energia
-    const tusdEnergy = 
-      (formData.consumptionPeakHours * formData.tusdPeakRate) +
-      (formData.consumptionOffPeakHours * formData.tusdOffPeakRate);
-    
-    const teEnergy = 
-      (formData.consumptionPeakHours * formData.tePeakRate / 1000) +
-      (formData.consumptionOffPeakHours * formData.teOffPeakRate / 1000);
-    
-    const bandeira = 
-      (formData.consumptionPeakHours * formData.bandeiraPeak) +
-      (formData.consumptionOffPeakHours * formData.bandeiraOffPeak);
-    
-    const demand = 
-      (formData.demandPeak * formData.tusdDemandPeak) +
-      (formData.demandOffPeak * formData.tusdDemandOffPeak);
-    
-    const chargesSubtotal = formData.ccee + formData.onu + formData.pes;
-    
-    const regulatedSubtotal = tusdEnergy + teEnergy + bandeira + demand + chargesSubtotal;
-    
-    // Aplicar impostos (sobre base tributária)
-    const taxRate = (formData.icms + formData.pis + formData.cofins);
+    // REGULADO - TUSD ENERGIA
+    const tusdEnergyPeak = formData.consumptionPeakkWh * formData.tusdPeakRate;
+    const tusdEnergyOffPeak = formData.consumptionOffPeakkWh * formData.tusdOffPeakRate;
+    const tusdEnergy = tusdEnergyPeak + tusdEnergyOffPeak;
+
+    // REGULADO - TE ENERGIA
+    const teEnergyPeak = (formData.consumptionPeakHours * formData.tePeakRate) / 1000;
+    const teEnergyOffPeak = (formData.consumptionOffPeakHours * formData.teOffPeakRate) / 1000;
+    const teEnergy = teEnergyPeak + teEnergyOffPeak;
+
+    // REGULADO - BANDEIRA
+    const bandeiraPeak = formData.consumptionPeakkWh * formData.bandeiraPeak;
+    const bandeiraOffPeak = formData.consumptionOffPeakkWh * formData.bandeiraOffPeak;
+    const bandeira = bandeiraPeak + bandeiraOffPeak;
+
+    // REGULADO - DEMANDA
+    const demandCost = (formData.demandPeak * formData.tusdDemandPeak) + 
+                       (formData.demandOffPeak * formData.tusdDemandOffPeak);
+
+    // REGULADO - ENCARGOS
+    const chargesTotal = formData.ccee + formData.onu + formData.pes + formData.rge;
+
+    // REGULADO - ENERGIA DE RESERVA
+    const reserveEnergyCost = formData.reserveEnergyConsumption * formData.reserveEnergyRate;
+
+    // REGULADO - SUBTOTAL
+    const regulatedSubtotal = tusdEnergy + teEnergy + bandeira + demandCost + chargesTotal + reserveEnergyCost;
+
+    // REGULADO - IMPOSTOS
+    const taxRate = formData.icms + formData.pis + formData.cofins + formData.taxMunicipality;
     const taxes = regulatedSubtotal * taxRate;
-    
-    // Créditos
+
+    // REGULADO - TOTAL
     const regulatedTotal = (regulatedSubtotal + taxes) - formData.creditAmount;
 
-    // ACL - Cálculo para comparativo
-    const aclEnergy = 
-      (formData.consumptionPeakHours * formData.aclPeakRate / 1000) +
-      (formData.consumptionOffPeakHours * formData.aclOffPeakRate / 1000);
-    
-    const aclDemand = (formData.demandPeak + formData.demandOffPeak) * 20; // Taxa média
-    const aclDistribution = (formData.consumptionPeakHours + formData.consumptionOffPeakHours) * 0.60;
+    // ACL - CÁLCULO PARA COMPARATIVO
+    const aclEnergyPeak = (formData.consumptionPeakHours * formData.aclPeakRate) / 1000;
+    const aclEnergyOffPeak = (formData.consumptionOffPeakHours * formData.aclOffPeakRate) / 1000;
+    const aclEnergy = aclEnergyPeak + aclEnergyOffPeak;
+
+    const aclDemand = (formData.demandPeak * formData.aclDemandPeak) + 
+                      (formData.demandOffPeak * formData.aclDemandOffPeak);
+
+    // ACL - DISTRIBUIÇÃO (aproximação)
+    const aclDistribution = (formData.consumptionPeakkWh + formData.consumptionOffPeakkWh) * 0.60;
+
     const aclSubtotal = aclEnergy + aclDemand + aclDistribution;
     const aclTaxes = aclSubtotal * taxRate;
     const aclTotal = (aclSubtotal + aclTaxes) - formData.creditAmount;
 
-    // Economia
+    // ECONOMIA
     const monthlyEconomy = regulatedTotal - aclTotal;
     const annualEconomy = monthlyEconomy * 12;
-    const economyPercent = (monthlyEconomy / regulatedTotal * 100).toFixed(1);
+    const economyPercent = regulatedTotal > 0 ? ((monthlyEconomy / regulatedTotal) * 100).toFixed(1) : '0.0';
 
     setResults({
       regulatedBreakdown: {
+        tusdEnergyPeak: tusdEnergyPeak.toFixed(2),
+        tusdEnergyOffPeak: tusdEnergyOffPeak.toFixed(2),
         tusdEnergy: tusdEnergy.toFixed(2),
+        teEnergyPeak: teEnergyPeak.toFixed(2),
+        teEnergyOffPeak: teEnergyOffPeak.toFixed(2),
         teEnergy: teEnergy.toFixed(2),
         bandeira: bandeira.toFixed(2),
-        demand: demand.toFixed(2),
-        charges: chargesSubtotal.toFixed(2),
+        demand: demandCost.toFixed(2),
+        charges: chargesTotal.toFixed(2),
+        reserveEnergy: reserveEnergyCost.toFixed(2),
         subtotal: regulatedSubtotal.toFixed(2),
         taxes: taxes.toFixed(2),
+        credits: formData.creditAmount.toFixed(2),
       },
       regulatedTotal: regulatedTotal.toFixed(2),
       aclTotal: aclTotal.toFixed(2),
@@ -146,6 +212,40 @@ export default function InvoicesPage() {
     }));
   };
 
+  const renderField = (label: string, fieldName: keyof InvoiceData, type: string = 'number', step: string = '0.01') => (
+    <div>
+      <label className="text-sm text-slate-400 block mb-1">{label}</label>
+      <input
+        type={type}
+        value={formData[fieldName]}
+        onChange={(e) => handleChange(fieldName, e.target.value)}
+        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:border-blue-500"
+        step={step}
+      />
+    </div>
+  );
+
+  const renderSection = (title: string, key: string, children: React.ReactNode) => (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <button
+        onClick={() => toggleSection(key)}
+        className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700 transition"
+      >
+        <h3 className="font-bold text-white">{title}</h3>
+        {expandedSections[key as keyof typeof expandedSections] ?
+          <ChevronUp size={20} className="text-blue-400" /> :
+          <ChevronDown size={20} className="text-slate-400" />
+        }
+      </button>
+
+      {expandedSections[key as keyof typeof expandedSections] && (
+        <div className="px-4 py-4 space-y-3 border-t border-slate-700">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-6xl mx-auto">
@@ -158,63 +258,52 @@ export default function InvoicesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* FORMULÁRIO */}
           <div className="lg:col-span-1">
-            <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 sticky top-6">
+            <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 sticky top-6 max-h-96 overflow-y-auto">
               <h2 className="text-xl font-bold text-white mb-4">Registrar Fatura</h2>
-              
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                <div className="text-sm font-semibold text-blue-400">Identificação</div>
-                <input 
-                  type="text" 
-                  placeholder="Número da Fatura"
-                  value={formData.invoiceNumber}
-                  onChange={(e) => handleChange('invoiceNumber', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
-                <input 
-                  type="text" 
-                  placeholder="UC"
-                  value={formData.consumerUnit}
-                  onChange={(e) => handleChange('consumerUnit', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
-                <input 
-                  type="month" 
-                  value={formData.referenceMonth}
-                  onChange={(e) => handleChange('referenceMonth', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
 
-                <div className="text-sm font-semibold text-green-400">Consumo (kWh)</div>
-                <input 
-                  type="number" 
-                  placeholder="Consumo Ponta"
-                  value={formData.consumptionPeakHours}
-                  onChange={(e) => handleChange('consumptionPeakHours', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
-                <input 
-                  type="number" 
-                  placeholder="Consumo Fora Ponta"
-                  value={formData.consumptionOffPeakHours}
-                  onChange={(e) => handleChange('consumptionOffPeakHours', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
+              <div className="space-y-4">
+                {renderSection('📋 Identificação', 'identification',
+                  <div className="space-y-3">
+                    {renderField('Número da Fatura', 'invoiceNumber', 'text')}
+                    {renderField('UC', 'consumerUnit', 'text')}
+                    {renderField('Período', 'referenceMonth', 'month')}
+                    {renderField('Contrato', 'contractNumber', 'text')}
+                    {renderField('Distribuidora', 'distributor', 'text')}
+                  </div>
+                )}
 
-                <div className="text-sm font-semibold text-yellow-400">Demanda (kW)</div>
-                <input 
-                  type="number" 
-                  placeholder="Demanda Ponta"
-                  value={formData.demandPeak}
-                  onChange={(e) => handleChange('demandPeak', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
-                <input 
-                  type="number" 
-                  placeholder="Demanda Fora Ponta"
-                  value={formData.demandOffPeak}
-                  onChange={(e) => handleChange('demandOffPeak', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                />
+                {renderSection('⚡ Consumo', 'consumption',
+                  <div className="space-y-3">
+                    {renderField('Consumo Ponta (kWh)', 'consumptionPeakkWh')}
+                    {renderField('Consumo Fora Ponta (kWh)', 'consumptionOffPeakkWh')}
+                  </div>
+                )}
+
+                {renderSection('📊 Demanda (kW)', 'demand',
+                  <div className="space-y-3">
+                    {renderField('Demanda Ponta', 'demandPeak')}
+                    {renderField('Demanda Fora Ponta', 'demandOffPeak')}
+                  </div>
+                )}
+
+                {renderSection('💰 Encargos', 'charges',
+                  <div className="space-y-3">
+                    {renderField('CCEE (R$/kWh)', 'ccee')}
+                    {renderField('ONU (R$/kWh)', 'onu')}
+                    {renderField('PES (R$/kWh)', 'pes')}
+                    {renderField('RGE (R$/kWh)', 'rge')}
+                  </div>
+                )}
+
+                {renderSection('🏛️ Impostos', 'taxes',
+                  <div className="space-y-3">
+                    {renderField('ICMS (%)', 'icms')}
+                    {renderField('PIS (%)', 'pis')}
+                    {renderField('COFINS (%)', 'cofins')}
+                    {renderField('Taxa Municipal (%)', 'taxMunicipality')}
+                    {renderField('Crédito (R$)', 'creditAmount')}
+                  </div>
+                )}
 
                 <button
                   onClick={calculateInvoice}
@@ -246,8 +335,16 @@ export default function InvoicesPage() {
                     <p className="text-2xl font-bold text-green-400">R$ {results.monthlyEconomy}</p>
                   </div>
                   <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                    <p className="text-slate-400 text-sm">% Economia</p>
+                    <p className="text-2xl font-bold text-yellow-400">{results.economyPercent}%</p>
+                  </div>
+                  <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
                     <p className="text-slate-400 text-sm">Economia/ano</p>
                     <p className="text-2xl font-bold text-green-500">R$ {results.annualEconomy}</p>
+                  </div>
+                  <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                    <p className="text-slate-400 text-sm">ROI Anual</p>
+                    <p className="text-2xl font-bold text-purple-400">~{(parseFloat(results.economyPercent) * 3).toFixed(0)}%</p>
                   </div>
                 </div>
 
@@ -255,36 +352,62 @@ export default function InvoicesPage() {
                 <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
                   <h3 className="text-lg font-bold text-white mb-4">Fatura Regulada - Detalhamento</h3>
                   <div className="space-y-2 text-sm">
+                    <div className="bg-slate-700 p-2 rounded">
+                      <div className="flex justify-between">
+                        <span>TUSD Energia Ponta</span>
+                        <span>R$ {results.regulatedBreakdown.tusdEnergyPeak}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400 text-xs">
+                        <span>TUSD Energia Fora Ponta</span>
+                        <span>R$ {results.regulatedBreakdown.tusdEnergyOffPeak}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-700 p-2 rounded">
+                      <div className="flex justify-between">
+                        <span>TE Energia Ponta</span>
+                        <span>R$ {results.regulatedBreakdown.teEnergyPeak}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400 text-xs">
+                        <span>TE Energia Fora Ponta</span>
+                        <span>R$ {results.regulatedBreakdown.teEnergyOffPeak}</span>
+                      </div>
+                    </div>
+
                     <div className="flex justify-between">
-                      <span className="text-slate-400">TUSD Energia</span>
-                      <span className="text-white">R$ {results.regulatedBreakdown.tusdEnergy}</span>
+                      <span>Bandeira</span>
+                      <span>R$ {results.regulatedBreakdown.bandeira}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">TE Energia</span>
-                      <span className="text-white">R$ {results.regulatedBreakdown.teEnergy}</span>
+                      <span>Demanda</span>
+                      <span>R$ {results.regulatedBreakdown.demand}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Bandeira</span>
-                      <span className="text-white">R$ {results.regulatedBreakdown.bandeira}</span>
+                      <span>Encargos (CCEE, ONU, PES, RGE)</span>
+                      <span>R$ {results.regulatedBreakdown.charges}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Demanda</span>
-                      <span className="text-white">R$ {results.regulatedBreakdown.demand}</span>
+                      <span>Energia de Reserva</span>
+                      <span>R$ {results.regulatedBreakdown.reserveEnergy}</span>
+                    </div>
+
+                    <div className="border-t border-slate-600 pt-2 mt-2 flex justify-between font-bold">
+                      <span>Subtotal</span>
+                      <span>R$ {results.regulatedBreakdown.subtotal}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Encargos (CCEE, ONU, PES)</span>
-                      <span className="text-white">R$ {results.regulatedBreakdown.charges}</span>
-                    </div>
-                    <div className="border-t border-slate-700 pt-2 mt-2 flex justify-between font-bold">
-                      <span className="text-slate-300">Subtotal</span>
-                      <span className="text-white">R$ {results.regulatedBreakdown.subtotal}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Impostos (ICMS + PIS + COFINS)</span>
+                      <span>Impostos (ICMS + PIS + COFINS + Mun.)</span>
                       <span className="text-yellow-400">R$ {results.regulatedBreakdown.taxes}</span>
                     </div>
-                    <div className="border-t border-slate-700 pt-2 mt-2 flex justify-between font-bold text-lg">
-                      <span className="text-white">TOTAL</span>
+                    {formData.creditAmount > 0 && (
+                      <div className="flex justify-between">
+                        <span>(-) Crédito</span>
+                        <span className="text-green-400">-R$ {results.regulatedBreakdown.credits}</span>
+                      </div>
+                    )}
+
+                    <div className="border-t border-slate-600 pt-2 mt-2 flex justify-between font-bold text-lg">
+                      <span>TOTAL REGULADO</span>
                       <span className="text-green-400">R$ {results.regulatedTotal}</span>
                     </div>
                   </div>
@@ -294,20 +417,21 @@ export default function InvoicesPage() {
                 <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <TrendingUp size={24} className="text-green-400" />
-                    Economia Potencial
+                    Comparativo Regulado vs ACL
                   </h3>
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
-                      <p className="text-slate-400 text-sm">% Economia</p>
+                      <p className="text-slate-400 text-sm">Regulado</p>
+                      <p className="text-2xl font-bold">R$ {results.regulatedTotal}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400 text-sm">ACL (Mercado Livre)</p>
+                      <p className="text-2xl font-bold text-blue-400">R$ {results.aclTotal}</p>
+                    </div>
+                    <div className="col-span-2 bg-slate-700 rounded-lg p-3">
+                      <p className="text-slate-400 text-sm">Economia Potencial</p>
                       <p className="text-3xl font-bold text-green-400">{results.economyPercent}%</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-sm">Mensal</p>
-                      <p className="text-3xl font-bold text-blue-400">R$ {results.monthlyEconomy}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-sm">Anual</p>
-                      <p className="text-3xl font-bold text-purple-400">R$ {results.annualEconomy}</p>
+                      <p className="text-sm text-slate-300">R$ {results.monthlyEconomy}/mês | R$ {results.annualEconomy}/ano</p>
                     </div>
                   </div>
                 </div>
@@ -316,7 +440,7 @@ export default function InvoicesPage() {
 
             {!results && (
               <div className="bg-slate-800 rounded-lg p-12 border border-slate-700 text-center">
-                <p className="text-slate-400">Preencha os dados da fatura e clique em "Calcular" para gerar o comparativo</p>
+                <p className="text-slate-400">Preencha os dados da fatura e clique em "Calcular Fatura" para ver o comparativo</p>
               </div>
             )}
           </div>
