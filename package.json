@@ -1,5 +1,10 @@
 {
   "name": "energy-management-platform",
   "version": "1.0.0",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "xlsx": "^0.18.5"
+  }
 }
