@@ -7,6 +7,7 @@ import {
   UploadedFile,
   BadRequestException,
   InternalServerErrorException,
+  Headers,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -15,6 +16,7 @@ import { extname } from 'path';
 import * as fs from 'fs/promises';
 
 import { ValidationService } from '../services/validation.service';
+import { ContractValidationService } from '../services/contract-validation.service';
 import { DistributorDetectorService } from '../services/distributor-detector.service';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { GenericParser } from '../parsers/generic.parser';
@@ -34,15 +36,12 @@ interface MulterFile {
 export class DocumentProcessingController {
   constructor(
     private validationService: ValidationService,
+    private contractValidationService: ContractValidationService,
     private distributorDetectorService: DistributorDetectorService,
     private pdfExtractor: PdfExtractorService,
     private genericParser: GenericParser,
   ) {}
 
-  /**
-   * POST /api/document-processing/upload
-   * Upload de fatura com processamento automático
-   */
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -60,101 +59,95 @@ export class DocumentProcessingController {
         }
         cb(null, true);
       },
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
-  async uploadDocument(@UploadedFile() file: MulterFile) {
+  async uploadDocument(
+    @UploadedFile() file: MulterFile,
+    @Headers('x-organization-id') organizationId?: string,
+  ) {
     if (!file) {
       throw new BadRequestException('Nenhum arquivo enviado');
     }
 
     try {
-      // 1. Ler arquivo
-      const fileBuffer = await fs.readFile(file.path);
+      const orgId = organizationId || 'default-org';
+      console.log(`📄 Processando: ${file.originalname}`);
 
-      // 2. Extrair texto (PDF ou OCR para imagens)
+      const fileBuffer = await fs.readFile(file.path);
       let rawText = '';
       if (file.mimetype === 'application/pdf') {
         rawText = await this.pdfExtractor.extractText(fileBuffer);
-      } else {
-        // TODO: Implementar OCR para imagens (Tesseract)
-        rawText = '[OCR não implementado] - Salve como PDF para extração';
       }
 
-      // 3. Detectar concessionária
       const distributor = this.distributorDetectorService.detectDistributor(rawText);
-
-      // 4. Parser de fatura
       const parsedData = this.genericParser.parse(rawText, distributor);
+      const extractionValidation = this.validationService.validateExtractedData(parsedData);
 
-      // 5. Validar dados extraídos
-      const validation = this.validationService.validateExtractedData(parsedData);
+      const contractValidation = this.contractValidationService.validateAgainstContract(
+        parsedData.clientCnpj || '',
+        parsedData.consumerUnit || '',
+        parsedData.referenceMonth,
+        parsedData.consumptionKwh,
+      );
 
-      // 6. Definir caminho de armazenamento estruturado
-      // organization/{org_id}/empresa/{empresa_id}/ano/{year}/mes/{month}/{filename}
+      const isFinal = contractValidation.status === 'VALIDO';
+
       const storagePath = this.defineStoragePath(
-        'default-org',
+        orgId,
         'default-empresa',
         parsedData.referenceMonth,
         file.originalname,
       );
-
-      // 7. Mover arquivo para estrutura final
       await this.moveFileToStructure(file.path, storagePath);
+
+      const documentId = uuidv4();
 
       return {
         success: true,
-        documentId: uuidv4(),
+        documentId,
         extraction: {
           invoiceNumber: parsedData.invoiceNumber,
           referenceMonth: parsedData.referenceMonth,
-          distributor: distributor,
+          distributor,
           consumptionKwh: parsedData.consumptionKwh,
           totalAmount: parsedData.totalAmount,
-          confidenceLevel: validation.confidenceLevel,
-          confidenceScore: validation.confidenceScore,
-          validationNotes: validation.notes,
+          confidenceLevel: extractionValidation.confidenceLevel,
+          confidenceScore: extractionValidation.confidenceScore,
+          
+          clientCnpj: parsedData.clientCnpj,
+          clientName: parsedData.clientName,
+          consumerUnitNumber: parsedData.consumerUnitNumber,
+        },
+        audit: {
+          extraction: extractionValidation,
+          contract: contractValidation,
+          status: isFinal ? 'APPROVED' : 'PENDING_REVIEW',
         },
         storagePath,
       };
     } catch (error) {
-      console.error('Erro ao processar documento:', error);
-      throw new InternalServerErrorException('Erro ao processar fatura');
+      console.error('❌ Erro:', error);
+      throw new InternalServerErrorException(
+        error instanceof Error ? error.message : 'Erro ao processar fatura',
+      );
     }
   }
 
-  /**
-   * GET /api/document-processing
-   * Lista documentos processados da organização
-   */
   @Get()
   async listDocuments() {
-    return {
-      success: true,
-      data: [],
-      message: 'Nenhum documento encontrado',
-    };
+    return { success: true, data: [], message: 'Nenhum documento encontrado' };
   }
 
-  /**
-   * GET /api/document-processing/:documentId/status
-   * Consultar status de um documento
-   */
   @Get(':documentId/status')
   async getDocumentStatus(@Param('documentId') documentId: string) {
-    return {
-      success: true,
-      data: { documentId, status: 'PENDING' },
-    };
+    return { success: true, data: { documentId, status: 'PENDING' } };
   }
 
-  /**
-   * Helpers
-   */
   private defineStoragePath(
     organizationId: string,
     empresaId: string,
-    referenceMonth: string, // YYYY-MM
+    referenceMonth: string,
     filename: string,
   ): string {
     const [year, month] = referenceMonth.split('-');

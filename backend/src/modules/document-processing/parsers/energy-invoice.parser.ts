@@ -16,18 +16,23 @@ export interface ParsedInvoiceData {
   issueDate?: string;
   consumerUnit?: string;
   rawText?: string;
+  
+  // NOVOS: Dados para auditoria
+  clientCnpj?: string;
+  clientName?: string;
+  distributorCnpj?: string;
+  distributorName?: string;
+  consumerUnitNumber?: string;
 }
 
 export class EnergyInvoiceParser {
   private cpflParser = new CpflParser();
 
   parse(text: string, distributor: Distributor): ParsedInvoiceData {
-    // Se for CPFL, usa o parser especializado
     if (distributor === Distributor.CPFL) {
       return this.cpflParser.parse(text);
     }
 
-    // Fallback: parser genérico
     return this.parseGeneric(text, distributor);
   }
 

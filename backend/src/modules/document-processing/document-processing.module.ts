@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DocumentProcessingController } from './controllers/document-processing.controller';
 import { ValidationService } from './services/validation.service';
+import { ContractValidationService } from './services/contract-validation.service';
 import { DistributorDetectorService } from './services/distributor-detector.service';
 import { PdfExtractorService } from './services/pdf-extractor.service';
 import { GenericParser } from './parsers/generic.parser';
@@ -11,12 +12,13 @@ import { CpflParser } from './parsers/cpfl.parser';
   controllers: [DocumentProcessingController],
   providers: [
     ValidationService,
+    ContractValidationService,
     DistributorDetectorService,
     PdfExtractorService,
     GenericParser,
     EnergyInvoiceParser,
     CpflParser,
   ],
-  exports: [ValidationService, EnergyInvoiceParser, CpflParser],
+  exports: [ValidationService, ContractValidationService, EnergyInvoiceParser],
 })
 export class DocumentProcessingModule {}
