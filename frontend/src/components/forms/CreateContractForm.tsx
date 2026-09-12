@@ -4,8 +4,10 @@ import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { api } from '@/lib/api/client';
 import { Contract } from '@/types/api';
+import { TariffConfig } from '@/types/tariff';
 import { ChevronDown, ChevronUp, AlertCircle, Plus } from 'lucide-react';
 import { DistributorModal } from '@/components/modals/DistributorModal';
+import { TariffConfigForm } from '@/components/forms/TariffConfigForm';
 
 interface Distributor {
   id: string;
@@ -28,28 +30,22 @@ const calculateContractMetrics = (data: any) => {
   const icmsRate = Number(data.icmsPercentage) || 0;
   const demandKw = Number(data.demandKw) || 0;
 
-  // Cálculos básicos
   const regulatedCostBase = mwhAnnual * regulatedPrice;
   const freeMarketCostBase = mwhAnnual * freeMarketPrice;
   const tusdCost = mwhAnnual * tusdComponent;
 
-  // ICMS
   const icmsValueRegulated = regulatedCostBase * (icmsRate / 100);
   const icmsValueFreeMarket = (freeMarketCostBase + tusdCost) * (icmsRate / 100);
 
-  // Custos totais
   const regulatedTotal = regulatedCostBase + icmsValueRegulated;
   const freeMarketTotal = freeMarketCostBase + tusdCost + icmsValueFreeMarket;
 
-  // Taxas anuais
   const annualFee = monthlyFee * 12;
 
-  // Economia
   const grossSavings = regulatedTotal - freeMarketTotal;
   const netSavings = grossSavings - annualFee;
   const savingsPercentage = regulatedTotal > 0 ? (grossSavings / regulatedTotal) * 100 : 0;
 
-  // ROI
   const roi = annualFee > 0 ? (netSavings / annualFee) * 100 : 0;
 
   return {
@@ -88,11 +84,15 @@ export function CreateContractForm({
     parties: true,
     energy: true,
     pricing: true,
+    tariff: true,
     adjustments: false,
     flexibility: false,
     commercial: false,
     configuration: true,
   });
+
+  const [tariffConfig, setTariffConfig] = useState<TariffConfig | null>(null);
+  const [calculationResult, setCalculationResult] = useState<any>(null);
 
   const {
     register,
@@ -104,7 +104,6 @@ export function CreateContractForm({
   } = useForm({
     mode: 'onBlur',
     defaultValues: {
-      // Cliente
       clientName: '',
       clientCnpj: '',
       clientEmail: '',
@@ -113,32 +112,27 @@ export function CreateContractForm({
       clientCity: '',
       clientState: '',
 
-      // Contrato
       contractNumber: '',
       contractTitle: '',
       startDate: new Date().toISOString().split('T')[0],
       endDate: '',
       observations: '',
 
-      // Fornecedor
       supplierName: '',
       supplierCnpj: '',
       supplierContact: '',
       supplierEmail: '',
       supplierPhone: '',
 
-      // Distribuidor
       distributorName: '',
       distributorCnpj: '',
 
-      // Energia
       contractedMwhAnnual: 100,
       seasonality: 0,
       flexibility: 10,
       demandKw: 50,
       consumerUnits: '',
 
-      // Precificação
       pricePerMwh: 150,
       regulatedPrice: 200,
       tusdComponent: 0,
@@ -146,33 +140,28 @@ export function CreateContractForm({
       monthlyFee: 1000,
       commissionPercentage: 5,
 
-      // Reajustes
       adjustmentIndex: 'IPCA',
       adjustmentDate: '',
       adjustmentPercentage: 0,
       adjustmentCap: 10,
       adjustmentFloor: -10,
 
-      // Flexibilidade
       variationAllowed: 5,
       takeOrPayEnabled: false,
       penaltyPercentage: 5,
       noticeTermDays: 30,
 
-      // Comercial
       billingFrequency: 'MONTHLY',
       paymentMethod: 'BOLETO',
       dueCardancyDays: 0,
       currency: 'BRL',
 
-      // Configuração
       contractType: 'STANDARD',
       status: 'ACTIVE',
       purchaseModality: 'FREE_MARKET',
     },
   });
 
-  // Cálculos em tempo real
   const watchedFields = watch([
     'contractedMwhAnnual',
     'regulatedPrice',
@@ -215,16 +204,101 @@ export function CreateContractForm({
     setValue('distributorCnpj', distributor.cnpj);
   };
 
+  const handleTariffConfigSave = (config: TariffConfig) => {
+    setTariffConfig(config);
+    alert('✅ Configuração de tarifas salva com sucesso!');
+  };
+
+  const handleTariffCalculate = async (config: TariffConfig) => {
+    try {
+      // Simular cálculo com a tarifa configurada
+      const consumptionData = {
+        consumptionPeakKwh: 600,
+        consumptionOffPeakKwh: 600,
+        demandPeakKw: 50,
+        demandOffPeakKw: 40,
+        generatorVolumeMwh: watch('contractedMwhAnnual'),
+      };
+
+      // Preparar input para o backend
+      const settlementInput = {
+        consumerUnitId: 'uc-temp',
+        referenceMonth: new Date(),
+        regulatedTusd: {
+          consumptionPeakKwh: consumptionData.consumptionPeakKwh,
+          consumptionOffPeakKwh: consumptionData.consumptionOffPeakKwh,
+          demandPeakKw: consumptionData.demandPeakKw,
+          demandOffPeakKw: consumptionData.demandOffPeakKw,
+          tusdRatePeak: config.regulated.tusd.peakRate,
+          tusdRateOffPeak: config.regulated.tusd.offPeakRate,
+          demandRate: config.regulated.tusd.demandRate,
+        },
+        regulatedTe: {
+          consumptionPeakKwh: consumptionData.consumptionPeakKwh,
+          consumptionOffPeakKwh: consumptionData.consumptionOffPeakKwh,
+          teRatePeak: config.regulated.te.peakRate,
+          teRateOffPeak: config.regulated.te.offPeakRate,
+          additionalBandPeak: config.regulated.additionalCharges?.bandeiraPeak,
+          additionalBandOffPeak: config.regulated.additionalCharges?.bandeiraOffPeak,
+        },
+        aclDistribution: {
+          consumptionPeakTusdKwh: consumptionData.consumptionPeakKwh,
+          consumptionOffPeakTusdKwh: consumptionData.consumptionOffPeakKwh,
+          demandPeakKw: consumptionData.demandPeakKw,
+          demandOffPeakKw: consumptionData.demandOffPeakKw,
+          tusdRatePeak: config.acl.distribution.tusdPeakRate,
+          tusdRateOffPeak: config.acl.distribution.tusdOffPeakRate,
+          demandRate: config.acl.distribution.demandRate,
+          cdeCovid: config.acl.distribution.cdeCovid,
+          cdeWater: config.acl.distribution.cdeWater,
+        },
+        aclCcee: {
+          generatorVolumeMwh: consumptionData.generatorVolumeMwh,
+          generatorRateMwhBrl: config.acl.generator.ratePerMwh,
+          contributionAssociative: config.acl.ccee.associativeContribution,
+          eer: config.acl.ccee.eer,
+          ercap: config.acl.ccee.ercap,
+          financialGuarantee: config.acl.ccee.financialGuarantee,
+          penalties: config.acl.ccee.penalties,
+          liquidationMcpCredit: config.acl.ccee.liquidationMcp,
+          nuclearQuotas: config.acl.ccee.nuclearQuotas,
+        },
+        taxes: {
+          pisFederal: config.taxes.pisFederal,
+          cofinsFederal: config.taxes.cofinsFederal,
+          icmsStateRate: config.taxes.icmsState,
+        },
+      };
+
+      const response = await api.settlements.calculate(settlementInput);
+      
+      if (response.data) {
+        setCalculationResult(response.data);
+        alert('✅ Cálculo realizado com sucesso!');
+      }
+    } catch (err: any) {
+      alert(`❌ Erro ao calcular: ${err.message}`);
+    }
+  };
+
   const onSubmit = async (data: any) => {
     setLoading(true);
     setApiError(null);
 
     try {
-      const response = await api.contracts.create(data);
+      const contractData = {
+        ...data,
+        tariffConfig,
+        calculationResult,
+      };
+
+      const response = await api.contracts.create(contractData);
 
       if (response.statusCode === 201 && response.data) {
         onSuccess?.(response.data as Contract);
         reset();
+        setTariffConfig(null);
+        setCalculationResult(null);
       } else {
         const errorMsg = response.message || 'Erro ao criar contrato';
         setApiError(errorMsg);
@@ -259,7 +333,7 @@ export function CreateContractForm({
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 bg-slate-900 p-6 rounded-lg shadow-lg border border-slate-700 max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-3xl font-bold text-white">📝 Cadastrar Contrato</h2>
-          <span className="text-sm text-slate-400">9 seções</span>
+          <span className="text-sm text-slate-400">10 seções</span>
         </div>
 
         {apiError && (
@@ -377,7 +451,6 @@ export function CreateContractForm({
                 </div>
               </div>
 
-              {/* Distribuidor com Modal */}
               <div className="border-t border-slate-700 pt-4 mt-4">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="font-semibold text-slate-200">Distribuidor</h4>
@@ -467,13 +540,11 @@ export function CreateContractForm({
                 </div>
               </div>
 
-              {/* Motor de Cálculo - Comparativo Regulado vs Livre */}
               {metrics.regulatedTotal > 0 && (
                 <div className="bg-gradient-to-r from-green-900/40 to-blue-900/40 border border-green-700 rounded-lg p-4 mt-4 space-y-3">
                   <p className="text-green-300 text-sm font-semibold">📊 Análise Comparativa (Anual):</p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Regulado */}
                     <div className="bg-slate-800/50 p-3 rounded border border-slate-700">
                       <p className="text-xs text-slate-400 mb-1">Mercado Regulado</p>
                       <p className="text-xs text-slate-300">Energia: R$ {metrics.regulatedCostBase.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p>
@@ -481,7 +552,6 @@ export function CreateContractForm({
                       <p className="text-lg font-bold text-red-400">Total: R$ {metrics.regulatedTotal.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p>
                     </div>
 
-                    {/* Mercado Livre */}
                     <div className="bg-slate-800/50 p-3 rounded border border-slate-700">
                       <p className="text-xs text-slate-400 mb-1">Mercado Livre</p>
                       <p className="text-xs text-slate-300">Energia: R$ {metrics.freeMarketCostBase.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p>
@@ -512,9 +582,33 @@ export function CreateContractForm({
           )}
         </div>
 
-        {/* 6. REAJUSTES */}
+        {/* 6. CONFIGURAÇÃO DE TARIFAS */}
         <div className="border border-slate-700 rounded-lg overflow-hidden">
-          <SectionHeader title="6️⃣ Reajustes" section="adjustments" />
+          <SectionHeader title="6️⃣ Configuração de Tarifas (Detalhado)" section="tariff" />
+          {expandedSections.tariff && (
+            <div className="p-6 bg-slate-800/50">
+              <TariffConfigForm
+                initialData={tariffConfig || undefined}
+                onSubmit={handleTariffConfigSave}
+                onCalculate={handleTariffCalculate}
+              />
+              {calculationResult && (
+                <div className="mt-4 p-4 bg-green-900/20 border border-green-700 rounded-lg">
+                  <h4 className="text-green-300 font-semibold mb-2">✅ Resultado do Cálculo com Tarifas Detalhadas:</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-slate-300">
+                    <div>Regulado: R$ {calculationResult.regulatedTotalCost?.toLocaleString('pt-BR')}</div>
+                    <div>ACL: R$ {calculationResult.aclTotalCost?.toLocaleString('pt-BR')}</div>
+                    <div>Economia: R$ {calculationResult.grossSavings?.toLocaleString('pt-BR')} ({calculationResult.savingsPercentage?.toFixed(1)}%)</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 7. REAJUSTES */}
+        <div className="border border-slate-700 rounded-lg overflow-hidden">
+          <SectionHeader title="7️⃣ Reajustes" section="adjustments" />
           {expandedSections.adjustments && (
             <div className="space-y-4 p-6 bg-slate-800/50">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -535,22 +629,14 @@ export function CreateContractForm({
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Data</label>
                   <input type="date" {...register('adjustmentDate')} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Cap (%)</label>
-                  <input type="number" step="0.01" {...register('adjustmentCap', { valueAsNumber: true })} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Floor (%)</label>
-                  <input type="number" step="0.01" {...register('adjustmentFloor', { valueAsNumber: true })} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* 7. FLEXIBILIDADE */}
+        {/* 8. FLEXIBILIDADE */}
         <div className="border border-slate-700 rounded-lg overflow-hidden">
-          <SectionHeader title="7️⃣ Flexibilidade e Mecanismos" section="flexibility" />
+          <SectionHeader title="8️⃣ Flexibilidade e Mecanismos" section="flexibility" />
           {expandedSections.flexibility && (
             <div className="space-y-4 p-6 bg-slate-800/50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -577,9 +663,9 @@ export function CreateContractForm({
           )}
         </div>
 
-        {/* 8. CONDIÇÕES COMERCIAIS */}
+        {/* 9. CONDIÇÕES COMERCIAIS */}
         <div className="border border-slate-700 rounded-lg overflow-hidden">
-          <SectionHeader title="8️⃣ Condições Comerciais" section="commercial" />
+          <SectionHeader title="9️⃣ Condições Comerciais" section="commercial" />
           {expandedSections.commercial && (
             <div className="space-y-4 p-6 bg-slate-800/50">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -608,9 +694,9 @@ export function CreateContractForm({
           )}
         </div>
 
-        {/* 9. CONFIGURAÇÃO */}
+        {/* 10. CONFIGURAÇÃO */}
         <div className="border border-slate-700 rounded-lg overflow-hidden">
-          <SectionHeader title="9️⃣ Configuração" section="configuration" />
+          <SectionHeader title="🔟 Configuração" section="configuration" />
           {expandedSections.configuration && (
             <div className="space-y-4 p-6 bg-slate-800/50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
