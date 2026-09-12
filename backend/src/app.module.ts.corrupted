@@ -1,24 +1,43 @@
 import { Module } from '@nestjs/common';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ConfigModule } from '@nestjs/config';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { PassportModule } from '@nestjs/passport';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { JwtModule } from '@nestjs/jwt';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 
 // Modules
 import { SharedModule } from './modules/shared/shared.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { UsersModule } from './modules/users/users.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ConsumerUnitsModule } from './modules/consumer-units/consumer-units.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ValidationsModule } from './modules/validations/validations.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { BackofficeModule } from './modules/backoffice/backoffice.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ManagementFeesModule } from './modules/management-fees/management-fees.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 import { EnginesModule } from './modules/engines/engines.module';
 import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 
@@ -59,9 +78,6 @@ import { AppService } from './app.service';
     ReportsModule,
     NotificationsModule,
     BackofficeModule,
-    
-    // Document Processing (NEW)
-    DocumentProcessingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

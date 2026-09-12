@@ -1,0 +1,13 @@
+export enum Distributor {
+  CPFL = 'CPFL',
+  ENERGISA = 'ENERGISA',
+  ENEL = 'ENEL',
+  NEOENERGIA = 'NEOENERGIA',
+  EQUATORIAL = 'EQUATORIAL',
+  CEMIG = 'CEMIG',
+  LIGHT = 'LIGHT',
+  AES = 'AES',
+  COPEL = 'COPEL',
+  ELETROPAULO = 'ELETROPAULO',
+  GENERIC = 'GENERIC',
+}

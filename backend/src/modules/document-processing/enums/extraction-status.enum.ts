@@ -1,0 +1,15 @@
+export enum ExtractionStatus {
+  PENDING = 'PENDING',
+  EXTRACTED = 'EXTRACTED',
+  VALIDATED = 'VALIDATED',
+  NEEDS_REVISION = 'NEEDS_REVISION',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export enum ConfidenceLevel {
+  CRITICAL_LOW = 'CRITICAL_LOW',
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+}
