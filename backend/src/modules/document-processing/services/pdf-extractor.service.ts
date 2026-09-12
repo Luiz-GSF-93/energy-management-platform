@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class PdfExtractorService {
@@ -7,20 +9,13 @@ export class PdfExtractorService {
       console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF ===`);
       console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
-      // Importar pdf-parse corretamente do caminho exato
-      const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+      // Importar pdf-parse v2.4.5 corretamente
+      const pdfParse = require('pdf-parse');
       
-      console.log(`✓ pdf-parse importado com sucesso`);
-      console.log(`🔄 Tipo: ${typeof pdfParse}`);
+      console.log(`✓ pdf-parse v2.4.5 carregado`);
 
-      if (typeof pdfParse !== 'function') {
-        throw new Error(
-          `pdf-parse não é uma função. Tipo: ${typeof pdfParse}. ` +
-          `Chaves: ${Object.keys(pdfParse).slice(0, 10).join(', ')}`
-        );
-      }
-
-      console.log(`✓ Executando pdfParse com buffer de ${buffer.length} bytes...`);
+      // Executar parse com buffer
+      console.log(`🔄 Fazendo parse do PDF...`);
       const data = await pdfParse(buffer);
 
       console.log(`✅ === PDF PROCESSADO COM SUCESSO ===`);
@@ -28,7 +23,7 @@ export class PdfExtractorService {
       console.log(`📝 Texto extraído: ${(data.text?.length || 0)} caracteres`);
       
       if (data.info) {
-        console.log(`📊 Metadados - Título: "${data.info.Title || 'N/A'}", Autor: "${data.info.Author || 'N/A'}", Producer: "${data.info.Producer || 'N/A'}"`);
+        console.log(`📊 Metadados - Producer: "${data.info.Producer || 'N/A'}", Título: "${data.info.Title || 'N/A'}"`);
       }
 
       // Se tem texto significativo (>100 chars), retornar
@@ -39,30 +34,28 @@ export class PdfExtractorService {
         return data.text;
       }
 
-      // Se vazio ou muito curto
+      // Se vazio ou muito curto, tentar OCR
       if (!data.text || data.text.trim().length === 0) {
-        console.warn(`⚠️ PDF SEM TEXTO EXTRAÍVEL (pode ser imagem ou protegido)`);
-        console.log(`📊 Info:`, {
-          pages: data.numpages,
-          textLength: data.text?.length || 0,
-          producer: data.info?.Producer || 'N/A',
-        });
+        console.warn(`⚠️ PDF SEM CAMADA DE TEXTO (pode ser imagem ou protegido)`);
+        console.log(`🔍 === INICIANDO OCR COM TESSERACT ===`);
         
-        // Tentar OCR
-        console.log(`🔍 Tentando OCR...`);
         const ocrText = await this.extractWithTesseract(buffer);
-        if (ocrText && ocrText.length > 100) {
-          console.log(`✅ OCR extraiu ${ocrText.length} caracteres`);
+        
+        if (ocrText && ocrText.trim().length > 100) {
+          console.log(`✅ OCR EXTRAIU ${ocrText.length} CARACTERES`);
+          console.log(`\n📄 === TEXTO DO OCR (primeiros 2000 chars) ===\n`);
+          console.log(ocrText.substring(0, 2000));
+          console.log(`\n--- FIM ---\n`);
           return ocrText;
         }
         
-        console.error(`❌ Nenhum texto extraído (PDF é imagem sem OCR implementado)`);
+        console.error(`❌ Nenhum texto extraído (PDF é imagem sem OCR disponível)`);
         return '';
       }
 
-      // Tem texto mas é curto
+      // Se tem texto mas é curto
       console.warn(`⚠️ PDF extraiu apenas ${data.text.trim().length} caracteres`);
-      console.log(`\n📄 === TEXTO COMPLETO (${data.text.length} chars) ===\n`);
+      console.log(`\n📄 === TEXTO COMPLETO ===\n`);
       console.log(data.text);
       console.log(`\n--- FIM ---\n`);
       
@@ -70,25 +63,98 @@ export class PdfExtractorService {
 
     } catch (error) {
       console.error(`❌ === ERRO AO EXTRAIR PDF ===`);
-      console.error(`Tipo de erro:`, error instanceof Error ? error.constructor.name : typeof error);
-      
       if (error instanceof Error) {
         console.error(`📌 Mensagem: ${error.message}`);
         console.error(`📌 Stack:`, error.stack?.substring(0, 800));
       } else {
         console.error(`📌 Erro:`, error);
       }
-      
       return '';
     }
   }
 
   private async extractWithTesseract(buffer: Buffer): Promise<string> {
     try {
-      console.log(`🔍 === OCR COM TESSERACT.JS ===`);
-      console.warn(`⚠️ Tesseract.js não implementado ainda`);
-      console.warn(`   Para implementar OCR, execute: npm install tesseract.js`);
-      return '';
+      console.log(`🔍 === CONVERSÃO VISUAL PARA TEXTO COM TESSERACT.JS ===`);
+      
+      try {
+        const Tesseract = require('tesseract.js');
+        const sharp = require('sharp');
+        
+        console.log(`✓ Tesseract.js carregado`);
+        console.log(`✓ Sharp carregado`);
+
+        // Detectar tipo de arquivo
+        const isPDF = buffer.toString('ascii', 0, 4) === '%PDF';
+        console.log(`📄 Tipo: ${isPDF ? 'PDF (convertendo para imagem)' : 'Imagem direta'}`);
+
+        let imagesToProcess: Buffer[] = [];
+
+        // Se é PDF, converter primeira página para imagem
+        if (isPDF) {
+          console.log(`🔄 Convertendo PDF para imagem...`);
+          try {
+            // Usar pdfjs para extrair primeira página como imagem
+            const pdfjsLib = require('pdfjs-dist');
+            const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+            
+            if (pdf.numPages > 0) {
+              const page = await pdf.getPage(1);
+              const viewport = page.getViewport({ scale: 2.0 });
+              const canvas = require('canvas').createCanvas(viewport.width, viewport.height);
+              const context = canvas.getContext('2d');
+              
+              await page.render({
+                canvasContext: context,
+                viewport: viewport
+              }).promise;
+              
+              imagesToProcess.push(canvas.toBuffer('image/png'));
+              console.log(`✓ Primeira página convertida`);
+            }
+          } catch (e) {
+            console.warn(`⚠️ Não foi possível extrair imagem do PDF, tentando OCR direto no buffer`);
+            // Fallback: tentar OCR no buffer como se fosse imagem
+            imagesToProcess.push(buffer);
+          }
+        } else {
+          // É imagem, usar diretamente
+          imagesToProcess.push(buffer);
+        }
+
+        // Fazer OCR em cada imagem
+        let fullText = '';
+        
+        for (let i = 0; i < imagesToProcess.length; i++) {
+          console.log(`📸 Processando imagem ${i + 1}/${imagesToProcess.length}...`);
+          
+          try {
+            const result = await Tesseract.recognize(imagesToProcess[i], 'por');
+            const text = result.data.text;
+            
+            console.log(`  ✓ OCR extraiu ${text.length} caracteres da imagem ${i + 1}`);
+            console.log(`  📊 Confiança: ${(result.data.confidence || 0).toFixed(2)}%`);
+            
+            fullText += text + '\n';
+          } catch (ocrError) {
+            console.warn(`⚠️ Erro ao fazer OCR na imagem ${i + 1}:`, 
+              ocrError instanceof Error ? ocrError.message : ocrError
+            );
+          }
+        }
+
+        console.log(`✅ OCR CONCLUÍDO - Total: ${fullText.length} caracteres`);
+        return fullText;
+
+      } catch (libError) {
+        console.error(`❌ Erro ao carregar bibliotecas:`, 
+          libError instanceof Error ? libError.message : libError
+        );
+        console.warn(`⚠️ Tesseract.js ou Sharp não disponível`);
+        console.warn(`   Instale com: npm install tesseract.js sharp canvas`);
+        return '';
+      }
+
     } catch (error) {
       console.error(`❌ Erro em OCR:`, error instanceof Error ? error.message : error);
       return '';
