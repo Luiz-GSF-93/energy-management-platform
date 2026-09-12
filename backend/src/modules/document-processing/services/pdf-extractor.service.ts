@@ -4,100 +4,135 @@ import { Injectable } from '@nestjs/common';
 export class PdfExtractorService {
   async extractText(buffer: Buffer): Promise<string> {
     try {
-      console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF ===`);
+      console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF (pdfjs-dist) ===`);
       console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
-      // Importar pdf-parse de forma robusta
-      let pdfParse = require('pdf-parse');
+      // Importar pdfjs-dist
+      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
       
-      // pdf-parse versão 2.x pode estar como default export
-      if (typeof pdfParse !== 'function' && pdfParse.default && typeof pdfParse.default === 'function') {
-        pdfParse = pdfParse.default;
-        console.log(`✓ Usando pdfParse.default`);
-      }
-      
-      console.log(`🔄 Tipo de pdfParse ANTES de usar: ${typeof pdfParse}`);
-      console.log(`🔄 Chaves do objeto: ${Object.keys(pdfParse).join(', ')}`);
+      console.log(`✓ pdfjs-dist carregado com sucesso`);
 
-      if (typeof pdfParse !== 'function') {
-        console.error(`❌ pdf-parse não é uma função!`);
-        console.error(`   Tipo: ${typeof pdfParse}`);
-        console.error(`   Valor: ${JSON.stringify(pdfParse)}`);
-        throw new Error(
-          `pdf-parse não é uma função. Tipo encontrado: ${typeof pdfParse}. ` +
-          `Valor: ${JSON.stringify(pdfParse)}`
-        );
+      // Configurar worker
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/legacy/build/pdf.worker.js');
+        console.log(`✓ Worker PDF configurado`);
+      } catch (e) {
+        console.warn(`⚠️ Worker PDF não configurado, continuando sem ele`);
       }
 
-      console.log(`✓ pdf-parse é uma função, executando...`);
-      const data = await pdfParse(buffer);
+      // Fazer parse do PDF
+      console.log(`🔄 Iniciando parsing do PDF...`);
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      
+      console.log(`📄 Total de páginas: ${pdf.numPages}`);
+
+      let extractedText = '';
+      let totalChars = 0;
+
+      // Extrair texto de cada página
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        try {
+          console.log(`📖 Processando página ${pageNum}/${pdf.numPages}...`);
+          
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          // Concatenar items de texto
+          const pageText = textContent.items
+            .map((item: any) => {
+              // Cada item tem propriedade 'str' com o texto
+              return item.str || '';
+            })
+            .join(' ');
+          
+          extractedText += pageText + '\n';
+          totalChars += pageText.length;
+          
+          console.log(`  ✓ Página ${pageNum}: ${pageText.length} caracteres`);
+          
+        } catch (pageError) {
+          console.warn(`⚠️ Erro ao processar página ${pageNum}:`, 
+            pageError instanceof Error ? pageError.message : pageError
+          );
+          continue;
+        }
+      }
 
       console.log(`✅ === PDF PROCESSADO COM SUCESSO ===`);
-      console.log(`📄 Páginas: ${data.numpages}`);
-      console.log(`📝 Texto extraído: ${data.text?.length || 0} caracteres`);
-      
-      if (data.info) {
-        console.log(`📊 Título: "${data.info.Title || 'N/A'}"`);
-        console.log(`👤 Autor: "${data.info.Author || 'N/A'}"`);
-        console.log(`🔖 Producer: "${data.info.Producer || 'N/A'}"`);
-      }
+      console.log(`📝 Total de caracteres extraídos: ${totalChars}`);
+      console.log(`📄 Páginas processadas: ${pdf.numPages}`);
 
-      // Se tem texto significativo, retornar
-      if (data.text && data.text.trim().length > 50) {
+      // Se tem texto significativo (>100 chars), retornar
+      if (extractedText.trim().length > 100) {
         console.log(`\n📄 === PRIMEIROS 2000 CARACTERES DO TEXTO ===\n`);
-        console.log(data.text.substring(0, 2000));
+        console.log(extractedText.substring(0, 2000));
         console.log(`\n--- FIM DA AMOSTRA ---\n`);
-        return data.text;
+        return extractedText;
       }
 
-      // Se vazio ou muito curto, tentar OCR com Tesseract
-      if (data.text && data.text.trim().length > 0 && data.text.trim().length <= 50) {
-        console.warn(`⚠️ PDF tem apenas ${data.text.trim().length} caracteres (muito pouco)`);
-      } else {
-        console.warn(`⚠️ PDF sem camada de texto detectável`);
-      }
-      
-      console.warn(`⚠️ Tentando OCR com Tesseract...`);
-      const ocrText = await this.extractWithTesseract(buffer);
-      
-      if (ocrText && ocrText.length > 50) {
-        console.log(`✅ OCR extraiu ${ocrText.length} caracteres`);
-        return ocrText;
+      // Se vazio ou muito curto
+      if (extractedText.trim().length === 0) {
+        console.warn(`⚠️ PDF SEM TEXTO EXTRAÍVEL (pode ser imagem ou protegido)`);
+        console.log(`🔍 Tentando OCR com Tesseract...`);
+        const ocrText = await this.extractWithTesseract(buffer);
+        
+        if (ocrText && ocrText.length > 100) {
+          console.log(`✅ OCR extraiu ${ocrText.length} caracteres`);
+          return ocrText;
+        }
+        
+        console.error(`❌ Nenhum texto extraído (PDF é imagem sem OCR implementado)`);
+        return '';
       }
 
-      console.error(`❌ Nenhum texto extraído (PDF pode ser imagem sem OCR ou corrompido)`);
-      console.log(`📊 Info do PDF:`, {
-        numpages: data.numpages,
-        textLength: data.text?.length || 0,
-        producer: data.info?.Producer || 'N/A',
-        version: data.version || 'N/A',
-      });
+      // Tem texto mas é muito curto
+      console.warn(`⚠️ PDF extraiu apenas ${extractedText.trim().length} caracteres`);
+      console.log(`\n📄 === TEXTO EXTRAÍDO (${extractedText.length} chars) ===\n`);
+      console.log(extractedText.substring(0, 1000));
+      console.log(`\n--- FIM ---\n`);
       
-      return '';
+      return extractedText;
+
     } catch (error) {
       console.error(`❌ === ERRO AO EXTRAIR PDF ===`);
-      console.error(`Erro completo:`, error);
+      console.error(`Tipo de erro:`, error instanceof Error ? error.constructor.name : typeof error);
+      
       if (error instanceof Error) {
         console.error(`📌 Mensagem: ${error.message}`);
-        console.error(`📌 Stack (primeiras 500 chars):`);
-        console.error(error.stack?.substring(0, 500));
+        console.error(`📌 Stack completo:`);
+        console.error(error.stack);
+      } else {
+        console.error(`📌 Erro (não é Error):`, error);
       }
+      
       return '';
     }
   }
 
   private async extractWithTesseract(buffer: Buffer): Promise<string> {
     try {
-      console.log(`🔍 === TENTANDO OCR COM TESSERACT ===`);
+      console.log(`🔍 === TENTANDO OCR COM TESSERACT.JS ===`);
       
-      // OCR será implementado aqui depois
-      // Por enquanto, apenas placeholder
-      console.warn(`⚠️ Tesseract.js não foi instalado ainda`);
-      console.warn(`   Para implementar OCR, execute: npm install tesseract.js`);
-      
-      return '';
+      // Tentar importar tesseract.js se disponível
+      try {
+        const Tesseract = require('tesseract.js');
+        console.log(`✓ Tesseract.js carregado`);
+        
+        // TODO: Implementar integração com Tesseract.js
+        // Seria necessário:
+        // 1. Converter PDF para imagens
+        // 2. Fazer OCR de cada imagem
+        // 3. Concatenar resultados
+        
+        console.warn(`⚠️ Tesseract.js não implementado ainda`);
+        return '';
+      } catch (e) {
+        console.warn(`⚠️ Tesseract.js não instalado`);
+        console.warn(`   Para implementar OCR, execute: npm install tesseract.js`);
+        return '';
+      }
     } catch (error) {
-      console.error(`❌ Erro em OCR:`, error);
+      console.error(`❌ Erro em OCR:`, error instanceof Error ? error.message : error);
       return '';
     }
   }
