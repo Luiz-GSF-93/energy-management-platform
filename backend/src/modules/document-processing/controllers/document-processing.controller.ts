@@ -14,7 +14,6 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
-import { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -61,18 +60,20 @@ export class DocumentProcessingController {
           cb(null, `${randomName}${extname(file.originalname)}`);
         },
       }),
-      fileFilter: (req, file, cb) => {
+      fileFilter: (req: any, file: any, cb: any) => {
         const allowedMimes = ['application/pdf', 'image/jpeg', 'image/png'];
         if (!allowedMimes.includes(file.mimetype)) {
           return cb(
             new BadRequestException(
               `Tipo de arquivo não suportado: ${file.mimetype}`,
             ),
+            false,
           );
         }
         if (file.size > 10 * 1024 * 1024) {
           return cb(
             new BadRequestException('Arquivo maior que 10MB'),
+            false,
           );
         }
         cb(null, true);
@@ -81,7 +82,7 @@ export class DocumentProcessingController {
     }),
   )
   async uploadDocument(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
     @Req() req: any,
   ) {
     try {
