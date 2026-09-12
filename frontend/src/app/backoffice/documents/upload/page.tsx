@@ -75,7 +75,7 @@ export default function DocumentUploadPage() {
       console.log(`📤 === INICIANDO UPLOAD ===`);
       console.log(`📄 Arquivo: ${file.name}`);
       console.log(`📦 Tamanho: ${file.size} bytes`);
-      console.log(`📋 Tipo MIME: ${file.mimetype}`);
+      console.log(`📋 Tipo MIME: ${file.type}`);
       console.log(`🏢 Organization: ${organizationId}`);
       console.log(`🌐 Endpoint: ${API_URL}/api/document-processing/upload`);
 
