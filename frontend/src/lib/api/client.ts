@@ -23,9 +23,8 @@ class ApiClient {
     const fullUrl = `${this.baseUrl}${url}`;
     console.log(`[API] ${method} ${fullUrl}`);
 
-    const headers: Record<string, string> = {
+    const headers: any = {
       'Content-Type': 'application/json',
-      ...(typeof options?.headers === 'object' ? options.headers : {}),
     };
 
     if (typeof window !== 'undefined') {
@@ -38,7 +37,7 @@ class ApiClient {
     const response = await fetch(fullUrl, {
       method,
       headers,
-      ...options,
+      ...(options || {}),
       body: options?.body ? JSON.stringify(options.body) : undefined,
     });
 
