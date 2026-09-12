@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 // Modules
 import { SharedModule } from './modules/shared/shared.module';
@@ -22,6 +23,11 @@ import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { EnginesModule } from './modules/engines/engines.module';
 import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
 
+// Entities Document Processing
+import { DocumentUpload } from './modules/document-processing/entities/document-upload.entity';
+import { InvoiceExtraction } from './modules/document-processing/entities/invoice-extraction.entity';
+import { ExtractionLog } from './modules/document-processing/entities/extraction-log.entity';
+
 // Controllers & Services
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -34,6 +40,12 @@ import { AppService } from './app.service';
       secret: process.env.JWT_SECRET || 'your-secret-key',
       signOptions: { expiresIn: '7d' },
     }),
+    // TypeORM - Document Processing Entities
+    TypeOrmModule.forFeature([
+      DocumentUpload,
+      InvoiceExtraction,
+      ExtractionLog,
+    ]),
     // Core
     SharedModule,
     AuthModule,
@@ -60,7 +72,7 @@ import { AppService } from './app.service';
     NotificationsModule,
     BackofficeModule,
     
-    // Document Processing (NEW)
+    // Document Processing
     DocumentProcessingModule,
   ],
   controllers: [AppController],
