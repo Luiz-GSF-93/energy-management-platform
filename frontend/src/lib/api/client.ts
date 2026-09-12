@@ -1,144 +1,141 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { getSession } from '@/auth';
 
-export interface ApiResponse<T = any> {
-  statusCode: number;
-  message: string;
-  data?: T;
-  error?: string;
+interface RequestOptions extends RequestInit {
+  params?: Record<string, any>;
 }
 
 class ApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+  constructor() {
+    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // Garantir que não há /api/v1 duplicado
+    this.baseUrl = this.baseUrl.replace(/\/api\/v1\/?$/, '');
   }
 
   private async request<T>(
-    endpoint: string,
-    method: string,
-    body?: any
-  ): Promise<ApiResponse<T>> {
-    try {
-      const token =
-        typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-      const options: RequestInit = {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-      };
-
-      if (body) {
-        options.body = JSON.stringify(body);
-      }
-
-      const response = await fetch(`${this.baseUrl}/api/v1${endpoint}`, options);
-
-      if (response.status === 401) {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth_token');
-          window.location.href = '/auth/login';
-        }
-      }
-
-      const data = await response.json();
-      return data as ApiResponse<T>;
-    } catch (error: any) {
-      return {
-        statusCode: 500,
-        message: error.message,
-        error: 'Request failed',
-      };
+    path: string,
+    method: string = 'GET',
+    options?: RequestOptions
+  ): Promise<T> {
+    // Garantir que o path começa com /
+    let url = path.startsWith('/') ? path : `/${path}`;
+    
+    // Se o path já tem /api/v1, não duplicar
+    if (!url.includes('/api/v1')) {
+      url = `/api/v1${url}`;
     }
+
+    const fullUrl = `${this.baseUrl}${url}`;
+    console.log(`[API] ${method} ${fullUrl}`);
+
+    const session = await getSession();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    };
+
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
+    const response = await fetch(fullUrl, {
+      method,
+      headers,
+      ...options,
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    if (response.status === 401) {
+      // Handle logout
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/login';
+      }
+    }
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error(`[API Error] ${response.status}`, data);
+      throw new Error(data?.message || 'API request failed');
+    }
+
+    return data;
   }
 
-  post<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'POST', body);
+  get<T>(path: string, options?: RequestOptions) {
+    return this.request<T>(path, 'GET', options);
   }
 
-  get<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'GET');
+  post<T>(path: string, body?: any, options?: RequestOptions) {
+    return this.request<T>(path, 'POST', { ...options, body });
   }
 
-  put<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'PUT', body);
+  put<T>(path: string, body?: any, options?: RequestOptions) {
+    return this.request<T>(path, 'PUT', { ...options, body });
   }
 
-  delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'DELETE');
+  delete<T>(path: string, options?: RequestOptions) {
+    return this.request<T>(path, 'DELETE', options);
   }
 
-  patch<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'PATCH', body);
+  patch<T>(path: string, body?: any, options?: RequestOptions) {
+    return this.request<T>(path, 'PATCH', { ...options, body });
   }
+
+  // Grouped endpoints
+  auth = {
+    login: (credentials: any) => this.post('/auth/login', credentials),
+    logout: () => this.post('/auth/logout'),
+  };
+
+  contracts = {
+    list: () => this.get<any[]>('/contracts'),
+    create: (data: any) => this.post('/contracts', data),
+    get: (id: string) => this.get(`/contracts/${id}`),
+    update: (id: string, data: any) => this.put(`/contracts/${id}`, data),
+    delete: (id: string) => this.delete(`/contracts/${id}`),
+    analytics: () => this.get('/contracts/analytics/overview'),
+  };
+
+  invoices = {
+    list: () => this.get<any[]>('/invoices'),
+    create: (data: any) => this.post('/invoices', data),
+    get: (id: string) => this.get(`/invoices/${id}`),
+    update: (id: string, data: any) => this.put(`/invoices/${id}`, data),
+    delete: (id: string) => this.delete(`/invoices/${id}`),
+    compare: (data: any) => this.post('/invoices/compare', data),
+    metrics: (consumerUnitId: string) =>
+      this.get(`/invoices/metrics/${consumerUnitId}`),
+  };
+
+  consumerUnits = {
+    list: () => this.get<any[]>('/consumer-units'),
+    get: (id: string) => this.get(`/consumer-units/${id}`),
+    create: (data: any) => this.post('/consumer-units', data),
+    update: (id: string, data: any) => this.put(`/consumer-units/${id}`, data),
+    delete: (id: string) => this.delete(`/consumer-units/${id}`),
+  };
+
+  settlements = {
+    calculate: (data: any) => this.post('/settlements/calculate', data),
+  };
+
+  fees = {
+    list: () => this.get('/fees'),
+    create: (data: any) => this.post('/fees', data),
+    update: (id: string, data: any) => this.put(`/fees/${id}`, data),
+    delete: (id: string) => this.delete(`/fees/${id}`),
+  };
+
+  approvals = {
+    list: () => this.get('/approvals'),
+    create: (data: any) => this.post('/approvals', data),
+    approve: (id: string) => this.post(`/approvals/${id}/approve`),
+    reject: (id: string, reason: string) =>
+      this.post(`/approvals/${id}/reject`, { reason }),
+  };
 }
 
-const apiClient = new ApiClient(API_BASE_URL);
-
-export const api = {
-  // Métodos genéricos
-  get: <T>(endpoint: string) => apiClient.get<T>(endpoint),
-  post: <T>(endpoint: string, data: any) => apiClient.post<T>(endpoint, data),
-  put: <T>(endpoint: string, data: any) => apiClient.put<T>(endpoint, data),
-  delete: <T>(endpoint: string) => apiClient.delete<T>(endpoint),
-  patch: <T>(endpoint: string, data: any) => apiClient.patch<T>(endpoint, data),
-
-  auth: {
-    login: (email: string, password: string) =>
-      apiClient.post('/auth/login', { email, password }),
-    logout: () => localStorage.removeItem('auth_token'),
-  },
-
-  contracts: {
-    create: (data: any) => apiClient.post('/contracts', data),
-    list: (params?: any) => apiClient.get('/contracts'),
-    get: (id: string) => apiClient.get(`/contracts/${id}`),
-    update: (id: string, data: any) => apiClient.put(`/contracts/${id}`, data),
-    delete: (id: string) => apiClient.delete(`/contracts/${id}`),
-    analytics: () => apiClient.get('/contracts/analytics/overview'),
-  },
-
-  invoices: {
-    create: (data: any) => apiClient.post('/invoices', data),
-    list: (params?: any) => apiClient.get('/invoices'),
-    get: (id: string) => apiClient.get(`/invoices/${id}`),
-    update: (id: string, data: any) => apiClient.put(`/invoices/${id}`, data),
-    delete: (id: string) => apiClient.delete(`/invoices/${id}`),
-    compare: (id: string, data: any) => apiClient.post(`/invoices/${id}/compare`, data),
-    metrics: (consumerUnitId: string, params?: any) => 
-      apiClient.get(`/invoices/metrics/${consumerUnitId}`),
-  },
-
-  consumerUnits: {
-    list: () => apiClient.get('/consumer-units'),
-    get: (id: string) => apiClient.get(`/consumer-units/${id}`),
-    create: (data: any) => apiClient.post('/consumer-units', data),
-    update: (id: string, data: any) => apiClient.put(`/consumer-units/${id}`, data),
-    delete: (id: string) => apiClient.delete(`/consumer-units/${id}`),
-  },
-
-  settlements: {
-    calculate: (data: any) => apiClient.post('/settlements/calculate', data),
-  },
-
-  fees: {
-    create: (data: any) => apiClient.post('/fees', data),
-    list: () => apiClient.get('/fees'),
-    get: (id: string) => apiClient.get(`/fees/${id}`),
-    update: (id: string, data: any) => apiClient.put(`/fees/${id}`, data),
-    delete: (id: string) => apiClient.delete(`/fees/${id}`),
-  },
-
-  approvals: {
-    create: (data: any) => apiClient.post('/approvals', data),
-    list: () => apiClient.get('/approvals'),
-    get: (id: string) => apiClient.get(`/approvals/${id}`),
-    approve: (id: string) => apiClient.put(`/approvals/${id}/approve`, {}),
-    reject: (id: string) => apiClient.put(`/approvals/${id}/reject`, {}),
-  },
-};
-
-export { apiClient };
+export const api = new ApiClient();
+export const apiClient = new ApiClient();

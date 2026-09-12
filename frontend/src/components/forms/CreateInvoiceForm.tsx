@@ -1,360 +1,223 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { api } from '@/lib/api/client';
-import { Invoice } from '@/types/invoice';
-import { ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import { Calculator, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
-interface CreateInvoiceFormProps {
-  consumerUnitId: string;
-  contractId: string;
-  onSuccess?: (invoice: Invoice) => void;
-  onError?: (error: string) => void;
-}
+const invoiceSchema = z.object({
+  consumerUnitId: z.string().min(1, 'UC obrigatória'),
+  contractId: z.string().min(1, 'Contrato obrigatório'),
+  referenceMonth: z.string().min(1, 'Período obrigatório'),
+  // CAMPOS REMOVIDOS (já estão na fatura simulada):
+  // - tusdEnergy
+  // - tusdDemand
+  // - mwhVolume
+});
 
-export function CreateInvoiceForm({
-  consumerUnitId,
-  contractId,
-  onSuccess,
-  onError,
-}: CreateInvoiceFormProps) {
+type InvoiceFormData = z.infer<typeof invoiceSchema>;
+
+export default function CreateInvoiceForm() {
   const [loading, setLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [expandedSection, setExpandedSection] = useState<string>('identification');
-  const [economyCalc, setEconomyCalc] = useState({
-    regulatedCost: 0,
-    freeMarketCost: 0,
-    savings: 0,
-    savingsPercentage: 0,
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [calculationResult, setCalculationResult] = useState<any>(null);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+  } = useForm<InvoiceFormData>({
+    resolver: zodResolver(invoiceSchema),
   });
 
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<any>({
-    defaultValues: {
-      invoiceNumber: '',
-      referenceMonth: new Date().toISOString().split('T')[0],
-      distributorName: '',
-      distributorCnpj: '',
-      consumerUnitNumber: '',
-      meterNumber: '',
-      tariffModality: 'conventional',
-      consumptionKwhPeak: 0,
-      consumptionKwhOffPeak: 0,
-      totalConsumptionKwh: 0,
-      demandKwPeak: 0,
-      demandKwOffPeak: 0,
-      demandKwBilled: 0,
-      tusdEnergyRatePeak: 0,
-      tusdEnergyRateOffPeak: 0,
-      teEnergyRatePeak: 0,
-      teEnergyRateOffPeak: 0,
-      demandRatePeak: 0,
-      demandRateOffPeak: 0,
-      chargesCost: 0,
-      municipalTax: 0,
-      icmsRate: 0.18,
-      pisRate: 0.0765,
-      cofinsRate: 0.076,
-      previousCredit: 0,
-      discount: 0,
-      notes: '',
-    },
-  });
+  const consumerUnitId = watch('consumerUnitId');
+  const contractId = watch('contractId');
 
-  const watchConsumption = watch(['consumptionKwhPeak', 'consumptionKwhOffPeak', 'demandKwPeak', 'demandKwOffPeak']);
-  const watchTariffs = watch(['tusdEnergyRatePeak', 'tusdEnergyRateOffPeak', 'teEnergyRatePeak', 'teEnergyRateOffPeak']);
-
-  useEffect(() => {
-    const [peakKwh, offPeakKwh] = watchConsumption;
-    const [tusdPeak, tusdOffPeak, tePeak, teOffPeak] = watchTariffs;
-
-    const freeMarket = (peakKwh || 0) * (tusdPeak || 0) + (offPeakKwh || 0) * (tusdOffPeak || 0) +
-                       (peakKwh || 0) * (tePeak || 0) + (offPeakKwh || 0) * (teOffPeak || 0);
-    const regulated = freeMarket * 1.15;
-
-    const savings = regulated - freeMarket;
-    const savingsPerc = regulated > 0 ? (savings / regulated) * 100 : 0;
-
-    setEconomyCalc({
-      regulatedCost: regulated,
-      freeMarketCost: freeMarket,
-      savings,
-      savingsPercentage: savingsPerc,
-    });
-  }, [watchConsumption, watchTariffs]);
-
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: InvoiceFormData) => {
     setLoading(true);
-    setApiError(null);
+    setError(null);
 
     try {
-      const invoiceData = {
-        organizationId: 'org-default',
+      // Buscar contrato com tarifa configurada
+      const contract = await api.contracts.get(contractId);
+
+      if (!contract?.tariffConfig) {
+        throw new Error('Contrato sem tarifa configurada');
+      }
+
+      // Chamar settlement engine com dados do contrato
+      const settlementData = {
         consumerUnitId,
-        energyContractId: contractId,
-        ...data,
+        referenceMonth: new Date(data.referenceMonth),
+        // Dados já vêm da tarifa do contrato
+        ...contract.tariffConfig,
       };
 
-      const response = await api.invoices.create(invoiceData);
-      
-      if (response.data && response.statusCode === 200) {
-        const invoice = response.data as Invoice;
-        onSuccess?.(invoice);
-        reset();
-      } else {
-        throw new Error(response.message || 'Erro ao criar fatura');
-      }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.message || err.message || 'Erro ao criar fatura';
-      setApiError(errorMsg);
-      onError?.(errorMsg);
+      const result = await api.settlements.calculate(settlementData);
+
+      // Salvar fatura com resultado do cálculo
+      await api.invoices.create({
+        contractId,
+        consumerUnitId,
+        referenceMonth: data.referenceMonth,
+        status: 'EMITIDA',
+        ...result,
+      });
+
+      setCalculationResult(result);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      console.error('Erro ao calcular fatura:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao calcular fatura');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? '' : section);
-  };
-
-  const SectionHeader = ({ icon, title, section }: { icon: string; title: string; section: string }) => (
-    <button
-      type="button"
-      onClick={() => toggleSection(section)}
-      className="w-full flex items-center justify-between px-4 py-3 bg-slate-700 hover:bg-slate-600 transition rounded-lg mb-4"
-    >
-      <span className="flex items-center gap-2 font-semibold text-white">
-        {icon} {title}
-      </span>
-      {expandedSection === section ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-    </button>
-  );
-
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
-      <h2 className="text-2xl font-bold text-white">📋 Nova Fatura</h2>
+    <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+      <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <Calculator size={24} />
+        Motor de Cálculo de Fatura
+      </h2>
 
-      {apiError && (
-        <div className="p-4 bg-red-900/50 border border-red-700 text-red-200 rounded-lg">
-          {apiError}
+      {error && (
+        <div className="mb-6 p-4 bg-red-900/30 border border-red-500/50 rounded-lg flex items-center gap-2">
+          <AlertCircle size={20} className="text-red-400" />
+          <span className="text-red-200">{error}</span>
         </div>
       )}
 
-      {/* SEÇÃO 1: Identificação */}
-      <div>
-        <SectionHeader icon="📝" title="Identificação" section="identification" />
-        {expandedSection === 'identification' && (
-          <div className="grid grid-cols-2 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Nº Fatura</label>
-              <input {...register('invoiceNumber')} type="text" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" placeholder="Ex: INV-202601-1234" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Mês/Ano Referência</label>
-              <input {...register('referenceMonth')} type="date" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 2: Concessionária */}
-      <div>
-        <SectionHeader icon="🏢" title="Concessionária e UC" section="distributor" />
-        {expandedSection === 'distributor' && (
-          <div className="grid grid-cols-2 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Distribuidora</label>
-              <input {...register('distributorName')} type="text" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" placeholder="Ex: CPFL, Enel" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">CNPJ</label>
-              <input {...register('distributorCnpj')} type="text" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" placeholder="12.345.678/0001-90" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">UC</label>
-              <input {...register('consumerUnitNumber')} type="text" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" placeholder="4001234567891" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Medidor</label>
-              <input {...register('meterNumber')} type="text" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" placeholder="00123456789" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 3: Modalidade e Consumo */}
-      <div>
-        <SectionHeader icon="⚡" title="Consumo e Demanda" section="consumption" />
-        {expandedSection === 'consumption' && (
-          <div className="grid grid-cols-3 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Modalidade Tarifária</label>
-              <select {...register('tariffModality')} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white">
-                <option value="conventional">Convencional</option>
-                <option value="green">Verde (Demanda Única)</option>
-                <option value="blue">Azul (Ponta/Fora Ponta)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Consumo Ponta (kWh)</label>
-              <input {...register('consumptionKwhPeak', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Consumo Fora Ponta (kWh)</label>
-              <input {...register('consumptionKwhOffPeak', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Demanda Ponta (kW)</label>
-              <input {...register('demandKwPeak', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Demanda Fora Ponta (kW)</label>
-              <input {...register('demandKwOffPeak', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Demanda Cobrada (kW)</label>
-              <input {...register('demandKwBilled', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 4: Tarifas (TUSD e TE) */}
-      <div>
-        <SectionHeader icon="💰" title="Tarifas (R$/kWh)" section="tariffs" />
-        {expandedSection === 'tariffs' && (
-          <div className="grid grid-cols-3 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">TUSD Ponta (R$/kWh)</label>
-              <input {...register('tusdEnergyRatePeak', { valueAsNumber: true })} type="number" step="0.000001" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">TUSD Fora Ponta (R$/kWh)</label>
-              <input {...register('tusdEnergyRateOffPeak', { valueAsNumber: true })} type="number" step="0.000001" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">TE Ponta (R$/kWh)</label>
-              <input {...register('teEnergyRatePeak', { valueAsNumber: true })} type="number" step="0.000001" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">TE Fora Ponta (R$/kWh)</label>
-              <input {...register('teEnergyRateOffPeak', { valueAsNumber: true })} type="number" step="0.000001" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Demanda Ponta (R$/kW)</label>
-              <input {...register('demandRatePeak', { valueAsNumber: true })} type="number" step="0.000001" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Demanda Fora Ponta (R$/kW)</label>
-              <input {...register('demandRateOffPeak', { valueAsNumber: true })} type="number" step="0.000001" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 5: Encargos */}
-      <div>
-        <SectionHeader icon="📊" title="Encargos e Taxas" section="charges" />
-        {expandedSection === 'charges' && (
-          <div className="grid grid-cols-3 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Encargos Setoriais (R$)</label>
-              <input {...register('chargesCost', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Taxa Municipal (R$)</label>
-              <input {...register('municipalTax', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 6: Impostos */}
-      <div>
-        <SectionHeader icon="🏛️" title="Impostos (%)" section="taxes" />
-        {expandedSection === 'taxes' && (
-          <div className="grid grid-cols-3 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">ICMS (%)</label>
-              <input {...register('icmsRate', { valueAsNumber: true })} type="number" step="0.01" min="0" max="100" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">PIS (%)</label>
-              <input {...register('pisRate', { valueAsNumber: true })} type="number" step="0.01" min="0" max="100" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">COFINS (%)</label>
-              <input {...register('cofinsRate', { valueAsNumber: true })} type="number" step="0.01" min="0" max="100" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 7: Crédito e Descontos */}
-      <div>
-        <SectionHeader icon="💳" title="Crédito e Descontos" section="credits" />
-        {expandedSection === 'credits' && (
-          <div className="grid grid-cols-2 gap-4 bg-slate-750 p-4 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Crédito Anterior (R$)</label>
-              <input {...register('previousCredit', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Desconto (R$)</label>
-              <input {...register('discount', { valueAsNumber: true })} type="number" step="0.01" className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SEÇÃO 8: Observações */}
-      <div>
-        <SectionHeader icon="📝" title="Observações" section="notes" />
-        {expandedSection === 'notes' && (
-          <div className="bg-slate-750 p-4 rounded-lg">
-            <textarea {...register('notes')} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white" rows={4} placeholder="Observações ou comentários sobre a fatura..." />
-          </div>
-        )}
-      </div>
-
-      {/* Resumo de Economia */}
-      <div className="grid grid-cols-4 gap-4 bg-green-900/30 p-4 rounded-lg border border-green-800">
-        <div>
-          <p className="text-sm text-green-300">Mercado Regulado</p>
-          <p className="text-xl font-bold text-green-400">R$ {economyCalc.regulatedCost.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</p>
+      {success && (
+        <div className="mb-6 p-4 bg-green-900/30 border border-green-500/50 rounded-lg flex items-center gap-2">
+          <CheckCircle size={20} className="text-green-400" />
+          <span className="text-green-200">✅ Fatura calculada e salva com sucesso!</span>
         </div>
-        <div>
-          <p className="text-sm text-green-300">Mercado Livre</p>
-          <p className="text-xl font-bold text-green-400">R$ {economyCalc.freeMarketCost.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</p>
-        </div>
-        <div>
-          <p className="text-sm text-green-300">Economia</p>
-          <p className="text-xl font-bold text-green-400">R$ {economyCalc.savings.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</p>
-        </div>
-        <div>
-          <p className="text-sm text-green-300">% Economia</p>
-          <p className="text-xl font-bold text-green-400">{economyCalc.savingsPercentage.toFixed(2)}%</p>
-        </div>
-      </div>
+      )}
 
-      {/* Botões */}
-      <div className="flex gap-4 justify-end">
-        <button
-          type="button"
-          className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition font-medium"
-          onClick={() => reset()}
-        >
-          Limpar
-        </button>
+      {/* Resultado do Cálculo - 5 Cards */}
+      {calculationResult && (
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-slate-700/50 p-4 rounded-lg">
+            <p className="text-slate-400 text-sm mb-1">Custo Regulado</p>
+            <p className="text-blue-400 text-xl font-bold">
+              R$ {calculationResult.regulatedCost?.toLocaleString('pt-BR') || '0.00'}
+            </p>
+          </div>
+
+          <div className="bg-slate-700/50 p-4 rounded-lg">
+            <p className="text-slate-400 text-sm mb-1">Custo ACL</p>
+            <p className="text-purple-400 text-xl font-bold">
+              R$ {calculationResult.aclCost?.toLocaleString('pt-BR') || '0.00'}
+            </p>
+          </div>
+
+          <div className="bg-slate-700/50 p-4 rounded-lg">
+            <p className="text-slate-400 text-sm mb-1">Economia Bruta</p>
+            <p className="text-green-400 text-xl font-bold">
+              R$ {calculationResult.savings?.toLocaleString('pt-BR') || '0.00'}
+            </p>
+          </div>
+
+          <div className="bg-slate-700/50 p-4 rounded-lg">
+            <p className="text-slate-400 text-sm mb-1">% Economia</p>
+            <p className="text-yellow-400 text-xl font-bold">
+              {((calculationResult.savings / calculationResult.regulatedCost) * 100).toFixed(2)}%
+            </p>
+          </div>
+
+          <div className="bg-slate-700/50 p-4 rounded-lg">
+            <p className="text-slate-400 text-sm mb-1">ROI Anual</p>
+            <p className="text-indigo-400 text-xl font-bold">
+              {calculationResult.roi?.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Formulário Simplificado */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* UC */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Unidade Consumidora *
+            </label>
+            <input
+              type="text"
+              {...register('consumerUnitId')}
+              placeholder="Selecionar UC"
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+            />
+            {errors.consumerUnitId && (
+              <p className="text-red-400 text-sm mt-1">{errors.consumerUnitId.message}</p>
+            )}
+          </div>
+
+          {/* Contrato */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Contrato *
+            </label>
+            <input
+              type="text"
+              {...register('contractId')}
+              placeholder="Selecionar Contrato"
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+            />
+            {errors.contractId && (
+              <p className="text-red-400 text-sm mt-1">{errors.contractId.message}</p>
+            )}
+          </div>
+
+          {/* Período */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Período (Mês/Ano) *
+            </label>
+            <input
+              type="month"
+              {...register('referenceMonth')}
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
+            />
+            {errors.referenceMonth && (
+              <p className="text-red-400 text-sm mt-1">{errors.referenceMonth.message}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Botão Calcular */}
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 text-white rounded-lg transition font-medium flex items-center gap-2"
+          className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition"
         >
-          {loading ? <Loader className="animate-spin" size={16} /> : null}
-          {loading ? 'Criando...' : 'Criar Fatura'}
+          {loading ? (
+            <>
+              <Loader size={20} className="animate-spin" />
+              Calculando...
+            </>
+          ) : (
+            <>
+              <Calculator size={20} />
+              Calcular Fatura
+            </>
+          )}
         </button>
-      </div>
-    </form>
+
+        {/* Informação */}
+        <div className="p-3 bg-slate-700/30 rounded text-slate-300 text-sm">
+          <p>
+            💡 <strong>Nota:</strong> Os dados de tarifa (TUSD, TE, MWh, etc.) são automaticamente
+            carregados do contrato selecionado. Apenas selecione UC, Contrato e Período para calcular.
+          </p>
+        </div>
+      </form>
+    </div>
   );
 }
