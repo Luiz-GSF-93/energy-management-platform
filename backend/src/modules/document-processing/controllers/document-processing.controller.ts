@@ -63,28 +63,17 @@ export class DocumentProcessingController {
       fileFilter: (req: any, file: any, cb: any) => {
         const allowedMimes = ['application/pdf', 'image/jpeg', 'image/png'];
         if (!allowedMimes.includes(file.mimetype)) {
-          return cb(
-            new BadRequestException(
-              `Tipo de arquivo não suportado: ${file.mimetype}`,
-            ),
-            false,
-          );
+          return cb(new Error(`Tipo não suportado: ${file.mimetype}`), false);
         }
         if (file.size > 10 * 1024 * 1024) {
-          return cb(
-            new BadRequestException('Arquivo maior que 10MB'),
-            false,
-          );
+          return cb(new Error('Arquivo muito grande'), false);
         }
         cb(null, true);
       },
       limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
-  async uploadDocument(
-    @UploadedFile() file: any,
-    @Req() req: any,
-  ) {
+  async uploadDocument(@UploadedFile() file: any, @Req() req: any) {
     try {
       if (!file) {
         throw new BadRequestException('Arquivo não enviado');
@@ -93,9 +82,8 @@ export class DocumentProcessingController {
       const organizationId = req.user?.organizationId || 'default-org';
       const userId = req.user?.id || 'default-user';
 
-      this.logger.log(`📤 Upload iniciado: ${file.originalname}`);
+      this.logger.log(`📤 Upload: ${file.originalname}`);
 
-      // 1. Criar documento
       const document = this.documentRepo.create({
         id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         organizationId,
@@ -108,31 +96,22 @@ export class DocumentProcessingController {
       });
 
       const savedDoc = await this.documentRepo.save(document);
-      this.logger.log(`✅ Documento: ${savedDoc.id}`);
 
-      // 2. Extrair texto
       let rawText = '';
       if (file.mimetype === 'application/pdf') {
         try {
           rawText = await this.pdfExtractor.extractTextFromPdf(file.path);
         } catch (error) {
-          this.logger.warn(`⚠️ Erro ao extrair PDF: ${error.message}`);
+          this.logger.warn(`Erro PDF: ${error.message}`);
         }
       }
 
-      // 3. Detectar distribuidora
       const distributor = this.distributorDetector.detectDistributor(rawText);
-
-      // 4. Parse
       const structuredData = this.genericParser.parse(rawText);
       structuredData.distributor = distributor;
 
-      // 5. Validar
-      const validation = await this.validationService.validateExtractedData(
-        structuredData,
-      );
+      const validation = await this.validationService.validateExtractedData(structuredData);
 
-      // 6. Criar extração
       const extraction = this.extractionRepo.create({
         id: `ext_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         documentId: savedDoc.id,
@@ -153,7 +132,6 @@ export class DocumentProcessingController {
       });
 
       const savedExtraction = await this.extractionRepo.save(extraction);
-      this.logger.log(`✅ Extração: ${savedExtraction.id}`);
 
       return {
         success: true,
@@ -168,10 +146,10 @@ export class DocumentProcessingController {
           structuredData: savedExtraction.structuredData,
           validationNotes: savedExtraction.validationNotes,
         },
-        message: '📄 Fatura processada!',
+        message: '📄 Processado!',
       };
     } catch (error) {
-      this.logger.error(`❌ Erro: ${error.message}`);
+      this.logger.error(`Erro: ${error.message}`);
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
@@ -179,18 +157,9 @@ export class DocumentProcessingController {
   @Get(':documentId/status')
   async getDocumentStatus(@Param('documentId') documentId: string) {
     try {
-      const document = await this.documentRepo.findOne({
-        where: { id: documentId },
-      });
-
-      if (!document) {
-        throw new BadRequestException('Documento não encontrado');
-      }
-
-      const extraction = await this.extractionRepo.findOne({
-        where: { documentId },
-      });
-
+      const document = await this.documentRepo.findOne({ where: { id: documentId } });
+      if (!document) throw new BadRequestException('Não encontrado');
+      const extraction = await this.extractionRepo.findOne({ where: { documentId } });
       return {
         documentId,
         filename: document.filename,
@@ -207,12 +176,10 @@ export class DocumentProcessingController {
   async listDocuments(@Req() req: any) {
     try {
       const organizationId = req.user?.organizationId || 'default-org';
-
       const documents = await this.documentRepo.find({
         where: { organizationId },
         order: { uploadedAt: 'DESC' },
       });
-
       return { total: documents.length, documents };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
