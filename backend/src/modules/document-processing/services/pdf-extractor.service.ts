@@ -4,78 +4,53 @@ import { Injectable } from '@nestjs/common';
 export class PdfExtractorService {
   async extractText(buffer: Buffer): Promise<string> {
     try {
-      console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF (pdfjs-dist) ===`);
+      console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF ===`);
       console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
-      // Importar pdfjs-dist
-      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+      // Importar pdf-parse corretamente do caminho exato
+      const pdfParse = require('pdf-parse/lib/pdf-parse.js');
       
-      console.log(`✓ pdfjs-dist carregado com sucesso`);
+      console.log(`✓ pdf-parse importado com sucesso`);
+      console.log(`🔄 Tipo: ${typeof pdfParse}`);
 
-      // Configurar worker
-      try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/legacy/build/pdf.worker.js');
-        console.log(`✓ Worker PDF configurado`);
-      } catch (e) {
-        console.warn(`⚠️ Worker PDF não configurado, continuando sem ele`);
+      if (typeof pdfParse !== 'function') {
+        throw new Error(
+          `pdf-parse não é uma função. Tipo: ${typeof pdfParse}. ` +
+          `Chaves: ${Object.keys(pdfParse).slice(0, 10).join(', ')}`
+        );
       }
 
-      // Fazer parse do PDF
-      console.log(`🔄 Iniciando parsing do PDF...`);
-      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-      
-      console.log(`📄 Total de páginas: ${pdf.numPages}`);
-
-      let extractedText = '';
-      let totalChars = 0;
-
-      // Extrair texto de cada página
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        try {
-          console.log(`📖 Processando página ${pageNum}/${pdf.numPages}...`);
-          
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          
-          // Concatenar items de texto
-          const pageText = textContent.items
-            .map((item: any) => {
-              // Cada item tem propriedade 'str' com o texto
-              return item.str || '';
-            })
-            .join(' ');
-          
-          extractedText += pageText + '\n';
-          totalChars += pageText.length;
-          
-          console.log(`  ✓ Página ${pageNum}: ${pageText.length} caracteres`);
-          
-        } catch (pageError) {
-          console.warn(`⚠️ Erro ao processar página ${pageNum}:`, 
-            pageError instanceof Error ? pageError.message : pageError
-          );
-          continue;
-        }
-      }
+      console.log(`✓ Executando pdfParse com buffer de ${buffer.length} bytes...`);
+      const data = await pdfParse(buffer);
 
       console.log(`✅ === PDF PROCESSADO COM SUCESSO ===`);
-      console.log(`📝 Total de caracteres extraídos: ${totalChars}`);
-      console.log(`📄 Páginas processadas: ${pdf.numPages}`);
+      console.log(`📄 Páginas: ${data.numpages}`);
+      console.log(`📝 Texto extraído: ${(data.text?.length || 0)} caracteres`);
+      
+      if (data.info) {
+        console.log(`📊 Metadados - Título: "${data.info.Title || 'N/A'}", Autor: "${data.info.Author || 'N/A'}", Producer: "${data.info.Producer || 'N/A'}"`);
+      }
 
       // Se tem texto significativo (>100 chars), retornar
-      if (extractedText.trim().length > 100) {
+      if (data.text && data.text.trim().length > 100) {
         console.log(`\n📄 === PRIMEIROS 2000 CARACTERES DO TEXTO ===\n`);
-        console.log(extractedText.substring(0, 2000));
+        console.log(data.text.substring(0, 2000));
         console.log(`\n--- FIM DA AMOSTRA ---\n`);
-        return extractedText;
+        return data.text;
       }
 
       // Se vazio ou muito curto
-      if (extractedText.trim().length === 0) {
+      if (!data.text || data.text.trim().length === 0) {
         console.warn(`⚠️ PDF SEM TEXTO EXTRAÍVEL (pode ser imagem ou protegido)`);
-        console.log(`🔍 Tentando OCR com Tesseract...`);
-        const ocrText = await this.extractWithTesseract(buffer);
+        console.log(`📊 Info:`, {
+          pages: data.numpages,
+          textLength: data.text?.length || 0,
+          producer: data.info?.Producer || 'N/A',
+        });
         
+        // Tentar OCR
+        console.log(`🔍 Tentando OCR...`);
+        const ocrText = await this.extractWithTesseract(buffer);
         if (ocrText && ocrText.length > 100) {
           console.log(`✅ OCR extraiu ${ocrText.length} caracteres`);
           return ocrText;
@@ -85,13 +60,13 @@ export class PdfExtractorService {
         return '';
       }
 
-      // Tem texto mas é muito curto
-      console.warn(`⚠️ PDF extraiu apenas ${extractedText.trim().length} caracteres`);
-      console.log(`\n📄 === TEXTO EXTRAÍDO (${extractedText.length} chars) ===\n`);
-      console.log(extractedText.substring(0, 1000));
+      // Tem texto mas é curto
+      console.warn(`⚠️ PDF extraiu apenas ${data.text.trim().length} caracteres`);
+      console.log(`\n📄 === TEXTO COMPLETO (${data.text.length} chars) ===\n`);
+      console.log(data.text);
       console.log(`\n--- FIM ---\n`);
       
-      return extractedText;
+      return data.text;
 
     } catch (error) {
       console.error(`❌ === ERRO AO EXTRAIR PDF ===`);
@@ -99,10 +74,9 @@ export class PdfExtractorService {
       
       if (error instanceof Error) {
         console.error(`📌 Mensagem: ${error.message}`);
-        console.error(`📌 Stack completo:`);
-        console.error(error.stack);
+        console.error(`📌 Stack:`, error.stack?.substring(0, 800));
       } else {
-        console.error(`📌 Erro (não é Error):`, error);
+        console.error(`📌 Erro:`, error);
       }
       
       return '';
@@ -111,26 +85,10 @@ export class PdfExtractorService {
 
   private async extractWithTesseract(buffer: Buffer): Promise<string> {
     try {
-      console.log(`🔍 === TENTANDO OCR COM TESSERACT.JS ===`);
-      
-      // Tentar importar tesseract.js se disponível
-      try {
-        const Tesseract = require('tesseract.js');
-        console.log(`✓ Tesseract.js carregado`);
-        
-        // TODO: Implementar integração com Tesseract.js
-        // Seria necessário:
-        // 1. Converter PDF para imagens
-        // 2. Fazer OCR de cada imagem
-        // 3. Concatenar resultados
-        
-        console.warn(`⚠️ Tesseract.js não implementado ainda`);
-        return '';
-      } catch (e) {
-        console.warn(`⚠️ Tesseract.js não instalado`);
-        console.warn(`   Para implementar OCR, execute: npm install tesseract.js`);
-        return '';
-      }
+      console.log(`🔍 === OCR COM TESSERACT.JS ===`);
+      console.warn(`⚠️ Tesseract.js não implementado ainda`);
+      console.warn(`   Para implementar OCR, execute: npm install tesseract.js`);
+      return '';
     } catch (error) {
       console.error(`❌ Erro em OCR:`, error instanceof Error ? error.message : error);
       return '';
