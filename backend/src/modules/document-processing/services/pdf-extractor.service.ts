@@ -7,46 +7,53 @@ export class PdfExtractorService {
       console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF ===`);
       console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
-      // Tentar com pdf-parse primeiro
-      const pdfParse = require('pdf-parse');
+      // Forma correta: pdf-parse pode estar como .default ou como módulo direto
+      let pdfParse = require('pdf-parse');
       
-      console.log(`🔄 Chamando pdfParse com buffer...`);
+      // Se for um objeto com propriedade default, usar ela
+      if (typeof pdfParse !== 'function' && pdfParse.default) {
+        pdfParse = pdfParse.default;
+      }
+      
+      console.log(`🔄 Tipo de pdfParse: ${typeof pdfParse}`);
+
+      if (typeof pdfParse !== 'function') {
+        throw new Error(`pdf-parse não é uma função. Tipo: ${typeof pdfParse}`);
+      }
+
       const data = await pdfParse(buffer);
 
-      console.log(`✅ === PDF PROCESSADO ===`);
+      console.log(`✅ === PDF PROCESSADO COM SUCESSO ===`);
       console.log(`📄 Páginas: ${data.numpages}`);
       console.log(`📝 Texto extraído: ${data.text?.length || 0} caracteres`);
       
       if (data.info) {
-        console.log(`📊 Título: ${data.info.Title || 'N/A'}`);
-        console.log(`👤 Autor: ${data.info.Author || 'N/A'}`);
+        console.log(`📊 Título: "${data.info.Title || 'N/A'}"`);
+        console.log(`👤 Autor: "${data.info.Author || 'N/A'}"`);
       }
 
       // Se tem texto, retornar
       if (data.text && data.text.trim().length > 0) {
-        console.log(`\n📄 === AMOSTRA DO TEXTO (primeiros 1500 chars) ===`);
-        console.log(data.text.substring(0, 1500));
+        console.log(`\n📄 === PRIMEIROS 2000 CARACTERES DO TEXTO ===`);
+        console.log(data.text.substring(0, 2000));
         console.log(`\n--- FIM DA AMOSTRA ---\n`);
         return data.text;
       }
 
-      // Se não tem texto, tentar com pdfjs-dist
-      console.warn(`⚠️ pdf-parse retornou vazio, tentando pdfjs-dist...`);
-      const textFromPdfjs = await this.extractWithPdfjs(buffer);
+      // Se vazio, tentar OCR com Tesseract
+      console.warn(`⚠️ PDF sem camada de texto, tentando OCR com Tesseract...`);
+      const ocrText = await this.extractWithTesseract(buffer);
       
-      if (textFromPdfjs.length > 0) {
-        console.log(`✅ pdfjs-dist extraiu ${textFromPdfjs.length} caracteres`);
-        console.log(`\n📄 === TEXTO EXTRAÍDO COM PDFJS ===`);
-        console.log(textFromPdfjs.substring(0, 1500));
-        console.log(`\n--- FIM ---\n`);
-        return textFromPdfjs;
+      if (ocrText && ocrText.length > 0) {
+        console.log(`✅ OCR extraiu ${ocrText.length} caracteres`);
+        return ocrText;
       }
 
-      console.error(`❌ Nenhum texto extraído com pdf-parse ou pdfjs-dist`);
-      console.log(`📊 Estrutura do PDF:`, {
+      console.error(`❌ Nenhum texto extraído (PDF pode ser imagem sem OCR)`);
+      console.log(`📊 Info do PDF:`, {
         numpages: data.numpages,
         hasText: !!(data.text?.length),
-        version: data.version || 'N/A',
+        producer: data.info?.Producer || 'N/A',
       });
       
       return '';
@@ -55,29 +62,23 @@ export class PdfExtractorService {
       console.error(`Erro:`, error);
       if (error instanceof Error) {
         console.error(`Mensagem: ${error.message}`);
+        console.error(`Stack:`, error.stack?.substring(0, 300));
       }
       return '';
     }
   }
 
-  private async extractWithPdfjs(buffer: Buffer): Promise<string> {
+  private async extractWithTesseract(buffer: Buffer): Promise<string> {
     try {
-      const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
-      pdfjs.GlobalWorkerOptions.workerSrc = require('pdfjs-dist/legacy/build/pdf.worker.js');
-
-      const pdf = await pdfjs.getDocument({ data: buffer }).promise;
-      let text = '';
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        text += pageText + '\n';
-      }
-
-      return text;
+      console.log(`🔍 Tentando OCR com Tesseract...`);
+      
+      // Nota: Tesseract seria necessário para PDFs com imagem
+      // Por enquanto, apenas registrar que seria necessário
+      console.warn(`⚠️ OCR com Tesseract não implementado ainda (seria necessário para PDFs em imagem)`);
+      
+      return '';
     } catch (error) {
-      console.error(`❌ Erro em pdfjs-dist:`, error);
+      console.error(`❌ Erro em OCR:`, error);
       return '';
     }
   }
