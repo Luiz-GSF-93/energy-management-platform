@@ -8,6 +8,7 @@ export class DistributorDetectorService {
       /CPFL Energia/i,
       /Companhia Paulista de Força e Luz/i,
       /cpfl\.com\.br/i,
+      /CPFL/i,
     ],
     [Distributor.ENERGISA]: [
       /Energisa/i,
@@ -46,10 +47,13 @@ export class DistributorDetectorService {
       /Eletropaulo/i,
       /eletropaulo\.com\.br/i,
     ],
-    [Distributor.GENERIC]: [/./], // Always matches as fallback
+    [Distributor.GENERIC]: [/./],
   };
 
   detectDistributor(text: string): Distributor {
+    console.log(`🔎 Detectando distribuidor em ${text.length} caracteres`);
+    console.log(`📝 Primeiros 300 chars: ${text.substring(0, 300)}`);
+
     // Testa cada distribuidor exceto GENERIC
     for (const distributor of Object.values(Distributor)) {
       if (distributor === Distributor.GENERIC) continue;
@@ -58,10 +62,13 @@ export class DistributorDetectorService {
       
       for (const pattern of patterns) {
         if (pattern.test(text)) {
+          console.log(`✅ Distribuidor detectado: ${distributor}`);
           return distributor;
         }
       }
     }
+
+    console.log('⚠️ Nenhum distribuidor específico detectado, usando GENERIC');
     return Distributor.GENERIC;
   }
 }
