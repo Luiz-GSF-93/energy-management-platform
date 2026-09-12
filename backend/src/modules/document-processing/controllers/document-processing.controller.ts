@@ -19,8 +19,7 @@ import { ValidationService } from '../services/validation.service';
 import { DistributorDetectorService } from '../services/distributor-detector.service';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { GenericParser } from '../parsers/generic.parser';
-import { DocumentStatus } from '../enums/document-status.enum';
-import { ExtractionStatus, ConfidenceLevel } from '../enums/extraction-status.enum';
+import { ConfidenceLevel } from '../enums/extraction-status.enum';
 
 @Controller('api/document-processing')
 export class DocumentProcessingController {
@@ -39,26 +38,17 @@ export class DocumentProcessingController {
       storage: diskStorage({
         destination: (req, file, cb) => {
           const uploadDir = join(process.cwd(), 'uploads', 'documents');
-          if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-          }
+          if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
           cb(null, uploadDir);
         },
         filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          cb(null, `${randomName}${extname(file.originalname)}`);
+          const name = Array(32).fill(null).map(() => Math.round(Math.random() * 16).toString(16)).join('');
+          cb(null, `${name}${extname(file.originalname)}`);
         },
       }),
       fileFilter: (req: any, file: any, cb: any) => {
-        const allowedMimes = ['application/pdf', 'image/jpeg', 'image/png'];
-        if (!allowedMimes.includes(file.mimetype)) {
-          return cb(new Error(`Tipo não suportado`), false);
-        }
-        if (file.size > 10 * 1024 * 1024) {
-          return cb(new Error('Arquivo muito grande'), false);
+        if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.mimetype)) {
+          return cb(new Error('Tipo inválido'), false);
         }
         cb(null, true);
       },
@@ -67,73 +57,52 @@ export class DocumentProcessingController {
   )
   async uploadDocument(@UploadedFile() file: any, @Req() req: any) {
     try {
-      if (!file) {
-        throw new BadRequestException('Arquivo não enviado');
-      }
+      if (!file) throw new BadRequestException('Arquivo não enviado');
 
       this.logger.log(`📤 Upload: ${file.originalname}`);
 
-      // Dados mockados para teste
-      const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const extractionId = `ext_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const docId = `doc_${Date.now()}`;
+      const extId = `ext_${Date.now()}`;
 
       let rawText = '';
       if (file.mimetype === 'application/pdf') {
         try {
           rawText = await this.pdfExtractor.extractTextFromPdf(file.path);
         } catch (error) {
-          this.logger.warn(`Erro PDF: ${error.message}`);
-          rawText = 'Erro ao extrair';
+          this.logger.warn(`PDF: ${error.message}`);
         }
       }
 
       const distributor = this.distributorDetector.detectDistributor(rawText);
-      const structuredData = this.genericParser.parse(rawText);
-      structuredData.distributor = distributor;
+      const data = this.genericParser.parse(rawText);
+      data.distributor = distributor;
 
-      const validation = await this.validationService.validateExtractedData(structuredData);
-
-      this.logger.log(`✅ Processado com score ${validation.confidenceScore}%`);
+      const validation = await this.validationService.validateExtractedData(data);
 
       return {
         success: true,
-        documentId,
-        extractionId,
-        status: 'UPLOADED',
+        documentId: docId,
+        extractionId: extId,
         extraction: {
-          id: extractionId,
-          extractionStatus:
-            validation.confidenceLevel === ConfidenceLevel.HIGH
-              ? ExtractionStatus.EXTRACTED
-              : ExtractionStatus.NEEDS_REVISION,
           confidenceScore: validation.confidenceScore,
           confidenceLevel: validation.confidenceLevel,
-          structuredData,
+          structuredData: data,
           validationNotes: validation.issues.join('\n'),
         },
-        message: '📄 Processado com sucesso!',
+        message: '✅ Processado!',
       };
     } catch (error) {
-      this.logger.error(`Erro: ${error.message}`);
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
 
   @Get(':documentId/status')
-  async getDocumentStatus(@Param('documentId') documentId: string) {
-    return {
-      documentId,
-      status: 'UPLOADED',
-      message: 'Documento processado',
-    };
+  getStatus(@Param('documentId') documentId: string) {
+    return { documentId, status: 'UPLOADED' };
   }
 
   @Get()
-  async listDocuments(@Req() req: any) {
-    return {
-      total: 0,
-      documents: [],
-      message: 'Nenhum documento',
-    };
+  listDocuments() {
+    return { total: 0, documents: [] };
   }
 }
