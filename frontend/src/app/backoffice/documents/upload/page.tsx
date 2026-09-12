@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import axios from 'axios';
 
@@ -13,7 +13,13 @@ export default function DocumentUploadPage() {
   const [organizationId, setOrganizationId] = useState('org-expertev-test-001');
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  // Remove /api/v1 if present to avoid duplication
+  const getBaseUrl = () => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+    return baseUrl.replace(/\/api\/v1\/?$/, '');
+  };
+
+  const API_URL = getBaseUrl();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -72,54 +78,55 @@ export default function DocumentUploadPage() {
       const formData = new FormData();
       formData.append('file', file);
 
+      const uploadUrl = `${API_URL}/api/document-processing/upload`;
+
       console.log(`📤 === INICIANDO UPLOAD ===`);
       console.log(`📄 Arquivo: ${file.name}`);
       console.log(`📦 Tamanho: ${file.size} bytes`);
       console.log(`📋 Tipo MIME: ${file.type}`);
-      console.log(`🏢 Organization: ${organizationId}`);
-      console.log(`🌐 Endpoint: ${API_URL}/api/document-processing/upload`);
+      console.log(`🏢 Organização: ${organizationId}`);
+      console.log(`🌐 Endpoint: ${uploadUrl}`);
+      console.log(`🔧 Base URL: ${API_URL}`);
 
-      const response = await axios.post(
-        `${API_URL}/api/document-processing/upload`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'x-organization-id': organizationId,
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total || 1)
-            );
-            setUploadProgress(percentCompleted);
-            console.log(`📊 Progresso: ${percentCompleted}%`);
-          },
-        }
-      );
+      const response = await axios.post(uploadUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'x-organization-id': organizationId,
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1)
+          );
+          setUploadProgress(percentCompleted);
+          console.log(`📊 Progresso: ${percentCompleted}%`);
+        },
+      });
 
       console.log(`✅ === UPLOAD BEM-SUCEDIDO ===`);
       console.log(`📥 Resposta do servidor:`, response.data);
-      
+
       setResult(response.data);
       setFile(null);
     } catch (err: any) {
       console.error('❌ === ERRO NO UPLOAD ===');
       console.error('Erro completo:', err);
-      
+
       if (err.response) {
-        console.error('Status:', err.response.status);
-        console.error('Data:', err.response.data);
+        console.error('❌ Status HTTP:', err.response.status);
+        console.error('❌ Resposta do servidor:', err.response.data);
+        console.error('❌ Headers:', err.response.headers);
       } else if (err.request) {
-        console.error('Sem resposta do servidor:', err.request);
+        console.error('❌ Sem resposta do servidor');
+        console.error('❌ Request:', err.request);
       } else {
-        console.error('Erro na configuração:', err.message);
+        console.error('❌ Erro na configuração:', err.message);
       }
 
       const errorMsg =
         err.response?.data?.message ||
         err.response?.data?.error ||
         err.message ||
-        'Erro ao fazer upload';
+        'Erro ao fazer upload. Verifique o console para detalhes.';
       setError(errorMsg);
     } finally {
       setUploading(false);
@@ -133,8 +140,11 @@ export default function DocumentUploadPage() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Upload de Faturas
         </h1>
-        <p className="text-gray-600 mb-8">
+        <p className="text-gray-600 mb-1">
           Organização: <strong>{organizationId}</strong>
+        </p>
+        <p className="text-xs text-gray-500 mb-8">
+          API Base: {API_URL}
         </p>
 
         {/* Dropzone */}
@@ -219,7 +229,13 @@ export default function DocumentUploadPage() {
         {error && (
           <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start">
             <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
-            <p className="text-red-800">{error}</p>
+            <div>
+              <p className="text-red-800 font-medium">Erro no upload</p>
+              <p className="text-red-700 text-sm mt-1">{error}</p>
+              <p className="text-red-600 text-xs mt-2">
+                👉 Verifique o console (F12) para detalhes completos
+              </p>
+            </div>
           </div>
         )}
 
@@ -229,9 +245,9 @@ export default function DocumentUploadPage() {
             <div className="flex items-start mb-4">
               <CheckCircle className="w-6 h-6 text-green-600 mr-3 flex-shrink-0" />
               <div>
-                <p className="font-medium text-green-900">Upload realizado!</p>
+                <p className="font-medium text-green-900">✅ Upload realizado com sucesso!</p>
                 <p className="text-sm text-green-800 mt-1">
-                  ID do Documento: {result.documentId}
+                  ID do Documento: <code className="bg-green-100 px-2 py-1 rounded">{result.documentId}</code>
                 </p>
               </div>
             </div>
@@ -239,66 +255,84 @@ export default function DocumentUploadPage() {
             {result.extraction && (
               <div className="mt-4 pt-4 border-t border-green-200">
                 <p className="font-medium text-gray-900 mb-3">
-                  Dados Extraídos:
+                  📊 Dados Extraídos:
                 </p>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="bg-white p-3 rounded border border-green-100">
-                    <p className="text-gray-600 text-xs uppercase">Número da Fatura</p>
-                    <p className="font-mono text-gray-900 font-semibold">
+                    <p className="text-gray-600 text-xs uppercase font-semibold">Número da Fatura</p>
+                    <p className="font-mono text-gray-900 font-bold text-lg mt-1">
                       {result.extraction.invoiceNumber || '—'}
                     </p>
                   </div>
                   <div className="bg-white p-3 rounded border border-green-100">
-                    <p className="text-gray-600 text-xs uppercase">Distribuidor</p>
-                    <p className="font-mono text-gray-900 font-semibold">
+                    <p className="text-gray-600 text-xs uppercase font-semibold">Distribuidor</p>
+                    <p className="font-mono text-gray-900 font-bold text-lg mt-1">
                       {result.extraction.distributor || '—'}
                     </p>
                   </div>
                   <div className="bg-white p-3 rounded border border-green-100">
-                    <p className="text-gray-600 text-xs uppercase">Mês</p>
-                    <p className="font-mono text-gray-900 font-semibold">
+                    <p className="text-gray-600 text-xs uppercase font-semibold">Mês de Referência</p>
+                    <p className="font-mono text-gray-900 font-bold text-lg mt-1">
                       {result.extraction.referenceMonth || '—'}
                     </p>
                   </div>
                   <div className="bg-white p-3 rounded border border-green-100">
-                    <p className="text-gray-600 text-xs uppercase">Consumo (kWh)</p>
-                    <p className="font-mono text-gray-900 font-semibold">
-                      {result.extraction.consumptionKwh || '—'}
+                    <p className="text-gray-600 text-xs uppercase font-semibold">Consumo (kWh)</p>
+                    <p className="font-mono text-gray-900 font-bold text-lg mt-1">
+                      {result.extraction.consumptionKwh?.toLocaleString('pt-BR') || '—'}
                     </p>
                   </div>
                   <div className="bg-white p-3 rounded border border-green-100">
-                    <p className="text-gray-600 text-xs uppercase">Total</p>
-                    <p className="font-mono text-gray-900 font-semibold">
+                    <p className="text-gray-600 text-xs uppercase font-semibold">Total</p>
+                    <p className="font-mono text-gray-900 font-bold text-lg mt-1">
                       {result.extraction.totalAmount
-                        ? `R$ ${result.extraction.totalAmount.toFixed(2)}`
+                        ? `R$ ${result.extraction.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                         : '—'}
                     </p>
                   </div>
                   <div className="bg-white p-3 rounded border border-green-100">
-                    <p className="text-gray-600 text-xs uppercase">Confiança</p>
-                    <p className={`font-semibold ${
-                      result.extraction.confidenceLevel === 'HIGH' ? 'text-green-600' :
-                      result.extraction.confidenceLevel === 'MEDIUM' ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
+                    <p className="text-gray-600 text-xs uppercase font-semibold">Confiança</p>
+                    <p
+                      className={`font-bold text-lg mt-1 ${
+                        result.extraction.confidenceLevel === 'HIGH'
+                          ? 'text-green-600'
+                          : result.extraction.confidenceLevel === 'MEDIUM'
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
+                      }`}
+                    >
                       {result.extraction.confidenceLevel} ({result.extraction.confidenceScore}%)
                     </p>
                   </div>
                 </div>
 
+                {result.extraction.notes && result.extraction.notes.length > 0 && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                    <p className="text-sm font-medium text-yellow-900 mb-2">⚠️ Observações:</p>
+                    <ul className="text-sm text-yellow-800 list-disc list-inside">
+                      {result.extraction.notes.map((note: string, i: number) => (
+                        <li key={i}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {result.audit?.contract && (
-                  <div className="mt-4 p-3 bg-white border border-green-100 rounded">
-                    <p className="text-sm font-medium text-gray-900 mb-2">Validação de Contrato:</p>
-                    <p className="text-sm text-gray-600">
-                      Status: <strong>{result.audit.contract.status}</strong>
+                  <div className="mt-4 p-3 bg-white border border-blue-200 rounded">
+                    <p className="text-sm font-medium text-blue-900 mb-2">🔍 Validação de Contrato:</p>
+                    <p className="text-sm text-blue-800">
+                      Status: <strong className="text-blue-900">{result.audit.contract.status}</strong>
                     </p>
-                    {result.audit.contract.observacoes && result.audit.contract.observacoes.length > 0 && (
-                      <ul className="mt-2 text-sm text-gray-600 list-disc list-inside">
-                        {result.audit.contract.observacoes.map((obs: string, i: number) => (
-                          <li key={i}>{obs}</li>
-                        ))}
-                      </ul>
-                    )}
+                    {result.audit.contract.observacoes &&
+                      result.audit.contract.observacoes.length > 0 && (
+                        <ul className="mt-2 text-sm text-blue-800 list-disc list-inside">
+                          {result.audit.contract.observacoes.map(
+                            (obs: string, i: number) => (
+                              <li key={i}>{obs}</li>
+                            )
+                          )}
+                        </ul>
+                      )}
                   </div>
                 )}
               </div>
@@ -313,7 +347,7 @@ export default function DocumentUploadPage() {
             disabled={uploading}
             className="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {uploading ? `Enviando (${uploadProgress}%)...` : 'Fazer Upload'}
+            {uploading ? `Enviando (${uploadProgress}%)...` : '📤 Fazer Upload'}
           </button>
         )}
 
@@ -326,7 +360,7 @@ export default function DocumentUploadPage() {
             }}
             className="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Fazer Novo Upload
+            ➕ Enviar Outra Fatura
           </button>
         )}
       </div>
