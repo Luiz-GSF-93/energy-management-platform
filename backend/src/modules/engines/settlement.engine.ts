@@ -1,114 +1,186 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 
+/**
+ * Interface para componentes de TUSD (Mercado Regulado)
+ */
+export interface TusdRegulatedComponents {
+  consumptionPeakKwh: number;           // Consumo Ponta TUSD
+  consumptionOffPeakKwh: number;        // Consumo Fora Ponta TUSD
+  demandPeakKw: number;                 // Demanda Ponta TUSD
+  demandOffPeakKw: number;              // Demanda Fora Ponta TUSD
+  tusdRatePeak: number;                 // R$/kWh Ponta
+  tusdRateOffPeak: number;              // R$/kWh Fora Ponta
+  demandRate: number;                   // R$/kW
+}
+
+/**
+ * Interface para componentes de TE (Transmissão - Mercado Regulado)
+ */
+export interface TeRegulatedComponents {
+  consumptionPeakKwh: number;           // Consumo Ponta TE
+  consumptionOffPeakKwh: number;        // Consumo Fora Ponta TE
+  teRatePeak: number;                   // R$/kWh Ponta
+  teRateOffPeak: number;                // R$/kWh Fora Ponta
+  additionalBandPeak?: number;          // Adicional Bandeira Ponta
+  additionalBandOffPeak?: number;       // Adicional Bandeira F. Ponta
+}
+
+/**
+ * Interface para componentes do Mercado Livre (Distribuição)
+ */
+export interface DistributionAclComponents {
+  consumptionPeakTusdKwh: number;       // Consumo Ponta TUSD
+  consumptionOffPeakTusdKwh: number;    // Consumo Fora Ponta TUSD
+  demandPeakKw: number;                 // Demanda Ponta
+  demandOffPeakKw: number;              // Demanda Fora Ponta
+  tusdRatePeak: number;                 // R$/kWh
+  tusdRateOffPeak: number;              // R$/kWh
+  demandRate: number;                   // R$/kW
+  cdeCovid: number;                     // CDE-COVID (R$)
+  cdeWater: number;                     // CDE Escassez Hídrica (R$)
+  subsidyRate?: number;                 // Subvenção Tarifária (%)
+}
+
+/**
+ * Interface para custos CCEE (Câmara de Comercialização de Energia Elétrica)
+ */
+export interface CceeAclCosts {
+  generatorVolumeMwh: number;           // MWh volume
+  generatorRateMwhBrl: number;          // R$/MWh
+  contributionAssociative: number;      // Contribuição Associativa (R$)
+  eer: number;                          // EER (R$)
+  ercap: number;                        // ERCAP (R$)
+  financialGuarantee: number;           // Aporte Garantia Financeira (R$)
+  penalties: number;                    // Penalidades (R$)
+  liquidationMcpCredit: number;         // Liquidação MCP - Crédito (R$)
+  nuclearQuotas: number;                // COTAS E.NUCLEAR (R$)
+}
+
+/**
+ * Interface para custos de administração
+ */
+export interface ManagementCosts {
+  model: 'FIXED' | 'HYBRID' | 'PERCENTAGE';
+  fixedMonthlyCost?: number;            // R$/mês
+  percentageOnSavings?: number;         // %
+  variableRateMwh?: number;             // R$/MWh (raro)
+}
+
+/**
+ * Interface para impostos
+ */
+export interface TaxComponents {
+  pisFederal: number;                   // PIS Federal (%)
+  cofinsFederal: number;                // COFINS Federal (%)
+  icmsStateRate: number;                // ICMS Estadual (%)
+  irRate?: number;                      // IR (%)
+  csllRate?: number;                    // CSLL (%)
+}
+
+/**
+ * Input para cálculo completo - COMPATÍVEL COM VERSÃO ANTERIOR
+ */
 export interface SettlementInput {
   consumerUnitId: string;
   referenceMonth: Date;
   
-  // Consumo
-  consumptionMwh: number;
-  
-  // Mercado Regulado
-  regulatedEnergyPrice: number;      // R$/MWh
-  regulatedTusdCost: number;         // R$
-  regulatedTaxes: number;            // R$
-  
-  // Mercado Livre
-  contractedPrice: number;            // R$/MWh
-  cceeCost: number;                  // R$
-  chargesCost: number;               // R$
-  taxesCost: number;                 // R$
-  
-  // Remuneração
-  remunerationModel: 'FIXED' | 'HYBRID' | 'PERFORMANCE';
+  // Compatibilidade com versão anterior (simplificada)
+  consumptionMwh?: number;              // MWh total (fallback)
+  regulatedEnergyPrice?: number;        // R$/MWh (fallback)
+  regulatedTusdCost?: number;           // R$ (fallback)
+  regulatedTaxes?: number;              // R$ (fallback)
+  contractedPrice?: number;             // R$/MWh (fallback)
+  cceeCost?: number;                    // R$ (fallback)
+  chargesCost?: number;                 // R$ (fallback)
+  taxesCost?: number;                   // R$ (fallback)
+  remunerationModel?: 'FIXED' | 'HYBRID' | 'PERFORMANCE';
   fixedFee?: number;
   variablePercentage?: number;
-  
-  // Validações
   minConsumption?: number;
   maxConsumption?: number;
+  
+  // Novos componentes detalhados
+  regulatedTusd?: TusdRegulatedComponents;
+  regulatedTe?: TeRegulatedComponents;
+  aclDistribution?: DistributionAclComponents;
+  aclCcee?: CceeAclCosts;
+  managementCosts?: ManagementCosts;
+  taxes?: TaxComponents;
 }
 
+/**
+ * Output detalhado
+ */
 export interface SettlementOutput {
   referenceMonth: string;
   consumerUnitId: string;
   
-  // Custos
+  // Custos totais
   regulatedTotalCost: number;
   aclTotalCost: number;
   
   // Economia
   grossSavings: number;
-  eligibleCosts: number;
-  netSavings: number;
-  
-  // Remuneração
   managementFee: number;
-  customerFinalSavings: number;
+  netSavings: number;
   
   // Métricas
   savingsPercentage: number;
   roi: number;
   
-  // Breakdown (detalhes)
-  breakdown: {
-    regulatedEnergy: number;
-    regulatedTusd: number;
-    regulatedTaxes: number;
-    aclEnergy: number;
-    aclCcee: number;
-    aclCharges: number;
-    aclTaxes: number;
+  // Detalhamento Mercado Regulado
+  regulatedBreakdown: {
+    tusdEnergy: number;
+    tusdDemand: number;
+    teEnergy: number;
+    teAdditional: number;
+    subtotal: number;
+    taxes: number;
+    total: number;
   };
-}
-
-export interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-  warnings: string[];
+  
+  // Detalhamento Mercado Livre
+  aclBreakdown: {
+    distributionTusd: number;
+    distributionDemand: number;
+    distributionCharges: number;
+    generatorCost: number;
+    cceeCosts: number;
+    subtotal: number;
+    taxes: number;
+    total: number;
+  };
 }
 
 @Injectable()
 export class SettlementEngine {
   /**
-   * Calcula a apuração mensal completa
-   * Mercado Regulado vs Mercado Livre
+   * Calcula apuração mensal completa com todos os componentes
    */
   calculateSettlement(input: SettlementInput): SettlementOutput {
-    // 1. Validar input
-    const validation = this.validateInput(input);
-    if (!validation.isValid) {
-      throw new BadRequestException(
-        `Erro de validação: ${validation.errors.join(', ')}`
-      );
-    }
-
-    // 2. Custo Mercado Regulado
-    const regulatedTotalCost = this.calculateRegulatedCost(input);
+    // 1. Calcular custos regulado
+    const regulatedBreakdown = this.calculateRegulatedBreakdown(input);
+    const regulatedTotalCost = regulatedBreakdown.total;
     
-    // 3. Custo Mercado Livre (ACL)
-    const aclTotalCost = this.calculateAclCost(input);
+    // 2. Calcular custos ACL
+    const aclBreakdown = this.calculateAclBreakdown(input);
+    const aclTotalCost = aclBreakdown.total;
     
-    // 4. Economia Bruta
+    // 3. Economia bruta
     const grossSavings = regulatedTotalCost - aclTotalCost;
     
-    // 5. Custos Elegíveis (descontos)
-    const eligibleCosts = this.calculateEligibleCosts(grossSavings);
+    // 4. Remuneração da gestora
+    const managementFee = this.calculateManagementFee(input, grossSavings);
     
-    // 6. Economia Líquida para cálculo de honorário
-    const netSavings = grossSavings - eligibleCosts;
+    // 5. Economia líquida
+    const netSavings = Math.max(0, grossSavings - managementFee);
     
-    // 7. Remuneração Gestora
-    const managementFee = this.calculateManagementFee(input, netSavings);
-    
-    // 8. Economia Final do Cliente
-    const customerFinalSavings = Math.max(0, netSavings - managementFee);
-    
-    // 9. Métricas
+    // 6. Métricas
     const savingsPercentage = regulatedTotalCost > 0 
       ? (grossSavings / regulatedTotalCost) * 100 
       : 0;
     const roi = regulatedTotalCost > 0
-      ? (customerFinalSavings / regulatedTotalCost) * 100 
+      ? (netSavings / regulatedTotalCost) * 100 
       : 0;
     
     return {
@@ -117,130 +189,190 @@ export class SettlementEngine {
       regulatedTotalCost: this.round(regulatedTotalCost),
       aclTotalCost: this.round(aclTotalCost),
       grossSavings: this.round(grossSavings),
-      eligibleCosts: this.round(eligibleCosts),
-      netSavings: this.round(netSavings),
       managementFee: this.round(managementFee),
-      customerFinalSavings: this.round(customerFinalSavings),
+      netSavings: this.round(netSavings),
       savingsPercentage: this.round(savingsPercentage, 2),
       roi: this.round(roi, 2),
-      breakdown: {
-        regulatedEnergy: this.round(input.consumptionMwh * input.regulatedEnergyPrice),
-        regulatedTusd: this.round(input.regulatedTusdCost),
-        regulatedTaxes: this.round(input.regulatedTaxes),
-        aclEnergy: this.round(input.consumptionMwh * input.contractedPrice),
-        aclCcee: this.round(input.cceeCost),
-        aclCharges: this.round(input.chargesCost),
-        aclTaxes: this.round(input.taxesCost),
-      },
+      regulatedBreakdown,
+      aclBreakdown,
     };
   }
-  
+
   /**
-   * Validar input
+   * Detalha custos do Mercado Regulado
    */
-  private validateInput(input: SettlementInput): ValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    
-    // Consumo válido
-    if (input.consumptionMwh < 0) {
-      errors.push('Consumo não pode ser negativo');
+  private calculateRegulatedBreakdown(input: SettlementInput) {
+    let tusdEnergy = 0;
+    let tusdDemand = 0;
+    let teEnergy = 0;
+    let teAdditional = 0;
+    let subtotal = 0;
+
+    // Se usa componentes detalhados
+    if (input.regulatedTusd) {
+      const { consumptionPeakKwh, consumptionOffPeakKwh, demandPeakKw, demandOffPeakKw, tusdRatePeak, tusdRateOffPeak, demandRate } = input.regulatedTusd;
+      tusdEnergy = (consumptionPeakKwh * tusdRatePeak + consumptionOffPeakKwh * tusdRateOffPeak);
+      tusdDemand = ((demandPeakKw + demandOffPeakKw) * demandRate);
     }
-    if (input.consumptionMwh === 0) {
-      warnings.push('Consumo é zero');
+
+    if (input.regulatedTe) {
+      const { consumptionPeakKwh, consumptionOffPeakKwh, teRatePeak, teRateOffPeak, additionalBandPeak = 0, additionalBandOffPeak = 0 } = input.regulatedTe;
+      teEnergy = (consumptionPeakKwh * teRatePeak + consumptionOffPeakKwh * teRateOffPeak);
+      teAdditional = (additionalBandPeak + additionalBandOffPeak);
     }
-    if (input.minConsumption && input.consumptionMwh < input.minConsumption) {
-      errors.push(`Consumo abaixo do mínimo (${input.minConsumption} MWh)`);
+
+    // Fallback para interface antiga
+    if (!input.regulatedTusd && !input.regulatedTe) {
+      const mwh = input.consumptionMwh ?? 0;
+      const price = input.regulatedEnergyPrice ?? 0;
+      tusdEnergy = mwh * price;
+      tusdDemand = input.regulatedTusdCost ?? 0;
+      teEnergy = 0;
     }
-    if (input.maxConsumption && input.consumptionMwh > input.maxConsumption) {
-      warnings.push(`Consumo acima do máximo (${input.maxConsumption} MWh)`);
-    }
-    
-    // Preços válidos
-    if (input.regulatedEnergyPrice < 0 || input.contractedPrice < 0) {
-      errors.push('Preços de energia não podem ser negativos');
-    }
-    
-    // Custos válidos
-    if (input.regulatedTusdCost < 0 || input.cceeCost < 0) {
-      errors.push('Custos não podem ser negativos');
-    }
-    
-    // Remuneração válida
-    if (input.remunerationModel === 'FIXED' && input.fixedFee === undefined) {
-      errors.push('Modelo FIXED requer fixedFee');
-    }
-    if ((input.remunerationModel === 'HYBRID' || input.remunerationModel === 'PERFORMANCE') && 
-        input.variablePercentage === undefined) {
-      errors.push('Modelo HYBRID/PERFORMANCE requer variablePercentage');
-    }
-    if (input.variablePercentage !== undefined && (input.variablePercentage < 0 || input.variablePercentage > 100)) {
-      errors.push('variablePercentage deve estar entre 0 e 100');
-    }
-    
+
+    subtotal = tusdEnergy + tusdDemand + teEnergy + teAdditional;
+    const taxes = this.calculateTaxes(subtotal, input.taxes, input.regulatedTaxes);
+    const total = subtotal + taxes;
+
     return {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
+      tusdEnergy: this.round(tusdEnergy),
+      tusdDemand: this.round(tusdDemand),
+      teEnergy: this.round(teEnergy),
+      teAdditional: this.round(teAdditional),
+      subtotal: this.round(subtotal),
+      taxes: this.round(taxes),
+      total: this.round(total),
     };
   }
-  
+
   /**
-   * Calcula custo no mercado regulado
+   * Detalha custos do Mercado Livre (ACL)
    */
-  private calculateRegulatedCost(input: SettlementInput): number {
-    const energyCost = input.consumptionMwh * input.regulatedEnergyPrice;
-    return energyCost + input.regulatedTusdCost + input.regulatedTaxes;
+  private calculateAclBreakdown(input: SettlementInput) {
+    let distributionTusd = 0;
+    let distributionDemand = 0;
+    let distributionCharges = 0;
+    let generatorCost = 0;
+    let cceeCosts = 0;
+
+    // Se usa componentes detalhados
+    if (input.aclDistribution) {
+      const { consumptionPeakTusdKwh, consumptionOffPeakTusdKwh, demandPeakKw, demandOffPeakKw, tusdRatePeak, tusdRateOffPeak, demandRate, cdeCovid = 0, cdeWater = 0 } = input.aclDistribution;
+      distributionTusd = (consumptionPeakTusdKwh * tusdRatePeak + consumptionOffPeakTusdKwh * tusdRateOffPeak);
+      distributionDemand = ((demandPeakKw + demandOffPeakKw) * demandRate);
+      distributionCharges = cdeCovid + cdeWater;
+    }
+
+    if (input.aclCcee) {
+      generatorCost = input.aclCcee.generatorVolumeMwh * input.aclCcee.generatorRateMwhBrl;
+      cceeCosts = input.aclCcee.contributionAssociative +
+                  input.aclCcee.eer +
+                  input.aclCcee.ercap +
+                  input.aclCcee.financialGuarantee +
+                  input.aclCcee.penalties +
+                  input.aclCcee.liquidationMcpCredit +
+                  input.aclCcee.nuclearQuotas;
+    }
+
+    // Fallback para interface antiga
+    if (!input.aclDistribution && !input.aclCcee) {
+      const mwh = input.consumptionMwh ?? 0;
+      const price = input.contractedPrice ?? 0;
+      generatorCost = mwh * price;
+      cceeCosts = (input.cceeCost ?? 0) + (input.chargesCost ?? 0);
+      distributionTusd = 0;
+      distributionDemand = 0;
+      distributionCharges = 0;
+    }
+
+    const subtotal = distributionTusd + distributionDemand + distributionCharges + generatorCost + cceeCosts;
+    const taxes = this.calculateTaxes(subtotal, input.taxes, input.taxesCost);
+    const total = subtotal + taxes;
+
+    return {
+      distributionTusd: this.round(distributionTusd),
+      distributionDemand: this.round(distributionDemand),
+      distributionCharges: this.round(distributionCharges),
+      generatorCost: this.round(generatorCost),
+      cceeCosts: this.round(cceeCosts),
+      subtotal: this.round(subtotal),
+      taxes: this.round(taxes),
+      total: this.round(total),
+    };
   }
-  
+
   /**
-   * Calcula custo no mercado livre (ACL)
+   * Calcula impostos (PIS + COFINS + ICMS)
    */
-  private calculateAclCost(input: SettlementInput): number {
-    const energyCost = input.consumptionMwh * input.contractedPrice;
-    return energyCost + input.cceeCost + input.chargesCost + input.taxesCost;
-  }
-  
-  /**
-   * Calcula custos elegíveis (tributos sobre economia)
-   */
-  private calculateEligibleCosts(grossSavings: number): number {
-    // Apenas aplica tributação se houver economia positiva
-    if (grossSavings <= 0) return 0;
+  private calculateTaxes(subtotal: number, taxes?: TaxComponents, fallbackTaxes?: number): number {
+    // Usa fallback se não tiver componentes detalhados
+    if (!taxes && fallbackTaxes !== undefined) {
+      return fallbackTaxes;
+    }
     
-    // 15% de tributação (IR + CSLL)
-    const taxRate = 0.15;
-    return grossSavings * taxRate;
+    if (!taxes) return 0;
+    
+    const pisRate = (taxes.pisFederal ?? 0) / 100;
+    const cofinsRate = (taxes.cofinsFederal ?? 0) / 100;
+    const icmsRate = (taxes.icmsStateRate ?? 0) / 100;
+    
+    // PIS e COFINS sobre base tributária
+    const pisCofinsBase = subtotal;
+    const pisCofins = pisCofinsBase * (pisRate + cofinsRate);
+    
+    // ICMS
+    const icms = subtotal * icmsRate;
+    
+    return pisCofins + icms;
   }
-  
+
   /**
    * Calcula remuneração da gestora
    */
-  private calculateManagementFee(input: SettlementInput, netSavings: number): number {
-    // Não cobra se economia líquida é zero ou negativa
-    if (netSavings <= 0) return 0;
-    
-    switch (input.remunerationModel) {
+  private calculateManagementFee(input: SettlementInput, grossSavings: number): number {
+    // Prioridade: componente detalhado
+    if (input.managementCosts) {
+      const { model, fixedMonthlyCost = 0, percentageOnSavings = 0 } = input.managementCosts;
+      
+      switch (model) {
+        case 'FIXED':
+          return fixedMonthlyCost;
+        
+        case 'HYBRID':
+          return fixedMonthlyCost + (grossSavings * percentageOnSavings / 100);
+        
+        case 'PERCENTAGE':
+          return (grossSavings * percentageOnSavings / 100);
+        
+        default:
+          return 0;
+      }
+    }
+
+    // Fallback para interface antiga
+    if (grossSavings <= 0) return 0;
+
+    const model = input.remunerationModel ?? 'PERFORMANCE';
+    const fixedFee = input.fixedFee ?? 0;
+    const variablePercentage = input.variablePercentage ?? 0;
+
+    switch (model) {
       case 'FIXED':
-        return input.fixedFee ?? 0;
+        return fixedFee;
       
       case 'HYBRID':
-        // Fixo + percentual sobre economia
-        const fixed = input.fixedFee ?? 0;
-        const variable = (netSavings * (input.variablePercentage ?? 0)) / 100;
-        return fixed + variable;
+        return fixedFee + (grossSavings * variablePercentage / 100);
       
       case 'PERFORMANCE':
-        // Apenas percentual sobre economia
-        return (netSavings * (input.variablePercentage ?? 0)) / 100;
+        return (grossSavings * variablePercentage / 100);
       
       default:
         return 0;
     }
   }
-  
+
   /**
-   * Arredonda para 2 casas decimais
+   * Arredonda valores
    */
   private round(value: number, decimals: number = 2): number {
     return parseFloat(value.toFixed(decimals));
