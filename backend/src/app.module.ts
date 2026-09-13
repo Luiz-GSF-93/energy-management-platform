@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { getDatabaseConfig } from './config/database.config';
+import { getTypeOrmConfig } from './config/typeorm.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
@@ -26,7 +26,7 @@ import { SharedModule } from './modules/shared/shared.module';
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
     }),
-    TypeOrmModule.forRoot(getDatabaseConfig()),
+    TypeOrmModule.forRoot(getTypeOrmConfig()),
     SharedModule,
     AuthModule,
     UsersModule,
