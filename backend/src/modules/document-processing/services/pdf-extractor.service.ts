@@ -7,8 +7,8 @@ export class PdfExtractorService {
     console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
     try {
-      // Strategy 1: pdf-parse com tratamento correto do módulo
-      console.log('🔄 Strategy 1: Tentando pdf-parse...');
+      // Strategy 1: pdf-parse (versão correta com PDFParse class)
+      console.log('🔄 Strategy 1: Tentando pdf-parse com PDFParse class...');
       const textFromPdfParse = await this.extractWithPdfParse(buffer);
       
       if (textFromPdfParse && textFromPdfParse.trim().length > 100) {
@@ -18,9 +18,8 @@ export class PdfExtractorService {
         return textFromPdfParse;
       }
 
-      // Strategy 2: OCR com Tesseract (para PDFs com imagem ou scaneados)
-      console.log('⚠️ pdf-parse não encontrou texto suficiente');
-      console.log('🔄 Strategy 2: Tentando OCR com Tesseract.js...');
+      console.warn('⚠️ pdf-parse não encontrou texto suficiente');
+      console.log('🔄 Strategy 2: Tentando Tesseract.js para OCR...');
       const textFromOcr = await this.extractWithTesseract(buffer);
       
       if (textFromOcr && textFromOcr.trim().length > 100) {
@@ -30,46 +29,40 @@ export class PdfExtractorService {
         return textFromOcr;
       }
 
-      console.warn('⚠️ Nenhuma estratégia conseguiu extrair texto significativo');
+      console.warn('⚠️ Nenhuma estratégia conseguiu extrair texto');
       return '';
 
     } catch (error) {
       console.error('❌ ERRO NA EXTRAÇÃO:', 
         error instanceof Error ? error.message : String(error)
       );
-      if (error instanceof Error) {
-        console.error('Stack:', error.stack?.substring(0, 300));
-      }
       return '';
     }
   }
 
   private async extractWithPdfParse(buffer: Buffer): Promise<string> {
     try {
-      console.log('  📖 Carregando pdf-parse...');
+      console.log('  📖 Carregando pdf-parse com PDFParse class...');
       
-      // Importar corretamente - pode vir como default export ou função direta
       const pdfParseModule = require('pdf-parse');
-      const pdfParse = pdfParseModule.default || pdfParseModule;
       
-      console.log(`  ✓ Tipo de pdfParse: ${typeof pdfParse}`);
-      
-      if (typeof pdfParse !== 'function') {
-        console.warn(`  ⚠️ pdfParse não é uma função, tipo: ${typeof pdfParse}`);
-        return '';
+      // pdf-parse exporta uma classe PDFParse
+      if (typeof pdfParseModule.PDFParse !== 'function') {
+        throw new Error('PDFParse não é uma função');
       }
 
-      const data = await pdfParse(buffer);
+      // Criar instância e processar
+      const pdfParser = new pdfParseModule.PDFParse();
+      await pdfParser.parseBuffer(buffer);
       
-      console.log(`  ✓ Páginas: ${data.numpages}`);
-      console.log(`  ✓ Caracteres: ${data.text?.length || 0}`);
+      console.log(`  ✓ Páginas: ${pdfParser.numpages}`);
+      console.log(`  ✓ Caracteres: ${pdfParser.text?.length || 0}`);
       
-      if (data.info) {
-        console.log(`  ✓ Producer: "${data.info.Producer || 'N/A'}"`);
-        console.log(`  ✓ Title: "${data.info.Title || 'N/A'}"`);
+      if (pdfParser.info) {
+        console.log(`  ✓ Producer: "${pdfParser.info.Producer || 'N/A'}"`);
       }
       
-      return data.text || '';
+      return pdfParser.text || '';
     } catch (error) {
       console.warn('  ⚠️ pdf-parse falhou:', 
         error instanceof Error ? error.message : String(error)
@@ -84,8 +77,7 @@ export class PdfExtractorService {
       
       const Tesseract = require('tesseract.js');
       
-      // Tesseract.js espera uma imagem, não um PDF diretamente
-      // Vamos tentar, mas provavelmente falhará
+      // Tesseract.js espera uma imagem ou arquivo, tenta diretamente
       const { data: result } = await Tesseract.recognize(buffer, 'por', {
         logger: (m: any) => {
           if (m.status === 'recognizing text' && m.progress > 0) {
@@ -100,7 +92,6 @@ export class PdfExtractorService {
       console.warn('  ⚠️ OCR falhou:', 
         error instanceof Error ? error.message : String(error)
       );
-      console.warn('  ℹ️ OCR não conseguiu processar PDF diretamente');
       return '';
     }
   }
