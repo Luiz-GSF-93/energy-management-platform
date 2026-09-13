@@ -4,89 +4,174 @@ import { Injectable } from '@nestjs/common';
 export class PdfExtractorService {
   async extractText(buffer: Buffer): Promise<string> {
     try {
-      console.log(`📖 === INICIANDO EXTRAÇÃO DE PDF ===`);
+      console.log(`📖 === INICIANDO EXTRAÇÃO INTELIGENTE DE PDF ===`);
       console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
-      // Usar require com dynamic require
-      let pdfParse;
-      try {
-        pdfParse = require('pdf-parse');
-        console.log(`✓ pdf-parse importado`);
-        
-        // Se for um objeto com propriedade default
-        if (pdfParse && pdfParse.default) {
-          pdfParse = pdfParse.default;
-        }
-        
-        // Tenta chamar como função
-        if (typeof pdfParse === 'function') {
-          console.log(`✓ Executando pdfParse...`);
-          const data = await pdfParse(buffer);
-          
-          console.log(`✅ === PDF EXTRAÍDO COM pdf-parse ===`);
-          console.log(`📄 Páginas: ${data.numpages}`);
-          console.log(`📝 Texto: ${data.text?.length || 0} caracteres`);
-          
-          if (data.text && data.text.trim().length > 50) {
-            console.log(`\n📄 === PRIMEIROS 2000 CARACTERES ===\n`);
-            console.log(data.text.substring(0, 2000));
-            console.log(`\n--- FIM ---\n`);
-            return data.text;
-          }
-        }
-      } catch (e) {
-        console.warn(`⚠️ pdf-parse falhou:`, e instanceof Error ? e.message : e);
-      }
+      // Detectar tipo de PDF
+      const pdfType = this.detectPdfType(buffer);
+      console.log(`📊 Tipo de PDF detectado: ${pdfType}`);
 
-      // Fallback: Usar pdfjs-dist
-      console.log(`🔄 Tentando com pdfjs-dist...`);
-      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
-      
       let extractedText = '';
-      try {
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-        console.log(`📄 Total de páginas: ${pdf.numPages}`);
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-          try {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            
-            const pageText = textContent.items
-              .map((item: any) => item.str || '')
-              .join(' ');
-            
-            extractedText += pageText + '\n';
-            console.log(`  ✓ Página ${i}: ${pageText.length} caracteres`);
-          } catch (pageErr) {
-            console.warn(`⚠️ Erro na página ${i}:`, pageErr);
-          }
+      // Strategy 1: Tentar pdf-parse (mais rápido para PDFs simples)
+      if (pdfType === 'SIMPLE' || pdfType === 'UNKNOWN') {
+        console.log(`🔄 Strategy 1: Tentando pdf-parse...`);
+        extractedText = await this.extractWithPdfParse(buffer);
+        
+        if (extractedText && extractedText.trim().length > 100) {
+          console.log(`✅ pdf-parse extraiu ${extractedText.length} caracteres`);
+          return this.cleanAndFormatText(extractedText);
         }
-
-        console.log(`✅ === PDF EXTRAÍDO COM pdfjs-dist ===`);
-        console.log(`📝 Total: ${extractedText.length} caracteres`);
-
-        if (extractedText.trim().length > 50) {
-          console.log(`\n📄 === PRIMEIROS 2000 CARACTERES ===\n`);
-          console.log(extractedText.substring(0, 2000));
-          console.log(`\n--- FIM ---\n`);
-          return extractedText;
-        }
-
-      } catch (pdfErr) {
-        console.error(`❌ pdfjs-dist também falhou:`, pdfErr);
       }
 
-      console.warn(`⚠️ Nenhum texto foi extraído`);
-      return extractedText || '';
+      // Strategy 2: Usar pdfjs-dist (melhor controle)
+      console.log(`🔄 Strategy 2: Tentando pdfjs-dist com controle de páginas...`);
+      extractedText = await this.extractWithPdfjs(buffer);
+      
+      if (extractedText && extractedText.trim().length > 100) {
+        console.log(`✅ pdfjs-dist extraiu ${extractedText.length} caracteres`);
+        return this.cleanAndFormatText(extractedText);
+      }
+
+      // Strategy 3: Fallback - processar como OCR (se implementado)
+      console.log(`⚠️ Nenhuma estratégia extraiu texto significativo`);
+      return extractedText;
 
     } catch (error) {
-      console.error(`❌ === ERRO CRÍTICO NA EXTRAÇÃO ===`);
+      console.error(`❌ === ERRO NA EXTRAÇÃO ===`);
       if (error instanceof Error) {
-        console.error(`📌 Mensagem: ${error.message}`);
+        console.error(`📌 ${error.message}`);
         console.error(`📌 Stack:`, error.stack?.substring(0, 500));
       }
       return '';
     }
+  }
+
+  /**
+   * Detecta o tipo de PDF analisando sua estrutura
+   */
+  private detectPdfType(buffer: Buffer): string {
+    try {
+      const header = buffer.toString('ascii', 0, 100);
+      
+      // Verificar se é PDF protegido/criptografado
+      if (header.includes('Encrypt')) {
+        console.log(`  ⚠️ PDF protegido/criptografado detectado`);
+        return 'PROTECTED';
+      }
+      
+      // Verificar se é PDF com conteúdo complexo
+      if (header.includes('Form') || header.includes('XObject')) {
+        console.log(`  ℹ️ PDF com conteúdo complexo detectado`);
+        return 'COMPLEX';
+      }
+      
+      // Verificar se é PDF com imagens (pode ser scaneado)
+      if (header.includes('Image') || header.includes('DCTDecode')) {
+        console.log(`  ℹ️ PDF com imagens detectado`);
+        return 'IMAGE_BASED';
+      }
+
+      console.log(`  ℹ️ PDF simples detectado`);
+      return 'SIMPLE';
+    } catch (e) {
+      return 'UNKNOWN';
+    }
+  }
+
+  /**
+   * Strategy 1: Usar pdf-parse (rápido, simples)
+   */
+  private async extractWithPdfParse(buffer: Buffer): Promise<string> {
+    try {
+      console.log(`  📖 Carregando pdf-parse...`);
+      
+      const pdfParse = require('pdf-parse');
+      console.log(`  ✓ Tipo: ${typeof pdfParse}`);
+
+      const data = await pdfParse(buffer);
+      
+      console.log(`  ✓ Páginas: ${data.numpages}`);
+      console.log(`  ✓ Texto: ${data.text?.length || 0} caracteres`);
+      
+      if (data.text && data.text.trim().length > 50) {
+        console.log(`\n📄 === PRIMEIRO 1500 CHARS (pdf-parse) ===\n`);
+        console.log(data.text.substring(0, 1500));
+        console.log(`\n--- FIM ---\n`);
+      }
+      
+      return data.text || '';
+    } catch (error) {
+      console.warn(`  ⚠️ pdf-parse falhou:`, 
+        error instanceof Error ? error.message : error
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Strategy 2: Usar pdfjs-dist (maior controle)
+   */
+  private async extractWithPdfjs(buffer: Buffer): Promise<string> {
+    try {
+      console.log(`  📖 Carregando pdfjs-dist...`);
+      
+      const pdfjsLib = require('pdfjs-dist');
+      console.log(`  ✓ pdfjs-dist carregado`);
+
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      console.log(`  ✓ Páginas: ${pdf.numPages}`);
+
+      let fullText = '';
+      const maxPages = Math.min(pdf.numPages, 50); // Limitar a 50 páginas
+
+      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+        try {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          // Extrair texto preservando ordem
+          const pageText = textContent.items
+            .map((item: any) => item.str || '')
+            .join(' ');
+          
+          fullText += pageText + '\n';
+          console.log(`  ✓ Página ${pageNum}: ${pageText.length} chars`);
+        } catch (pageError) {
+          console.warn(`  ⚠️ Erro na página ${pageNum}`);
+          continue;
+        }
+      }
+
+      console.log(`  ✓ Total extraído: ${fullText.length} caracteres`);
+      
+      if (fullText.trim().length > 50) {
+        console.log(`\n📄 === PRIMEIRO 1500 CHARS (pdfjs-dist) ===\n`);
+        console.log(fullText.substring(0, 1500));
+        console.log(`\n--- FIM ---\n`);
+      }
+
+      return fullText;
+    } catch (error) {
+      console.warn(`  ⚠️ pdfjs-dist falhou:`,
+        error instanceof Error ? error.message : error
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Limpar e formatar texto extraído
+   */
+  private cleanAndFormatText(text: string): string {
+    if (!text) return '';
+
+    return text
+      // Remover quebras de linha excessivas
+      .replace(/\n\n+/g, '\n')
+      // Remover espaços excessivos
+      .replace(/  +/g, ' ')
+      // Trimmar
+      .trim();
   }
 }
