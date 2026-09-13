@@ -29,7 +29,6 @@
     "@supabase/supabase-js": "^2.38.4",
     "@types/bcrypt": "^6.0.0",
     "bcrypt": "^6.0.0",
-    "canvas": "^3.2.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "multer": "^2.3.0",
