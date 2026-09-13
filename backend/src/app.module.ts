@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { getDatabaseConfig } from './config/database.config';
 import { AppController } from './app.controller';
@@ -17,10 +18,16 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { BackofficeModule } from './modules/backoffice/backoffice.module';
 import { DocumentProcessingModule } from './modules/document-processing/document-processing.module';
+import { SharedModule } from './modules/shared/shared.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ['.env', '.env.local'],
+    }),
     TypeOrmModule.forRoot(getDatabaseConfig()),
+    SharedModule,
     AuthModule,
     UsersModule,
     CustomersModule,
