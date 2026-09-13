@@ -26,7 +26,6 @@ export class DocumentProcessingController {
           const filename = `${Date.now()}-${uuidv4()}${ext}`;
           cb(null, filename);
         },
-        limits: { fileSize: 10 * 1024 * 1024 },
       }),
     }),
   )
