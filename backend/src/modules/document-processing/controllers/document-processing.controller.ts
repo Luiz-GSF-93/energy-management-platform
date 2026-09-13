@@ -6,7 +6,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { InvoiceDataExtractorService } from '../services/invoice-data-extractor.service';
-import { DocumentPersistenceService } from '../services/document-persistence.service';
 
 type UploadedFileType = Express.Multer.File;
 
@@ -15,7 +14,6 @@ export class DocumentProcessingController {
   constructor(
     private pdfExtractorService: PdfExtractorService,
     private invoiceDataExtractorService: InvoiceDataExtractorService,
-    private documentPersistenceService: DocumentPersistenceService,
   ) {}
   
   @Post('upload')
@@ -28,8 +26,8 @@ export class DocumentProcessingController {
           const filename = `${Date.now()}-${uuidv4()}${ext}`;
           cb(null, filename);
         },
+        limits: { fileSize: 10 * 1024 * 1024 },
       }),
-      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
   async uploadDocument(
@@ -38,44 +36,28 @@ export class DocumentProcessingController {
     @Headers('x-empresa-id') empresaId: string,
   ) {
     console.log('📤 === UPLOAD INICIADO ===');
-    console.log(`📦 Arquivo: ${file.originalname}`);
-    console.log(`📊 Tamanho: ${file.size} bytes`);
-    console.log(`🏢 Org: ${organizationId}, Empresa: ${empresaId}\n`);
+    console.log(`📄 Arquivo: ${file.originalname} (${file.size} bytes)`);
+    console.log(`🏢 Organização: ${organizationId}`);
+    console.log(`🏭 Empresa: ${empresaId}`);
 
     try {
+      // Ler o arquivo do disco
       const fileBuffer = fs.readFileSync(file.path);
-      console.log(`✅ Arquivo lido: ${fileBuffer.length} bytes`);
+      console.log(`📦 Buffer lido: ${fileBuffer.length} bytes`);
 
       let extractedText = '';
-      let invoiceData: any = null;
-      let validation: any = null;
-      let persistedData: any = null;
+      let invoiceData = {};
 
+      // Se for PDF, extrair texto
       if (file.mimetype === 'application/pdf') {
-        console.log('\n🔄 Iniciando extração de texto...\n');
+        console.log('🔍 Extraindo texto do PDF...');
         extractedText = await this.pdfExtractorService.extractText(fileBuffer);
-        console.log(`✅ Texto extraído: ${extractedText.length} caracteres\n`);
+        console.log(`✅ Texto extraído: ${extractedText.length} caracteres`);
 
-        console.log('🔄 Iniciando extração de dados estruturados...\n');
+        // Extrair dados estruturados
+        console.log('📊 Extraindo dados de fatura...');
         invoiceData = this.invoiceDataExtractorService.extractData(extractedText);
-
-        console.log('\n🔄 Validando fatura...\n');
-        validation = this.invoiceDataExtractorService.validateInvoice(invoiceData);
-
-        // ✅ Persistir dados
-        console.log('\n🔄 Persistindo dados...\n');
-        persistedData = await this.documentPersistenceService.saveDocument({
-          filename: file.filename,
-          originalName: file.originalname,
-          mimeType: file.mimetype,
-          fileSize: file.size,
-          filePath: file.path,
-          extractedText,
-          invoiceData,
-          validationResult: validation,
-          organizationId,
-          empresaId,
-        });
+        console.log(`✅ Dados extraídos: ${JSON.stringify(invoiceData)}`);
       }
 
       return {
@@ -88,45 +70,28 @@ export class DocumentProcessingController {
           mimetype: file.mimetype,
           path: file.path,
         },
+        extracted: {
+          textLength: extractedText.length,
+          text: extractedText.substring(0, 1000),
+        },
+        invoiceData,
         headers: {
           organizationId,
           empresaId,
         },
-        extraction: {
-          textLength: extractedText.length,
-          textPreview: extractedText.substring(0, 300),
-        },
-        invoiceData: invoiceData ? {
-          invoiceNumber: invoiceData.invoiceNumber,
-          emissionDate: invoiceData.emissionDate,
-          referenceMonth: invoiceData.referenceMonth,
-          dueDate: invoiceData.dueDate,
-          clientName: invoiceData.clientName,
-          clientCnpj: invoiceData.clientCnpj,
-          distributorName: invoiceData.distributorName,
-          consumerUnit: invoiceData.consumerUnit,
-          consumptionKwh: invoiceData.consumptionKwh,
-          demandKw: invoiceData.demandKw,
-          totalAmount: invoiceData.totalAmount,
-          currency: invoiceData.currency,
-        } : null,
-        validation: validation || null,
-        persisted: persistedData || null,
       };
     } catch (error) {
       console.error('❌ Erro no upload:', error);
       return {
         success: false,
-        message: 'Erro ao processar o upload',
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
       };
     }
   }
 
   @Get()
-  listDocuments() {
-    console.log('📋 Listando documentos...');
-    return { 
+  async listDocuments() {
+    return {
       success: true,
       documents: [],
       message: 'Lista de documentos vazia',
@@ -134,12 +99,11 @@ export class DocumentProcessingController {
   }
 
   @Get(':documentId/status')
-  getDocumentStatus(@Param('documentId') documentId: string) {
-    console.log(`📍 Buscando status do documento: ${documentId}`);
-    return { 
-      success: true,
-      documentId, 
+  async getDocumentStatus(@Param('documentId') documentId: string) {
+    return {
+      documentId,
       status: 'PENDING',
+      message: `Verificando status do documento: ${documentId}`,
     };
   }
 }
