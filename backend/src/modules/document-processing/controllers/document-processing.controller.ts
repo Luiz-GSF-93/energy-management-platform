@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { InvoiceDataExtractorService } from '../services/invoice-data-extractor.service';
+import { DocumentPersistenceService } from '../services/document-persistence.service';
 
 type UploadedFileType = Express.Multer.File;
 
@@ -14,6 +15,7 @@ export class DocumentProcessingController {
   constructor(
     private pdfExtractorService: PdfExtractorService,
     private invoiceDataExtractorService: InvoiceDataExtractorService,
+    private documentPersistenceService: DocumentPersistenceService,
   ) {}
   
   @Post('upload')
@@ -47,19 +49,33 @@ export class DocumentProcessingController {
       let extractedText = '';
       let invoiceData: any = null;
       let validation: any = null;
+      let persistedData: any = null;
 
       if (file.mimetype === 'application/pdf') {
         console.log('\n🔄 Iniciando extração de texto...\n');
         extractedText = await this.pdfExtractorService.extractText(fileBuffer);
         console.log(`✅ Texto extraído: ${extractedText.length} caracteres\n`);
 
-        // ✅ Extrair dados estruturados
         console.log('🔄 Iniciando extração de dados estruturados...\n');
         invoiceData = this.invoiceDataExtractorService.extractData(extractedText);
 
-        // ✅ Validar fatura
         console.log('\n🔄 Validando fatura...\n');
         validation = this.invoiceDataExtractorService.validateInvoice(invoiceData);
+
+        // ✅ Persistir dados
+        console.log('\n🔄 Persistindo dados...\n');
+        persistedData = await this.documentPersistenceService.saveDocument({
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          fileSize: file.size,
+          filePath: file.path,
+          extractedText,
+          invoiceData,
+          validationResult: validation,
+          organizationId,
+          empresaId,
+        });
       }
 
       return {
@@ -78,7 +94,7 @@ export class DocumentProcessingController {
         },
         extraction: {
           textLength: extractedText.length,
-          textPreview: extractedText.substring(0, 500),
+          textPreview: extractedText.substring(0, 300),
         },
         invoiceData: invoiceData ? {
           invoiceNumber: invoiceData.invoiceNumber,
@@ -95,6 +111,7 @@ export class DocumentProcessingController {
           currency: invoiceData.currency,
         } : null,
         validation: validation || null,
+        persisted: persistedData || null,
       };
     } catch (error) {
       console.error('❌ Erro no upload:', error);
