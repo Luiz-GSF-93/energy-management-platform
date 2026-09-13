@@ -1,32 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
 import { DocumentEntity } from '../entities/document.entity';
 
 @Injectable()
-export class DocumentRepository extends Repository<DocumentEntity> {
-  constructor(private dataSource: DataSource) {
-    super(DocumentEntity, dataSource.createEntityManager());
+export class DocumentRepository {
+  private documents: DocumentEntity[] = [];
+
+  async save(document: DocumentEntity): Promise<DocumentEntity> {
+    this.documents.push(document);
+    return document;
   }
 
-  async findByInvoiceNumber(invoiceNumber: string, organizationId: string): Promise<DocumentEntity | null> {
-    return this.findOne({
-      where: { invoiceNumber, organizationId },
-      order: { createdAt: 'DESC' },
-    });
+  async findById(id: string): Promise<DocumentEntity | null> {
+    return this.documents.find(d => d.id === id) || null;
   }
 
-  async findByOrganization(organizationId: string, limit: number = 50): Promise<DocumentEntity[]> {
-    return this.find({
-      where: { organizationId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+  async findByOrganization(organizationId: string): Promise<DocumentEntity[]> {
+    return this.documents.filter(d => d.organizationId === organizationId);
   }
 
-  async findValidInvoices(organizationId: string): Promise<DocumentEntity[]> {
-    return this.find({
-      where: { organizationId, isValidInvoice: true },
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(): Promise<DocumentEntity[]> {
+    return this.documents;
   }
 }
