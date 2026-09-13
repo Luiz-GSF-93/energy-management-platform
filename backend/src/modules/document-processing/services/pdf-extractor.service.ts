@@ -3,175 +3,134 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class PdfExtractorService {
   async extractText(buffer: Buffer): Promise<string> {
+    console.log('📖 === INICIANDO EXTRAÇÃO DE PDF ===');
+    console.log(`📦 Buffer size: ${buffer.length} bytes`);
+
     try {
-      console.log(`📖 === INICIANDO EXTRAÇÃO INTELIGENTE DE PDF ===`);
-      console.log(`📦 Buffer size: ${buffer.length} bytes`);
-
-      // Detectar tipo de PDF
-      const pdfType = this.detectPdfType(buffer);
-      console.log(`📊 Tipo de PDF detectado: ${pdfType}`);
-
-      let extractedText = '';
-
-      // Strategy 1: Tentar pdf-parse (mais rápido para PDFs simples)
-      if (pdfType === 'SIMPLE' || pdfType === 'UNKNOWN') {
-        console.log(`🔄 Strategy 1: Tentando pdf-parse...`);
-        extractedText = await this.extractWithPdfParse(buffer);
-        
-        if (extractedText && extractedText.trim().length > 100) {
-          console.log(`✅ pdf-parse extraiu ${extractedText.length} caracteres`);
-          return this.cleanAndFormatText(extractedText);
-        }
-      }
-
-      // Strategy 2: Usar pdfjs-dist (melhor controle)
-      console.log(`🔄 Strategy 2: Tentando pdfjs-dist com controle de páginas...`);
-      extractedText = await this.extractWithPdfjs(buffer);
+      // Strategy 1: pdf-parse
+      console.log('🔄 Strategy 1: Tentando pdf-parse...');
+      const textFromPdfParse = await this.extractWithPdfParse(buffer);
       
-      if (extractedText && extractedText.trim().length > 100) {
-        console.log(`✅ pdfjs-dist extraiu ${extractedText.length} caracteres`);
-        return this.cleanAndFormatText(extractedText);
+      if (textFromPdfParse && textFromPdfParse.trim().length > 100) {
+        console.log(`✅ pdf-parse extraiu ${textFromPdfParse.length} caracteres`);
+        console.log('\n📄 === PRIMEIROS 2000 CARACTERES ===\n');
+        console.log(textFromPdfParse.substring(0, 2000));
+        return textFromPdfParse;
       }
 
-      // Strategy 3: Fallback - processar como OCR (se implementado)
-      console.log(`⚠️ Nenhuma estratégia extraiu texto significativo`);
-      return extractedText;
+      // Strategy 2: pdfjs-dist
+      console.log('🔄 Strategy 2: Tentando pdfjs-dist...');
+      const textFromPdfjs = await this.extractWithPdfjs(buffer);
+      
+      if (textFromPdfjs && textFromPdfjs.trim().length > 100) {
+        console.log(`✅ pdfjs-dist extraiu ${textFromPdfjs.length} caracteres`);
+        console.log('\n📄 === PRIMEIROS 2000 CARACTERES ===\n');
+        console.log(textFromPdfjs.substring(0, 2000));
+        return textFromPdfjs;
+      }
+
+      // Strategy 3: OCR com Tesseract
+      console.log('🔄 Strategy 3: Tentando OCR com Tesseract.js...');
+      const textFromOcr = await this.extractWithTesseract(buffer);
+      
+      if (textFromOcr && textFromOcr.trim().length > 100) {
+        console.log(`✅ OCR extraiu ${textFromOcr.length} caracteres`);
+        console.log('\n📄 === PRIMEIROS 2000 CARACTERES ===\n');
+        console.log(textFromOcr.substring(0, 2000));
+        return textFromOcr;
+      }
+
+      console.warn('⚠️ Nenhuma estratégia conseguiu extrair texto significativo');
+      return '';
 
     } catch (error) {
-      console.error(`❌ === ERRO NA EXTRAÇÃO ===`);
-      if (error instanceof Error) {
-        console.error(`📌 ${error.message}`);
-        console.error(`📌 Stack:`, error.stack?.substring(0, 500));
-      }
+      console.error('❌ ERRO NA EXTRAÇÃO:', 
+        error instanceof Error ? error.message : String(error)
+      );
       return '';
     }
   }
 
-  /**
-   * Detecta o tipo de PDF analisando sua estrutura
-   */
-  private detectPdfType(buffer: Buffer): string {
-    try {
-      const header = buffer.toString('ascii', 0, 100);
-      
-      // Verificar se é PDF protegido/criptografado
-      if (header.includes('Encrypt')) {
-        console.log(`  ⚠️ PDF protegido/criptografado detectado`);
-        return 'PROTECTED';
-      }
-      
-      // Verificar se é PDF com conteúdo complexo
-      if (header.includes('Form') || header.includes('XObject')) {
-        console.log(`  ℹ️ PDF com conteúdo complexo detectado`);
-        return 'COMPLEX';
-      }
-      
-      // Verificar se é PDF com imagens (pode ser scaneado)
-      if (header.includes('Image') || header.includes('DCTDecode')) {
-        console.log(`  ℹ️ PDF com imagens detectado`);
-        return 'IMAGE_BASED';
-      }
-
-      console.log(`  ℹ️ PDF simples detectado`);
-      return 'SIMPLE';
-    } catch (e) {
-      return 'UNKNOWN';
-    }
-  }
-
-  /**
-   * Strategy 1: Usar pdf-parse (rápido, simples)
-   */
   private async extractWithPdfParse(buffer: Buffer): Promise<string> {
     try {
-      console.log(`  📖 Carregando pdf-parse...`);
-      
       const pdfParse = require('pdf-parse');
-      console.log(`  ✓ Tipo: ${typeof pdfParse}`);
-
       const data = await pdfParse(buffer);
       
-      console.log(`  ✓ Páginas: ${data.numpages}`);
-      console.log(`  ✓ Texto: ${data.text?.length || 0} caracteres`);
-      
-      if (data.text && data.text.trim().length > 50) {
-        console.log(`\n📄 === PRIMEIRO 1500 CHARS (pdf-parse) ===\n`);
-        console.log(data.text.substring(0, 1500));
-        console.log(`\n--- FIM ---\n`);
-      }
-      
+      console.log(`  ✓ pdf-parse: ${data.numpages} páginas, ${data.text?.length || 0} chars`);
       return data.text || '';
     } catch (error) {
-      console.warn(`  ⚠️ pdf-parse falhou:`, 
-        error instanceof Error ? error.message : error
+      console.warn('  ⚠️ pdf-parse falhou:', 
+        error instanceof Error ? error.message : String(error)
       );
       return '';
     }
   }
 
-  /**
-   * Strategy 2: Usar pdfjs-dist (maior controle)
-   */
   private async extractWithPdfjs(buffer: Buffer): Promise<string> {
     try {
-      console.log(`  📖 Carregando pdfjs-dist...`);
-      
-      const pdfjsLib = require('pdfjs-dist');
-      console.log(`  ✓ pdfjs-dist carregado`);
-
+      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-      console.log(`  ✓ Páginas: ${pdf.numPages}`);
-
-      let fullText = '';
-      const maxPages = Math.min(pdf.numPages, 50); // Limitar a 50 páginas
-
-      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-        try {
-          const page = await pdf.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          
-          // Extrair texto preservando ordem
-          const pageText = textContent.items
-            .map((item: any) => item.str || '')
-            .join(' ');
-          
-          fullText += pageText + '\n';
-          console.log(`  ✓ Página ${pageNum}: ${pageText.length} chars`);
-        } catch (pageError) {
-          console.warn(`  ⚠️ Erro na página ${pageNum}`);
-          continue;
-        }
-      }
-
-      console.log(`  ✓ Total extraído: ${fullText.length} caracteres`);
       
-      if (fullText.trim().length > 50) {
-        console.log(`\n📄 === PRIMEIRO 1500 CHARS (pdfjs-dist) ===\n`);
-        console.log(fullText.substring(0, 1500));
-        console.log(`\n--- FIM ---\n`);
+      let fullText = '';
+      const maxPages = Math.min(pdf.numPages, 10);
+
+      for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const text = await page.getTextContent();
+        const pageText = text.items.map((item: any) => item.str || '').join(' ');
+        fullText += pageText + '\n';
       }
 
+      console.log(`  ✓ pdfjs-dist: ${pdf.numPages} páginas, ${fullText.length} chars`);
       return fullText;
     } catch (error) {
-      console.warn(`  ⚠️ pdfjs-dist falhou:`,
-        error instanceof Error ? error.message : error
+      console.warn('  ⚠️ pdfjs-dist falhou:', 
+        error instanceof Error ? error.message : String(error)
       );
       return '';
     }
   }
 
-  /**
-   * Limpar e formatar texto extraído
-   */
-  private cleanAndFormatText(text: string): string {
-    if (!text) return '';
+  private async extractWithTesseract(buffer: Buffer): Promise<string> {
+    try {
+      console.log('  📖 Preparando Tesseract.js...');
+      
+      const Tesseract = require('tesseract.js');
+      const sharp = require('sharp');
+      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
-    return text
-      // Remover quebras de linha excessivas
-      .replace(/\n\n+/g, '\n')
-      // Remover espaços excessivos
-      .replace(/  +/g, ' ')
-      // Trimmar
-      .trim();
+      // Converter primeira página do PDF para imagem
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const page = await pdf.getPage(1);
+      
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = require('canvas').createCanvas(viewport.width, viewport.height);
+      const ctx = canvas.getContext('2d');
+
+      await page.render({
+        canvasContext: ctx,
+        viewport: viewport,
+      }).promise;
+
+      const imageData = canvas.toBuffer('image/png');
+      console.log('  ✓ PDF convertido para imagem');
+
+      // Executar OCR
+      const { data: result } = await Tesseract.recognize(imageData, 'por', {
+        logger: (m: any) => {
+          if (m.status === 'recognizing text') {
+            console.log(`  📊 OCR Progress: ${Math.round(m.progress * 100)}%`);
+          }
+        },
+      });
+
+      console.log(`  ✓ OCR concluído: ${result.text.length} chars`);
+      return result.text;
+    } catch (error) {
+      console.warn('  ⚠️ OCR falhou:', 
+        error instanceof Error ? error.message : String(error)
+      );
+      return '';
+    }
   }
 }
