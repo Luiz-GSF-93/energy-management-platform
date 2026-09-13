@@ -3,6 +3,7 @@ import { DocumentEntity } from '../modules/document-processing/entities/document
 
 export const getDatabaseConfig = (): TypeOrmModuleOptions => {
   const isProduction = process.env.NODE_ENV === 'production';
+  const hasDbConfig = process.env.DATABASE_HOST && process.env.DATABASE_USER;
 
   return {
     type: 'postgres',
@@ -12,14 +13,11 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
     password: process.env.DATABASE_PASSWORD || 'postgres',
     database: process.env.DATABASE_NAME || 'energy_db',
     entities: [DocumentEntity],
-    synchronize: !isProduction,
-    logging: isProduction ? false : true,
+    synchronize: !isProduction && hasDbConfig,
+    logging: false,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
-    extra: {
-      max: 10,
-      min: 2,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    },
+    retryAttempts: 1,
+    retryDelay: 1000,
+    connectTimeoutMS: 5000,
   };
 };
