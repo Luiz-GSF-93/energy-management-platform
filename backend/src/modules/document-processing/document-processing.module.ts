@@ -4,6 +4,7 @@ import { ValidationService } from './services/validation.service';
 import { ContractValidationService } from './services/contract-validation.service';
 import { DistributorDetectorService } from './services/distributor-detector.service';
 import { PdfExtractorService } from './services/pdf-extractor.service';
+import { InvoiceDataExtractorService } from './services/invoice-data-extractor.service';
 import { GenericParser } from './parsers/generic.parser';
 import { EnergyInvoiceParser } from './parsers/energy-invoice.parser';
 import { CpflParser } from './parsers/cpfl.parser';
@@ -15,10 +16,16 @@ import { CpflParser } from './parsers/cpfl.parser';
     ContractValidationService,
     DistributorDetectorService,
     PdfExtractorService,
+    InvoiceDataExtractorService,
     GenericParser,
     EnergyInvoiceParser,
     CpflParser,
   ],
-  exports: [ValidationService, ContractValidationService, EnergyInvoiceParser],
+  exports: [
+    ValidationService,
+    ContractValidationService,
+    EnergyInvoiceParser,
+    InvoiceDataExtractorService,
+  ],
 })
 export class DocumentProcessingModule {}

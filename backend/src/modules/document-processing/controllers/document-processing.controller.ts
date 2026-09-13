@@ -5,12 +5,16 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
+import { InvoiceDataExtractorService } from '../services/invoice-data-extractor.service';
 
 type UploadedFileType = Express.Multer.File;
 
 @Controller('document-processing')
 export class DocumentProcessingController {
-  constructor(private pdfExtractorService: PdfExtractorService) {}
+  constructor(
+    private pdfExtractorService: PdfExtractorService,
+    private invoiceDataExtractorService: InvoiceDataExtractorService,
+  ) {}
   
   @Post('upload')
   @UseInterceptors(
@@ -37,15 +41,25 @@ export class DocumentProcessingController {
     console.log(`🏢 Org: ${organizationId}, Empresa: ${empresaId}\n`);
 
     try {
-      // Ler o arquivo do disco
       const fileBuffer = fs.readFileSync(file.path);
-      console.log(`✅ Arquivo carregado: ${fileBuffer.length} bytes`);
+      console.log(`✅ Arquivo lido: ${fileBuffer.length} bytes`);
 
-      // Extrair texto do PDF
       let extractedText = '';
+      let invoiceData: any = null;
+      let validation: any = null;
+
       if (file.mimetype === 'application/pdf') {
-        console.log('\n🔄 Iniciando extração de texto do PDF...\n');
+        console.log('\n🔄 Iniciando extração de texto...\n');
         extractedText = await this.pdfExtractorService.extractText(fileBuffer);
+        console.log(`✅ Texto extraído: ${extractedText.length} caracteres\n`);
+
+        // ✅ Extrair dados estruturados
+        console.log('🔄 Iniciando extração de dados estruturados...\n');
+        invoiceData = this.invoiceDataExtractorService.extractData(extractedText);
+
+        // ✅ Validar fatura
+        console.log('\n🔄 Validando fatura...\n');
+        validation = this.invoiceDataExtractorService.validateInvoice(invoiceData);
       }
 
       return {
@@ -62,10 +76,25 @@ export class DocumentProcessingController {
           organizationId,
           empresaId,
         },
-        extracted: {
+        extraction: {
           textLength: extractedText.length,
-          text: extractedText.substring(0, 1000), // Primeiros 1000 caracteres
+          textPreview: extractedText.substring(0, 500),
         },
+        invoiceData: invoiceData ? {
+          invoiceNumber: invoiceData.invoiceNumber,
+          emissionDate: invoiceData.emissionDate,
+          referenceMonth: invoiceData.referenceMonth,
+          dueDate: invoiceData.dueDate,
+          clientName: invoiceData.clientName,
+          clientCnpj: invoiceData.clientCnpj,
+          distributorName: invoiceData.distributorName,
+          consumerUnit: invoiceData.consumerUnit,
+          consumptionKwh: invoiceData.consumptionKwh,
+          demandKw: invoiceData.demandKw,
+          totalAmount: invoiceData.totalAmount,
+          currency: invoiceData.currency,
+        } : null,
+        validation: validation || null,
       };
     } catch (error) {
       console.error('❌ Erro no upload:', error);
