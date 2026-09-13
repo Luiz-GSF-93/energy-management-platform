@@ -4,11 +4,13 @@ import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import { PdfExtractorService } from '../services/pdf-extractor.service';
 
 type UploadedFileType = Express.Multer.File;
 
 @Controller('document-processing')
 export class DocumentProcessingController {
+  constructor(private pdfExtractorService: PdfExtractorService) {}
   
   @Post('upload')
   @UseInterceptors(
@@ -35,8 +37,16 @@ export class DocumentProcessingController {
     console.log(`🏢 Org: ${organizationId}, Empresa: ${empresaId}\n`);
 
     try {
+      // Ler o arquivo do disco
       const fileBuffer = fs.readFileSync(file.path);
       console.log(`✅ Arquivo carregado: ${fileBuffer.length} bytes`);
+
+      // Extrair texto do PDF
+      let extractedText = '';
+      if (file.mimetype === 'application/pdf') {
+        console.log('\n🔄 Iniciando extração de texto do PDF...\n');
+        extractedText = await this.pdfExtractorService.extractText(fileBuffer);
+      }
 
       return {
         success: true,
@@ -53,7 +63,8 @@ export class DocumentProcessingController {
           empresaId,
         },
         extracted: {
-          textLength: fileBuffer.length,
+          textLength: extractedText.length,
+          text: extractedText.substring(0, 1000), // Primeiros 1000 caracteres
         },
       };
     } catch (error) {

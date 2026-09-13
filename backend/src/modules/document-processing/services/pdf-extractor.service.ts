@@ -5,54 +5,37 @@ export class PdfExtractorService {
   async extractText(buffer: Buffer): Promise<string> {
     console.log('📖 === INICIANDO EXTRAÇÃO DE PDF ===');
     console.log(`📦 Buffer size: ${buffer.length} bytes`);
-
+    
     try {
-      // Strategy 1: pdf-parse (função simples)
-      console.log('🔄 Strategy 1: Tentando pdf-parse...');
-      const textFromPdfParse = await this.extractWithPdfParse(buffer);
+      // Importar pdfjs-dist
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.js');
+      const pdfjsLib = pdfjs.default;
       
-      if (textFromPdfParse && textFromPdfParse.trim().length > 100) {
-        console.log(`✅ pdf-parse extraiu ${textFromPdfParse.length} caracteres`);
-        console.log('\n📄 === PRIMEIROS 2000 CARACTERES ===\n');
-        console.log(textFromPdfParse.substring(0, 2000));
-        return textFromPdfParse;
-      }
-
-      console.warn('⚠️ pdf-parse não encontrou texto suficiente');
-      return '';
-
-    } catch (error) {
-      console.error('❌ ERRO NA EXTRAÇÃO:', 
-        error instanceof Error ? error.message : String(error)
-      );
-      return '';
-    }
-  }
-
-  private async extractWithPdfParse(buffer: Buffer): Promise<string> {
-    try {
-      console.log('  📖 Carregando pdf-parse...');
+      // Configurar worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
       
-      // Importar como função direta
-      const pdf = require('pdf-parse/lib/pdf-parse.js');
+      // Fazer parse do PDF
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      console.log(`✅ PDF carregado: ${pdf.numPages} páginas`);
       
-      console.log(`  ✓ Tipo: ${typeof pdf}`);
+      let fullText = '';
       
-      // Chamar a função pdf() com o buffer
-      const data = await pdf(buffer);
-      
-      console.log(`  ✓ Páginas: ${data.numpages}`);
-      console.log(`  ✓ Caracteres: ${data.text?.length || 0}`);
-      
-      if (data.info) {
-        console.log(`  ✓ Producer: "${data.info.Producer || 'N/A'}"`);
+      // Extrair texto de cada página (máximo 10 páginas)
+      const maxPages = Math.min(pdf.numPages, 10);
+      for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join('');
+        fullText += pageText + '\n';
+        console.log(`  ✓ Página ${i}: ${pageText.length} caracteres`);
       }
       
-      return data.text || '';
+      console.log(`✅ Extração concluída: ${fullText.length} caracteres totais`);
+      console.log(`📄 Primeiros 500 caracteres:\n${fullText.substring(0, 500)}\n`);
+      
+      return fullText;
     } catch (error) {
-      console.warn('  ⚠️ pdf-parse falhou:', 
-        error instanceof Error ? error.message : String(error)
-      );
+      console.error('❌ Erro na extração:', error instanceof Error ? error.message : String(error));
       return '';
     }
   }
