@@ -14,6 +14,8 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import * as multer from 'multer';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { ValidationService } from '../services/validation.service';
 import { ContractValidationService } from '../services/contract-validation.service';
@@ -67,6 +69,7 @@ export class DocumentProcessingController {
       console.log(`📄 Arquivo: ${file.originalname}`);
       console.log(`📦 Tamanho: ${file.size} bytes`);
       console.log(`📋 MIME Type: ${file.mimetype}`);
+      console.log(`📁 Caminho: ${file.path}`);
       console.log(`🏢 Org: ${organizationId}, Empresa: ${empresaId}`);
 
       // ============================================
@@ -76,6 +79,7 @@ export class DocumentProcessingController {
       const fileExtension = extname(file.originalname).toLowerCase();
       if (!this.ALLOWED_EXTENSIONS.includes(fileExtension)) {
         console.error(`❌ Extensão não permitida: ${fileExtension}`);
+        await this.deleteFile(file.path);
         throw new BadRequestException(
           `Extensão não permitida. Aceitos: ${this.ALLOWED_EXTENSIONS.join(', ')}`,
         );
@@ -83,6 +87,7 @@ export class DocumentProcessingController {
 
       if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
         console.error(`❌ MIME type não permitido: ${file.mimetype}`);
+        await this.deleteFile(file.path);
         throw new BadRequestException(
           `Tipo de arquivo não permitido. Aceitos: PDF, PNG, JPEG. Recebido: ${file.mimetype}`,
         );
@@ -90,17 +95,23 @@ export class DocumentProcessingController {
 
       if (file.size > this.MAX_FILE_SIZE) {
         console.error(`❌ Arquivo muito grande: ${file.size} bytes`);
+        await this.deleteFile(file.path);
         throw new BadRequestException(
           `Arquivo muito grande. Máximo: 10 MB. Recebido: ${(file.size / 1024 / 1024).toFixed(2)} MB`,
         );
       }
 
+      // Ler arquivo do disco
+      const fileBuffer = fs.readFileSync(file.path);
+      console.log(`✓ Arquivo lido do disco: ${fileBuffer.length} bytes`);
+
       const isValidInvoiceFile = await this.validateInvoiceFile(
-        file.buffer,
+        fileBuffer,
         file.mimetype,
       );
       if (!isValidInvoiceFile) {
         console.error(`❌ Arquivo não parece ser uma fatura de energia`);
+        await this.deleteFile(file.path);
         throw new BadRequestException(
           `Arquivo não parece ser uma fatura de energia. Por favor, envie um PDF ou imagem válido(a) de fatura.`,
         );
@@ -114,7 +125,7 @@ export class DocumentProcessingController {
 
       console.log(`📖 Extraindo texto...`);
       const extractedText = await this.pdfExtractorService.extractText(
-        file.buffer,
+        fileBuffer,
       );
       console.log(`✅ Texto extraído: ${extractedText.length} caracteres`);
 
@@ -256,10 +267,16 @@ export class DocumentProcessingController {
     try {
       console.log(`🔍 Validando se é arquivo de fatura...`);
 
+      if (!buffer || buffer.length === 0) {
+        console.error(`❌ Buffer vazio`);
+        return false;
+      }
+
       if (mimeType === 'application/pdf') {
         const header = buffer.toString('ascii', 0, 4);
         const isPDF = header === '%PDF';
         console.log(`  ✓ Validação PDF: ${isPDF ? 'VÁLIDO' : 'INVÁLIDO'}`);
+        console.log(`  ✓ Header: "${header}"`);
         return isPDF;
       }
 
@@ -268,6 +285,7 @@ export class DocumentProcessingController {
         const isJPEG = buffer[0] === 0xff && buffer[1] === 0xd8;
         const isValid = isPNG || isJPEG;
         console.log(`  ✓ Validação Imagem: ${isValid ? 'VÁLIDO' : 'INVÁLIDO'}`);
+        console.log(`  ✓ Primeiros bytes: [${buffer[0]}, ${buffer[1]}]`);
         return isValid;
       }
 
@@ -293,16 +311,24 @@ export class DocumentProcessingController {
     sourcePath: string,
     destinationPath: string,
   ): Promise<void> {
-    const fs = require('fs').promises;
-    const path = require('path');
-
     const fullDestPath = `./uploads/documents/${destinationPath}`;
     const destDir = path.dirname(fullDestPath);
 
     console.log(`📁 Criando diretório: ${destDir}`);
-    await fs.mkdir(destDir, { recursive: true });
+    await fs.promises.mkdir(destDir, { recursive: true });
 
     console.log(`📤 Movendo arquivo de ${sourcePath} para ${fullDestPath}`);
-    await fs.rename(sourcePath, fullDestPath);
+    await fs.promises.rename(sourcePath, fullDestPath);
+  }
+
+  private async deleteFile(filePath: string): Promise<void> {
+    try {
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        console.log(`🗑️ Arquivo deletado: ${filePath}`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Erro ao deletar arquivo: ${filePath}`, error);
+    }
   }
 }
