@@ -5,8 +5,8 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // ✅ IMPORTANTE: NÃO usar setGlobalPrefix aqui
-  // As rotas já têm /api/v1 nos controllers
+  // ✅ Adicionar prefixo global aqui
+  app.setGlobalPrefix('api/v1');
   
   app.useGlobalPipes(
     new ValidationPipe({
@@ -57,13 +57,14 @@ async function bootstrap() {
   
   const port = process.env.PORT || 3001;
   await app.listen(port, '0.0.0.0');
-  console.log(`✅ Application is running on: http://0.0.0.0:${port}`);
-  console.log(`✅ CORS enabled for: ${corsOrigins.join(', ')}`);
-  console.log(`✅ Custom headers allowed: x-organization-id, x-empresa-id`);
-  console.log(`✅ ValidationPipe enabled globally`);
+  console.log(`✅ Aplicação rodando em: http://0.0.0.0:${port}`);
+  console.log(`✅ Prefixo global: /api/v1`);
+  console.log(`✅ CORS habilitado para: ${corsOrigins.join(', ')}`);
+  console.log(`✅ Headers customizados: x-organization-id, x-empresa-id`);
+  console.log(`✅ ValidationPipe ativo globalmente`);
 }
 
 bootstrap().catch(err => {
-  console.error('❌ Error starting application:', err);
+  console.error('❌ Erro ao iniciar aplicação:', err);
   process.exit(1);
 });

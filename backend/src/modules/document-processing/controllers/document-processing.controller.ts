@@ -5,11 +5,11 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Usar Express.Multer.File em vez de multer.File
 type UploadedFileType = Express.Multer.File;
 
-@Controller('/api/v1/document-processing')
+@Controller('document-processing')
 export class DocumentProcessingController {
+  
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -21,7 +21,7 @@ export class DocumentProcessingController {
           cb(null, filename);
         },
       }),
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
   async uploadDocument(
@@ -35,7 +35,6 @@ export class DocumentProcessingController {
     console.log(`🏢 Org: ${organizationId}, Empresa: ${empresaId}\n`);
 
     try {
-      // Ler o arquivo do disco
       const fileBuffer = fs.readFileSync(file.path);
       console.log(`✅ Arquivo carregado: ${fileBuffer.length} bytes`);
 
@@ -53,6 +52,9 @@ export class DocumentProcessingController {
           organizationId,
           empresaId,
         },
+        extracted: {
+          textLength: fileBuffer.length,
+        },
       };
     } catch (error) {
       console.error('❌ Erro no upload:', error);
@@ -66,11 +68,21 @@ export class DocumentProcessingController {
 
   @Get()
   listDocuments() {
-    return { documents: [] };
+    console.log('📋 Listando documentos...');
+    return { 
+      success: true,
+      documents: [],
+      message: 'Lista de documentos vazia',
+    };
   }
 
   @Get(':documentId/status')
   getDocumentStatus(@Param('documentId') documentId: string) {
-    return { documentId, status: 'PENDING' };
+    console.log(`📍 Buscando status do documento: ${documentId}`);
+    return { 
+      success: true,
+      documentId, 
+      status: 'PENDING',
+    };
   }
 }
