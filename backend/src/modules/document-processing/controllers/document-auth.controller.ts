@@ -41,7 +41,7 @@ export class DocumentAuthController {
     const result = this.authService.refreshToken(body.token);
     
     return {
-      success: !result.error,
+      success: result && 'access_token' in result,
       data: result,
     };
   }
