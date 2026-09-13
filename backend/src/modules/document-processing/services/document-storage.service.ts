@@ -13,6 +13,10 @@ export class DocumentStorageService {
       status: 'COMPLETED',
       createdAt: new Date(),
       updatedAt: new Date(),
+      totalAmount: data.totalAmount || 0,
+      clientName: data.clientName || '',
+      consumptionKwh: data.consumptionKwh || 0,
+      demandKw: data.demandKw || 0,
       ...data,
     } as DocumentEntity;
 
