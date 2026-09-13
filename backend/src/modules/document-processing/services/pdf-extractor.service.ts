@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import * as path from 'path';
 
 @Injectable()
 export class PdfExtractorService {
@@ -11,11 +12,15 @@ export class PdfExtractorService {
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.js');
       const pdfjsLib = pdfjs.default;
       
-      // Configurar worker
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      // ✅ Usar worker local (não CDN)
+      const workerPath = path.join(path.dirname(require.resolve('pdfjs-dist/legacy/build/pdf.js')), 'pdf.worker.min.js');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+      
+      // ✅ Converter Buffer para Uint8Array
+      const uint8Array = new Uint8Array(buffer);
       
       // Fazer parse do PDF
-      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
       console.log(`✅ PDF carregado: ${pdf.numPages} páginas`);
       
       let fullText = '';
