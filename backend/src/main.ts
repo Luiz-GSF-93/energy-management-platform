@@ -5,9 +5,9 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // ✅ SEM setGlobalPrefix (as rotas já têm /api/v1 nos controllers)
+  // ✅ IMPORTANTE: NÃO usar setGlobalPrefix aqui
+  // As rotas já têm /api/v1 nos controllers
   
-  // ✅ ATIVAR VALIDAÇÃO GLOBAL
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -32,7 +32,6 @@ async function bootstrap() {
     corsOrigins.push(process.env.CORS_ORIGIN);
   }
 
-  // ✅ CORS CONFIGURADO CORRETAMENTE COM HEADERS CUSTOMIZADOS
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
@@ -57,8 +56,8 @@ async function bootstrap() {
   });
   
   const port = process.env.PORT || 3001;
-  await app.listen(port);
-  console.log(`✅ Application is running on: http://localhost:${port}`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`✅ Application is running on: http://0.0.0.0:${port}`);
   console.log(`✅ CORS enabled for: ${corsOrigins.join(', ')}`);
   console.log(`✅ Custom headers allowed: x-organization-id, x-empresa-id`);
   console.log(`✅ ValidationPipe enabled globally`);
