@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PdfExtractorService } from '../services/pdf-extractor.service';
 import { InvoiceDataExtractorService } from '../services/invoice-data-extractor.service';
+import { DocumentStorageService } from '../services/document-storage.service';
 
 type UploadedFileType = Express.Multer.File;
 
@@ -14,6 +15,7 @@ export class DocumentProcessingController {
   constructor(
     private pdfExtractorService: PdfExtractorService,
     private invoiceDataExtractorService: InvoiceDataExtractorService,
+    private documentStorageService: DocumentStorageService,
   ) {}
   
   @Post('upload')
@@ -45,7 +47,7 @@ export class DocumentProcessingController {
       console.log(`📦 Buffer lido: ${fileBuffer.length} bytes`);
 
       let extractedText = '';
-      let invoiceData = {};
+      let invoiceData: any = {};
 
       // Se for PDF, extrair texto
       if (file.mimetype === 'application/pdf') {
@@ -59,9 +61,31 @@ export class DocumentProcessingController {
         console.log(`✅ Dados extraídos: ${JSON.stringify(invoiceData)}`);
       }
 
+      // 💾 Salvar documento no storage
+      console.log('💾 Salvando documento...');
+      const savedDocument = await this.documentStorageService.saveDocument({
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        filePath: file.path,
+        extractedText,
+        invoiceNumber: invoiceData.invoiceNumber,
+        emissionDate: invoiceData.emissionDate,
+        referenceMonth: invoiceData.referenceMonth,
+        dueDate: invoiceData.dueDate,
+        clientCnpj: invoiceData.clientCnpj,
+        distributorName: invoiceData.distributorName,
+        currency: invoiceData.currency,
+        organizationId,
+        empresaId,
+      });
+      console.log(`✅ Documento salvo com ID: ${savedDocument.id}`);
+
       return {
         success: true,
         message: 'Upload realizado com sucesso',
+        documentId: savedDocument.id,
         file: {
           originalName: file.originalname,
           filename: file.filename,
@@ -89,20 +113,61 @@ export class DocumentProcessingController {
   }
 
   @Get()
-  async listDocuments() {
+  async listDocuments(
+    @Headers('x-organization-id') organizationId: string,
+  ) {
+    console.log(`📋 Listando documentos para organização: ${organizationId}`);
+    
+    let documents = [];
+    if (organizationId) {
+      documents = await this.documentStorageService.getDocumentsByOrganization(organizationId);
+    } else {
+      documents = await this.documentStorageService.getAllDocuments();
+    }
+
     return {
       success: true,
-      documents: [],
-      message: 'Lista de documentos vazia',
+      total: documents.length,
+      documents,
+      message: documents.length === 0 ? 'Nenhum documento encontrado' : `${documents.length} documento(s) encontrado(s)`,
+    };
+  }
+
+  @Get(':documentId')
+  async getDocument(@Param('documentId') documentId: string) {
+    console.log(`🔍 Buscando documento: ${documentId}`);
+    const document = await this.documentStorageService.getDocument(documentId);
+
+    if (!document) {
+      return {
+        success: false,
+        error: 'Documento não encontrado',
+      };
+    }
+
+    return {
+      success: true,
+      document,
     };
   }
 
   @Get(':documentId/status')
   async getDocumentStatus(@Param('documentId') documentId: string) {
+    const document = await this.documentStorageService.getDocument(documentId);
+
+    if (!document) {
+      return {
+        success: false,
+        error: 'Documento não encontrado',
+      };
+    }
+
     return {
+      success: true,
       documentId,
-      status: 'PENDING',
-      message: `Verificando status do documento: ${documentId}`,
+      status: document.status,
+      createdAt: document.createdAt,
+      updatedAt: document.updatedAt,
     };
   }
 }
