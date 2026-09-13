@@ -7,7 +7,7 @@ export class PdfExtractorService {
     console.log(`📦 Buffer size: ${buffer.length} bytes`);
 
     try {
-      // Strategy 1: pdf-parse (rápido, sem dependências pesadas)
+      // Strategy 1: pdf-parse com tratamento correto do módulo
       console.log('🔄 Strategy 1: Tentando pdf-parse...');
       const textFromPdfParse = await this.extractWithPdfParse(buffer);
       
@@ -18,7 +18,7 @@ export class PdfExtractorService {
         return textFromPdfParse;
       }
 
-      // Strategy 2: OCR com Tesseract (para PDFs com imagem)
+      // Strategy 2: OCR com Tesseract (para PDFs com imagem ou scaneados)
       console.log('⚠️ pdf-parse não encontrou texto suficiente');
       console.log('🔄 Strategy 2: Tentando OCR com Tesseract.js...');
       const textFromOcr = await this.extractWithTesseract(buffer);
@@ -37,13 +37,28 @@ export class PdfExtractorService {
       console.error('❌ ERRO NA EXTRAÇÃO:', 
         error instanceof Error ? error.message : String(error)
       );
+      if (error instanceof Error) {
+        console.error('Stack:', error.stack?.substring(0, 300));
+      }
       return '';
     }
   }
 
   private async extractWithPdfParse(buffer: Buffer): Promise<string> {
     try {
-      const pdfParse = require('pdf-parse');
+      console.log('  📖 Carregando pdf-parse...');
+      
+      // Importar corretamente - pode vir como default export ou função direta
+      const pdfParseModule = require('pdf-parse');
+      const pdfParse = pdfParseModule.default || pdfParseModule;
+      
+      console.log(`  ✓ Tipo de pdfParse: ${typeof pdfParse}`);
+      
+      if (typeof pdfParse !== 'function') {
+        console.warn(`  ⚠️ pdfParse não é uma função, tipo: ${typeof pdfParse}`);
+        return '';
+      }
+
       const data = await pdfParse(buffer);
       
       console.log(`  ✓ Páginas: ${data.numpages}`);
@@ -69,7 +84,8 @@ export class PdfExtractorService {
       
       const Tesseract = require('tesseract.js');
       
-      // Tentar OCR direto (funciona melhor com imagens)
+      // Tesseract.js espera uma imagem, não um PDF diretamente
+      // Vamos tentar, mas provavelmente falhará
       const { data: result } = await Tesseract.recognize(buffer, 'por', {
         logger: (m: any) => {
           if (m.status === 'recognizing text' && m.progress > 0) {
@@ -84,6 +100,7 @@ export class PdfExtractorService {
       console.warn('  ⚠️ OCR falhou:', 
         error instanceof Error ? error.message : String(error)
       );
+      console.warn('  ℹ️ OCR não conseguiu processar PDF diretamente');
       return '';
     }
   }
