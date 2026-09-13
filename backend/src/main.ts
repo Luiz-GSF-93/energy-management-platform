@@ -5,8 +5,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // Global prefix para todas as rotas
-  app.setGlobalPrefix('api/v1');
+  // ✅ SEM setGlobalPrefix (as rotas já têm /api/v1 nos controllers)
   
   // ✅ ATIVAR VALIDAÇÃO GLOBAL
   app.useGlobalPipes(
