@@ -14,14 +14,16 @@ import { SupabaseService } from '../../services/supabase.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET') || 'energy-secret-key-2026';
-        const expiresIn = configService.get<number | string>('JWT_EXPIRES_IN') || '7d';
+        // Converte para segundos: 7 dias = 604800 segundos
+        const expiresInStr = configService.get<string>('JWT_EXPIRES_IN') || '7d';
+        const expiresIn = this.parseExpiresIn(expiresInStr);
         
         console.log('🔐 JWT Config:', { secret: secret.substring(0, 10) + '...', expiresIn });
         
         return {
           secret,
           signOptions: { 
-            expiresIn: expiresIn as string | number, // type assertion
+            expiresIn, // número em segundos
           },
         };
       },
@@ -31,4 +33,20 @@ import { SupabaseService } from '../../services/supabase.service';
   providers: [AuthService, JwtStrategy, SupabaseService],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule {
+  private static parseExpiresIn(expiresIn: string): number {
+    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    if (!match) return 604800; // 7 dias padrão
+    
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+    
+    switch (unit) {
+      case 's': return value;
+      case 'm': return value * 60;
+      case 'h': return value * 3600;
+      case 'd': return value * 86400;
+      default: return 604800;
+    }
+  }
+}
