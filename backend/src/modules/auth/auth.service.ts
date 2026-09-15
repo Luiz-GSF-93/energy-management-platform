@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 
@@ -8,6 +9,7 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private supabaseService: SupabaseService,
+    private configService: ConfigService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -43,10 +45,16 @@ export class AuthService {
 
     if (error) throw new UnauthorizedException('Credenciais inválidas');
 
-    const token = this.jwtService.sign({
-      sub: data.user.id,
-      email: data.user.email,
-    });
+    // Gera token com expiresIn explícito
+    const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN') || '7d';
+    
+    const token = this.jwtService.sign(
+      {
+        sub: data.user.id,
+        email: data.user.email,
+      },
+      { expiresIn }, // passa expiresIn na chamada de sign
+    );
 
     return {
       access_token: token,

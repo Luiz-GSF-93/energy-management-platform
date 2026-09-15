@@ -2,20 +2,27 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
-import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { SupabaseService } from '../../services/supabase.service';
 
 @Module({
   imports: [
-    PassportModule.register({ defaultStrategy: 'jwt' }),
+    PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),
-        signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN') },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET') || 'energy-secret-key-2026';
+        const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || '7d';
+        
+        console.log('🔐 JWT Config:', { secret: secret.substring(0, 10) + '...', expiresIn });
+        
+        return {
+          secret,
+          signOptions: { expiresIn }, // expiresIn é uma string '7d'
+        };
+      },
     }),
   ],
   controllers: [AuthController],
