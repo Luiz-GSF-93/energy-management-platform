@@ -14,13 +14,15 @@ import { SupabaseService } from '../../services/supabase.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET') || 'energy-secret-key-2026';
-        const expiresIn = configService.get<string>('JWT_EXPIRES_IN') || '7d';
+        const expiresIn = configService.get<number | string>('JWT_EXPIRES_IN') || '7d';
         
         console.log('🔐 JWT Config:', { secret: secret.substring(0, 10) + '...', expiresIn });
         
         return {
           secret,
-          signOptions: { expiresIn }, // expiresIn é uma string '7d'
+          signOptions: { 
+            expiresIn: expiresIn as string | number, // type assertion
+          },
         };
       },
     }),

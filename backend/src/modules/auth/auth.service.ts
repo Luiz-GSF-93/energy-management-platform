@@ -45,15 +45,14 @@ export class AuthService {
 
     if (error) throw new UnauthorizedException('Credenciais inválidas');
 
-    // Gera token com expiresIn explícito
-    const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN') || '7d';
+    const expiresIn = this.configService.get<string | number>('JWT_EXPIRES_IN') || '7d';
     
     const token = this.jwtService.sign(
       {
         sub: data.user.id,
         email: data.user.email,
       },
-      { expiresIn }, // passa expiresIn na chamada de sign
+      { expiresIn: expiresIn as string | number },
     );
 
     return {
