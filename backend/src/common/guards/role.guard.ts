@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY, PERMISSIONS_KEY } from '../decorators/roles.decorator';
+import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { RequestWithTenant } from '../interfaces/tenant-context.interface';
 
 @Injectable()
@@ -13,34 +13,32 @@ export class RoleGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
-      ROLES_KEY,
-      [context.getHandler(), context.getClass()],
-    );
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    if (!requiredRoles && !requiredPermissions) {
+    // Se não houver @Permissions(), permite acesso
+    if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
 
     const request = context.switchToHttp().getRequest<RequestWithTenant>();
-    const { role, permissions } = request.tenantContext || {};
+    const tenantContext = request.tenantContext;
 
-    if (requiredRoles && role && !requiredRoles.includes(role)) {
-      throw new ForbiddenException(
-        `Insufficient role permissions. Required roles: ${requiredRoles.join(', ')}`,
-      );
+    // Se não houver contexto de tenant, nega
+    if (!tenantContext) {
+      throw new ForbiddenException('Tenant context not found');
     }
 
-    if (
-      requiredPermissions &&
-      !requiredPermissions.some((perm) => permissions?.includes(perm))
-    ) {
+    // Verificar se as permissões estão no contexto
+    const hasPermission = requiredPermissions.some((permission) =>
+      tenantContext.permissions?.includes(permission),
+    );
+
+    if (!hasPermission) {
       throw new ForbiddenException(
-        `Insufficient permissions. Required: ${requiredPermissions.join(', ')}`,
+        `Missing required permissions: ${requiredPermissions.join(', ')}`,
       );
     }
 

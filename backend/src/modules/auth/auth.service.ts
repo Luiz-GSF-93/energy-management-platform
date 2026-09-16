@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 
 @Injectable()
 export class AuthService {
@@ -52,6 +53,94 @@ export class AuthService {
         email: data.user.email,
         name: data.user.user_metadata?.name,
       },
+    };
+  }
+
+  async getContext(tenant: TenantContext) {
+    const supabase = this.supabaseService.getClient();
+
+    // Recuperar todas as organizações do usuário
+    const { data: memberships } = await supabase
+      .from('user_roles')
+      .select(
+        `
+        user_id,
+        roles (
+          id,
+          name,
+          organization_id,
+          permissions
+        )
+      `,
+      )
+      .eq('user_id', tenant.userId);
+
+    // Mapear organizações únicas com seus roles
+    const organizationsMap = new Map<
+      string,
+      {
+        id: string;
+        role: string;
+        role_id: string;
+        permissions: string[];
+      }
+    >();
+
+    memberships?.forEach(
+      (membership: {
+        roles: {
+          organization_id: string;
+          name: string;
+          id: string;
+          permissions: string[];
+        };
+      }) => {
+        if (membership.roles) {
+          const key = membership.roles.organization_id;
+          if (!organizationsMap.has(key)) {
+            organizationsMap.set(key, {
+              id: membership.roles.organization_id,
+              role: membership.roles.name,
+              role_id: membership.roles.id,
+              permissions: membership.roles.permissions || [],
+            });
+          }
+        }
+      },
+    );
+
+    const organizations = Array.from(organizationsMap.values());
+
+    // Organização atual
+    const currentOrganization = organizations.find(
+      (org) => org.id === tenant.organizationId,
+    ) || organizations[0];
+
+    return {
+      user: {
+        id: tenant.userId,
+        email: tenant.email,
+      },
+      organizations: organizations.map((org) => ({
+        id: org.id,
+        role: org.role,
+        role_id: org.role_id,
+      })),
+      currentOrganization: {
+        id: currentOrganization?.id,
+        role: currentOrganization?.role,
+        permissions: currentOrganization?.permissions || [],
+      },
+    };
+  }
+
+  async getProfile(tenant: TenantContext) {
+    return {
+      user_id: tenant.userId,
+      email: tenant.email,
+      organization_id: tenant.organizationId,
+      role: tenant.role,
+      permissions: tenant.permissions,
     };
   }
 

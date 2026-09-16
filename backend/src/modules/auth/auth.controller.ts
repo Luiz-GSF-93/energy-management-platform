@@ -1,35 +1,35 @@
-import { Controller, Post, Body, Get, Request, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
-
-interface AuthRequest {
-  user: {
-    userId: string;
-    email: string;
-  };
-}
+import { Tenant } from '../../common/decorators/tenant.decorator';
+import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
-  @Public()
   @Post('register')
+  @Public()
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
-  @Public()
   @Post('login')
+  @Public()
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
 
+  @Get('context')
+  async getContext(@Tenant() tenant: TenantContext) {
+    console.log('[AuthController] getContext - tenant:', tenant);
+    return this.authService.getContext(tenant);
+  }
+
   @Get('profile')
-  @UseGuards(JwtAuthGuard)
-  async getProfile(@Request() req: AuthRequest) {
-    return req.user;
+  async getProfile(@Tenant() tenant: TenantContext) {
+    console.log('[AuthController] getProfile - tenant:', tenant);
+    return this.authService.getProfile(tenant);
   }
 }

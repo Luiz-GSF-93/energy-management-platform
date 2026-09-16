@@ -5,6 +5,7 @@ export * from './interfaces/tenant-context.interface';
 export * from './decorators/tenant.decorator';
 export * from './decorators/roles.decorator';
 export * from './decorators/public.decorator';
+export * from './decorators/permissions.decorator';
 
 // Guards
 export * from './guards/tenant.guard';

@@ -1,23 +1,43 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { RequestWithTenant } from '../interfaces/tenant-context.interface';
+import { createParamDecorator, ExecutionContext, Logger } from '@nestjs/common';
 
-export const Tenant = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest<RequestWithTenant>();
-    return request.tenantContext;
-  },
-);
+const logger = new Logger('TenantDecorator');
 
-export const OrganizationId = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest<RequestWithTenant>();
-    return request.tenantContext?.organizationId;
-  },
-);
+export const Tenant = createParamDecorator((data: unknown, ctx: ExecutionContext) => {
+  const request = ctx.switchToHttp().getRequest();
+  const tenantContext = request.tenantContext;
 
-export const UserId = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest<RequestWithTenant>();
-    return request.tenantContext?.userId;
-  },
-);
+  logger.log(`[@Tenant] Extracting context: org=${tenantContext?.organizationId}, role=${tenantContext?.role}`);
+
+  if (!tenantContext) {
+    logger.error(`[@Tenant] No tenant context found on request!`);
+    return null;
+  }
+
+  return tenantContext;
+});
+
+export const OrganizationId = createParamDecorator((data: unknown, ctx: ExecutionContext) => {
+  const request = ctx.switchToHttp().getRequest();
+  const tenantContext = request.tenantContext;
+
+  if (!tenantContext) {
+    logger.warn(`[@OrganizationId] No tenant context found`);
+    return 'org_default';
+  }
+
+  logger.log(`[@OrganizationId] Returning org: ${tenantContext.organizationId}`);
+  return tenantContext.organizationId;
+});
+
+export const UserId = createParamDecorator((data: unknown, ctx: ExecutionContext) => {
+  const request = ctx.switchToHttp().getRequest();
+  const tenantContext = request.tenantContext;
+
+  if (!tenantContext) {
+    logger.warn(`[@UserId] No tenant context found`);
+    return null;
+  }
+
+  logger.log(`[@UserId] Returning userId: ${tenantContext.userId}`);
+  return tenantContext.userId;
+});
