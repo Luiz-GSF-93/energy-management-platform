@@ -1,35 +1,55 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { DocumentsService } from '../services/documents.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { OrganizationId } from '../../../common/decorators/tenant.decorator';
 
 @Controller('documents')
-@UseGuards(JwtAuthGuard)
 export class DocumentsController {
   constructor(private documentsService: DocumentsService) {}
 
   @Post()
-  create(@Body() createDocumentDto: CreateDocumentDto) {
-    return this.documentsService.create(createDocumentDto);
+  async create(
+    @Body() createDocumentDto: CreateDocumentDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.documentsService.create(createDocumentDto, organizationId);
   }
 
   @Get()
-  findByCustomer(@Query('customerId') customerId: string) {
-    return this.documentsService.findByCustomer(customerId);
+  async findAll(@OrganizationId() organizationId: string) {
+    return this.documentsService.findAll(organizationId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.documentsService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.documentsService.findOne(id, organizationId);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateDocumentDto: UpdateDocumentDto) {
-    return this.documentsService.update(id, updateDocumentDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateDocumentDto: UpdateDocumentDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.documentsService.update(id, organizationId, updateDocumentDto);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.documentsService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.documentsService.delete(id, organizationId);
   }
 }

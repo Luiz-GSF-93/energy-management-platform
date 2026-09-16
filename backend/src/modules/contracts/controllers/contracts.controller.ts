@@ -1,35 +1,55 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { ContractsService } from '../services/contracts.service';
 import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { OrganizationId } from '../../../common/decorators/tenant.decorator';
 
 @Controller('contracts')
-@UseGuards(JwtAuthGuard)
 export class ContractsController {
   constructor(private contractsService: ContractsService) {}
 
   @Post()
-  create(@Body() createContractDto: CreateContractDto) {
-    return this.contractsService.create(createContractDto);
+  async create(
+    @Body() createContractDto: CreateContractDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.contractsService.create(createContractDto, organizationId);
   }
 
   @Get()
-  findByConsumerUnit(@Query('consumerUnitId') consumerUnitId: string) {
-    return this.contractsService.findByConsumerUnit(consumerUnitId);
+  async findAll(@OrganizationId() organizationId: string) {
+    return this.contractsService.findAll(organizationId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.contractsService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.contractsService.findOne(id, organizationId);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateContractDto: UpdateContractDto) {
-    return this.contractsService.update(id, updateContractDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateContractDto: UpdateContractDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.contractsService.update(id, organizationId, updateContractDto);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.contractsService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.contractsService.delete(id, organizationId);
   }
 }

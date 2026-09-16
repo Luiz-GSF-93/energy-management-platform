@@ -1,43 +1,55 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { CustomersService } from '../services/customers.service';
 import { CreateCustomerDto, UpdateCustomerDto } from '../dto/create-customer.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-
-interface AuthRequest extends Request {
-  user: { userId: string; email: string };
-}
+import { OrganizationId } from '../../../common/decorators/tenant.decorator';
 
 @Controller('customers')
-@UseGuards(JwtAuthGuard)
 export class CustomersController {
   constructor(private customersService: CustomersService) {}
 
   @Post()
-  create(@Body() createCustomerDto: CreateCustomerDto) {
-    return this.customersService.create(createCustomerDto);
+  async create(
+    @Body() createCustomerDto: CreateCustomerDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.customersService.create(createCustomerDto, organizationId);
   }
 
   @Get()
-  findAll() {
-    // TODO: passar organizationId do JWT
-    return this.customersService.findAll('org-default');
+  async findAll(@OrganizationId() organizationId: string) {
+    return this.customersService.findAll(organizationId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.customersService.findOne(id, 'org-default');
+  async findOne(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.customersService.findOne(id, organizationId);
   }
 
   @Put(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
+    @OrganizationId() organizationId: string,
   ) {
-    return this.customersService.update(id, 'org-default', updateCustomerDto);
+    return this.customersService.update(id, organizationId, updateCustomerDto);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.customersService.delete(id, 'org-default');
+  async delete(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.customersService.delete(id, organizationId);
   }
 }

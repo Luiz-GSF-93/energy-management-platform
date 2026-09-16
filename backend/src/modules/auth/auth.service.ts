@@ -1,5 +1,4 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
@@ -7,7 +6,6 @@ import { LoginDto, RegisterDto } from './dto/auth.dto';
 @Injectable()
 export class AuthService {
   constructor(
-    private jwtService: JwtService,
     private supabaseService: SupabaseService,
     private configService: ConfigService,
   ) {}
@@ -45,26 +43,29 @@ export class AuthService {
 
     if (error) throw new UnauthorizedException('Credenciais inválidas');
 
-    // Usa expiresIn em segundos (7 dias = 604800)
-    const token = this.jwtService.sign(
-      {
-        sub: data.user.id,
-        email: data.user.email,
-      },
-      { expiresIn: 604800 }, // 7 dias em segundos
-    );
-
+    // Retorna o JWT do Supabase (já assinado e válido)
     return {
-      access_token: token,
-      user: data.user,
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.user_metadata?.name,
+      },
     };
   }
 
   async validateToken(token: string) {
     try {
-      const payload = this.jwtService.verify(token);
-      return payload;
-    } catch {
+      const supabase = this.supabaseService.getClient();
+      const { data, error } = await supabase.auth.getUser(token);
+
+      if (error || !data.user) {
+        throw new UnauthorizedException('Token inválido');
+      }
+
+      return data.user;
+    } catch (error) {
       throw new UnauthorizedException('Token inválido');
     }
   }

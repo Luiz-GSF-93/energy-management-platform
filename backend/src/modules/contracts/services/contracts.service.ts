@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
 
@@ -6,64 +6,71 @@ import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto
 export class ContractsService {
   constructor(private supabaseService: SupabaseService) {}
 
-  async create(createContractDto: CreateContractDto) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('energy_contracts')
-      .insert([{ ...createContractDto, status: 'ACTIVE' }])
-      .select()
-      .single();
-
-    if (error) throw new BadRequestException(error.message);
-    return data;
-  }
-
-  async findByConsumerUnit(consumerUnitId: string) {
+  async findAll(organizationId: string) {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('energy_contracts')
       .select('*')
-      .eq('consumerUnitId', consumerUnitId)
-      .is('deletedAt', null);
+      .eq('organization_id', organizationId);
 
-    if (error) throw new BadRequestException(error.message);
+    if (error) throw new Error(error.message);
     return data;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, organizationId: string) {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('energy_contracts')
       .select('*')
       .eq('id', id)
-      .is('deletedAt', null)
+      .eq('organization_id', organizationId)
       .single();
 
-    if (error || !data) throw new NotFoundException('Contract not found');
+    if (error) throw new Error(error.message);
     return data;
   }
 
-  async update(id: string, updateContractDto: UpdateContractDto) {
+  async create(createContractDto: CreateContractDto, organizationId: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('energy_contracts')
+      .insert([{ ...createContractDto, organization_id: organizationId }])
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  async update(
+    id: string,
+    organizationId: string,
+    updateContractDto: UpdateContractDto,
+  ) {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('energy_contracts')
       .update(updateContractDto)
       .eq('id', id)
+      .eq('organization_id', organizationId)
       .select()
       .single();
 
-    if (error) throw new BadRequestException(error.message);
+    if (error) throw new Error(error.message);
     return data;
   }
 
-  async delete(id: string) {
-    const { error } = await this.supabaseService
+  async delete(id: string, organizationId: string) {
+    const { data, error } = await this.supabaseService
       .getClient()
       .from('energy_contracts')
-      .update({ deletedAt: new Date().toISOString() })
-      .eq('id', id);
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single();
 
-    if (error) throw new BadRequestException(error.message);
-    return { message: 'Contract deleted successfully' };
+    if (error) throw new Error(error.message);
+    return data;
   }
 }

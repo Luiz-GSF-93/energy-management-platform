@@ -1,35 +1,62 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { ConsumerUnitsService } from '../services/consumer-units.service';
 import { CreateConsumerUnitDto, UpdateConsumerUnitDto } from '../dto/create-consumer-unit.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { OrganizationId } from '../../../common/decorators/tenant.decorator';
 
 @Controller('consumer-units')
-@UseGuards(JwtAuthGuard)
 export class ConsumerUnitsController {
   constructor(private consumerUnitsService: ConsumerUnitsService) {}
 
   @Post()
-  create(@Body() createConsumerUnitDto: CreateConsumerUnitDto) {
-    return this.consumerUnitsService.create(createConsumerUnitDto);
+  async create(
+    @Body() createConsumerUnitDto: CreateConsumerUnitDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.consumerUnitsService.create(
+      createConsumerUnitDto,
+      organizationId,
+    );
   }
 
   @Get()
-  findByCustomer(@Query('customerId') customerId: string) {
-    return this.consumerUnitsService.findByCustomer(customerId);
+  async findAll(@OrganizationId() organizationId: string) {
+    return this.consumerUnitsService.findAll(organizationId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.consumerUnitsService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.consumerUnitsService.findOne(id, organizationId);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateConsumerUnitDto: UpdateConsumerUnitDto) {
-    return this.consumerUnitsService.update(id, updateConsumerUnitDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateConsumerUnitDto: UpdateConsumerUnitDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.consumerUnitsService.update(
+      id,
+      organizationId,
+      updateConsumerUnitDto,
+    );
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.consumerUnitsService.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.consumerUnitsService.delete(id, organizationId);
   }
 }

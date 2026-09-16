@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
 
@@ -6,64 +6,71 @@ import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto
 export class DocumentsService {
   constructor(private supabaseService: SupabaseService) {}
 
-  async create(createDocumentDto: CreateDocumentDto) {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('documents')
-      .insert([{ ...createDocumentDto, processingStatus: 'PENDING' }])
-      .select()
-      .single();
-
-    if (error) throw new BadRequestException(error.message);
-    return data;
-  }
-
-  async findByCustomer(customerId: string) {
+  async findAll(organizationId: string) {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
       .select('*')
-      .eq('customerId', customerId)
-      .is('deletedAt', null);
+      .eq('organization_id', organizationId);
 
-    if (error) throw new BadRequestException(error.message);
+    if (error) throw new Error(error.message);
     return data;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, organizationId: string) {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
       .select('*')
       .eq('id', id)
-      .is('deletedAt', null)
+      .eq('organization_id', organizationId)
       .single();
 
-    if (error || !data) throw new NotFoundException('Document not found');
+    if (error) throw new Error(error.message);
     return data;
   }
 
-  async update(id: string, updateDocumentDto: UpdateDocumentDto) {
+  async create(createDocumentDto: CreateDocumentDto, organizationId: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('documents')
+      .insert([{ ...createDocumentDto, organization_id: organizationId }])
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  async update(
+    id: string,
+    organizationId: string,
+    updateDocumentDto: UpdateDocumentDto,
+  ) {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
       .update(updateDocumentDto)
       .eq('id', id)
+      .eq('organization_id', organizationId)
       .select()
       .single();
 
-    if (error) throw new BadRequestException(error.message);
+    if (error) throw new Error(error.message);
     return data;
   }
 
-  async delete(id: string) {
-    const { error } = await this.supabaseService
+  async delete(id: string, organizationId: string) {
+    const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
-      .update({ deletedAt: new Date().toISOString() })
-      .eq('id', id);
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single();
 
-    if (error) throw new BadRequestException(error.message);
-    return { message: 'Document deleted successfully' };
+    if (error) throw new Error(error.message);
+    return data;
   }
 }
