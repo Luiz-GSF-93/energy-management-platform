@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -14,6 +14,7 @@ import { TenantGuard } from './common/guards/tenant.guard';
 import { RoleGuard } from './common/guards/role.guard';
 import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
 @Module({
   imports: [
@@ -47,4 +48,8 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RateLimitMiddleware).forRoutes('*');
+  }
+}
