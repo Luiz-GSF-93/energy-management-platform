@@ -3,45 +3,59 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
-import { RequestWithTenant } from '../interfaces/tenant-context.interface';
+import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
 
 @Injectable()
 export class RoleGuard implements CanActivate {
+  private readonly logger = new Logger(RoleGuard.name);
+
   constructor(private reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const requiredPermissions = this.reflector.get<string[]>(
       PERMISSIONS_KEY,
-      [context.getHandler(), context.getClass()],
+      context.getHandler(),
     );
 
-    // Se não houver @Permissions(), permite acesso
     if (!requiredPermissions || requiredPermissions.length === 0) {
+      this.logger.debug('[RoleGuard] Nenhuma permissão requerida');
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<RequestWithTenant>();
+    const request = context.switchToHttp().getRequest();
     const tenantContext = request.tenantContext;
 
-    // Se não houver contexto de tenant, nega
-    if (!tenantContext) {
-      throw new ForbiddenException('Tenant context not found');
-    }
-
-    // Verificar se as permissões estão no contexto
-    const hasPermission = requiredPermissions.some((permission) =>
-      tenantContext.permissions?.includes(permission),
+    this.logger.log(
+      `[RoleGuard] Validando: ${requiredPermissions.join(', ')}`,
     );
 
-    if (!hasPermission) {
+    if (!tenantContext || !tenantContext.permissions) {
+      this.logger.warn(
+        `[RoleGuard] DENIED - Usuário sem tenantContext ou permissões`,
+      );
       throw new ForbiddenException(
-        `Missing required permissions: ${requiredPermissions.join(', ')}`,
+        'Usuário não possui permissões',
       );
     }
 
+    const userPermissions = new Set(tenantContext.permissions);
+    const hasPermission = requiredPermissions.some((perm) =>
+      userPermissions.has(perm),
+    );
+
+    if (!hasPermission) {
+      this.logger.warn(
+        `[RoleGuard] DENIED - Permissão necessária: ${requiredPermissions.join(', ')}`,
+      );
+      throw new ForbiddenException(
+        'Acesso negado',
+      );
+    }
+
+    this.logger.log(`[RoleGuard] GRANTED - Usuário autorizado`);
     return true;
   }
 }

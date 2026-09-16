@@ -10,12 +10,15 @@ import {
 import { CustomersService } from '../services/customers.service';
 import { CreateCustomerDto, UpdateCustomerDto } from '../dto/create-customer.dto';
 import { OrganizationId } from '../../../common/decorators/tenant.decorator';
+import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
+import { PERMISSIONS } from '../../../common/constants/permissions';
 
 @Controller('customers')
 export class CustomersController {
   constructor(private customersService: CustomersService) {}
 
   @Post()
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_CREATE])
   async create(
     @Body() createCustomerDto: CreateCustomerDto,
     @OrganizationId() organizationId: string,
@@ -24,11 +27,13 @@ export class CustomersController {
   }
 
   @Get()
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_VIEW])
   async findAll(@OrganizationId() organizationId: string) {
     return this.customersService.findAll(organizationId);
   }
 
   @Get(':id')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_VIEW])
   async findOne(
     @Param('id') id: string,
     @OrganizationId() organizationId: string,
@@ -37,6 +42,7 @@ export class CustomersController {
   }
 
   @Put(':id')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_UPDATE])
   async update(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -46,6 +52,7 @@ export class CustomersController {
   }
 
   @Delete(':id')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_DELETE])
   async delete(
     @Param('id') id: string,
     @OrganizationId() organizationId: string,
