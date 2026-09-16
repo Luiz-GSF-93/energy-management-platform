@@ -1,50 +1,47 @@
 import { IsString, IsEmail, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateCustomerDto {
-  @IsUUID()
-  organizationId!: string;
+  @IsString()
+  company_name!: string;
+
+  @IsOptional()
+  @IsString()
+  trade_name?: string;
 
   @IsString()
-  name!: string;
+  document!: string;
 
+  @IsOptional()
+  @IsString()
+  economic_group?: string;
+
+  @IsOptional()
+  @IsString()
+  contact_name?: string;
+
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  contact_email?: string;
 
   @IsOptional()
   @IsString()
-  document?: string;
-
-  @IsOptional()
-  @IsString()
-  phone?: string;
-
-  @IsOptional()
-  @IsString()
-  address?: string;
-
-  @IsOptional()
-  @IsString()
-  city?: string;
-
-  @IsOptional()
-  @IsString()
-  state?: string;
+  contact_phone?: string;
 }
 
 export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
-  name?: string;
+  company_name?: string;
+
+  @IsOptional()
+  @IsString()
+  trade_name?: string;
 
   @IsOptional()
   @IsEmail()
-  email?: string;
+  contact_email?: string;
 
   @IsOptional()
   @IsString()
-  phone?: string;
-
-  @IsOptional()
-  @IsString()
-  address?: string;
+  contact_phone?: string;
 }
