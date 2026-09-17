@@ -4,10 +4,12 @@ import { RoleGuard } from './guards/role.guard';
 import { TenantInterceptor } from './interceptors/tenant.interceptor';
 import { AuditInterceptor } from './interceptors/audit.interceptor';
 import { SupabaseService } from '../services/supabase.service';
+import { AuditService } from './services/audit.service';
 
 @Module({
   providers: [
     SupabaseService,
+    AuditService,
     TenantGuard,
     RoleGuard,
     TenantInterceptor,
@@ -15,6 +17,7 @@ import { SupabaseService } from '../services/supabase.service';
   ],
   exports: [
     SupabaseService,
+    AuditService,
     TenantGuard,
     RoleGuard,
     TenantInterceptor,
