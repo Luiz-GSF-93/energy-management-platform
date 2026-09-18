@@ -1,8 +1,16 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+  ForbiddenException,
+  Logger
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PUBLIC_KEY } from '../decorators/public.decorator';
 import { SupabaseService } from '../../services/supabase.service';
+import { TenantContext } from '../interfaces/tenant-context.interface';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -40,10 +48,10 @@ export class TenantGuard implements CanActivate {
     }
 
     const token = authHeader.substring(7);
-    this.logger.log(`[TOKEN] Extracted token (first 50 chars): ${token.substring(0, 50)}...`);
+    this.logger.log(`[TOKEN] Bearer token extracted`);
 
-    // 3. Validar JWT com Supabase
     try {
+      // 3. Validar JWT com Supabase (autenticação autoritativa)
       const { data, error } = await this.supabaseService.getClient().auth.getUser(token);
 
       if (error || !data.user) {
@@ -52,9 +60,34 @@ export class TenantGuard implements CanActivate {
       }
 
       const userId = data.user.id;
-      this.logger.log(`[SUPABASE_SUCCESS] userId=${userId}`);
+      this.logger.log(`[SUPABASE_SUCCESS] userId extracted`);
 
-      // 4. Buscar organização
+      // 4. Extrair iat e exp do JWT (apenas leitura, sem verificação)
+      let iat: number | undefined;
+      let exp: number | undefined;
+
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = Buffer.from(parts[1], 'base64').toString('utf-8');
+          const decoded = JSON.parse(payload);
+
+          // Validar que iat e exp são números válidos
+          if (typeof decoded.iat === 'number') {
+            iat = decoded.iat;
+          }
+          if (typeof decoded.exp === 'number') {
+            exp = decoded.exp;
+          }
+
+          this.logger.log(`[JWT_DECODED] iat e exp extraídos com sucesso`);
+        }
+      } catch (decodeError) {
+        this.logger.warn(`[JWT_DECODE_WARNING] Não foi possível extrair iat/exp: ${(decodeError as Error).message}`);
+        // Continuar sem iat/exp (são opcionais)
+      }
+
+      // 5. Buscar perfil do usuário
       const { data: profile, error: profileError } = await this.supabaseService
         .getClient()
         .from('user_profiles')
@@ -63,61 +96,113 @@ export class TenantGuard implements CanActivate {
         .single();
 
       if (profileError || !profile) {
-        this.logger.warn(`[PROFILE_MISSING] userId=${userId}, profileError=${profileError?.message}`);
-      } else {
-        this.logger.log(`[PROFILE_FOUND] organization_id=${profile.organization_id}`);
+        this.logger.error(`[PROFILE_MISSING] userId extraction, profileError=${profileError?.message}`);
+        // 401: usuário não tem profile — erro de autenticação
+        throw new UnauthorizedException('User profile not found');
       }
 
-      // 5. Buscar role - ESTRATÉGIA ALTERNATIVA: dois passos
-      let roleData = null;
-      let permissions: any[] = [];
+      const activeOrgId = profile.organization_id;
+      this.logger.log(`[PROFILE_FOUND] organization context set`);
 
-      // Passo 5a: Buscar user_role record
-      const { data: userRoleRecord, error: userRoleError } = await this.supabaseService
+      // 6. ✓ NOVO: Validar organização não deletada
+      const { data: org, error: orgError } = await this.supabaseService
         .getClient()
-        .from('user_roles')
-        .select('role_id')
-        .eq('user_id', userId)
+        .from('organizations')
+        .select('id, deleted_at')
+        .eq('id', activeOrgId)
         .single();
 
-      if (userRoleError || !userRoleRecord) {
-        this.logger.warn(`[USER_ROLE_MISSING] userId=${userId}, error=${userRoleError?.message}`);
-      } else {
-        this.logger.log(`[USER_ROLE_FOUND] role_id=${userRoleRecord.role_id}`);
-
-        // Passo 5b: Buscar role por ID
-        const { data: roleRecord, error: roleError } = await this.supabaseService
-          .getClient()
-          .from('roles')
-          .select('name, permissions')
-          .eq('id', userRoleRecord.role_id)
-          .single();
-
-        if (roleError || !roleRecord) {
-          this.logger.warn(`[ROLE_LOOKUP_FAILED] role_id=${userRoleRecord.role_id}, error=${roleError?.message}`);
-        } else {
-          this.logger.log(`[ROLE_FOUND] name=${roleRecord.name}, perms_count=${Array.isArray(roleRecord.permissions) ? roleRecord.permissions.length : 0}`);
-          roleData = roleRecord;
-          permissions = roleRecord.permissions || [];
-        }
+      if (orgError || !org || org.deleted_at !== null) {
+        this.logger.warn(
+          `[ORG_DELETED] organization context not available`,
+        );
+        // 403: organização deletada ou não existe — erro de autorização
+        throw new ForbiddenException(
+          'Organization not available (deleted or does not exist)',
+        );
       }
 
-      // 6. Montar contexto e anexar ao request
-      const tenantContext = {
+      this.logger.log(`[ORG_ACTIVE] organization validated`);
+
+      // 7. ✓ NOVO: Procurar membership ativa em organization_members (fonte autoritativa)
+      const { data: membership, error: membershipError } = await this.supabaseService
+        .getClient()
+        .from('organization_members')
+        .select(
+          `
+          id,
+          user_id,
+          organization_id,
+          role_id,
+          status,
+          roles(id, name, permissions, organization_id)
+          `,
+        )
+        .eq('user_id', userId)
+        .eq('organization_id', activeOrgId)
+        .eq('status', 'active')
+        .single();
+
+      if (membershipError || !membership) {
+        this.logger.warn(
+          `[MEMBERSHIP_MISSING] no active membership in organization context`,
+        );
+        // 403: sem membership ativa — erro de autorização
+        throw new ForbiddenException(
+          'No active membership in this organization',
+        );
+      }
+
+      this.logger.log(`[MEMBERSHIP_FOUND] membership validated`);
+
+      // 8. ✓ NOVO: Validar role e extrair dados
+      const role = (membership as any).roles;
+
+      if (!role) {
+        this.logger.error(
+          `[ROLE_NOT_FOUND] role associated with membership is missing`,
+        );
+        // 403: role não encontrada — erro de autorização
+        throw new ForbiddenException('Role not found');
+      }
+
+      // 9. ✓ NOVO: Validar alinhamento: role.organization_id === activeOrgId
+      if (role.organization_id !== activeOrgId) {
+        this.logger.error(
+          `[ROLE_ORG_MISMATCH] role organization misaligned with context`,
+        );
+        // 403: role pertence a outra organização — erro de autorização
+        throw new ForbiddenException('Role organization mismatch');
+      }
+
+      this.logger.log(`[ROLE_VALID] role validated`);
+
+      // 10. Extrair permissions
+      const permissions: string[] = Array.isArray(role.permissions) ? role.permissions : [];
+      this.logger.log(`[PERMISSIONS] extracted from role`);
+
+      // 11. Montar TenantContext (com roleId novo, iat/exp opcionais)
+      const tenantContext: TenantContext = {
         userId,
-        organizationId: profile?.organization_id || 'org_default',
-        role: roleData?.name || 'user',
-        permissions: permissions,
-        email: data.user.email,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 604800,
+        organizationId: activeOrgId,
+        role: role.name,
+        roleId: role.id,                     // ✓ NOVO
+        permissions,
+        email: data.user.email || '',
+        iat,                                 // ✓ OPCIONAL: extraído do JWT
+        exp,                                 // ✓ OPCIONAL: extraído do JWT
       };
 
       (request as any).tenantContext = tenantContext;
-      this.logger.log(`[CONTEXT_SET] tenant context attached: org=${tenantContext.organizationId}, role=${tenantContext.role}, perms_count=${tenantContext.permissions.length}`);
+      this.logger.log(
+        `[CONTEXT_SET] tenant context attached: role set, permissions count=${tenantContext.permissions.length}`,
+      );
 
       return true;
     } catch (err) {
+      if (err instanceof UnauthorizedException || err instanceof ForbiddenException) {
+        throw err;
+      }
       const error = err as Error;
       this.logger.error(`[EXCEPTION] ${error.message}`, error.stack);
       throw new UnauthorizedException(`Guard failed: ${error.message}`);
