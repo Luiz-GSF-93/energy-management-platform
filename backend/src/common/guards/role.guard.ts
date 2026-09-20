@@ -37,22 +37,26 @@ export class RoleGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const tenantContext = request.tenantContext;
+    const authorizationContext =
+      request.accessContext || request.tenantContext;
 
     this.logger.log(
       `[RoleGuard] Validando: ${requiredPermissions.join(', ')}`,
     );
 
-    if (!tenantContext || !tenantContext.permissions) {
+    if (
+      !authorizationContext ||
+      !Array.isArray(authorizationContext.permissions)
+    ) {
       this.logger.warn(
-        `[RoleGuard] DENIED - Usuário sem tenantContext ou permissões`,
+        `[RoleGuard] DENIED - Usuário sem contexto de autorização ou permissões`,
       );
       throw new ForbiddenException(
         'Usuário não possui permissões',
       );
     }
 
-    const userPermissions = new Set(tenantContext.permissions);
+    const userPermissions = new Set(authorizationContext.permissions);
     const hasPermission = requiredPermissions.some((perm) =>
       userPermissions.has(perm),
     );

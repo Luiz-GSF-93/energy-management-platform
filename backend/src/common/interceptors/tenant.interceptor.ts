@@ -35,8 +35,22 @@ export class TenantInterceptor implements NestInterceptor {
       );
     }
 
-    const { organizationId } = request.tenantContext || {};
+    const authorizationContext =
+      request.accessContext || request.tenantContext;
     const startTime = Date.now();
+
+    if (authorizationContext?.scope === 'global') {
+      return next.handle().pipe(
+        tap(() => {
+          const duration = Date.now() - startTime;
+          console.log(
+            `[TenantInterceptor] ${request.method} ${request.path} | Platform Scope | ${duration}ms`,
+          );
+        }),
+      );
+    }
+
+    const organizationId = request.tenantContext?.organizationId;
 
     if (request.body && request.body.organization_id) {
       if (request.body.organization_id !== organizationId) {
