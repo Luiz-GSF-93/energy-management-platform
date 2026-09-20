@@ -1,8 +1,8 @@
 # Phase 5.6 – Consultant / External User – Start Brief
 
-**Status:** Architecture Approved / Database Implementation Pending Schema Confirmation  
-**Phase:** 5.6  
-**Depends on:** ADR 009, Phase 5.5b.1, Phase 5.5b.2, Phase 5.5c  
+**Status:** Architecture Approved / Database Implementation Pending Schema Confirmation
+**Phase:** 5.6
+**Depends on:** ADR 009, Phase 5.5b.1, Phase 5.5b.2, Phase 5.5c
 **Next phase:** 5.7 Platform Admin
 
 ---
@@ -365,4 +365,3 @@ implemented as part of Phase 5.6.
 - administrative API contract;
 - audit implementation details;
 - implementation tests.
-
