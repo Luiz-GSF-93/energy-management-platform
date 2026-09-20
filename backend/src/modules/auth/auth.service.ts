@@ -60,81 +60,88 @@ export class AuthService {
   }
 
   async getContext(tenant: TenantContext) {
-    const supabase = this.supabaseService.getClient();
+    try {
+      const supabase = this.supabaseService.getClient();
 
-    // Recuperar todas as organizações do usuário
-    const { data: memberships } = await supabase
-      .from('user_roles')
-      .select(
-        `
-        user_id,
-        roles (
-          id,
-          name,
+      const { data: memberships, error: membershipsError } = await supabase
+        .from('organization_members')
+        .select(`
+          user_id,
           organization_id,
-          permissions
-        )
-      `,
-      )
-      .eq('user_id', tenant.userId);
+          role_id,
+          status,
+          roles(id, name, organization_id, permissions),
+          organizations(id, name, deleted_at)
+        `)
+        .eq('user_id', tenant.userId)
+        .eq('status', 'active');
 
-    // Mapear organizações únicas com seus roles
-    const organizationsMap = new Map<
-      string,
-      {
-        id: string;
-        role: string;
-        role_id: string;
-        permissions: string[];
+      if (membershipsError) {
+        this.logger.error('[getContext] Failed to load organization memberships');
+        throw new InternalServerErrorException(
+          'Failed to load organization context',
+        );
       }
-    >();
 
-    memberships?.forEach(
-      (membership: {
-        roles: {
-          organization_id: string;
-          name: string;
-          id: string;
-          permissions: string[];
-        };
-      }) => {
-        if (membership.roles) {
-          const key = membership.roles.organization_id;
-          if (!organizationsMap.has(key)) {
-            organizationsMap.set(key, {
-              id: membership.roles.organization_id,
-              role: membership.roles.name,
-              role_id: membership.roles.id,
-              permissions: membership.roles.permissions || [],
-            });
-          }
-        }
-      },
-    );
+      const validMemberships = (memberships || []).filter(
+        (membership: any) => {
+          const organization = membership.organizations;
+          const role = membership.roles;
 
-    const organizations = Array.from(organizationsMap.values());
+          return (
+            organization &&
+            organization.deleted_at === null &&
+            role &&
+            membership.role_id === role.id &&
+            role.organization_id === membership.organization_id
+          );
+        },
+      );
 
-    // Organização atual
-    const currentOrganization = organizations.find(
-      (org) => org.id === tenant.organizationId,
-    ) || organizations[0];
+      const currentMembership = validMemberships.find(
+        (membership: any) =>
+          membership.organization_id === tenant.organizationId,
+      );
 
-    return {
-      user: {
-        id: tenant.userId,
-        email: tenant.email,
-      },
-      organizations: organizations.map((org) => ({
-        id: org.id,
-        role: org.role,
-        role_id: org.role_id,
-      })),
-      currentOrganization: {
-        id: currentOrganization?.id,
-        role: currentOrganization?.role,
-        permissions: currentOrganization?.permissions || [],
-      },
-    };
+      if (!currentMembership) {
+        throw new ForbiddenException(
+          'No active membership in the current organization',
+        );
+      }
+
+      const currentRole = currentMembership.roles;
+
+      return {
+        user: {
+          id: tenant.userId,
+          email: tenant.email,
+        },
+        organizations: validMemberships.map((membership: any) => ({
+          id: membership.organization_id,
+          role: membership.roles.name,
+          role_id: membership.roles.id,
+        })),
+        currentOrganization: {
+          id: currentMembership.organization_id,
+          role: currentRole.name,
+          permissions: Array.isArray(currentRole.permissions)
+            ? currentRole.permissions
+            : [],
+        },
+      };
+    } catch (err) {
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
+      this.logger.error('[getContext] Unexpected error');
+      throw new InternalServerErrorException(
+        'Failed to load organization context',
+      );
+    }
   }
 
   async getProfile(tenant: TenantContext) {
