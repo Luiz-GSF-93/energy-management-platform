@@ -117,4 +117,53 @@ export class AuditService {
       throw error;
     }
   }
+
+  async logUserAffiliationChange(params: {
+    actorUserId: string;
+    organizationId: string;
+    targetUserId: string;
+    before: 'internal' | 'external';
+    after: 'internal' | 'external';
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: params.organizationId,
+      user_id: params.actorUserId,
+      action: 'UPDATE_USER_AFFILIATION',
+      resource_type: 'user_profile',
+      resource_id: params.targetUserId,
+      changes: {
+        before: {
+          affiliationType: params.before,
+        },
+        after: {
+          affiliationType: params.after,
+        },
+      },
+      ip_address: params.ipAddress || null,
+      user_agent: params.userAgent || null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert(auditEntry);
+
+    if (error) {
+      this.logger.error(
+        `[logUserAffiliationChange] Audit failed for target ${params.targetUserId}`,
+      );
+      throw new Error('Audit insert failed');
+    }
+
+    this.logger.log(
+      `[logUserAffiliationChange] Affiliation change audited for target ${params.targetUserId}`,
+    );
+  }
+
 }
