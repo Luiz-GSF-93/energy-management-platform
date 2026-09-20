@@ -10,8 +10,12 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PUBLIC_KEY } from '../decorators/public.decorator';
 import { RECOVERY_ENDPOINT_KEY } from '../decorators/recovery-endpoint.decorator';
+import { PLATFORM_SCOPE_KEY } from '../decorators/platform-scope.decorator';
 import { SupabaseService } from '../../services/supabase.service';
-import { TenantContext } from '../interfaces/tenant-context.interface';
+import {
+  PlatformContext,
+  TenantContext,
+} from '../interfaces/tenant-context.interface';
 import { AuthenticatedUser, RequestWithAuthenticatedUser } from '../interfaces/authenticated-user.interface';
 
 @Injectable()
@@ -123,7 +127,80 @@ export class TenantGuard implements CanActivate {
         return true;
       }
 
-      // ========== FLUXO NORMAL (5.5b.1 PRESERVADO INTEGRALMENTE) ==========
+      // Phase 5.7 — resolver escopo global somente quando o handler
+      // declarar explicitamente @PlatformScope().
+      const isPlatformScope = this.reflector.getAllAndOverride<boolean>(
+        PLATFORM_SCOPE_KEY,
+        [
+          context.getHandler(),
+          context.getClass(),
+        ],
+      );
+
+      if (isPlatformScope) {
+        const { data: globalAssignments, error: globalAssignmentError } =
+          await this.supabaseService
+            .getClient()
+            .from('user_roles')
+            .select(`
+              user_id,
+              role_id,
+              roles(id, name, permissions, scope)
+            `)
+            .eq('user_id', userId);
+
+        if (globalAssignmentError) {
+          this.logger.error(
+            `[PLATFORM_ROLE_QUERY_FAILED] unable to resolve global assignment`,
+          );
+          throw new ForbiddenException('Platform authorization unavailable');
+        }
+
+        const validGlobalAssignments = (globalAssignments || []).filter(
+          (assignment: any) => {
+            const role = assignment?.roles;
+
+            return (
+              assignment?.user_id === userId &&
+              assignment?.role_id &&
+              role &&
+              assignment.role_id === role.id &&
+              role.scope === 'global' &&
+              Array.isArray(role.permissions)
+            );
+          },
+        );
+
+        if (validGlobalAssignments.length !== 1) {
+          this.logger.warn(
+            `[PLATFORM_ROLE_INVALID] expected exactly one valid global assignment`,
+          );
+          throw new ForbiddenException('Invalid platform authorization');
+        }
+
+        const globalRole = validGlobalAssignments[0].roles;
+
+        const platformContext: PlatformContext = {
+          scope: 'global',
+          userId,
+          role: globalRole.name,
+          roleId: globalRole.id,
+          permissions: globalRole.permissions,
+          email: data.user.email || '',
+          iat,
+          exp,
+        };
+
+        (request as any).accessContext = platformContext;
+
+        this.logger.log(
+          `[PLATFORM_CONTEXT_SET] global context attached: permissions count=${platformContext.permissions.length}`,
+        );
+
+        return true;
+      }
+
+      // ========== FLUXO NORMAL (5.5b.1 PRESERVADO) ==========
 
       const activeOrgId = profile.organization_id;
       this.logger.log(`[PROFILE_FOUND] organization context set`);
@@ -153,7 +230,7 @@ export class TenantGuard implements CanActivate {
           organization_id,
           role_id,
           status,
-          roles(id, name, permissions, organization_id)
+          roles(id, name, permissions, organization_id, scope)
         `)
         .eq('user_id', userId)
         .eq('organization_id', activeOrgId)
@@ -181,6 +258,13 @@ export class TenantGuard implements CanActivate {
         throw new ForbiddenException('Role organization mismatch');
       }
 
+      if (role.scope !== 'organization') {
+        this.logger.error(
+          `[ROLE_SCOPE_MISMATCH] organization membership resolved a non-organization role`,
+        );
+        throw new ForbiddenException('Role scope mismatch');
+      }
+
       this.logger.log(`[ROLE_VALID] role validated`);
 
       // 10. Extrair permissions (PRESERVADO DO ORIGINAL)
@@ -189,6 +273,7 @@ export class TenantGuard implements CanActivate {
 
       // 11. Montar TenantContext completo (PRESERVADO DO ORIGINAL + NOVO roleId)
       const tenantContext: TenantContext = {
+        scope: 'organization',
         userId,
         organizationId: activeOrgId,
         role: role.name,
@@ -200,6 +285,7 @@ export class TenantGuard implements CanActivate {
       };
 
       (request as any).tenantContext = tenantContext;
+      (request as any).accessContext = tenantContext;
       this.logger.log(`[CONTEXT_SET] tenant context attached: role set, permissions count=${tenantContext.permissions.length}`);
 
       return true;
