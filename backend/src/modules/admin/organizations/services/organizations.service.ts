@@ -118,8 +118,7 @@ export class OrganizationsService {
   async delete(
     id: string,
     auditContext: {
-      userId: string;
-      organizationId: string;
+      actorUserId: string;
       ipAddress?: string;
       userAgent?: string;
     },
@@ -149,8 +148,8 @@ export class OrganizationsService {
     };
 
     await this.auditService.logDelete({
-      userId: auditContext.userId,
-      organizationId: auditContext.organizationId,
+      userId: auditContext.actorUserId,
+      organizationId: id,
       resourceType: 'organization',
       resourceId: id,
       before: organizationBefore,

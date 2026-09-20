@@ -1,15 +1,15 @@
 import { Controller, Get, Post, Param, Body, Patch, Delete, Req } from '@nestjs/common';
-import { Request } from 'express';
 import { RequirePermission } from '../../../../common/decorators/require-permission.decorator';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
-import { Tenant } from '../../../../common/decorators/tenant.decorator';
-import { TenantContext } from '../../../../common/interfaces/tenant-context.interface';
+import { PlatformScope } from '../../../../common/decorators/platform-scope.decorator';
+import { RequestWithAuthenticatedUser } from '../../../../common/interfaces/authenticated-user.interface';
 import { OrganizationsService } from '../services/organizations.service';
 import { OrganizationDto } from '../dto/organizations.dto';
 import { CreateOrganizationDto } from '../dto/create-organization.dto';
 import { UpdateOrganizationDto } from '../dto/update-organization.dto';
 
 @Controller('admin/organizations')
+@PlatformScope()
 export class OrganizationsController {
   constructor(private organizationsService: OrganizationsService) {}
 
@@ -44,12 +44,10 @@ export class OrganizationsController {
   @RequirePermission([PERMISSIONS.PLATFORM_ORGANIZATIONS_DELETE])
   async delete(
     @Param('id') id: string,
-    @Tenant() tenant: TenantContext,
-    @Req() request: Request,
+    @Req() request: RequestWithAuthenticatedUser,
   ): Promise<{ message: string }> {
     await this.organizationsService.delete(id, {
-      userId: tenant.userId,
-      organizationId: tenant.organizationId,
+      actorUserId: request.authenticatedUser.userId,
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),
     });
