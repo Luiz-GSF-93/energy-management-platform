@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { SupabaseService } from '../../services/supabase.service';
+import { CommonModule } from '../../common/common.module';
 
 // Helper para converter string de expiração em segundos
 function parseExpiresIn(expiresIn: string): number {
@@ -26,6 +27,7 @@ function parseExpiresIn(expiresIn: string): number {
 
 @Module({
   imports: [
+    CommonModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -39,7 +41,7 @@ function parseExpiresIn(expiresIn: string): number {
         return {
           secret,
           signOptions: { 
-            expiresIn, // número em segundos
+            expiresIn,
           },
         };
       },

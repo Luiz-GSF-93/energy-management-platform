@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Body } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Tenant } from '../../common/decorators/tenant.decorator';
+import { RecoveryEndpoint } from '../../common/decorators/recovery-endpoint.decorator';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 
 @Controller('auth')
@@ -31,5 +32,29 @@ export class AuthController {
   async getProfile(@Tenant() tenant: TenantContext) {
     console.log('[AuthController] getProfile - tenant:', tenant);
     return this.authService.getProfile(tenant);
+  }
+
+  @Get('my-organizations')
+  @RecoveryEndpoint()
+  async getMyOrganizations(@Req() request: any): Promise<any> {
+    return this.authService.getMyOrganizations(
+      request.authenticatedUser.userId,
+    );
+  }
+
+  @Post('switch-organization/:organizationId')
+  @RecoveryEndpoint()
+  async switchOrganization(
+    @Param('organizationId') organizationId: string,
+    @Req() request: any,
+  ): Promise<any> {
+    const ipAddress = request.ip || request.socket?.remoteAddress;
+    const userAgent = request.get('User-Agent');
+    return this.authService.switchOrganization(
+      request.authenticatedUser.userId,
+      organizationId,
+      ipAddress,
+      userAgent,
+    );
   }
 }

@@ -1,14 +1,17 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
+import { AuditService } from '../../common/services/audit.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     private supabaseService: SupabaseService,
     private configService: ConfigService,
+    private auditService: AuditService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -36,7 +39,7 @@ export class AuthService {
     const { email, password } = loginDto;
 
     const { data, error } = await this.supabaseService
-      .getClient()
+      .createAuthClient()
       .auth.signInWithPassword({
         email,
         password,
@@ -156,6 +159,366 @@ export class AuthService {
       return data.user;
     } catch (error) {
       throw new UnauthorizedException('Token inválido');
+    }
+  }
+
+  async getMyOrganizations(userId: string): Promise<any> {
+    try {
+      this.logger.debug(`[getMyOrganizations] Iniciado`);
+
+      const { data: profile, error: profileError } = await this.supabaseService
+        .getClient()
+        .from('user_profiles')
+        .select('organization_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError || !profile) {
+        if (profileError) {
+          const profileErrorCode =
+            typeof profileError.code === 'string' &&
+            /^[A-Za-z0-9_-]+$/.test(profileError.code)
+              ? profileError.code
+              : 'REDACTED';
+
+          const profileErrorStatus =
+            typeof profileError.status === 'number' &&
+            Number.isInteger(profileError.status)
+              ? String(profileError.status)
+              : 'UNKNOWN';
+
+          const profileErrorName =
+            typeof profileError.name === 'string' &&
+            /^[A-Za-z0-9_-]+$/.test(profileError.name)
+              ? profileError.name
+              : 'REDACTED';
+
+        }
+        this.logger.error(`[getMyOrganizations] Profile não encontrado`);
+        throw new UnauthorizedException('Profile not found');
+      }
+
+      const currentOrgId = profile.organization_id;
+
+      const { data: memberships, error: memError } = await this.supabaseService
+        .getClient()
+        .from('organization_members')
+        .select(`
+          user_id,
+          organization_id,
+          role_id,
+          status,
+          roles(id, name, organization_id, permissions),
+          organizations(id, name, deleted_at)
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'active');
+
+      if (memError) {
+        this.logger.error(`[getMyOrganizations] Query error`);
+        throw new InternalServerErrorException(
+        'Failed to load organization memberships',
+      );
+      }
+
+      if (!memberships || memberships.length === 0) {
+        this.logger.warn(`[getMyOrganizations] Nenhuma membership ativa`);
+        return [];
+      }
+
+      const validMemberships = memberships
+        .filter((m: any) => {
+          const org = m.organizations;
+          const role = m.roles;
+          return org && org.deleted_at === null && role && role.organization_id === m.organization_id;
+        })
+        .map((m: any) => ({
+          organizationId: m.organization_id,
+          organizationName: m.organizations.name,
+          role: m.roles.name,
+          roleId: m.roles.id,
+          isActive: m.organization_id === currentOrgId,
+        }));
+
+      this.logger.log(
+        `[getMyOrganizations] Retornando ${validMemberships.length} memberships`,
+      );
+
+      return validMemberships;
+    } catch (err) {
+      if (
+        err instanceof UnauthorizedException ||
+        err instanceof ForbiddenException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
+      this.logger.error('[getMyOrganizations] Unexpected error');
+      throw new InternalServerErrorException(
+        'Failed to load organizations',
+      );
+    }
+  }
+
+  /**
+   * Troca a organização ativa do usuário.
+   */
+
+  async switchOrganization(
+    userId: string,
+    organizationId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<any> {
+    try {
+      this.logger.debug(
+        `[switchOrganization] Iniciado`,
+      );
+
+      const { data: currentProfile, error: profileError } = await this.supabaseService
+        .getClient()
+        .from('user_profiles')
+        .select('organization_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError || !currentProfile) {
+        this.logger.error(`[switchOrganization] Profile não encontrado`);
+        throw new UnauthorizedException('Profile not found');
+      }
+
+      const fromOrgId = currentProfile.organization_id;
+
+      // === OPTION 5: Classify context for audit (NORMAL vs RECOVERY) ==="
+      let auditOrganizationId: string;
+      let recovery = false;
+      let fromRoleId: string | null = null;
+
+      if (fromOrgId === null) {
+        recovery = true;
+        auditOrganizationId = organizationId;
+        this.logger.debug(`[switchOrganization] Recovery: prior context missing`);
+      } else {
+        const { data: priorOrgArray, error: priorOrgError } = await this.supabaseService
+          .getClient()
+          .from('organizations')
+          .select('id, deleted_at')
+          .eq('id', fromOrgId);
+
+        if (priorOrgError) {
+          throw new InternalServerErrorException(`Failed to check prior organization`);
+        }
+
+        if (!priorOrgArray || priorOrgArray.length === 0) {
+          recovery = true;
+          auditOrganizationId = organizationId;
+        } else if (priorOrgArray.length === 1) {
+          const priorOrg = priorOrgArray[0];
+
+          if (priorOrg.deleted_at !== null) {
+            recovery = true;
+            auditOrganizationId = organizationId;
+          } else {
+            recovery = false;
+            auditOrganizationId = fromOrgId;
+          }
+
+          const { data: priorMemberships, error: priorMembershipError } =
+            await this.supabaseService
+              .getClient()
+              .from('organization_members')
+              .select('role_id, roles(id, organization_id)')
+              .eq('user_id', userId)
+              .eq('organization_id', fromOrgId);
+
+          if (priorMembershipError) {
+            throw new InternalServerErrorException(
+              'Failed to resolve prior organization membership',
+            );
+          }
+
+          if (priorMemberships && priorMemberships.length > 1) {
+            throw new InternalServerErrorException(
+              'Data integrity error: multiple prior organization memberships found',
+            );
+          }
+
+          if (priorMemberships && priorMemberships.length === 1) {
+            const priorMembership = priorMemberships[0];
+            const priorRole = (priorMembership as any).roles;
+
+            if (
+              priorMembership.role_id &&
+              priorRole &&
+              priorRole.id === priorMembership.role_id &&
+              priorRole.organization_id === fromOrgId
+            ) {
+              fromRoleId = priorRole.id;
+            }
+          }
+        } else {
+          throw new InternalServerErrorException(`Data integrity error: multiple organizations found for prior context`);
+        }
+      }
+
+      const { data: targetOrgs, error: orgError } = await this.supabaseService
+        .getClient()
+        .from('organizations')
+        .select('id, name')
+        .eq('id', organizationId)
+        .is('deleted_at', null);
+
+      if (orgError || !targetOrgs || targetOrgs.length === 0) {
+        this.logger.warn(`[switchOrganization] Organização alvo não encontrada ou deletada`);
+        throw new ForbiddenException('Target organization not found or deleted');
+      }
+
+      if (targetOrgs.length > 1) {
+        throw new InternalServerErrorException(
+          'Data integrity error: multiple target organizations found',
+        );
+      }
+
+      const targetOrg = targetOrgs[0];
+
+      const { data: memberships, error: memError } = await this.supabaseService
+        .getClient()
+        .from('organization_members')
+        .select('role_id, status, roles(id, name, organization_id, permissions)')
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'active');
+
+      if (memError || !memberships || memberships.length === 0) {
+        this.logger.warn(`[switchOrganization] Sem membership ativa na target org`);
+        throw new ForbiddenException('No active membership in target organization');
+      }
+
+      if (memberships.length > 1) {
+        throw new InternalServerErrorException(
+          'Data integrity error: multiple active memberships found',
+        );
+      }
+
+      const membership = memberships[0];
+      const role = (membership as any).roles;
+
+      if (!role || role.organization_id !== organizationId) {
+        this.logger.error(`[switchOrganization] Role inválida`);
+        throw new ForbiddenException('Role invalid or does not belong to target organization');
+      }
+
+      if (fromOrgId === organizationId) {
+        this.logger.log('[switchOrganization] Same-org idempotent');
+        return {
+          organizationId,
+          organizationName: targetOrg.name,
+          role: role.name,
+          roleId: role.id,
+          message: 'Já está na organização alvo',
+        };
+      }
+
+      let updateQuery = this.supabaseService
+        .getClient()
+        .from('user_profiles')
+        .update({ organization_id: organizationId })
+        .eq('user_id', userId);
+
+      if (fromOrgId === null) {
+        updateQuery = updateQuery.is('organization_id', null);
+      } else {
+        updateQuery = updateQuery.eq('organization_id', fromOrgId);
+      }
+
+      const { data: updateData, error: updateError } = await updateQuery.select();
+
+      if (updateError) {
+        this.logger.error(`[switchOrganization] UPDATE failed`);
+        throw new InternalServerErrorException('Update failed');
+      }
+
+      if (!updateData) {
+        this.logger.error(`[switchOrganization] CAS FAILED: update returned no data`);
+        throw new InternalServerErrorException('Concurrent switch detected. Please retry.');
+      }
+
+      if (updateData.length === 0) {
+        this.logger.warn(`[switchOrganization] CAS CONFLICT: 0 rows updated`);
+        throw new InternalServerErrorException('Concurrent switch detected. Please retry.');
+      }
+
+      if (updateData.length > 1) {
+        this.logger.error(`[switchOrganization] CAS INTEGRITY ERROR: unexpected multiple rows affected`);
+        throw new InternalServerErrorException('Critical integrity error. Admin intervention required.');
+      }
+
+      this.logger.log(
+        `[switchOrganization] Profile updated`,
+      );
+
+      try {
+        await this.auditService.logOrganizationSwitch({
+          userId,
+          fromOrganizationId: fromOrgId,
+          toOrganizationId: organizationId,
+          fromRoleId,
+          toRoleId: role.id,
+          auditOrganizationId,
+          recovery,
+          status: 'success',
+          ipAddress,
+          userAgent,
+        });
+      } catch (auditErr) {
+        this.logger.error(
+          `[switchOrganization] Audit insert failed, attempting rollback`,
+        );
+
+        const { data: rollbackData, error: rollbackError } = await this.supabaseService
+          .getClient()
+          .from('user_profiles')
+          .update({ organization_id: fromOrgId })
+          .eq('user_id', userId)
+          .eq('organization_id', organizationId)
+          .select();
+
+        if (rollbackError || !rollbackData || rollbackData.length !== 1) {
+          this.logger.error(
+            `[switchOrganization] CRITICAL: Rollback failed`,
+          );
+          throw new InternalServerErrorException(
+            'CRITICAL: Audit failed and rollback also failed. Admin intervention required.',
+          );
+        }
+
+        this.logger.warn(`[switchOrganization] Rollback bem-sucedido após falha de audit`);
+        throw new InternalServerErrorException('Audit logging failed. Switch reverted.');
+      }
+
+      this.logger.log(
+        `[switchOrganization] Success`,
+      );
+
+      return {
+        organizationId,
+        organizationName: targetOrg.name,
+        role: role.name,
+        roleId: role.id,
+        message: 'Troca de organização bem-sucedida',
+      };
+    } catch (err) {
+      if (
+        err instanceof UnauthorizedException ||
+        err instanceof ForbiddenException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+
+      this.logger.error('[switchOrganization] Unexpected error');
+      throw new InternalServerErrorException('Erro ao trocar organização');
     }
   }
 }

@@ -19,4 +19,21 @@ export class SupabaseService {
   getClient() {
     return this.supabase;
   }
+
+  createAuthClient() {
+    const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
+    const supabaseKey = this.configService.get<string>('SUPABASE_SERVICE_KEY');
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase configuration unavailable');
+    }
+
+    return createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
 }

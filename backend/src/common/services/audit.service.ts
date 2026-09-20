@@ -59,4 +59,62 @@ export class AuditService {
 
     this.logger.log(`DELETE audited: ${resourceType} ${resourceId} by user ${userId} in org ${organizationId}`);
   }
+
+  async logOrganizationSwitch(params: {
+    userId: string;
+    fromOrganizationId: string | null;
+    toOrganizationId: string;
+    fromRoleId?: string | null;
+    toRoleId?: string | null;
+    auditOrganizationId: string;
+    recovery: boolean;
+    status: 'success' | 'failed';
+    errorMessage?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    try {
+      const auditEntry = {
+        id: randomUUID(),
+        organization_id: params.auditOrganizationId,
+        user_id: params.userId,
+        action: 'SWITCH_ORGANIZATION',
+        resource_type: 'organization_context',
+        resource_id: params.toOrganizationId,
+        changes: {
+          before: {
+            organizationId: params.fromOrganizationId,
+            roleId: params.fromRoleId ?? null,
+          },
+          after: {
+            organizationId: params.toOrganizationId,
+            roleId: params.toRoleId ?? null,
+          },
+          recovery: params.recovery,
+        },
+        ip_address: params.ipAddress || null,
+        user_agent: params.userAgent || null,
+        status: params.status,
+        error_message: params.errorMessage || null,
+        created_at: new Date().toISOString(),
+      };
+
+      const { error } = await this.supabaseService
+        .getClient()
+        .from('audit_logs')
+        .insert(auditEntry);
+
+      if (error) {
+
+        throw new Error('Audit insert failed');
+      }
+
+      this.logger.log(
+        `[logOrganizationSwitch] Audit ${params.status}`,
+      );
+    } catch (error) {
+      this.logger.error('[logOrganizationSwitch] Audit error');
+      throw error;
+    }
+  }
 }

@@ -4,9 +4,8 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
 import { RequestWithTenant } from '../interfaces/tenant-context.interface';
 
 @Injectable()
@@ -45,7 +44,7 @@ export class AuditInterceptor implements NestInterceptor {
           errorMessage: error.message,
           timestamp: new Date(),
         });
-        return of(error);
+        return throwError(() => error);
       }),
     );
   }

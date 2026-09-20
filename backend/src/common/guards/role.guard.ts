@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
+import { RECOVERY_ENDPOINT_KEY } from '../decorators/recovery-endpoint.decorator';
 
 @Injectable()
 export class RoleGuard implements CanActivate {
@@ -15,6 +16,16 @@ export class RoleGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isRecoveryEndpoint = this.reflector.get<boolean>(
+      RECOVERY_ENDPOINT_KEY,
+      context.getHandler(),
+    );
+
+    if (isRecoveryEndpoint) {
+      this.logger.debug('[RoleGuard] Recovery endpoint – skip permission check');
+      return true;
+    }
+
     const requiredPermissions = this.reflector.get<string[]>(
       PERMISSIONS_KEY,
       context.getHandler(),
@@ -50,9 +61,7 @@ export class RoleGuard implements CanActivate {
       this.logger.warn(
         `[RoleGuard] DENIED - Permissão necessária: ${requiredPermissions.join(', ')}`,
       );
-      throw new ForbiddenException(
-        'Acesso negado',
-      );
+      throw new ForbiddenException('Acesso negado');
     }
 
     this.logger.log(`[RoleGuard] GRANTED - Usuário autorizado`);
