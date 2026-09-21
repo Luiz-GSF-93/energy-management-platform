@@ -4,10 +4,12 @@ import { LicensesController } from './licenses.controller';
 
 describe('LicensesController', () => {
   const create = jest.fn();
+  const update = jest.fn();
   const resolveEffectiveLicense = jest.fn();
 
   const service: any = {
     create,
+    update,
     resolveEffectiveLicense,
   };
 
@@ -61,6 +63,52 @@ describe('LicensesController', () => {
       organizationId: tenant.organizationId,
       ipAddress: request.ip,
       userAgent: 'F1.4i.2-test',
+    });
+
+    expect(request.get).toHaveBeenCalledWith('user-agent');
+  });
+
+  it('requires organization license update permission', () => {
+    const permissions = Reflect.getMetadata(
+      PERMISSIONS_KEY,
+      LicensesController.prototype.update,
+    );
+
+    expect(permissions).toEqual([
+      PERMISSIONS.ORGANIZATION_LICENSES_UPDATE,
+    ]);
+  });
+
+  it('updates using validated tenant and request audit context', async () => {
+    const dto: any = {
+      status: 'suspended',
+    };
+
+    const tenant: any = {
+      userId: 'user-1',
+      organizationId: 'org-1',
+    };
+
+    const request: any = {
+      ip: '203.0.113.10',
+      get: jest.fn((name: string) =>
+        name === 'user-agent' ? 'F1.4i.3-test' : undefined,
+      ),
+    };
+
+    const updated = { id: 'license-1', status: 'SUSPENDED' };
+    update.mockResolvedValue(updated);
+
+    await expect(
+      controller.update('license-1', dto, tenant, request),
+    ).resolves.toEqual(updated);
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith('license-1', dto, {
+      actorUserId: tenant.userId,
+      organizationId: tenant.organizationId,
+      ipAddress: request.ip,
+      userAgent: 'F1.4i.3-test',
     });
 
     expect(request.get).toHaveBeenCalledWith('user-agent');

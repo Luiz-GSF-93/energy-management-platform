@@ -380,4 +380,49 @@ export class AuditService {
     );
   }
 
+  async logLicenseUpdate(params: {
+    actorUserId: string;
+    organizationId: string;
+    licenseId: string;
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }): Promise<void> {
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: params.organizationId,
+      user_id: params.actorUserId,
+      action: 'UPDATE_LICENSE',
+      resource_type: 'license',
+      resource_id: params.licenseId,
+      changes: {
+        before: params.before,
+        after: params.after,
+      },
+      ip_address: params.ipAddress ?? null,
+      user_agent: params.userAgent ?? null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert(auditEntry);
+
+    if (error) {
+      this.logger.error(
+        `[logLicenseUpdate] Audit failed for license ${params.licenseId}`,
+      );
+      throw new Error('Audit insert failed');
+    }
+
+    this.logger.log(
+      `[logLicenseUpdate] License update audited for license ${params.licenseId}`,
+    );
+  }
+
+
 }

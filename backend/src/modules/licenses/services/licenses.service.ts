@@ -3,10 +3,12 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { AuditService } from '../../../common/services/audit.service';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateLicenseDto } from '../dto/create-license.dto';
+import { UpdateLicenseDto } from '../dto/update-license.dto';
 
 export interface LicenseRecord {
   id: string;
@@ -185,6 +187,263 @@ export class LicensesService {
     }
 
     return createdLicense;
+  }
+
+  async update(
+    licenseId: string,
+    dto: UpdateLicenseDto,
+    auditContext: {
+      actorUserId: string;
+      organizationId: string;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+    },
+  ): Promise<LicenseRecord> {
+    const client = this.supabaseService.getClient();
+    const organizationId = auditContext.organizationId;
+
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException(
+        'License update requires at least one field',
+      );
+    }
+
+    const { data: licenses, error: loadError } = await client
+      .from('licenses')
+      .select('*')
+      .eq('id', licenseId)
+      .eq('organization_id', organizationId);
+
+    if (loadError) {
+      throw new InternalServerErrorException('Unable to load license');
+    }
+
+    if (!licenses || licenses.length === 0) {
+      throw new NotFoundException('License not found');
+    }
+
+    if (licenses.length !== 1) {
+      throw new InternalServerErrorException(
+        'Data integrity error: multiple licenses found',
+      );
+    }
+
+    const before = licenses[0] as LicenseRecord;
+
+    if (
+      before.id !== licenseId ||
+      before.organization_id !== organizationId
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid license identity',
+      );
+    }
+
+    const nextStatus = dto.status ?? before.status?.toLowerCase();
+
+    if (
+      nextStatus !== 'active' &&
+      nextStatus !== 'suspended' &&
+      nextStatus !== 'expired' &&
+      nextStatus !== 'cancelled'
+    ) {
+      throw new BadRequestException('License has invalid lifecycle state');
+    }
+
+    const nextStartDate =
+      dto.startDate !== undefined ? dto.startDate : before.start_date;
+    const nextEndDate =
+      dto.endDate !== undefined ? dto.endDate : before.end_date;
+
+    if (nextStatus === 'active' && !nextStartDate) {
+      throw new BadRequestException(
+        'Active license requires a start date',
+      );
+    }
+
+    if (
+      nextStartDate !== null &&
+      nextEndDate !== null &&
+      nextEndDate < nextStartDate
+    ) {
+      throw new BadRequestException(
+        'License end date cannot be before start date',
+      );
+    }
+
+    const payload: Record<string, unknown> = {};
+
+    if (dto.licenseType !== undefined) {
+      payload.license_type = dto.licenseType;
+    }
+    if (dto.documentsLimit !== undefined) {
+      payload.documents_limit = dto.documentsLimit;
+    }
+    if (dto.renewalDate !== undefined) {
+      payload.renewal_date = dto.renewalDate;
+    }
+    if (dto.startDate !== undefined) {
+      payload.start_date = dto.startDate;
+    }
+    if (dto.endDate !== undefined) {
+      payload.end_date = dto.endDate;
+    }
+    if (dto.maxConsumerUnits !== undefined) {
+      payload.max_consumer_units = dto.maxConsumerUnits;
+    }
+    if (dto.documentManagement !== undefined) {
+      payload.document_management = dto.documentManagement;
+    }
+    if (dto.advancedAnalytics !== undefined) {
+      payload.advanced_analytics = dto.advancedAnalytics;
+    }
+    if (dto.reportGeneration !== undefined) {
+      payload.report_generation = dto.reportGeneration;
+    }
+    if (dto.freeMarketManagement !== undefined) {
+      payload.free_market_management = dto.freeMarketManagement;
+    }
+
+    if (dto.status !== undefined) {
+      payload.status = dto.status.toUpperCase();
+      payload.active = dto.status === 'active';
+    }
+
+    const effectivePayload = Object.fromEntries(
+      Object.entries(payload).filter(([key, value]) => {
+        const current = before[key as keyof LicenseRecord];
+        return current !== value;
+      }),
+    );
+
+    if (Object.keys(effectivePayload).length === 0) {
+      return before;
+    }
+
+    effectivePayload.updated_at = new Date().toISOString();
+
+    let updateQuery = client
+      .from('licenses')
+      .update(effectivePayload)
+      .eq('id', licenseId)
+      .eq('organization_id', organizationId);
+
+    updateQuery =
+      before.updated_at === null
+        ? updateQuery.is('updated_at', null)
+        : updateQuery.eq('updated_at', before.updated_at);
+
+    const { data: updatedRows, error: updateError } =
+      await updateQuery.select('*');
+
+    if (updateError) {
+      const evidence = [updateError.details, updateError.message]
+        .filter((value): value is string => typeof value === 'string')
+        .join(' ');
+
+      if (
+        updateError.code === '23P01' &&
+        evidence.includes('licenses_active_validity_excl')
+      ) {
+        throw new ConflictException(
+          'License validity overlaps an existing active license',
+        );
+      }
+
+      throw new InternalServerErrorException('Unable to update license');
+    }
+
+    if (!updatedRows || updatedRows.length !== 1) {
+      throw new ConflictException(
+        'License changed concurrently; reload before updating',
+      );
+    }
+
+    const after = updatedRows[0] as LicenseRecord;
+
+    if (
+      after.id !== licenseId ||
+      after.organization_id !== organizationId
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid updated license identity',
+      );
+    }
+
+    const rollbackPayload: Record<string, unknown> = {};
+
+    for (const key of Object.keys(effectivePayload)) {
+      if (key === 'updated_at') continue;
+      rollbackPayload[key] = before[key as keyof LicenseRecord];
+    }
+
+    rollbackPayload.updated_at = before.updated_at;
+
+    const compensateUpdatedLicense = async (): Promise<void> => {
+      let rollbackQuery = client
+        .from('licenses')
+        .update(rollbackPayload)
+        .eq('id', licenseId)
+        .eq('organization_id', organizationId);
+
+      rollbackQuery =
+        after.updated_at === null
+          ? rollbackQuery.is('updated_at', null)
+          : rollbackQuery.eq('updated_at', after.updated_at);
+
+      const { data: revertedRows, error: rollbackError } =
+        await rollbackQuery.select('*');
+
+      if (
+        rollbackError ||
+        !revertedRows ||
+        revertedRows.length !== 1 ||
+        revertedRows[0]?.id !== licenseId ||
+        revertedRows[0]?.organization_id !== organizationId
+      ) {
+        throw new InternalServerErrorException(
+          'CRITICAL: license update compensation could not be confirmed',
+        );
+      }
+    };
+
+    for (const [key, value] of Object.entries(effectivePayload)) {
+      if (key === 'updated_at') continue;
+
+      if (after[key as keyof LicenseRecord] !== value) {
+        await compensateUpdatedLicense();
+
+        throw new InternalServerErrorException(
+          'License update integrity violation; update was reverted',
+        );
+      }
+    }
+
+    try {
+      await this.auditService.logLicenseUpdate({
+        actorUserId: auditContext.actorUserId,
+        organizationId,
+        licenseId,
+        before: before as unknown as Record<string, unknown>,
+        after: after as unknown as Record<string, unknown>,
+        ipAddress: auditContext.ipAddress,
+        userAgent: auditContext.userAgent,
+      });
+    } catch {
+      try {
+        await compensateUpdatedLicense();
+      } catch {
+        throw new InternalServerErrorException(
+          'CRITICAL: license update audit failed and rollback could not be confirmed',
+        );
+      }
+
+      throw new InternalServerErrorException(
+        'License update audit failed; update was reverted',
+      );
+    }
+
+    return after;
   }
 
   async resolveEffectiveLicense(
