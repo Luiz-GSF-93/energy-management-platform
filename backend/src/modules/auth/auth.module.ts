@@ -32,11 +32,14 @@ function parseExpiresIn(expiresIn: string): number {
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET') || 'energy-secret-key-2026';
+        const secret = configService.get<string>('JWT_SECRET');
+
+        if (!secret) {
+          throw new Error('JWT_SECRET not configured');
+        }
         const expiresInStr = configService.get<string>('JWT_EXPIRES_IN') || '7d';
         const expiresIn = parseExpiresIn(expiresInStr);
         
-        console.log('🔐 JWT Config:', { secret: secret.substring(0, 10) + '...', expiresIn });
         
         return {
           secret,
