@@ -38,7 +38,11 @@ const createService = (data: LicenseRecord[] | null, error: any = null) => {
     }),
   };
 
-  return new LicensesService(supabaseService);
+  const auditService: any = {
+    logLicenseCreation: jest.fn(),
+  };
+
+  return new LicensesService(supabaseService, auditService);
 };
 
 describe('LicensesService.resolveEffectiveLicense', () => {
