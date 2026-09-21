@@ -11,12 +11,333 @@ import {
   UserAffiliationType,
 } from '../dto/update-user-affiliation.dto';
 
+interface UserRoleRow {
+  id?: unknown;
+  name?: unknown;
+  organization_id?: unknown;
+  scope?: unknown;
+}
+
+interface UserMembershipRow {
+  user_id?: unknown;
+  organization_id?: unknown;
+  role_id?: unknown;
+  status?: unknown;
+  invited_at?: unknown;
+  accepted_at?: unknown;
+  roles?: UserRoleRow | UserRoleRow[] | null;
+}
+
+interface UserProfileRow {
+  user_id?: unknown;
+  email?: unknown;
+  name?: unknown;
+  affiliation_type?: unknown;
+}
+
+export interface OrganizationUserView {
+  userId: string;
+  email: string;
+  name: string | null;
+  affiliationType: UserAffiliationType;
+  membershipStatus: string;
+  role: {
+    id: string;
+    name: string;
+  };
+  invitedAt: string | null;
+  acceptedAt: string | null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
     private supabaseService: SupabaseService,
     private auditService: AuditService,
   ) {}
+
+  async findAll(organizationId: string): Promise<OrganizationUserView[]> {
+    const client = this.supabaseService.getClient();
+
+    const { data: memberships, error: membershipError } = await client
+      .from('organization_members')
+      .select(
+        'user_id, organization_id, role_id, status, invited_at, accepted_at, roles(id, name, organization_id, scope)',
+      )
+      .eq('organization_id', organizationId);
+
+    if (membershipError) {
+      throw new InternalServerErrorException(
+        'Failed to load organization users',
+      );
+    }
+
+    const membershipRows = (memberships || []) as UserMembershipRow[];
+
+    if (membershipRows.length === 0) {
+      return [];
+    }
+
+    const validatedMemberships = membershipRows.map((membership) =>
+      this.validateMembership(membership, organizationId),
+    );
+
+    const authorizedUserIds = validatedMemberships.map(
+      (membership) => membership.userId,
+    );
+
+    if (new Set(authorizedUserIds).size !== authorizedUserIds.length) {
+      throw new InternalServerErrorException(
+        'Data integrity error: duplicate organization membership',
+      );
+    }
+
+    const { data: profiles, error: profileError } = await client
+      .from('user_profiles')
+      .select('user_id, email, name, affiliation_type')
+      .in('user_id', authorizedUserIds);
+
+    if (profileError) {
+      throw new InternalServerErrorException(
+        'Failed to load organization user profiles',
+      );
+    }
+
+    const profileRows = (profiles || []) as UserProfileRow[];
+    const authorizedSet = new Set(authorizedUserIds);
+    const profileByUserId = new Map<string, UserProfileRow>();
+
+    for (const profile of profileRows) {
+      if (
+        typeof profile.user_id !== 'string' ||
+        !authorizedSet.has(profile.user_id)
+      ) {
+        throw new InternalServerErrorException(
+          'Data integrity error: unauthorized user profile returned',
+        );
+      }
+
+      if (profileByUserId.has(profile.user_id)) {
+        throw new InternalServerErrorException(
+          'Data integrity error: multiple user profiles found',
+        );
+      }
+
+      profileByUserId.set(profile.user_id, profile);
+    }
+
+    return validatedMemberships.map((membership) => {
+      const profile = profileByUserId.get(membership.userId);
+
+      if (!profile) {
+        throw new InternalServerErrorException(
+          'Data integrity error: user profile missing',
+        );
+      }
+
+      return this.composeUserView(membership, profile);
+    });
+  }
+
+  async findOne(
+    targetUserId: string,
+    organizationId: string,
+  ): Promise<OrganizationUserView> {
+    const client = this.supabaseService.getClient();
+
+    const { data: memberships, error: membershipError } = await client
+      .from('organization_members')
+      .select(
+        'user_id, organization_id, role_id, status, invited_at, accepted_at, roles(id, name, organization_id, scope)',
+      )
+      .eq('user_id', targetUserId)
+      .eq('organization_id', organizationId);
+
+    if (membershipError) {
+      throw new InternalServerErrorException(
+        'Failed to load organization user',
+      );
+    }
+
+    const membershipRows = (memberships || []) as UserMembershipRow[];
+
+    if (membershipRows.length === 0) {
+      throw new NotFoundException(
+        'User not found in current organization',
+      );
+    }
+
+    if (membershipRows.length > 1) {
+      throw new InternalServerErrorException(
+        'Data integrity error: multiple target memberships found',
+      );
+    }
+
+    const membership = this.validateMembership(
+      membershipRows[0],
+      organizationId,
+    );
+
+    if (membership.userId !== targetUserId) {
+      throw new InternalServerErrorException(
+        'Data integrity error: target membership mismatch',
+      );
+    }
+
+    const { data: profiles, error: profileError } = await client
+      .from('user_profiles')
+      .select('user_id, email, name, affiliation_type')
+      .eq('user_id', targetUserId);
+
+    if (profileError) {
+      throw new InternalServerErrorException(
+        'Failed to load organization user profile',
+      );
+    }
+
+    const profileRows = (profiles || []) as UserProfileRow[];
+
+    if (profileRows.length === 0) {
+      throw new InternalServerErrorException(
+        'Data integrity error: user profile missing',
+      );
+    }
+
+    if (profileRows.length > 1) {
+      throw new InternalServerErrorException(
+        'Data integrity error: multiple user profiles found',
+      );
+    }
+
+    if (profileRows[0].user_id !== targetUserId) {
+      throw new InternalServerErrorException(
+        'Data integrity error: target profile mismatch',
+      );
+    }
+
+    return this.composeUserView(membership, profileRows[0]);
+  }
+
+  private validateMembership(
+    membership: UserMembershipRow,
+    organizationId: string,
+  ): {
+    userId: string;
+    membershipStatus: string;
+    role: { id: string; name: string };
+    invitedAt: string | null;
+    acceptedAt: string | null;
+  } {
+    if (
+      typeof membership.user_id !== 'string' ||
+      typeof membership.organization_id !== 'string' ||
+      membership.organization_id !== organizationId ||
+      typeof membership.role_id !== 'string' ||
+      membership.role_id.length === 0 ||
+      typeof membership.status !== 'string'
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid organization membership',
+      );
+    }
+
+    const role = Array.isArray(membership.roles)
+      ? membership.roles.length === 1
+        ? membership.roles[0]
+        : null
+      : membership.roles;
+
+    if (
+      !role ||
+      typeof role.id !== 'string' ||
+      role.id.length === 0 ||
+      typeof role.name !== 'string' ||
+      role.name.length === 0 ||
+      typeof role.organization_id !== 'string' ||
+      role.organization_id !== organizationId ||
+      role.scope !== 'organization' ||
+      membership.role_id !== role.id
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid organization role',
+      );
+    }
+
+    if (
+      membership.invited_at !== null &&
+      membership.invited_at !== undefined &&
+      typeof membership.invited_at !== 'string'
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid membership invitation timestamp',
+      );
+    }
+
+    if (
+      membership.accepted_at !== null &&
+      membership.accepted_at !== undefined &&
+      typeof membership.accepted_at !== 'string'
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid membership acceptance timestamp',
+      );
+    }
+
+    return {
+      userId: membership.user_id,
+      membershipStatus: membership.status,
+      role: {
+        id: role.id,
+        name: role.name,
+      },
+      invitedAt:
+        typeof membership.invited_at === 'string'
+          ? membership.invited_at
+          : null,
+      acceptedAt:
+        typeof membership.accepted_at === 'string'
+          ? membership.accepted_at
+          : null,
+    };
+  }
+
+  private composeUserView(
+    membership: {
+      userId: string;
+      membershipStatus: string;
+      role: { id: string; name: string };
+      invitedAt: string | null;
+      acceptedAt: string | null;
+    },
+    profile: UserProfileRow,
+  ): OrganizationUserView {
+    if (
+      profile.user_id !== membership.userId ||
+      typeof profile.email !== 'string' ||
+      profile.email.length === 0 ||
+      (profile.name !== null &&
+        profile.name !== undefined &&
+        typeof profile.name !== 'string') ||
+      !USER_AFFILIATION_TYPES.includes(
+        profile.affiliation_type as UserAffiliationType,
+      )
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid user profile',
+      );
+    }
+
+    return {
+      userId: membership.userId,
+      email: profile.email,
+      name: typeof profile.name === 'string' ? profile.name : null,
+      affiliationType: profile.affiliation_type as UserAffiliationType,
+      membershipStatus: membership.membershipStatus,
+      role: membership.role,
+      invitedAt: membership.invitedAt,
+      acceptedAt: membership.acceptedAt,
+    };
+  }
 
   async updateAffiliation(
     targetUserId: string,

@@ -1,4 +1,11 @@
-import { Body, Controller, Param, Patch, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Req,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { RequirePermission } from '../../../../common/decorators/require-permission.decorator';
 import { Tenant } from '../../../../common/decorators/tenant.decorator';
@@ -10,6 +17,21 @@ import { UsersService } from '../services/users.service';
 @Controller('admin/users')
 export class UsersController {
   constructor(private usersService: UsersService) {}
+
+  @Get()
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
+  async findAll(@Tenant() tenant: TenantContext) {
+    return this.usersService.findAll(tenant.organizationId);
+  }
+
+  @Get(':userId')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
+  async findOne(
+    @Param('userId') userId: string,
+    @Tenant() tenant: TenantContext,
+  ) {
+    return this.usersService.findOne(userId, tenant.organizationId);
+  }
 
   @Patch(':userId/affiliation')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])

@@ -11,6 +11,8 @@ describe('UsersController authorization contract', () => {
   const organizationId = 'org-a';
 
   let usersService: {
+    findAll: jest.Mock;
+    findOne: jest.Mock;
     updateAffiliation: jest.Mock;
   };
 
@@ -20,6 +22,10 @@ describe('UsersController authorization contract', () => {
 
   beforeEach(() => {
     usersService = {
+      findAll: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue({
+        userId: targetUserId,
+      }),
       updateAffiliation: jest.fn().mockResolvedValue({
         userId: targetUserId,
         affiliationType: 'external',
@@ -31,7 +37,10 @@ describe('UsersController authorization contract', () => {
     guard = new RoleGuard(reflector);
   });
 
-  function executionContext(permissions?: string[]): any {
+  function executionContext(
+    handler: keyof UsersController,
+    permissions?: string[],
+  ): any {
     const request = {
       tenantContext: {
         userId: actorUserId,
@@ -44,51 +53,104 @@ describe('UsersController authorization contract', () => {
     };
 
     return {
-      getHandler: () => UsersController.prototype.updateAffiliation,
+      getHandler: () => UsersController.prototype[handler],
       switchToHttp: () => ({
         getRequest: () => request,
       }),
     };
   }
 
-  it('A — route declares ORGANIZATION_USERS_UPDATE', () => {
-    const required = Reflect.getMetadata(
-      PERMISSIONS_KEY,
-      UsersController.prototype.updateAffiliation,
+  it('A — list declares ORGANIZATION_USERS_VIEW', () => {
+    expect(
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        UsersController.prototype.findAll,
+      ),
+    ).toEqual([PERMISSIONS.ORGANIZATION_USERS_VIEW]);
+  });
+
+  it('B — read one declares ORGANIZATION_USERS_VIEW', () => {
+    expect(
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        UsersController.prototype.findOne,
+      ),
+    ).toEqual([PERMISSIONS.ORGANIZATION_USERS_VIEW]);
+  });
+
+  it('C — RoleGuard grants VIEW for list', async () => {
+    await expect(
+      guard.canActivate(
+        executionContext('findAll', [
+          PERMISSIONS.ORGANIZATION_USERS_VIEW,
+        ]),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('D — RoleGuard denies list without VIEW', async () => {
+    await expect(
+      guard.canActivate(
+        executionContext('findAll', [
+          PERMISSIONS.ORGANIZATION_USERS_UPDATE,
+        ]),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('E — findAll forwards tenant organization', async () => {
+    const tenant: any = {
+      userId: actorUserId,
+      organizationId,
+      permissions: [PERMISSIONS.ORGANIZATION_USERS_VIEW],
+    };
+
+    await controller.findAll(tenant);
+
+    expect(usersService.findAll).toHaveBeenCalledWith(organizationId);
+  });
+
+  it('F — findOne forwards target and tenant organization', async () => {
+    const tenant: any = {
+      userId: actorUserId,
+      organizationId,
+      permissions: [PERMISSIONS.ORGANIZATION_USERS_VIEW],
+    };
+
+    await controller.findOne(targetUserId, tenant);
+
+    expect(usersService.findOne).toHaveBeenCalledWith(
+      targetUserId,
+      organizationId,
     );
-
-    expect(required).toEqual([
-      PERMISSIONS.ORGANIZATION_USERS_UPDATE,
-    ]);
   });
 
-  it('B — RoleGuard grants required organization user permission', async () => {
-    const context = executionContext([
-      PERMISSIONS.ORGANIZATION_USERS_UPDATE,
-    ]);
-
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+  it('G — affiliation route remains ORGANIZATION_USERS_UPDATE', () => {
+    expect(
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        UsersController.prototype.updateAffiliation,
+      ),
+    ).toEqual([PERMISSIONS.ORGANIZATION_USERS_UPDATE]);
   });
 
-  it('C — RoleGuard denies when required permission is absent', async () => {
-    const context = executionContext([
-      PERMISSIONS.ORGANIZATION_USERS_VIEW,
-    ]);
-
+  it('H — RoleGuard still grants UPDATE for affiliation', async () => {
     await expect(
-      guard.canActivate(context),
+      guard.canActivate(
+        executionContext('updateAffiliation', [
+          PERMISSIONS.ORGANIZATION_USERS_UPDATE,
+        ]),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('I — RoleGuard denies missing permissions', async () => {
+    await expect(
+      guard.canActivate(executionContext('findOne', undefined)),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('D — RoleGuard denies missing tenant context permissions', async () => {
-    const context = executionContext(undefined);
-
-    await expect(
-      guard.canActivate(context),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('E — controller forwards target, affiliation and tenant audit context', async () => {
+  it('J — affiliation forwards existing audit context unchanged', async () => {
     const tenant: any = {
       userId: actorUserId,
       organizationId,
@@ -101,7 +163,9 @@ describe('UsersController authorization contract', () => {
     const request: any = {
       ip: '127.0.0.1',
       get: jest.fn((header: string) =>
-        header === 'user-agent' ? 'integration-test-agent' : undefined,
+        header === 'user-agent'
+          ? 'integration-test-agent'
+          : undefined,
       ),
     };
 
