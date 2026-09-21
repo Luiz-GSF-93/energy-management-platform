@@ -9,6 +9,7 @@ import { ConsumerUnitsModule } from './modules/consumer-units/consumer-units.mod
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { LicensesModule } from './modules/licenses/licenses.module';
 import { SupabaseService } from './services/supabase.service';
 import { CommonModule } from './common/common.module';
 import { TenantGuard } from './common/guards/tenant.guard';
@@ -27,6 +28,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     ContractsModule,
     DocumentsModule,
     AdminModule,
+    LicensesModule,
   ],
   controllers: [AppController],
   providers: [
