@@ -924,6 +924,7 @@ export class UsersService {
         const perPage = 100;
         const maxPages = 20;
         let authMatch: any = null;
+        let authLookupComplete = false;
 
         for (let page = 1; page <= maxPages; page += 1) {
           const { data, error } = await authClient.auth.admin.listUsers({
@@ -958,12 +959,20 @@ export class UsersService {
             typeof data?.lastPage === 'number' ? data.lastPage : null;
 
           if (lastPage !== null && page >= lastPage) {
+            authLookupComplete = true;
             break;
           }
 
           if (users.length < perPage && lastPage === null) {
+            authLookupComplete = true;
             break;
           }
+        }
+
+        if (!authLookupComplete) {
+          throw new InternalServerErrorException(
+            'Auth identity lookup exceeded bounded pagination without proving exhaustion',
+          );
         }
 
         if (authMatch) {
@@ -985,7 +994,9 @@ export class UsersService {
           inviteError ||
           !inviteData?.user ||
           typeof inviteData.user.id !== 'string' ||
-          inviteData.user.id.length === 0
+          inviteData.user.id.length === 0 ||
+          typeof inviteData.user.email !== 'string' ||
+          inviteData.user.email.trim().toLowerCase() !== normalizedEmail
         ) {
           throw new InternalServerErrorException(
             'Failed to create invited user identity',
@@ -1014,7 +1025,11 @@ export class UsersService {
           profileInsertError ||
           !insertedProfiles ||
           insertedProfiles.length !== 1 ||
-          insertedProfiles[0]?.user_id !== targetUserId
+          insertedProfiles[0]?.user_id !== targetUserId ||
+          typeof insertedProfiles[0]?.email !== 'string' ||
+          insertedProfiles[0].email.trim().toLowerCase() !== normalizedEmail ||
+          insertedProfiles[0]?.organization_id !== auditContext.organizationId ||
+          insertedProfiles[0]?.affiliation_type !== dto.affiliationType
         ) {
           throw new InternalServerErrorException(
             'Failed to provision invited user profile',

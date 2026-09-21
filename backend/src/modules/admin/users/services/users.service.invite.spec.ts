@@ -43,7 +43,9 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
     profiles?: any[];
     memberships?: any[];
     authUsers?: any[];
+    authListResponse?: any;
     inviteUser?: any;
+    profileInsertRows?: any[];
     affiliationType?: 'internal' | 'external';
     auditReject?: boolean;
     membershipInsertError?: any;
@@ -101,14 +103,16 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
     });
 
     const profileInsert = query({
-      data: [
-        {
-          user_id: userId,
-          email: 'invitee@example.com',
-          organization_id: organizationId,
-          affiliation_type: 'external',
-        },
-      ],
+      data:
+        options.profileInsertRows ??
+        [
+          {
+            user_id: userId,
+            email: 'invitee@example.com',
+            organization_id: organizationId,
+            affiliation_type: 'external',
+          },
+        ],
       error: null,
     });
 
@@ -168,13 +172,15 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
         },
         error: null,
       }),
-      listUsers: jest.fn().mockResolvedValue({
-        data: {
-          users: options.authUsers ?? [],
-          lastPage: 1,
+      listUsers: jest.fn().mockResolvedValue(
+        options.authListResponse ?? {
+          data: {
+            users: options.authUsers ?? [],
+            lastPage: 1,
+          },
+          error: null,
         },
-        error: null,
-      }),
+      ),
       inviteUserByEmail: jest.fn().mockResolvedValue(
         options.inviteUser ?? {
           data: {
@@ -339,6 +345,75 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when bounded Auth pagination cannot prove exhaustion', async () => {
+    const fullPage = Array.from({ length: 100 }, (_, index) => ({
+      id: `page-user-${index}`,
+      email: `page-user-${index}@example.test`,
+    }));
+
+    const h = harness({
+      profiles: [],
+      authListResponse: {
+        data: {
+          users: fullPage,
+          lastPage: 21,
+        },
+        error: null,
+      },
+    });
+
+    await expect(
+      h.service.invite(dto as any, auditContext),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+
+    expect(h.authAdmin.listUsers).toHaveBeenCalledTimes(20);
+    expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when invited Auth identity email does not match request', async () => {
+    const h = harness({
+      profiles: [],
+      authUsers: [],
+      inviteUser: {
+        data: {
+          user: {
+            id: userId,
+            email: 'different@example.com',
+          },
+        },
+        error: null,
+      },
+    });
+
+    await expect(
+      h.service.invite(dto as any, auditContext),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+
+    expect(h.authAdmin.inviteUserByEmail).toHaveBeenCalledTimes(1);
+    expect(h.auditService.logUserInvite).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when inserted profile return violates invite integrity', async () => {
+    const h = harness({
+      profiles: [],
+      authUsers: [],
+      profileInsertRows: [
+        {
+          user_id: userId,
+          email: 'invitee@example.com',
+          organization_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          affiliation_type: 'external',
+        },
+      ],
+    });
+
+    await expect(
+      h.service.invite(dto as any, auditContext),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+
+    expect(h.auditService.logUserInvite).not.toHaveBeenCalled();
   });
 
   it('maps membership uniqueness race to conflict', async () => {
