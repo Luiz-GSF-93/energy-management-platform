@@ -12,6 +12,7 @@ import { Tenant } from '../../../../common/decorators/tenant.decorator';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
 import { TenantContext } from '../../../../common/interfaces/tenant-context.interface';
 import { UpdateUserAffiliationDto } from '../dto/update-user-affiliation.dto';
+import { UpdateUserRoleDto } from '../dto/update-user-role.dto';
 import { UsersService } from '../services/users.service';
 
 @Controller('admin/users')
@@ -31,6 +32,26 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
   ) {
     return this.usersService.findOne(userId, tenant.organizationId);
+  }
+
+  @Patch(':userId/role')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])
+  async updateRole(
+    @Param('userId') userId: string,
+    @Body() dto: UpdateUserRoleDto,
+    @Tenant() tenant: TenantContext,
+    @Req() request: Request,
+  ) {
+    return this.usersService.updateRole(
+      userId,
+      dto.roleId,
+      {
+        actorUserId: tenant.userId,
+        organizationId: tenant.organizationId,
+        ipAddress: request.ip,
+        userAgent: request.get('user-agent'),
+      },
+    );
   }
 
   @Patch(':userId/affiliation')

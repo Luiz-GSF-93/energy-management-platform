@@ -339,6 +339,219 @@ export class UsersService {
     };
   }
 
+  async updateRole(
+    targetUserId: string,
+    requestedRoleId: string,
+    auditContext: {
+      actorUserId: string;
+      organizationId: string;
+      ipAddress?: string;
+      userAgent?: string;
+    },
+  ): Promise<{
+    userId: string;
+    role: { id: string; name: string };
+  }> {
+    const client = this.supabaseService.getClient();
+
+    const { data: memberships, error: membershipError } = await client
+      .from('organization_members')
+      .select(
+        'id, user_id, organization_id, role_id, status, roles(id, name, organization_id, scope)',
+      )
+      .eq('user_id', targetUserId)
+      .eq('organization_id', auditContext.organizationId)
+      .eq('status', 'active');
+
+    if (membershipError) {
+      throw new InternalServerErrorException(
+        'Failed to validate target organization membership',
+      );
+    }
+
+    if (!memberships || memberships.length === 0) {
+      throw new NotFoundException(
+        'Active organization membership not found',
+      );
+    }
+
+    if (memberships.length !== 1) {
+      throw new InternalServerErrorException(
+        'Data integrity error: multiple active organization memberships',
+      );
+    }
+
+    const membership = memberships[0] as any;
+
+    if (
+      typeof membership.id !== 'string' ||
+      membership.id.length === 0 ||
+      typeof membership.user_id !== 'string' ||
+      membership.user_id !== targetUserId ||
+      typeof membership.organization_id !== 'string' ||
+      membership.organization_id !== auditContext.organizationId ||
+      membership.status !== 'active' ||
+      typeof membership.role_id !== 'string' ||
+      membership.role_id.length === 0
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid organization membership',
+      );
+    }
+
+    const currentRole = Array.isArray(membership.roles)
+      ? membership.roles.length === 1
+        ? membership.roles[0]
+        : null
+      : membership.roles;
+
+    if (
+      !currentRole ||
+      typeof currentRole.id !== 'string' ||
+      currentRole.id !== membership.role_id ||
+      typeof currentRole.name !== 'string' ||
+      currentRole.name.length === 0 ||
+      typeof currentRole.organization_id !== 'string' ||
+      currentRole.organization_id !== auditContext.organizationId ||
+      currentRole.scope !== 'organization'
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid current organization role',
+      );
+    }
+
+    const { data: destinationRoles, error: destinationRoleError } =
+      await client
+        .from('roles')
+        .select('id, name, organization_id, scope')
+        .eq('id', requestedRoleId);
+
+    if (destinationRoleError) {
+      throw new InternalServerErrorException(
+        'Failed to validate destination role',
+      );
+    }
+
+    if (!destinationRoles || destinationRoles.length === 0) {
+      throw new NotFoundException('Destination role not found');
+    }
+
+    if (destinationRoles.length !== 1) {
+      throw new InternalServerErrorException(
+        'Data integrity error: multiple destination roles',
+      );
+    }
+
+    const destinationRole = destinationRoles[0] as any;
+
+    if (
+      typeof destinationRole.id !== 'string' ||
+      destinationRole.id !== requestedRoleId ||
+      typeof destinationRole.name !== 'string' ||
+      destinationRole.name.length === 0 ||
+      typeof destinationRole.organization_id !== 'string' ||
+      destinationRole.organization_id !== auditContext.organizationId ||
+      destinationRole.scope !== 'organization'
+    ) {
+      throw new BadRequestException(
+        'Destination role is not valid for the active organization',
+      );
+    }
+
+    const beforeRoleId = membership.role_id;
+
+    if (beforeRoleId === requestedRoleId) {
+      return {
+        userId: targetUserId,
+        role: {
+          id: destinationRole.id,
+          name: destinationRole.name,
+        },
+      };
+    }
+
+    const { data: updatedMemberships, error: updateError } = await client
+      .from('organization_members')
+      .update({ role_id: requestedRoleId })
+      .eq('user_id', targetUserId)
+      .eq('organization_id', auditContext.organizationId)
+      .eq('status', 'active')
+      .eq('role_id', beforeRoleId)
+      .select('id, user_id, organization_id, role_id, status');
+
+    if (updateError) {
+      throw new InternalServerErrorException(
+        'Failed to update organization membership role',
+      );
+    }
+
+    if (!updatedMemberships || updatedMemberships.length !== 1) {
+      throw new InternalServerErrorException(
+        'Concurrent or invalid organization membership role update',
+      );
+    }
+
+    const updatedMembership = updatedMemberships[0] as any;
+
+    if (
+      updatedMembership.id !== membership.id ||
+      updatedMembership.user_id !== targetUserId ||
+      updatedMembership.organization_id !== auditContext.organizationId ||
+      updatedMembership.status !== 'active' ||
+      updatedMembership.role_id !== requestedRoleId
+    ) {
+      throw new InternalServerErrorException(
+        'Data integrity error: invalid updated organization membership',
+      );
+    }
+
+    try {
+      await this.auditService.logUserMembershipRoleChange({
+        actorUserId: auditContext.actorUserId,
+        organizationId: auditContext.organizationId,
+        targetUserId,
+        membershipId: membership.id,
+        beforeRoleId,
+        afterRoleId: requestedRoleId,
+        ipAddress: auditContext.ipAddress,
+        userAgent: auditContext.userAgent,
+      });
+    } catch {
+      const { data: revertedMemberships, error: rollbackError } = await client
+        .from('organization_members')
+        .update({ role_id: beforeRoleId })
+        .eq('user_id', targetUserId)
+        .eq('organization_id', auditContext.organizationId)
+        .eq('status', 'active')
+        .eq('role_id', requestedRoleId)
+        .select('id, role_id');
+
+      if (
+        rollbackError ||
+        !revertedMemberships ||
+        revertedMemberships.length !== 1 ||
+        revertedMemberships[0]?.id !== membership.id ||
+        revertedMemberships[0]?.role_id !== beforeRoleId
+      ) {
+        throw new InternalServerErrorException(
+          'CRITICAL: Role audit failed and rollback could not be confirmed. Admin intervention required.',
+        );
+      }
+
+      throw new InternalServerErrorException(
+        'Role audit failed. Membership role update was reverted.',
+      );
+    }
+
+    return {
+      userId: targetUserId,
+      role: {
+        id: destinationRole.id,
+        name: destinationRole.name,
+      },
+    };
+  }
+
   async updateAffiliation(
     targetUserId: string,
     affiliationType: UserAffiliationType,
