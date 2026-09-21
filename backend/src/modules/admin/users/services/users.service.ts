@@ -339,6 +339,175 @@ export class UsersService {
     };
   }
 
+  async deactivate(
+    targetUserId: string,
+    auditContext: {
+      actorUserId: string;
+      organizationId: string;
+      ipAddress?: string;
+      userAgent?: string;
+    },
+  ): Promise<{
+    userId: string;
+    membershipStatus: 'inactive';
+  }> {
+    const {
+      actorUserId,
+      organizationId,
+      ipAddress,
+      userAgent,
+    } = auditContext;
+
+    if (targetUserId === actorUserId) {
+      throw new BadRequestException(
+        'Self-deactivation of the active organization membership is not allowed',
+      );
+    }
+
+    const { data: memberships, error: membershipError } =
+      await this.supabaseService
+        .getClient()
+        .from('organization_members')
+        .select('id, user_id, organization_id, role_id, status')
+        .eq('user_id', targetUserId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'active');
+
+    if (membershipError) {
+      throw new InternalServerErrorException(
+        'Failed to resolve active organization membership',
+      );
+    }
+
+    if (!memberships || memberships.length === 0) {
+      throw new NotFoundException(
+        'Active organization membership not found',
+      );
+    }
+
+    if (memberships.length !== 1) {
+      throw new InternalServerErrorException(
+        'Organization membership integrity violation',
+      );
+    }
+
+    const membership = memberships[0];
+
+    if (
+      !membership ||
+      typeof membership.id !== 'string' ||
+      membership.id.length === 0 ||
+      membership.user_id !== targetUserId ||
+      membership.organization_id !== organizationId ||
+      membership.status !== 'active'
+    ) {
+      throw new InternalServerErrorException(
+        'Organization membership integrity violation',
+      );
+    }
+
+    const { data: updatedMemberships, error: updateError } =
+      await this.supabaseService
+        .getClient()
+        .from('organization_members')
+        .update({
+          status: 'inactive',
+        })
+        .eq('id', membership.id)
+        .eq('user_id', targetUserId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'active')
+        .select('id, user_id, organization_id, status');
+
+    if (updateError) {
+      throw new InternalServerErrorException(
+        'Failed to deactivate organization membership',
+      );
+    }
+
+    if (
+      !updatedMemberships ||
+      updatedMemberships.length !== 1
+    ) {
+      throw new InternalServerErrorException(
+        'Organization membership changed concurrently',
+      );
+    }
+
+    const updatedMembership = updatedMemberships[0];
+
+    if (
+      !updatedMembership ||
+      updatedMembership.id !== membership.id ||
+      updatedMembership.user_id !== targetUserId ||
+      updatedMembership.organization_id !== organizationId ||
+      updatedMembership.status !== 'inactive'
+    ) {
+      throw new InternalServerErrorException(
+        'Organization membership integrity violation after deactivation',
+      );
+    }
+
+    try {
+      await this.auditService.logUserMembershipDeactivation({
+        actorUserId,
+        organizationId,
+        targetUserId,
+        membershipId: membership.id,
+        beforeStatus: 'active',
+        afterStatus: 'inactive',
+        ipAddress,
+        userAgent,
+      });
+    } catch {
+      const { data: rolledBackMemberships, error: rollbackError } =
+        await this.supabaseService
+          .getClient()
+          .from('organization_members')
+          .update({
+            status: 'active',
+          })
+          .eq('id', membership.id)
+          .eq('user_id', targetUserId)
+          .eq('organization_id', organizationId)
+          .eq('status', 'inactive')
+          .select('id, user_id, organization_id, status');
+
+      if (
+        rollbackError ||
+        !rolledBackMemberships ||
+        rolledBackMemberships.length !== 1
+      ) {
+        throw new InternalServerErrorException(
+          'CRITICAL: membership deactivation audit failed and rollback could not be confirmed',
+        );
+      }
+
+      const rolledBackMembership = rolledBackMemberships[0];
+
+      if (
+        !rolledBackMembership ||
+        rolledBackMembership.id !== membership.id ||
+        rolledBackMembership.user_id !== targetUserId ||
+        rolledBackMembership.organization_id !== organizationId ||
+        rolledBackMembership.status !== 'active'
+      ) {
+        throw new InternalServerErrorException(
+          'CRITICAL: membership deactivation audit failed and rollback integrity could not be confirmed',
+        );
+      }
+
+      throw new InternalServerErrorException(
+        'Membership deactivation audit failed; operation was reverted',
+      );
+    }
+
+    return {
+      userId: targetUserId,
+      membershipStatus: 'inactive',
+    };
+  }
+
   async updateRole(
     targetUserId: string,
     requestedRoleId: string,

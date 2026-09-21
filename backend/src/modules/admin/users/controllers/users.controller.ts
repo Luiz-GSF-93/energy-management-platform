@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Delete,
   Patch,
   Req,
 } from '@nestjs/common';
@@ -32,6 +33,21 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
   ) {
     return this.usersService.findOne(userId, tenant.organizationId);
+  }
+
+  @Delete(':userId')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_DELETE])
+  async deactivate(
+    @Param('userId') userId: string,
+    @Tenant() tenant: TenantContext,
+    @Req() request: Request,
+  ) {
+    return this.usersService.deactivate(userId, {
+      actorUserId: tenant.userId,
+      organizationId: tenant.organizationId,
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
   }
 
   @Patch(':userId/role')
