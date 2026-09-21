@@ -505,4 +505,5 @@ BEGIN
 END
 $guard$;
 
-COMMIT;
+-- Diagnostic transaction must never persist changes.
+ROLLBACK;
