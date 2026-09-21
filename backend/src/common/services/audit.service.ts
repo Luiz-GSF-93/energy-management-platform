@@ -217,4 +217,56 @@ export class AuditService {
     );
   }
 
+
+  async logUserMembershipDeactivation(params: {
+    actorUserId: string;
+    organizationId: string;
+    targetUserId: string;
+    membershipId: string;
+    beforeStatus: 'active';
+    afterStatus: 'inactive';
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: params.organizationId,
+      user_id: params.actorUserId,
+      action: 'DEACTIVATE_USER_MEMBERSHIP',
+      resource_type: 'organization_membership',
+      resource_id: params.membershipId,
+      changes: {
+        before: {
+          userId: params.targetUserId,
+          status: params.beforeStatus,
+        },
+        after: {
+          userId: params.targetUserId,
+          status: params.afterStatus,
+        },
+      },
+      ip_address: params.ipAddress || null,
+      user_agent: params.userAgent || null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert(auditEntry);
+
+    if (error) {
+      this.logger.error(
+        `[logUserMembershipDeactivation] Audit failed for membership ${params.membershipId}`,
+      );
+      throw new Error('Audit insert failed');
+    }
+
+    this.logger.log(
+      `[logUserMembershipDeactivation] Membership deactivation audited for membership ${params.membershipId}`,
+    );
+  }
+
 }
