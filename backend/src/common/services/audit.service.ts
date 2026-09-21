@@ -166,4 +166,55 @@ export class AuditService {
     );
   }
 
+  async logUserMembershipRoleChange(params: {
+    actorUserId: string;
+    organizationId: string;
+    targetUserId: string;
+    membershipId: string;
+    beforeRoleId: string;
+    afterRoleId: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: params.organizationId,
+      user_id: params.actorUserId,
+      action: 'UPDATE_USER_MEMBERSHIP_ROLE',
+      resource_type: 'organization_membership',
+      resource_id: params.membershipId,
+      changes: {
+        before: {
+          userId: params.targetUserId,
+          roleId: params.beforeRoleId,
+        },
+        after: {
+          userId: params.targetUserId,
+          roleId: params.afterRoleId,
+        },
+      },
+      ip_address: params.ipAddress || null,
+      user_agent: params.userAgent || null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert(auditEntry);
+
+    if (error) {
+      this.logger.error(
+        `[logUserMembershipRoleChange] Audit failed for membership ${params.membershipId}`,
+      );
+      throw new Error('Audit insert failed');
+    }
+
+    this.logger.log(
+      `[logUserMembershipRoleChange] Role change audited for membership ${params.membershipId}`,
+    );
+  }
+
 }
