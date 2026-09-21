@@ -218,6 +218,73 @@ export class AuditService {
   }
 
 
+
+  async logUserInvite(params: {
+    actorUserId: string;
+    organizationId: string;
+    targetUserId: string;
+    membershipId: string;
+    email: string;
+    roleId: string;
+    affiliationType: 'internal' | 'external';
+    provisioningPath: 'new_identity' | 'existing_identity';
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }): Promise<void> {
+    const {
+      actorUserId,
+      organizationId,
+      targetUserId,
+      membershipId,
+      email,
+      roleId,
+      affiliationType,
+      provisioningPath,
+      ipAddress,
+      userAgent,
+    } = params;
+
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: organizationId,
+      user_id: actorUserId,
+      action: 'INVITE_ORGANIZATION_USER',
+      resource_type: 'organization_membership',
+      resource_id: membershipId,
+      changes: {
+        before: null,
+        after: {
+          userId: targetUserId,
+          email,
+          roleId,
+          affiliationType,
+          provisioningPath,
+        },
+      },
+      ip_address: ipAddress ?? null,
+      user_agent: userAgent ?? null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert(auditEntry);
+
+    if (error) {
+      this.logger.error(
+        `[logUserInvite] Audit failed for membership ${membershipId}`,
+      );
+      throw new Error('Audit insert failed');
+    }
+
+    this.logger.log(
+      `[logUserInvite] Invite audited for membership ${membershipId}`,
+    );
+  }
+
   async logUserMembershipDeactivation(params: {
     actorUserId: string;
     organizationId: string;
