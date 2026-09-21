@@ -5,13 +5,17 @@ import {
   Param,
   Delete,
   Patch,
+  Post,
   Req,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { RequirePermission } from '../../../../common/decorators/require-permission.decorator';
 import { Tenant } from '../../../../common/decorators/tenant.decorator';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
 import { TenantContext } from '../../../../common/interfaces/tenant-context.interface';
+import { InviteUserDto } from '../dto/invite-user.dto';
 import { UpdateUserAffiliationDto } from '../dto/update-user-affiliation.dto';
 import { UpdateUserRoleDto } from '../dto/update-user-role.dto';
 import { UsersService } from '../services/users.service';
@@ -19,6 +23,28 @@ import { UsersService } from '../services/users.service';
 @Controller('admin/users')
 export class UsersController {
   constructor(private usersService: UsersService) {}
+
+  @Post('invite')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_INVITE])
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  async invite(
+    @Body() dto: InviteUserDto,
+    @Tenant() tenant: TenantContext,
+    @Req() request: Request,
+  ) {
+    return this.usersService.invite(dto, {
+      actorUserId: tenant.userId,
+      organizationId: tenant.organizationId,
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
+  }
 
   @Get()
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
