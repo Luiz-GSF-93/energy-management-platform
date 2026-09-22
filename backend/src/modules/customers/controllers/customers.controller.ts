@@ -18,7 +18,7 @@ export class CustomersController {
   constructor(private customersService: CustomersService) {}
 
   @Post()
-  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_CREATE])
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_CREATE])
   async create(
     @Body() createCustomerDto: CreateCustomerDto,
     @OrganizationId() organizationId: string,
@@ -27,13 +27,13 @@ export class CustomersController {
   }
 
   @Get()
-  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_VIEW])
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_VIEW])
   async findAll(@OrganizationId() organizationId: string) {
     return this.customersService.findAll(organizationId);
   }
 
   @Get(':id')
-  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_VIEW])
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_VIEW])
   async findOne(
     @Param('id') id: string,
     @OrganizationId() organizationId: string,
@@ -42,7 +42,7 @@ export class CustomersController {
   }
 
   @Put(':id')
-  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_UPDATE])
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_UPDATE])
   async update(
     @Param('id') id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -52,7 +52,7 @@ export class CustomersController {
   }
 
   @Delete(':id')
-  @RequirePermission([PERMISSIONS.ORGANIZATION_CONTRACTS_DELETE])
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_DELETE])
   async delete(
     @Param('id') id: string,
     @OrganizationId() organizationId: string,
