@@ -8,6 +8,87 @@ export class AuditService {
 
   constructor(private supabaseService: SupabaseService) {}
 
+  async logCreate(params: {
+    userId: string;
+    organizationId: string;
+    resourceType: string;
+    resourceId: string;
+    after: any;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: params.organizationId,
+      user_id: params.userId,
+      action: 'CREATE',
+      resource_type: params.resourceType,
+      resource_id: params.resourceId,
+      changes: {
+        before: null,
+        after: params.after,
+      },
+      ip_address: params.ipAddress || null,
+      user_agent: params.userAgent || null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert([auditEntry]);
+
+    if (error) {
+      this.logger.error(
+        `Failed to log CREATE for ${params.resourceType} ${params.resourceId}: ${error.message}`,
+      );
+      throw new Error(`Audit logging failed: ${error.message}`);
+    }
+  }
+
+  async logUpdate(params: {
+    userId: string;
+    organizationId: string;
+    resourceType: string;
+    resourceId: string;
+    before: any;
+    after: any;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const auditEntry = {
+      id: randomUUID(),
+      organization_id: params.organizationId,
+      user_id: params.userId,
+      action: 'UPDATE',
+      resource_type: params.resourceType,
+      resource_id: params.resourceId,
+      changes: {
+        before: params.before,
+        after: params.after,
+      },
+      ip_address: params.ipAddress || null,
+      user_agent: params.userAgent || null,
+      status: 'success',
+      error_message: null,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert([auditEntry]);
+
+    if (error) {
+      this.logger.error(
+        `Failed to log UPDATE for ${params.resourceType} ${params.resourceId}: ${error.message}`,
+      );
+      throw new Error(`Audit logging failed: ${error.message}`);
+    }
+  }
+
   async logDelete(params: {
     userId: string;
     organizationId: string;

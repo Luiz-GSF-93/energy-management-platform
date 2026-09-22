@@ -92,4 +92,96 @@ describe('OrganizationsController — Platform Admin contract', () => {
     expect(auditContext.organizationId).toBeUndefined();
     expect(auditContext.userId).toBeUndefined();
   });
+
+  it('H — create forwards authenticated actor and never tenant organization context', async () => {
+    const created = {
+      id: 'created-org',
+      name: 'Created',
+      description: null,
+      created_at: '2026-09-22T10:00:00.000Z',
+      updated_at: '2026-09-22T10:00:00.000Z',
+    };
+
+    const service = {
+      create: jest.fn().mockResolvedValue(created),
+    };
+
+    const controller = new OrganizationsController(service as any);
+
+    const request: any = {
+      authenticatedUser: {
+        userId: 'platform-user',
+        email: 'platform@example.test',
+      },
+      ip: '127.0.0.1',
+      get: jest.fn((header: string) =>
+        header === 'user-agent' ? 'f1.5.5-test' : undefined,
+      ),
+    };
+
+    await expect(
+      controller.create({ name: 'Created' }, request),
+    ).resolves.toEqual(created);
+
+    expect(service.create).toHaveBeenCalledWith(
+      { name: 'Created' },
+      {
+        actorUserId: 'platform-user',
+        ipAddress: '127.0.0.1',
+        userAgent: 'f1.5.5-test',
+      },
+    );
+
+    const auditContext = service.create.mock.calls[0][1];
+
+    expect(auditContext.organizationId).toBeUndefined();
+    expect(auditContext.userId).toBeUndefined();
+  });
+
+  it('I — update forwards authenticated actor and never tenant organization context', async () => {
+    const updated = {
+      id: 'target-org',
+      name: 'Updated',
+      description: null,
+      created_at: '2026-09-20T00:00:00.000Z',
+      updated_at: '2026-09-22T10:00:00.000Z',
+    };
+
+    const service = {
+      update: jest.fn().mockResolvedValue(updated),
+    };
+
+    const controller = new OrganizationsController(service as any);
+
+    const request: any = {
+      authenticatedUser: {
+        userId: 'platform-user',
+        email: 'platform@example.test',
+      },
+      ip: '127.0.0.1',
+      get: jest.fn((header: string) =>
+        header === 'user-agent' ? 'f1.5.5-test' : undefined,
+      ),
+    };
+
+    await expect(
+      controller.update('target-org', { name: 'Updated' }, request),
+    ).resolves.toEqual(updated);
+
+    expect(service.update).toHaveBeenCalledWith(
+      'target-org',
+      { name: 'Updated' },
+      {
+        actorUserId: 'platform-user',
+        ipAddress: '127.0.0.1',
+        userAgent: 'f1.5.5-test',
+      },
+    );
+
+    const auditContext = service.update.mock.calls[0][2];
+
+    expect(auditContext.organizationId).toBeUndefined();
+    expect(auditContext.userId).toBeUndefined();
+  });
+
 });

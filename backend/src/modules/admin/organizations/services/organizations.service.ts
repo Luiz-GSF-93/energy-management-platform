@@ -44,7 +44,14 @@ export class OrganizationsService {
     return data;
   }
 
-  async create(dto: CreateOrganizationDto): Promise<OrganizationDto> {
+  async create(
+    dto: CreateOrganizationDto,
+    auditContext: {
+      actorUserId: string;
+      ipAddress?: string;
+      userAgent?: string;
+    },
+  ): Promise<OrganizationDto> {
     if (!dto.name || dto.name.trim().length === 0) {
       throw new BadRequestException('Organization name is required');
     }
@@ -68,16 +75,49 @@ export class OrganizationsService {
       .select()
       .single();
 
-    if (error) {
-      throw new Error(`Supabase error: ${error.message}`);
+    if (error || !data) {
+      throw new Error(`Supabase error: ${error?.message || 'create failed'}`);
+    }
+
+    try {
+      await this.auditService.logCreate({
+        userId: auditContext.actorUserId,
+        organizationId: data.id,
+        resourceType: 'organization',
+        resourceId: data.id,
+        after: data,
+        ipAddress: auditContext.ipAddress,
+        userAgent: auditContext.userAgent,
+      });
+    } catch (auditError) {
+      const { error: rollbackError } = await this.supabaseService
+        .getClient()
+        .from('organizations')
+        .delete()
+        .eq('id', data.id)
+        .eq('updated_at', data.updated_at)
+        .is('deleted_at', null);
+
+      if (rollbackError) {
+        throw new Error('Organization audit failed and compensation failed');
+      }
+
+      throw auditError;
     }
 
     return data;
   }
 
-  async update(id: string, dto: UpdateOrganizationDto): Promise<OrganizationDto> {
-    // Verificar existência (e que não está deletada)
-    await this.findOne(id);
+  async update(
+    id: string,
+    dto: UpdateOrganizationDto,
+    auditContext: {
+      actorUserId: string;
+      ipAddress?: string;
+      userAgent?: string;
+    },
+  ): Promise<OrganizationDto> {
+    const before = await this.findOne(id);
 
     if (dto.name !== undefined && dto.name.trim().length === 0) {
       throw new BadRequestException('Organization name cannot be empty');
@@ -110,6 +150,37 @@ export class OrganizationsService {
       }
 
       throw new NotFoundException(`Organization ${id} not found`);
+    }
+
+    try {
+      await this.auditService.logUpdate({
+        userId: auditContext.actorUserId,
+        organizationId: id,
+        resourceType: 'organization',
+        resourceId: id,
+        before,
+        after: data,
+        ipAddress: auditContext.ipAddress,
+        userAgent: auditContext.userAgent,
+      });
+    } catch (auditError) {
+      const { error: rollbackError } = await this.supabaseService
+        .getClient()
+        .from('organizations')
+        .update({
+          name: before.name,
+          description: before.description ?? null,
+          updated_at: before.updated_at ?? null,
+        })
+        .eq('id', id)
+        .eq('updated_at', data.updated_at)
+        .is('deleted_at', null);
+
+      if (rollbackError) {
+        throw new Error('Organization audit failed and compensation failed');
+      }
+
+      throw auditError;
     }
 
     return data;
@@ -147,15 +218,32 @@ export class OrganizationsService {
       deleted_at: deletedAt,
     };
 
-    await this.auditService.logDelete({
-      userId: auditContext.actorUserId,
-      organizationId: id,
-      resourceType: 'organization',
-      resourceId: id,
-      before: organizationBefore,
-      after: organizationAfter,
-      ipAddress: auditContext.ipAddress,
-      userAgent: auditContext.userAgent,
-    });
+    try {
+      await this.auditService.logDelete({
+        userId: auditContext.actorUserId,
+        organizationId: id,
+        resourceType: 'organization',
+        resourceId: id,
+        before: organizationBefore,
+        after: organizationAfter,
+        ipAddress: auditContext.ipAddress,
+        userAgent: auditContext.userAgent,
+      });
+    } catch (auditError) {
+      const { error: rollbackError } = await this.supabaseService
+        .getClient()
+        .from('organizations')
+        .update({ deleted_at: null })
+        .eq('id', id)
+        .eq('deleted_at', deletedAt);
+
+      if (rollbackError) {
+        throw new Error(
+          'Organization delete audit failed and compensation failed',
+        );
+      }
+
+      throw auditError;
+    }
   }
 }

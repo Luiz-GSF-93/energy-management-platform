@@ -27,8 +27,15 @@ export class OrganizationsController {
 
   @Post()
   @RequirePermission([PERMISSIONS.PLATFORM_ORGANIZATIONS_CREATE])
-  async create(@Body() dto: CreateOrganizationDto): Promise<OrganizationDto> {
-    return this.organizationsService.create(dto);
+  async create(
+    @Body() dto: CreateOrganizationDto,
+    @Req() request: RequestWithAuthenticatedUser,
+  ): Promise<OrganizationDto> {
+    return this.organizationsService.create(dto, {
+      actorUserId: request.authenticatedUser.userId,
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
   }
 
   @Patch(':id')
@@ -36,8 +43,13 @@ export class OrganizationsController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateOrganizationDto,
+    @Req() request: RequestWithAuthenticatedUser,
   ): Promise<OrganizationDto> {
-    return this.organizationsService.update(id, dto);
+    return this.organizationsService.update(id, dto, {
+      actorUserId: request.authenticatedUser.userId,
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
   }
 
   @Delete(':id')
