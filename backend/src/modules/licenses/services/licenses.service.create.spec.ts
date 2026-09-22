@@ -55,7 +55,11 @@ function createHarness(options: {
   });
 
   const insertSelect = jest.fn(() => ({ single }));
-  const insert = jest.fn(() => ({ select: insertSelect }));
+  const insert = jest.fn(
+  (_payload: Record<string, unknown>[]) => ({
+    select: insertSelect,
+  }),
+);
 
   const rollbackSelect = jest.fn().mockResolvedValue({
     data:
