@@ -42,6 +42,7 @@ export class DocumentsController {
   }
 
   @Put(':id')
+  @RequirePermission([PERMISSIONS.DOCUMENTS_UPDATE])
   async update(
     @Param('id') id: string,
     @Body() updateDocumentDto: UpdateDocumentDto,
