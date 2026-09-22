@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -9,6 +10,12 @@ import { AuditService } from '../../../common/services/audit.service';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateLicenseDto } from '../dto/create-license.dto';
 import { UpdateLicenseDto } from '../dto/update-license.dto';
+
+export type LicenseCapability =
+  | 'document_management'
+  | 'advanced_analytics'
+  | 'report_generation'
+  | 'free_market_management';
 
 export interface LicenseRecord {
   id: string;
@@ -444,6 +451,27 @@ export class LicensesService {
     }
 
     return after;
+  }
+
+  async requireEntitlement(
+    organizationId: string,
+    capability: LicenseCapability,
+  ): Promise<LicenseRecord> {
+    const license = await this.resolveEffectiveLicense(organizationId);
+
+    if (!license) {
+      throw new ForbiddenException(
+        'Active license required for this capability',
+      );
+    }
+
+    if (license[capability] !== true) {
+      throw new ForbiddenException(
+        'License does not grant the required capability',
+      );
+    }
+
+    return license;
   }
 
   async resolveEffectiveLicense(

@@ -1,12 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
+import { LicensesService } from '../../licenses/services/licenses.service';
 
 @Injectable()
 export class DocumentsService {
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private licensesService: LicensesService,
+  ) {}
+
+  private async requireDocumentManagement(
+    organizationId: string,
+  ): Promise<void> {
+    await this.licensesService.requireEntitlement(
+      organizationId,
+      'document_management',
+    );
+  }
 
   async findAll(organizationId: string) {
+    await this.requireDocumentManagement(organizationId);
+
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
@@ -18,6 +33,8 @@ export class DocumentsService {
   }
 
   async findOne(id: string, organizationId: string) {
+    await this.requireDocumentManagement(organizationId);
+
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
@@ -31,6 +48,8 @@ export class DocumentsService {
   }
 
   async create(createDocumentDto: CreateDocumentDto, organizationId: string) {
+    await this.requireDocumentManagement(organizationId);
+
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
@@ -47,6 +66,8 @@ export class DocumentsService {
     organizationId: string,
     updateDocumentDto: UpdateDocumentDto,
   ) {
+    await this.requireDocumentManagement(organizationId);
+
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
@@ -61,6 +82,8 @@ export class DocumentsService {
   }
 
   async delete(id: string, organizationId: string) {
+    await this.requireDocumentManagement(organizationId);
+
     const { data, error } = await this.supabaseService
       .getClient()
       .from('documents')
