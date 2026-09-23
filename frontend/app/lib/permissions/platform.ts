@@ -4,4 +4,7 @@ export const PLATFORM_PERMISSIONS = {
 
   ORGANIZATIONS_CREATE:
     '6f62969b-1a2d-4adc-a784-2f49cba40dd5',
+
+  ORGANIZATIONS_UPDATE:
+    'ede45b9c-8af4-4b47-8490-9d386a3efb13',
 } as const;

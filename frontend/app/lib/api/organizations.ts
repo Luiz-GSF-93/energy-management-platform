@@ -13,6 +13,11 @@ export interface CreateOrganizationRequest {
   description?: string;
 }
 
+export interface UpdateOrganizationRequest {
+  name?: string;
+  description?: string;
+}
+
 export function getOrganizations():
   Promise<Organization[]> {
   return apiRequest<Organization[]>(
@@ -35,6 +40,19 @@ export function createOrganization(
     '/api/v1/admin/organizations',
     {
       method: 'POST',
+      body: input,
+    },
+  );
+}
+
+export function updateOrganization(
+  id: string,
+  input: UpdateOrganizationRequest,
+): Promise<Organization> {
+  return apiRequest<Organization>(
+    `/api/v1/admin/organizations/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
       body: input,
     },
   );

@@ -539,3 +539,29 @@ a {
   display: flex;
   justify-content: flex-end;
 }
+
+/* Organizations update */
+
+.organizations-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+}
+
+.organizations-edit {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.organizations-edit__description {
+  min-height: 7rem;
+  resize: vertical;
+  font: inherit;
+}
+
+.organizations-edit__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
