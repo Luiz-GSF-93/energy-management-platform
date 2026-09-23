@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { SupabaseService } from '../../../../services/supabase.service';
 import { AuditService } from '../../../../common/services/audit.service';
 import { OrganizationDto } from '../dto/organizations.dto';
@@ -186,6 +191,58 @@ export class OrganizationsService {
     return data;
   }
 
+  private async assertNoDeleteDependencies(
+    organizationId: string,
+  ): Promise<void> {
+    const dependencyTables = [
+      'organization_members',
+      'licenses',
+      'customers',
+      'consumer_units',
+      'energy_contracts',
+      'documents',
+    ] as const;
+
+    const client =
+      this.supabaseService.getClient();
+
+    for (const table of dependencyTables) {
+      const { data, error } = await client
+        .from(table)
+        .select('id')
+        .eq(
+          'organization_id',
+          organizationId,
+        )
+        .limit(1);
+
+      if (error) {
+        throw new Error(
+          `Unable to verify organization dependencies: ${table}`,
+        );
+      }
+
+      if (
+        Array.isArray(data) &&
+        data.length > 0
+      ) {
+        throw new ConflictException(
+          'Organization has dependencies that must be resolved before deletion',
+        );
+      }
+
+      if (
+        data !== null &&
+        data !== undefined &&
+        !Array.isArray(data)
+      ) {
+        throw new Error(
+          `Invalid organization dependency response: ${table}`,
+        );
+      }
+    }
+  }
+
   async delete(
     id: string,
     auditContext: {
@@ -197,10 +254,13 @@ export class OrganizationsService {
     // 1. Carregar estado BEFORE (para auditoria)
     const organizationBefore = await this.findOne(id);
 
-    // 2. Gerar deletedAt uma única vez (usar em UPDATE e em changes)
+    // 2. Falhar fechado quando houver dependências.
+    await this.assertNoDeleteDependencies(id);
+
+    // 3. Gerar deletedAt uma única vez (usar em UPDATE e em changes)
     const deletedAt = new Date().toISOString();
 
-    // 3. Soft-delete
+    // 4. Soft-delete
     const { error } = await this.supabaseService
       .getClient()
       .from('organizations')
@@ -212,7 +272,7 @@ export class OrganizationsService {
       throw new Error(`Supabase error: ${error.message}`);
     }
 
-    // 4. Registrar auditoria com estado AFTER (after = before + deleted_at)
+    // 5. Registrar auditoria com estado AFTER (after = before + deleted_at)
     const organizationAfter = {
       ...organizationBefore,
       deleted_at: deletedAt,

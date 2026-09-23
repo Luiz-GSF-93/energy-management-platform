@@ -7,6 +7,27 @@ describe('OrganizationsService — CREATE/UPDATE persistent audit', () => {
     userAgent: 'f1.5.5-test',
   };
 
+  function emptyDeleteDependencyQuery() {
+    const limit = jest.fn().mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    const eq = jest.fn(() => ({
+      limit,
+    }));
+
+    const select = jest.fn(() => ({
+      eq,
+    }));
+
+    return {
+      select,
+      eq,
+      limit,
+    };
+  }
+
   it('A — CREATE persists audit with authenticated actor', async () => {
     const created = {
       id: 'created-org',
@@ -259,7 +280,17 @@ describe('OrganizationsService — CREATE/UPDATE persistent audit', () => {
       .mockReturnValueOnce(rollbackQuery);
 
     const client = {
-      from: jest.fn(() => ({ update })),
+      from: jest.fn((table: string) => {
+        if (table === 'organizations') {
+          return { update };
+        }
+
+        return {
+          select:
+            emptyDeleteDependencyQuery()
+              .select,
+        };
+      }),
     };
 
     const auditService = {
@@ -328,7 +359,17 @@ describe('OrganizationsService — CREATE/UPDATE persistent audit', () => {
       .mockReturnValueOnce(rollbackQuery);
 
     const client = {
-      from: jest.fn(() => ({ update })),
+      from: jest.fn((table: string) => {
+        if (table === 'organizations') {
+          return { update };
+        }
+
+        return {
+          select:
+            emptyDeleteDependencyQuery()
+              .select,
+        };
+      }),
     };
 
     const auditService = {

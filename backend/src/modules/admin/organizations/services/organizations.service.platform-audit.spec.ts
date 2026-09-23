@@ -23,12 +23,30 @@ describe('OrganizationsService — platform organization audit contract', () => 
 
     const client = {
       from: jest.fn((table: string) => {
-        if (table !== 'organizations') {
-          throw new Error(`Unexpected table ${table}`);
+        if (table === 'organizations') {
+          return {
+            update: jest.fn(
+              () => updateQuery,
+            ),
+          };
         }
 
+        const limit =
+          jest.fn().mockResolvedValue({
+            data: [],
+            error: null,
+          });
+
+        const eq = jest.fn(() => ({
+          limit,
+        }));
+
+        const select = jest.fn(() => ({
+          eq,
+        }));
+
         return {
-          update: jest.fn(() => updateQuery),
+          select,
         };
       }),
     };
