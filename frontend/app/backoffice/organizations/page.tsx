@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  FormEvent,
   useCallback,
   useEffect,
   useState,
@@ -8,13 +9,17 @@ import {
 
 import BackofficeShell from '@/app/components/BackofficeShell';
 import {
+  Alert,
+  Button,
   Card,
   EmptyState,
   ErrorState,
+  Input,
   LoadingState,
 } from '@/app/components/ui';
 import {
   ApiError,
+  createOrganization,
   getOrganizations,
 } from '@/app/lib/api';
 import type {
@@ -33,6 +38,20 @@ export default function OrganizationsPage() {
     hasPermission,
   } = useAuth();
 
+  const [name, setName] = useState('');
+
+  const [description, setDescription] =
+    useState('');
+
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [createError, setCreateError] =
+    useState('');
+
+  const [createSuccess, setCreateSuccess] =
+    useState('');
+
   const [organizations, setOrganizations] =
     useState<Organization[]>([]);
 
@@ -46,6 +65,10 @@ export default function OrganizationsPage() {
 
   const canView = hasPermission(
     PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
+  );
+
+  const canCreate = hasPermission(
+    PLATFORM_PERMISSIONS.ORGANIZATIONS_CREATE,
   );
 
   const loadOrganizations =
@@ -76,6 +99,57 @@ export default function OrganizationsPage() {
         setStatus('error');
       }
     }, []);
+
+  const handleCreate = async (
+    event: FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    const normalizedName = name.trim();
+    const normalizedDescription =
+      description.trim();
+
+    if (!normalizedName) {
+      setCreateError(
+        'Informe o nome da organização.',
+      );
+      setCreateSuccess('');
+      return;
+    }
+
+    setSubmitting(true);
+    setCreateError('');
+    setCreateSuccess('');
+
+    try {
+      await createOrganization({
+        name: normalizedName,
+        ...(normalizedDescription
+          ? {
+              description:
+                normalizedDescription,
+            }
+          : {}),
+      });
+
+      setName('');
+      setDescription('');
+
+      setCreateSuccess(
+        'Organização criada com sucesso.',
+      );
+
+      await loadOrganizations();
+    } catch (error) {
+      setCreateError(
+        error instanceof ApiError
+          ? error.message
+          : 'Não foi possível criar a organização.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!canView) {
@@ -145,6 +219,84 @@ export default function OrganizationsPage() {
             </p>
           </div>
         </header>
+
+        {canCreate ? (
+          <Card>
+            <div className="organizations-create">
+              <div>
+                <h2>Nova organização</h2>
+
+                <p className="organizations-page__description">
+                  Cadastre uma nova organização
+                  na plataforma.
+                </p>
+              </div>
+
+              <form
+                className="organizations-create__form"
+                onSubmit={handleCreate}
+              >
+                {createError ? (
+                  <Alert variant="error">
+                    {createError}
+                  </Alert>
+                ) : null}
+
+                {createSuccess ? (
+                  <Alert>
+                    {createSuccess}
+                  </Alert>
+                ) : null}
+
+                <Input
+                  label="Nome"
+                  name="name"
+                  value={name}
+                  onChange={(event) =>
+                    setName(event.target.value)
+                  }
+                  required
+                  disabled={submitting}
+                  autoComplete="organization"
+                />
+
+                <div className="ds-field">
+                  <label
+                    className="ds-label"
+                    htmlFor="organization-description"
+                  >
+                    Descrição
+                  </label>
+
+                  <textarea
+                    id="organization-description"
+                    name="description"
+                    className="ds-input organizations-create__description"
+                    value={description}
+                    onChange={(event) =>
+                      setDescription(
+                        event.target.value,
+                      )
+                    }
+                    disabled={submitting}
+                    rows={4}
+                  />
+                </div>
+
+                <div className="organizations-create__actions">
+                  <Button
+                    type="submit"
+                    disabled={submitting}
+                  >
+                    {submitting
+                      ? 'Criando...'
+                      : 'Criar organização'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </Card>
+        ) : null}
 
         {organizations.length === 0 ? (
           <EmptyState

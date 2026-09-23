@@ -516,3 +516,26 @@ a {
   font-family: monospace;
   font-size: 0.875rem;
 }
+
+/* Organizations create */
+
+.organizations-create {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.organizations-create__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.organizations-create__description {
+  min-height: 7rem;
+  resize: vertical;
+  font: inherit;
+}
+
+.organizations-create__actions {
+  display: flex;
+  justify-content: flex-end;
+}

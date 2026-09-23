@@ -8,6 +8,11 @@ export interface Organization {
   updated_at?: string;
 }
 
+export interface CreateOrganizationRequest {
+  name: string;
+  description?: string;
+}
+
 export function getOrganizations():
   Promise<Organization[]> {
   return apiRequest<Organization[]>(
@@ -20,5 +25,17 @@ export function getOrganization(
 ): Promise<Organization> {
   return apiRequest<Organization>(
     `/api/v1/admin/organizations/${encodeURIComponent(id)}`,
+  );
+}
+
+export function createOrganization(
+  input: CreateOrganizationRequest,
+): Promise<Organization> {
+  return apiRequest<Organization>(
+    '/api/v1/admin/organizations',
+    {
+      method: 'POST',
+      body: input,
+    },
   );
 }

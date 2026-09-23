@@ -1,9 +1,11 @@
 export {
+  createOrganization,
   getOrganization,
   getOrganizations,
 } from './organizations';
 
 export type {
+  CreateOrganizationRequest,
   Organization,
 } from './organizations';
 
