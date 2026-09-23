@@ -84,6 +84,11 @@ export default function Sidebar() {
     filterBackofficeNavigation(
       backofficeNavigation,
       hasPermission,
+      context
+        ? context.scope === 'global'
+          ? 'global'
+          : 'organization'
+        : undefined,
     );
 
   return (

@@ -34,3 +34,14 @@ export type {
   OrganizationContextSummary,
   SwitchOrganizationResponse,
 } from './types';
+
+export {
+  getUser,
+  getUsers,
+} from './users';
+
+export type {
+  OrganizationUser,
+  OrganizationUserRole,
+  UserAffiliationType,
+} from './users';

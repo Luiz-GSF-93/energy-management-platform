@@ -1,0 +1,4 @@
+export const ORGANIZATION_PERMISSIONS = {
+  USERS_VIEW:
+    'f60e405e-f120-4420-a563-691162504b15',
+} as const;

@@ -599,3 +599,86 @@ a {
   gap: var(--space-3);
   flex-wrap: wrap;
 }
+
+/* Administration users */
+
+.users-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.users-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.users-page__header h1,
+.users-page__header p,
+.users-card h2,
+.users-card p,
+.users-card dl,
+.users-card dd {
+  margin: 0;
+}
+
+.users-page__eyebrow {
+  margin-bottom: var(--space-2) !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.users-page__description {
+  margin-top: var(--space-2) !important;
+}
+
+.users-state {
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.users-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns:
+    repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.users-card {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.users-card__identity {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.users-card__details {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.users-card__details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.users-card__details dt {
+  font-weight: 600;
+}
+
+.users-card__details dd {
+  text-align: right;
+}
