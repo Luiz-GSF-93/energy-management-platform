@@ -12,84 +12,48 @@ import {
   Button,
   Card,
   Input,
+  LoadingState,
 } from '@/app/components/ui';
+import { useAuth } from '@/app/providers';
 
 export default function LoginPage() {
   const router = useRouter();
 
+  const {
+    status,
+    login,
+  } = useAuth();
+
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [password, setPassword] =
+    useState('');
+  const [submitting, setSubmitting] =
+    useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-
-    if (token) {
+    if (status === 'authenticated') {
       router.replace('/backoffice/dashboard');
     }
-  }, [router]);
+  }, [router, status]);
 
   const handleLogin = async (
     event: FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
 
-    setLoading(true);
+    setSubmitting(true);
     setError('');
 
     try {
-      const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL;
+      await login({
+        email,
+        password,
+      });
 
-      if (!apiUrl) {
-        throw new Error(
-          'Configuração da API indisponível',
-        );
-      }
-
-      const response = await fetch(
-        `${apiUrl}/api/v1/auth/login`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        },
+      router.replace(
+        '/backoffice/dashboard',
       );
-
-      if (!response.ok) {
-        throw new Error('Credenciais inválidas');
-      }
-
-      const data = await response.json();
-
-      if (
-        typeof data?.access_token !== 'string' ||
-        !data.access_token
-      ) {
-        throw new Error(
-          'Resposta de autenticação inválida',
-        );
-      }
-
-      localStorage.setItem(
-        'access_token',
-        data.access_token,
-      );
-
-      if (typeof data?.user?.email === 'string') {
-        localStorage.setItem(
-          'user_email',
-          data.user.email,
-        );
-      }
-
-      router.replace('/backoffice/dashboard');
     } catch (err) {
       setError(
         err instanceof Error
@@ -97,9 +61,22 @@ export default function LoginPage() {
           : 'Erro ao fazer login',
       );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
+
+  if (status === 'loading') {
+    return (
+      <main className="auth-page">
+        <div className="auth-shell">
+          <LoadingState
+            title="Validando sessão..."
+            description="Verificando o contexto de acesso."
+          />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="auth-page">
@@ -139,7 +116,7 @@ export default function LoginPage() {
               placeholder="seu@email.com"
               autoComplete="email"
               required
-              disabled={loading}
+              disabled={submitting}
             />
 
             <Input
@@ -152,15 +129,15 @@ export default function LoginPage() {
               placeholder="••••••••"
               autoComplete="current-password"
               required
-              disabled={loading}
+              disabled={submitting}
             />
 
             <div className="auth-form__actions">
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={submitting}
               >
-                {loading
+                {submitting
                   ? 'Entrando...'
                   : 'Entrar'}
               </Button>

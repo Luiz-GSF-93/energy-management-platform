@@ -5,19 +5,69 @@ import {
   BarChart3,
   LogOut,
 } from 'lucide-react';
+import {
+  ChangeEvent,
+  useState,
+} from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/app/components/ui';
+import {
+  Alert,
+  Button,
+} from '@/app/components/ui';
+import { useAuth } from '@/app/providers';
 
 export default function Sidebar() {
   const router = useRouter();
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user_email');
+  const {
+    context,
+    logout,
+    switchOrganization,
+  } = useAuth();
 
+  const [switching, setSwitching] =
+    useState(false);
+  const [switchError, setSwitchError] =
+    useState('');
+
+  const handleLogout = () => {
+    logout();
     router.replace('/auth/login');
   };
+
+  const handleOrganizationChange = async (
+    event: ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const organizationId =
+      event.target.value;
+
+    if (
+      !context ||
+      organizationId ===
+        context.currentOrganization.id
+    ) {
+      return;
+    }
+
+    setSwitching(true);
+    setSwitchError('');
+
+    try {
+      await switchOrganization(
+        organizationId,
+      );
+    } catch {
+      setSwitchError(
+        'Não foi possível trocar de organização.',
+      );
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const organizations =
+    context?.organizations ?? [];
 
   return (
     <aside className="backoffice-sidebar">
@@ -35,10 +85,52 @@ export default function Sidebar() {
           </h1>
 
           <p className="backoffice-brand__context">
-            Backoffice
+            {context
+              ? `Perfil: ${context.currentOrganization.role}`
+              : 'Backoffice'}
           </p>
         </div>
       </header>
+
+      {context && organizations.length > 1 ? (
+        <div className="backoffice-context">
+          <label
+            className="backoffice-context__label"
+            htmlFor="organization-context"
+          >
+            Organização ativa
+          </label>
+
+          <select
+            id="organization-context"
+            className="backoffice-context__select"
+            value={
+              context.currentOrganization.id
+            }
+            onChange={
+              handleOrganizationChange
+            }
+            disabled={switching}
+          >
+            {organizations.map(
+              (organization) => (
+                <option
+                  key={organization.id}
+                  value={organization.id}
+                >
+                  {`Organização ${organization.id.slice(0, 8)} — ${organization.role}`}
+                </option>
+              ),
+            )}
+          </select>
+
+          {switchError ? (
+            <Alert variant="error">
+              {switchError}
+            </Alert>
+          ) : null}
+        </div>
+      ) : null}
 
       <nav
         className="backoffice-nav"

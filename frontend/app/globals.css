@@ -410,3 +410,37 @@ a {
     padding: var(--space-6);
   }
 }
+
+/* Organization context */
+
+.backoffice-context {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.backoffice-context__label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.backoffice-context__select {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.backoffice-context__select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.backoffice-context__select:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
