@@ -20,6 +20,7 @@ import {
 import {
   ApiError,
   createOrganization,
+  deleteOrganization,
   getOrganizations,
   updateOrganization,
 } from '@/app/lib/api';
@@ -68,6 +69,15 @@ export default function OrganizationsPage() {
   const [updateError, setUpdateError] =
     useState('');
 
+  const [deleteTarget, setDeleteTarget] =
+    useState<Organization | null>(null);
+
+  const [deleteSubmitting, setDeleteSubmitting] =
+    useState(false);
+
+  const [deleteError, setDeleteError] =
+    useState('');
+
   const [organizations, setOrganizations] =
     useState<Organization[]>([]);
 
@@ -89,6 +99,10 @@ export default function OrganizationsPage() {
 
   const canUpdate = hasPermission(
     PLATFORM_PERMISSIONS.ORGANIZATIONS_UPDATE,
+  );
+
+  const canDelete = hasPermission(
+    PLATFORM_PERMISSIONS.ORGANIZATIONS_DELETE,
   );
 
   const loadOrganizations =
@@ -261,6 +275,49 @@ export default function OrganizationsPage() {
       );
     } finally {
       setUpdateSubmitting(false);
+    }
+  };
+
+  const requestDelete = (
+    organization: Organization,
+  ) => {
+    setDeleteTarget(organization);
+    setDeleteError('');
+  };
+
+  const cancelDelete = () => {
+    if (deleteSubmitting) {
+      return;
+    }
+
+    setDeleteTarget(null);
+    setDeleteError('');
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setDeleteSubmitting(true);
+    setDeleteError('');
+
+    try {
+      await deleteOrganization(
+        deleteTarget.id,
+      );
+
+      setDeleteTarget(null);
+
+      await loadOrganizations();
+    } catch (error) {
+      setDeleteError(
+        error instanceof ApiError
+          ? error.message
+          : 'Não foi possível excluir a organização.',
+      );
+    } finally {
+      setDeleteSubmitting(false);
     }
   };
 
@@ -528,18 +585,33 @@ export default function OrganizationsPage() {
                         </div>
                       </dl>
 
-                      {canUpdate ? (
+                      {canUpdate || canDelete ? (
                         <div className="organizations-card__actions">
-                          <Button
-                            variant="secondary"
-                            onClick={() =>
-                              startEditing(
-                                organization,
-                              )
-                            }
-                          >
-                            Editar
-                          </Button>
+                          {canUpdate ? (
+                            <Button
+                              variant="secondary"
+                              onClick={() =>
+                                startEditing(
+                                  organization,
+                                )
+                              }
+                            >
+                              Editar
+                            </Button>
+                          ) : null}
+
+                          {canDelete ? (
+                            <Button
+                              variant="danger"
+                              onClick={() =>
+                                requestDelete(
+                                  organization,
+                                )
+                              }
+                            >
+                              Excluir
+                            </Button>
+                          ) : null}
                         </div>
                       ) : null}
                     </>
@@ -550,6 +622,68 @@ export default function OrganizationsPage() {
           </div>
         )}
       </div>
+      {deleteTarget ? (
+        <div
+          className="organizations-delete-overlay"
+          role="presentation"
+        >
+          <div
+            className="organizations-delete-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="organization-delete-title"
+          >
+            <h2 id="organization-delete-title">
+              Excluir organização?
+            </h2>
+
+            <p>
+              Você está prestes a excluir
+              <strong>
+                {' '}
+                {deleteTarget.name}
+              </strong>
+              .
+            </p>
+
+            <p>
+              A operação será bloqueada pelo
+              servidor se existirem dependências
+              vinculadas à organização.
+            </p>
+
+            {deleteError ? (
+              <Alert variant="error">
+                {deleteError}
+              </Alert>
+            ) : null}
+
+            <div className="organizations-delete-dialog__actions">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={deleteSubmitting}
+                onClick={cancelDelete}
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                type="button"
+                variant="danger"
+                disabled={deleteSubmitting}
+                onClick={() =>
+                  void handleDelete()
+                }
+              >
+                {deleteSubmitting
+                  ? 'Excluindo...'
+                  : 'Confirmar exclusão'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </BackofficeShell>
   );
 }

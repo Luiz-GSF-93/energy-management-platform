@@ -57,3 +57,14 @@ export function updateOrganization(
     },
   );
 }
+
+export function deleteOrganization(
+  id: string,
+): Promise<void> {
+  return apiRequest<void>(
+    `/api/v1/admin/organizations/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+}

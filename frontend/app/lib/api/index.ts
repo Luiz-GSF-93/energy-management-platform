@@ -1,5 +1,6 @@
 export {
   createOrganization,
+  deleteOrganization,
   getOrganization,
   getOrganizations,
   updateOrganization,

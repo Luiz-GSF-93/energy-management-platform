@@ -565,3 +565,37 @@ a {
   gap: var(--space-3);
   flex-wrap: wrap;
 }
+
+/* Organizations destructive confirmation */
+
+.organizations-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: rgb(0 0 0 / 45%);
+}
+
+.organizations-delete-dialog {
+  width: min(100%, 32rem);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.organizations-delete-dialog h2,
+.organizations-delete-dialog p {
+  margin: 0;
+}
+
+.organizations-delete-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
