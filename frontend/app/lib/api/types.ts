@@ -30,7 +30,8 @@ export interface SwitchOrganizationResponse {
   roleId: string;
 }
 
-export interface AuthContext {
+export interface OrganizationAuthContext {
+  scope?: 'organization';
   user: {
     id: string;
     email: string;
@@ -38,3 +39,18 @@ export interface AuthContext {
   organizations: OrganizationContextSummary[];
   currentOrganization: CurrentOrganizationContext;
 }
+
+export interface PlatformAuthContext {
+  scope: 'global';
+  user: {
+    id: string;
+    email: string;
+  };
+  role: string;
+  roleId: string;
+  permissions: string[];
+}
+
+export type AuthContext =
+  | OrganizationAuthContext
+  | PlatformAuthContext;

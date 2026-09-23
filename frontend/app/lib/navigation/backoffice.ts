@@ -1,3 +1,5 @@
+import { PLATFORM_PERMISSIONS } from '@/app/lib/permissions';
+
 export interface BackofficeNavigationItem {
   href: string;
   label: string;
@@ -9,6 +11,12 @@ export const backofficeNavigation:
     {
       href: '/backoffice/dashboard',
       label: 'Dashboard',
+    },
+    {
+      href: '/backoffice/organizations',
+      label: 'Organizações',
+      permission:
+        PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
     },
   ];
 

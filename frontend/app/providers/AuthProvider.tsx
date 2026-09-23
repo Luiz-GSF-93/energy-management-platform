@@ -13,12 +13,14 @@ import {
 import {
   ApiError,
   getAuthContext,
+  getPlatformContext,
   login as loginRequest,
   switchOrganization as switchOrganizationRequest,
 } from '@/app/lib/api';
 import type {
   AuthContext,
   LoginRequest,
+  OrganizationAuthContext,
 } from '@/app/lib/api';
 import { session } from '@/app/lib/auth/session';
 
@@ -45,6 +47,31 @@ const AuthenticationContext =
 
 interface AuthProviderProps {
   children: ReactNode;
+}
+
+function isOrganizationContext(
+  context: AuthContext | null,
+): context is OrganizationAuthContext {
+  return (
+    context !== null &&
+    context.scope !== 'global'
+  );
+}
+
+async function resolveAccessContext():
+  Promise<AuthContext> {
+  try {
+    return await getAuthContext();
+  } catch (error) {
+    if (
+      !(error instanceof ApiError) ||
+      error.status !== 403
+    ) {
+      throw error;
+    }
+  }
+
+  return getPlatformContext();
 }
 
 export function AuthProvider({
@@ -76,7 +103,7 @@ export function AuthProvider({
 
     try {
       const nextContext =
-        await getAuthContext();
+        await resolveAccessContext();
 
       setContext(nextContext);
       setStatus('authenticated');
@@ -133,7 +160,7 @@ export function AuthProvider({
 
       try {
         const nextContext =
-          await getAuthContext();
+          await resolveAccessContext();
 
         setContext(nextContext);
         setStatus('authenticated');
@@ -154,7 +181,7 @@ export function AuthProvider({
   const switchOrganization = useCallback(
     async (organizationId: string) => {
       if (
-        !context ||
+        !isOrganizationContext(context) ||
         organizationId ===
           context.currentOrganization.id
       ) {
@@ -194,10 +221,22 @@ export function AuthProvider({
   );
 
   const hasPermission = useCallback(
-    (permission: string) =>
-      context?.currentOrganization.permissions.includes(
-        permission,
-      ) ?? false,
+    (permission: string) => {
+      if (!context) {
+        return false;
+      }
+
+      if (context.scope === 'global') {
+        return context.permissions.includes(
+          permission,
+        );
+      }
+
+      return (
+        context.currentOrganization.permissions
+          .includes(permission)
+      );
+    },
     [context],
   );
 

@@ -3,8 +3,13 @@ import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Tenant } from '../../common/decorators/tenant.decorator';
+import { Access } from '../../common/decorators/access-context.decorator';
+import { PlatformScope } from '../../common/decorators/platform-scope.decorator';
 import { RecoveryEndpoint } from '../../common/decorators/recovery-endpoint.decorator';
-import { TenantContext } from '../../common/interfaces/tenant-context.interface';
+import {
+  AccessContext,
+  TenantContext,
+} from '../../common/interfaces/tenant-context.interface';
 
 @Controller('auth')
 export class AuthController {
@@ -26,6 +31,23 @@ export class AuthController {
   async getContext(@Tenant() tenant: TenantContext) {
     console.log('[AuthController] getContext - tenant:', tenant);
     return this.authService.getContext(tenant);
+  }
+
+  @Get('platform-context')
+  @PlatformScope()
+  async getPlatformContext(
+    @Access() access: AccessContext,
+  ) {
+    return {
+      scope: access.scope,
+      user: {
+        id: access.userId,
+        email: access.email,
+      },
+      role: access.role,
+      roleId: access.roleId,
+      permissions: access.permissions,
+    };
   }
 
   @Get('profile')

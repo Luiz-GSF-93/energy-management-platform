@@ -3,6 +3,7 @@ import {
 } from '@/app/lib/api/client';
 import type {
   AuthContext,
+  PlatformAuthContext,
   LoginRequest,
   LoginResponse,
   SwitchOrganizationResponse,
@@ -18,6 +19,13 @@ export function login(
       authenticated: false,
       body: input,
     },
+  );
+}
+
+export function getPlatformContext():
+  Promise<PlatformAuthContext> {
+  return apiRequest<PlatformAuthContext>(
+    '/api/v1/auth/platform-context',
   );
 }
 

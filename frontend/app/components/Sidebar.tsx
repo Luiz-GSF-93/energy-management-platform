@@ -49,6 +49,7 @@ export default function Sidebar() {
 
     if (
       !context ||
+      context.scope === 'global' ||
       organizationId ===
         context.currentOrganization.id
     ) {
@@ -71,8 +72,13 @@ export default function Sidebar() {
     }
   };
 
+  const organizationContext =
+    context && context.scope !== 'global'
+      ? context
+      : null;
+
   const organizations =
-    context?.organizations ?? [];
+    organizationContext?.organizations ?? [];
 
   const navigationItems =
     filterBackofficeNavigation(
@@ -97,13 +103,16 @@ export default function Sidebar() {
 
           <p className="backoffice-brand__context">
             {context
-              ? `Perfil: ${context.currentOrganization.role}`
+              ? context.scope === 'global'
+                ? `Perfil global: ${context.role}`
+                : `Perfil: ${context.currentOrganization.role}`
               : 'Backoffice'}
           </p>
         </div>
       </header>
 
-      {context && organizations.length > 1 ? (
+      {organizationContext &&
+      organizations.length > 1 ? (
         <div className="backoffice-context">
           <label
             className="backoffice-context__label"
@@ -116,7 +125,7 @@ export default function Sidebar() {
             id="organization-context"
             className="backoffice-context__select"
             value={
-              context.currentOrganization.id
+              organizationContext.currentOrganization.id
             }
             onChange={
               handleOrganizationChange
