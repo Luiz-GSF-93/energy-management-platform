@@ -15,6 +15,10 @@ import {
   Alert,
   Button,
 } from '@/app/components/ui';
+import {
+  backofficeNavigation,
+  filterBackofficeNavigation,
+} from '@/app/lib/navigation';
 import { useAuth } from '@/app/providers';
 
 export default function Sidebar() {
@@ -24,6 +28,7 @@ export default function Sidebar() {
     context,
     logout,
     switchOrganization,
+    hasPermission,
   } = useAuth();
 
   const [switching, setSwitching] =
@@ -68,6 +73,12 @@ export default function Sidebar() {
 
   const organizations =
     context?.organizations ?? [];
+
+  const navigationItems =
+    filterBackofficeNavigation(
+      backofficeNavigation,
+      hasPermission,
+    );
 
   return (
     <aside className="backoffice-sidebar">
@@ -136,18 +147,21 @@ export default function Sidebar() {
         className="backoffice-nav"
         aria-label="Administração"
       >
-        <Link
-          href="/backoffice/dashboard"
-          className="backoffice-nav__link"
-        >
-          <BarChart3
-            size={20}
-            className="backoffice-nav__icon"
-            aria-hidden="true"
-          />
+        {navigationItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="backoffice-nav__link"
+          >
+            <BarChart3
+              size={20}
+              className="backoffice-nav__icon"
+              aria-hidden="true"
+            />
 
-          <span>Dashboard</span>
-        </Link>
+            <span>{item.label}</span>
+          </Link>
+        ))}
       </nav>
 
       <footer className="backoffice-sidebar__footer">

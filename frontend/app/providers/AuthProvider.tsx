@@ -97,11 +97,20 @@ export function AuthProvider({
   }, [clearAuthentication]);
 
   useEffect(() => {
-    void refresh().catch(() => {
-      // The route/UI layer may present retry/error
-      // behavior in a later slice. Authentication
-      // remains fail-closed here.
-    });
+    const bootstrap = async () => {
+      await refresh();
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      void bootstrap().catch(() => {
+        // ProtectedRoute exposes the retry path.
+        // Authentication remains fail-closed.
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [refresh]);
 
   const login = useCallback(
