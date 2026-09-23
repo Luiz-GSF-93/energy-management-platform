@@ -506,4 +506,56 @@ export class AuditService {
   }
 
 
+
+  async logInitialOrganizationAdminBootstrap(params: {
+    actorUserId: string;
+    organizationId: string;
+    targetUserId: string;
+    membershipId: string;
+    roleId: string;
+    affiliationType: 'internal' | 'external';
+    provisioningPath:
+      | 'new_identity'
+      | 'existing_identity';
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const auditEntry = {
+      user_id: params.actorUserId,
+      organization_id: params.organizationId,
+      action: 'CREATE',
+      resource_type: 'organization_membership',
+      resource_id: params.membershipId,
+      before: null,
+      after: {
+        user_id: params.targetUserId,
+        organization_id: params.organizationId,
+        membership_id: params.membershipId,
+        role_id: params.roleId,
+        role_name: 'admin_org',
+        membership_status: 'active',
+        affiliation_type:
+          params.affiliationType,
+        provisioning_path:
+          params.provisioningPath,
+        bootstrap: true,
+      },
+      ip_address:
+        params.ipAddress ?? null,
+      user_agent:
+        params.userAgent ?? null,
+    };
+
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('audit_logs')
+      .insert(auditEntry);
+
+    if (error) {
+      throw new Error(
+        'Initial organization administrator bootstrap audit failed',
+      );
+    }
+  }
+
 }

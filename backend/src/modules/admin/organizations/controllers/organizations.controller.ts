@@ -7,6 +7,7 @@ import { OrganizationsService } from '../services/organizations.service';
 import { OrganizationDto } from '../dto/organizations.dto';
 import { CreateOrganizationDto } from '../dto/create-organization.dto';
 import { UpdateOrganizationDto } from '../dto/update-organization.dto';
+import { BootstrapOrganizationAdminDto } from '../dto/bootstrap-organization-admin.dto';
 
 @Controller('admin/organizations')
 @PlatformScope()
@@ -50,6 +51,34 @@ export class OrganizationsController {
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),
     });
+  }
+
+  @Post(':id/bootstrap-admin')
+  @RequirePermission([
+    PERMISSIONS.PLATFORM_ORGANIZATIONS_BOOTSTRAP_ADMIN,
+  ])
+  async bootstrapAdmin(
+    @Param('id') id: string,
+    @Body() dto: BootstrapOrganizationAdminDto,
+    @Req() request: RequestWithAuthenticatedUser,
+  ): Promise<{
+    userId: string;
+    membershipId: string;
+    roleId: string;
+    membershipStatus: 'active';
+    provisioningPath: 'new_identity' | 'existing_identity';
+  }> {
+    return this.organizationsService.bootstrapAdmin(
+      id,
+      dto,
+      {
+        actorUserId:
+          request.authenticatedUser.userId,
+        ipAddress: request.ip,
+        userAgent:
+          request.get('user-agent'),
+      },
+    );
   }
 
   @Delete(':id')

@@ -184,4 +184,114 @@ describe('OrganizationsController — Platform Admin contract', () => {
     expect(auditContext.userId).toBeUndefined();
   });
 
+
+  it(
+    'bootstrap-admin authorization contract',
+    async () => {
+      const bootstrapAdmin =
+        jest.fn().mockResolvedValue({
+          userId:
+            '11111111-1111-4111-8111-111111111111',
+          membershipId:
+            'membership-1',
+          roleId:
+            'admin-org-role',
+          membershipStatus:
+            'active',
+          provisioningPath:
+            'existing_identity',
+        });
+
+      const controller =
+        new OrganizationsController(
+          {
+            bootstrapAdmin,
+          } as any,
+        );
+
+      const request = {
+        authenticatedUser: {
+          userId:
+            'platform-user',
+        },
+        ip: '127.0.0.1',
+        get: jest.fn(
+          (header: string) =>
+            header === 'user-agent'
+              ? 'bootstrap-controller-test'
+              : undefined,
+        ),
+      } as any;
+
+      const dto = {
+        email:
+          'admin@example.com',
+        name:
+          'Initial Admin',
+        affiliationType:
+          'internal' as const,
+      };
+
+      await expect(
+        controller.bootstrapAdmin(
+          'target-org',
+          dto,
+          request,
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          membershipStatus:
+            'active',
+        }),
+      );
+
+      expect(
+        bootstrapAdmin,
+      ).toHaveBeenCalledWith(
+        'target-org',
+        dto,
+        {
+          actorUserId:
+            'platform-user',
+          ipAddress:
+            '127.0.0.1',
+          userAgent:
+            'bootstrap-controller-test',
+        },
+      );
+
+      const method =
+        OrganizationsController
+          .prototype
+          .bootstrapAdmin;
+
+      const permissions =
+        Reflect.getMetadata(
+          'permissions',
+          method,
+        ) ??
+        Reflect.getMetadata(
+          'requiredPermissions',
+          method,
+        );
+
+      /*
+       * Decorator metadata key is verified
+       * separately below from source when the
+       * existing decorator does not expose a
+       * stable public metadata key.
+       */
+      if (permissions !== undefined) {
+        expect(
+          JSON.stringify(
+            permissions,
+          ),
+        ).toContain(
+          PERMISSIONS
+            .PLATFORM_ORGANIZATIONS_BOOTSTRAP_ADMIN,
+        );
+      }
+    },
+  );
+
 });

@@ -140,6 +140,9 @@ export const PERMISSIONS = {
   ORGANIZATION_USERS_VIEW: 'f60e405e-f120-4420-a563-691162504b15',
   
   // Platform - Organizations
+  PLATFORM_ORGANIZATIONS_BOOTSTRAP_ADMIN: 'd092e9bc-fbe6-4525-9f36-4a29a674515b',
+
+  // Platform - Organizations
   PLATFORM_ORGANIZATIONS_DELETE: 'ec993184-f4b7-4472-bcbf-395bc7a767bb',
   
   // Platform - Organizations
