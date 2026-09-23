@@ -1,26 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import {
+  ReactNode,
+  useEffect,
+  useState,
+} from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+import { LoadingState } from '@/app/components/ui';
+
+interface ProtectedRouteProps {
+  children: ReactNode;
+}
+
+export default function ProtectedRoute({
+  children,
+}: ProtectedRouteProps) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] =
+    useState(false);
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const token =
+      localStorage.getItem('access_token');
+
     if (!token) {
-      router.push('/auth/login');
-    } else {
-      setLoading(false);
+      router.replace('/auth/login');
+      return;
     }
+
+    setAuthorized(true);
   }, [router]);
 
-  if (loading) {
+  if (!authorized) {
     return (
-      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
-        <p className="text-gray-400">Carregando...</p>
-      </div>
+      <LoadingState
+        title="Validando acesso..."
+        description="Preparando o ambiente administrativo."
+      />
     );
   }
 

@@ -1,8 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { LogOut, BarChart3, FileText, Users } from 'lucide-react';
+import {
+  BarChart3,
+  LogOut,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+import { Button } from '@/app/components/ui';
 
 export default function Sidebar() {
   const router = useRouter();
@@ -10,43 +15,62 @@ export default function Sidebar() {
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user_email');
-    router.push('/auth/login');
+
+    router.replace('/auth/login');
   };
 
   return (
-    <div className="w-64 h-screen bg-gradient-to-b from-[#1a1f2e] to-[#0f172a] border-r border-[#59cbe8]/20 flex flex-col p-6">
-      <div className="mb-8 pb-6 border-b border-[#59cbe8]/20">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#59cbe8] to-[#00d4ff] flex items-center justify-center text-white font-bold">
-            EE
-          </div>
-          <h1 className="text-xl font-bold text-[#59cbe8]">Expert Energy</h1>
+    <aside className="backoffice-sidebar">
+      <header className="backoffice-brand">
+        <div
+          className="backoffice-brand__mark"
+          aria-hidden="true"
+        >
+          EE
         </div>
-        <p className="text-xs text-[#cbd5e1]">Backoffice</p>
-      </div>
 
-      <nav className="flex-1 space-y-2">
-        <Link href="/backoffice/dashboard" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-[#59cbe8]/10 text-[#f1f5f9] transition">
-          <BarChart3 size={20} className="text-[#59cbe8]" />
-          Dashboard
-        </Link>
-        <Link href="/admin/contracts" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-[#59cbe8]/10 text-[#f1f5f9] transition">
-          <FileText size={20} className="text-[#59cbe8]" />
-          Contratos
-        </Link>
-        <Link href="/admin/customers" className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-[#59cbe8]/10 text-[#f1f5f9] transition">
-          <Users size={20} className="text-[#59cbe8]" />
-          Clientes
+        <div>
+          <h1 className="backoffice-brand__name">
+            Expert Energy
+          </h1>
+
+          <p className="backoffice-brand__context">
+            Backoffice
+          </p>
+        </div>
+      </header>
+
+      <nav
+        className="backoffice-nav"
+        aria-label="Administração"
+      >
+        <Link
+          href="/backoffice/dashboard"
+          className="backoffice-nav__link"
+        >
+          <BarChart3
+            size={20}
+            className="backoffice-nav__icon"
+            aria-hidden="true"
+          />
+
+          <span>Dashboard</span>
         </Link>
       </nav>
 
-      <button
-        onClick={handleLogout}
-        className="w-full flex items-center gap-3 px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
-      >
-        <LogOut size={20} />
-        Sair
-      </button>
-    </div>
+      <footer className="backoffice-sidebar__footer">
+        <Button
+          variant="danger"
+          onClick={handleLogout}
+        >
+          <LogOut
+            size={20}
+            aria-hidden="true"
+          />
+
+          Sair
+        </Button>
+      </footer>
+    </aside>
   );
 }

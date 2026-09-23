@@ -1,3 +1,4 @@
+import './globals.css';
 export const metadata = {
   title: 'Energy Management Platform',
   description: 'Gestão do Mercado Livre de Energia',
