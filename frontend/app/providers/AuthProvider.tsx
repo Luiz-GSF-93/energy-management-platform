@@ -1,4 +1,5 @@
 'use client';
+import { apiRequest } from '@/app/lib/api/client';
 
 import {
   createContext,
@@ -35,6 +36,8 @@ interface AuthContextValue {
   context: AuthContext | null;
   login(input: LoginRequest): Promise<void>;
   logout(): void;
+  enterOrganization(id: string): Promise<void>;
+  leaveOrganization(): Promise<void>;
   refresh(): Promise<void>;
   switchOrganization(
     organizationId: string,
@@ -71,6 +74,7 @@ async function resolveAccessContext():
     }
   }
 
+  session.setOrganizationSession(null);
   return getPlatformContext();
 }
 
@@ -220,6 +224,20 @@ export function AuthProvider({
     ],
   );
 
+  const enterOrganization = useCallback(async (id: string) => {
+    const result = await apiRequest<{ session_id: string }>(
+      '/api/v1/admin/organizations/' + encodeURIComponent(id) + '/operate', { method: 'POST' });
+    session.setOrganizationSession(result.session_id);
+    await refresh();
+  }, [refresh]);
+
+  const leaveOrganization = useCallback(async () => {
+    session.setOrganizationSession(null);
+    setStatus('loading');
+    try { setContext(await getPlatformContext()); setStatus('authenticated'); }
+    catch { await refresh(); }
+  }, [refresh]);
+
   const hasPermission = useCallback(
     (permission: string) => {
       if (!context) {
@@ -246,6 +264,8 @@ export function AuthProvider({
       context,
       login,
       logout,
+      enterOrganization,
+      leaveOrganization,
       refresh,
       switchOrganization,
       hasPermission,
@@ -255,6 +275,8 @@ export function AuthProvider({
       context,
       login,
       logout,
+      enterOrganization,
+      leaveOrganization,
       refresh,
       switchOrganization,
       hasPermission,

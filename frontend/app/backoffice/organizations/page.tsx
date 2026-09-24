@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 
+import OrganizationSetup from '@/app/components/OrganizationSetup';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import {
   Alert,
@@ -576,6 +577,7 @@ export default function OrganizationsPage() {
                         </p>
                       )}
 
+                      <OrganizationSetup organization={organization} />
                       <dl className="organizations-card__meta">
                         <div>
                           <dt>Identificador</dt>

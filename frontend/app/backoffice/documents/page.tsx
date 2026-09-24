@@ -31,9 +31,9 @@ function DocumentsContent() {
     currentOrg.current = organizationId;
     if (!organizationId || !canView) return;
     Promise.all([
-      apiRequest<Document[]>('/documents'),
-      canUpload ? apiRequest<Customer[]>('/customers') : Promise.resolve([]),
-      canUpload ? apiRequest<Unit[]>('/consumer-units') : Promise.resolve([]),
+      apiRequest<Document[]>('/api/v1/documents'),
+      canUpload ? apiRequest<Customer[]>('/api/v1/customers') : Promise.resolve([]),
+      canUpload ? apiRequest<Unit[]>('/api/v1/consumer-units') : Promise.resolve([]),
     ]).then(([d,c,u]) => { if (!cancelled) { setDocuments(d);setCustomers(c);setUnits(u); } })
       .catch(() => { if (!cancelled) setError('Não foi possível carregar os dados. Verifique sua licença e as permissões de documentos, clientes e unidades.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -47,7 +47,7 @@ function DocumentsContent() {
     data.set('referenceMonth',String(data.get('referenceMonth'))+'-01');
     const org=organizationId;setBusy(true);setError('');setNotice('');
     try {
-      const saved=await apiRequest<Document>('/documents/upload',{method:'POST',body:data});
+      const saved=await apiRequest<Document>('/api/v1/documents/upload',{method:'POST',body:data});
       if (currentOrg.current!==org) return;
       setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice('Arquivo enviado e armazenado com acesso privado. A leitura automática ainda não está disponível.');
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.'); }
@@ -56,7 +56,7 @@ function DocumentsContent() {
   async function download(id: string) {
     const org=organizationId;setError('');
     try {
-      const result=await apiRequest<{url:string}>('/documents/'+encodeURIComponent(id)+'/download');
+      const result=await apiRequest<{url:string}>('/api/v1/documents/'+encodeURIComponent(id)+'/download');
       if (currentOrg.current===org) { const link=document.createElement('a');link.href=result.url;link.rel='noopener noreferrer';link.click(); }
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Arquivo indisponível.'); }
   }

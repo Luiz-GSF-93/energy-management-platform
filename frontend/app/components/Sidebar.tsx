@@ -27,6 +27,7 @@ export default function Sidebar() {
   const {
     context,
     logout,
+    leaveOrganization,
     switchOrganization,
     hasPermission,
   } = useAuth();
@@ -116,6 +117,13 @@ export default function Sidebar() {
         </div>
       </header>
 
+      {organizationContext ? <div className="backoffice-context">
+        <p>Organização ativa</p><strong>{organizationContext.currentOrganization.name || organizationContext.currentOrganization.id}</strong>
+        {organizationContext.accessMode === 'platform_operation' ? <>
+          <p>Operação pelo administrador da plataforma</p>
+          <Button variant="secondary" onClick={() => { void leaveOrganization().then(() => router.replace('/backoffice/organizations')); }}>Voltar à plataforma</Button>
+        </> : null}
+      </div> : null}
       {organizationContext &&
       organizations.length > 1 ? (
         <div className="backoffice-context">

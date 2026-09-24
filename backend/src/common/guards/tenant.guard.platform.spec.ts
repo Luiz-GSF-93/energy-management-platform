@@ -424,4 +424,22 @@ describe('TenantGuard — Phase 5.7 platform scope', () => {
 
     expect(supabase.calls).not.toContain('user_roles');
   });
+  it('resolves an explicit platform operation through server authority, not the profile pointer', async () => {
+    const request: any = makeRequest();
+    request.headers['x-platform-organization-session']='33333333-3333-4333-8333-333333333333';
+    const supabase=makeSupabase();
+    (supabase.client as any).rpc=jest.fn().mockResolvedValue({data:[{organization_id:'explicit-org',organization_name:'Explicit',role_id:'admin-org',permissions:['documents.view']}],error:null});
+    const guard=new TenantGuard(makeReflector({}),supabase.service);
+    await expect(guard.canActivate(makeExecutionContext(request))).resolves.toBe(true);
+    expect(request.tenantContext).toMatchObject({userId,organizationId:'explicit-org',accessMode:'platform_operation'});
+    expect(supabase.calls).not.toContain('organization_members');
+  });
+  it('never falls back to a normal membership when the explicit session is rejected',async()=>{
+    const request:any=makeRequest();request.headers['x-platform-organization-session']='33333333-3333-4333-8333-333333333333';
+    const supabase=makeSupabase();(supabase.client as any).rpc=jest.fn().mockResolvedValue({data:[],error:null});
+    const guard=new TenantGuard(makeReflector({}),supabase.service);
+    await expect(guard.canActivate(makeExecutionContext(request))).rejects.toBeInstanceOf(ForbiddenException);
+    expect(request.tenantContext).toBeUndefined();
+  });
+
 });
