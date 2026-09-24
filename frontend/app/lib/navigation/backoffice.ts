@@ -22,6 +22,7 @@ export const backofficeNavigation:
       permission:
         PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
     },
+    { href: '/backoffice/documents', label: 'Documentos', permission: '8f105b02-4443-49de-b188-847e0284e7ed', scope: 'organization' },
     {
       href: '/backoffice/users',
       label: 'Usuários',
