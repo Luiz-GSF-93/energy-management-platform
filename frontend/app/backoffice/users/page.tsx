@@ -1,4 +1,5 @@
 'use client';
+import RecoveryAction from './RecoveryAction';
 import {FormEvent,useEffect,useState} from 'react';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
@@ -8,7 +9,7 @@ import {getUsers,type OrganizationUser,type OrganizationUserRole} from '@/app/li
 import {useAuth} from '@/app/providers';
 const labels:Record<string,string>={admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
 function Users(){
- const {hasPermission}=useAuth();
+ const {hasPermission,context}=useAuth();
  const [rows,setRows]=useState<OrganizationUser[]>([]),[roles,setRoles]=useState<OrganizationUserRole[]>([]),[editing,setEditing]=useState<OrganizationUser|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
  const view=hasPermission('f60e405e-f120-4420-a563-691162504b15');
  const invite=hasPermission('94f57d38-0438-43c5-81bc-5544ab53912a'),update=hasPermission('5f91d918-8def-4bc1-b6c7-37e1ff2d14e2');
@@ -31,7 +32,7 @@ function Users(){
  {!editing?<p>Para uma pessoa já cadastrada, este formulário adiciona somente o vínculo e a função nesta organização. Não altera seu perfil nas demais.</p>:null}
  <Button type="submit" disabled={busy||!roles.length}>{busy?'Salvando...':editing?'Salvar alterações':'Convidar / vincular'}</Button>{editing?<Button variant="secondary" disabled={busy} onClick={()=>setEditing(null)}>Cancelar</Button>:null}
  </form></Card>:null}
- {loading?<p>Carregando usuários...</p>:!rows.length?<p>Nenhum usuário vinculado. O acesso operacional do administrador da plataforma não cria um vínculo de usuário.</p>:rows.map(u=><Card key={u.userId} title={u.name||u.email}><p>{u.email}</p><p>{labels[u.role.name]||u.role.name} · {u.affiliationType==='internal'?'Interno':u.affiliationType==='external'?'Externo':'Vínculo não definido'} · {u.membershipStatus==='active'?'Ativo':'Inativo'}</p>{update&&u.membershipStatus==='active'?<Button variant="secondary" disabled={busy} onClick={()=>{setEditing(u);setError('');setMessage('');}}>Editar</Button>:null}</Card>)}
+ {loading?<p>Carregando usuários...</p>:!rows.length?<p>Nenhum usuário vinculado. O acesso operacional do administrador da plataforma não cria um vínculo de usuário.</p>:rows.map(u=><Card key={u.userId} title={u.name||u.email}><p>{u.email}</p><p>{labels[u.role.name]||u.role.name} · {u.affiliationType==='internal'?'Interno':u.affiliationType==='external'?'Externo':'Vínculo não definido'} · {u.membershipStatus==='active'?'Ativo':'Inativo'}</p>{update&&u.membershipStatus==='active'?<Button variant="secondary" disabled={busy} onClick={()=>{setEditing(u);setError('');setMessage('');}}>Editar</Button>:null}{update&&u.membershipStatus==='active'&&(u.userId===context?.user.id||roles.some(r=>r.id===u.role.id))?<RecoveryAction userId={u.userId} email={u.email} disabled={busy}/>:null}</Card>)}
  </section>;
 }
 export default function Page(){const {context}=useAuth();const id=context&&context.scope!=='global'?context.currentOrganization.id:'';return <ProtectedRoute><BackofficeShell>{id?<Users key={id}/>:<p>Selecione uma organização.</p>}</BackofficeShell></ProtectedRoute>;}

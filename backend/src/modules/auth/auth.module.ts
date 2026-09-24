@@ -54,6 +54,6 @@ function parseExpiresIn(expiresIn: string): number {
   ],
   controllers: [AuthController, PasswordRecoveryController],
   providers: [PasswordRecoveryService, AuthService, JwtStrategy, SupabaseService],
-  exports: [AuthService],
+  exports: [AuthService, PasswordRecoveryService],
 })
 export class AuthModule {}

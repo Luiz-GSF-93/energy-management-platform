@@ -80,4 +80,14 @@ describe('Password recovery', () => {
   ])('rejects invalid reset input %#', async input => {
     await expect(pipe.transform(input, { type: 'body', metatype: ResetPasswordDto })).rejects.toThrow();
   });
+  it('managed requests surface provider failure without leaking provider details', async () => {
+    auth.resetPasswordForEmail.mockResolvedValue({ error: { message: 'sensitive provider detail' } });
+    await expect(service.requestManaged('member@example.com', 'ip')).rejects.toMatchObject({ status: 503 });
+  });
+  it('managed and public requests share the same limiter', async () => {
+    for (let i = 0; i < 5; i++) await service.requestManaged('member@example.com', 'ip');
+    await expect(service.request('member@example.com', 'ip')).rejects.toMatchObject({ status: 429 });
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(5);
+  });
+
 });
