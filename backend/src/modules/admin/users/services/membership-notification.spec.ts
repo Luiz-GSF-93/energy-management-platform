@@ -12,6 +12,7 @@ describe('membership notification',()=>{
   expect(body.text).toContain(input.organizationName);expect(body.text).toContain('Operador');expect(body.text).toContain('Externo / consultor');expect(body.text).toContain('https://app.example.test/auth/login');
   expect(options.headers['Idempotency-Key']).toBe('organization-membership/member-a');expect(body.html).toBeUndefined();
  });
+ it('sends the reactivation subject and organization',async()=>{await sendMembershipNotification({...input,event:'reactivated'});const body=JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);expect(body.subject).toContain('reativado');expect(body.text).toContain('foi reativado');expect(body.text).toContain(input.organizationName);});
  it('does not send without configuration',async()=>{delete process.env.RESEND_API_KEY;expect(await sendMembershipNotification(input)).toBe('unavailable');expect(global.fetch).not.toHaveBeenCalled();});
  it('rejects insecure frontend URLs',async()=>{process.env.FRONTEND_URL='http://example.test';expect(await sendMembershipNotification(input)).toBe('unavailable');expect(global.fetch).not.toHaveBeenCalled();});
  it('contains provider rejection',async()=>{(global.fetch as jest.Mock).mockResolvedValue({ok:false});expect(await sendMembershipNotification(input)).toBe('failed');});
