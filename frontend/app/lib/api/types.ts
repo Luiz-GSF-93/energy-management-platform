@@ -12,12 +12,14 @@ export interface LoginResponse {
 }
 
 export interface OrganizationContextSummary {
+  name?: string;
   id: string;
   role: string;
   role_id: string;
 }
 
 export interface CurrentOrganizationContext {
+  name?: string;
   id: string;
   role: string;
   permissions: string[];
@@ -31,6 +33,7 @@ export interface SwitchOrganizationResponse {
 }
 
 export interface OrganizationAuthContext {
+  accessMode?: 'platform_operation';
   scope?: 'organization';
   user: {
     id: string;

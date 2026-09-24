@@ -44,6 +44,12 @@ export class LicensesService {
     private readonly auditService: AuditService,
   ) {}
 
+  async findAll(organizationId: string): Promise<LicenseRecord[]> {
+    const { data, error } = await this.supabaseService.getClient().from('licenses').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false });
+    if (error) throw new InternalServerErrorException('Unable to load licenses');
+    return data || [];
+  }
+
   async create(
     dto: CreateLicenseDto,
     auditContext: {

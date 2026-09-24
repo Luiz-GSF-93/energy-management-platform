@@ -78,6 +78,8 @@ export async function apiRequest<T>(
   }
 
   if (authenticated) {
+    const selectedOrganization = session.getOrganizationSession();
+    if (selectedOrganization) requestHeaders.set('x-platform-organization-session', selectedOrganization);
     const token = session.getAccessToken();
 
     if (!token) {

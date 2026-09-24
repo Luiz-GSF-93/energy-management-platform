@@ -1,6 +1,14 @@
 const ACCESS_TOKEN_KEY = 'access_token';
 
 export const session = {
+  getOrganizationSession(): string | null {
+    return typeof window === 'undefined' ? null : window.sessionStorage.getItem('organization_operation');
+  },
+  setOrganizationSession(id: string | null): void {
+    if (typeof window === 'undefined') return;
+    if (id) window.sessionStorage.setItem('organization_operation', id);
+    else window.sessionStorage.removeItem('organization_operation');
+  },
   getAccessToken(): string | null {
     if (typeof window === 'undefined') {
       return null;
@@ -23,6 +31,7 @@ export const session = {
       return;
     }
 
+    window.sessionStorage.removeItem('organization_operation');
     window.localStorage.removeItem(
       ACCESS_TOKEN_KEY,
     );

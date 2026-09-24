@@ -1,3 +1,4 @@
+import { resolvePlatformOperation, PLATFORM_SESSION_HEADER } from '../services/platform-operation';
 import {
   Injectable,
   CanActivate,
@@ -197,6 +198,13 @@ export class TenantGuard implements CanActivate {
           `[PLATFORM_CONTEXT_SET] global context attached: permissions count=${platformContext.permissions.length}`,
         );
 
+        return true;
+      }
+
+      if (request.headers[PLATFORM_SESSION_HEADER] !== undefined) {
+        const tenant = await resolvePlatformOperation(this.supabaseService.getClient(), request.headers[PLATFORM_SESSION_HEADER], authenticatedUser);
+        (request as any).tenantContext = tenant;
+        (request as any).accessContext = tenant;
         return true;
       }
 

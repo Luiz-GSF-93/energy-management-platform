@@ -13,6 +13,8 @@ interface BaseAccessContext {
 export interface OrganizationContext extends BaseAccessContext {
   scope: 'organization';
   organizationId: string;
+  organizationName?: string;
+  accessMode?: 'platform_operation';
 }
 
 export interface PlatformContext extends BaseAccessContext {
@@ -35,6 +37,8 @@ export type AccessContext = OrganizationContext | PlatformContext;
  */
 export interface TenantContext extends BaseAccessContext {
   organizationId: string;
+  organizationName?: string;
+  accessMode?: 'platform_operation';
   scope?: 'organization';
 }
 

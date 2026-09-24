@@ -67,6 +67,12 @@ export class LicensesController {
     });
   }
 
+  @Get()
+  @RequirePermission([PERMISSIONS.ORGANIZATION_LICENSES_VIEW])
+  async findAll(@Tenant() tenant: TenantContext) {
+    return this.licensesService.findAll(tenant.organizationId);
+  }
+
   @Get('effective')
   @RequirePermission([PERMISSIONS.ORGANIZATION_LICENSES_VIEW])
   async findEffective(@Tenant() tenant: TenantContext) {

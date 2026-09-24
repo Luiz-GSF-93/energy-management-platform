@@ -60,6 +60,12 @@ export class AuthService {
   }
 
   async getContext(tenant: TenantContext) {
+    if (tenant.accessMode === 'platform_operation') {
+      return { scope: 'organization', accessMode: tenant.accessMode,
+        user: { id: tenant.userId, email: tenant.email },
+        organizations: [{ id: tenant.organizationId, name: tenant.organizationName, role: tenant.role, role_id: tenant.roleId }],
+        currentOrganization: { id: tenant.organizationId, name: tenant.organizationName, role: tenant.role, permissions: tenant.permissions } };
+    }
     try {
       const supabase = this.supabaseService.getClient();
 
