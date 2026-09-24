@@ -138,7 +138,7 @@ export class DocumentsService {
       throw new ServiceUnavailableException('Falha no envio do documento');
     }
   }
-  async download(id: string, organizationId: string) {
+  async download(id: string, organizationId: string, inline = false) {
     await this.requireDocumentManagement(organizationId);
     const row = await this.scopedDocument(id, organizationId);
     if (row.file_verified !== true || row.storage_bucket !== DOCUMENT_BUCKET ||
@@ -147,7 +147,7 @@ export class DocumentsService {
       throw new ConflictException('Este registro ainda não possui arquivo verificado');
     }
     const result = await this.supabaseService.getClient().storage.from(DOCUMENT_BUCKET)
-      .createSignedUrl(row.file_path, 60, { download: row.original_filename });
+      .createSignedUrl(row.file_path, 60, { download: inline ? false : row.original_filename });
     if (result.error || !result.data?.signedUrl) throw new ServiceUnavailableException('Arquivo temporariamente indisponível');
     return { url: result.data.signedUrl, expiresIn: 60 };
   }

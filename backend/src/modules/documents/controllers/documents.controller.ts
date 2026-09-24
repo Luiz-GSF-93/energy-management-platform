@@ -40,6 +40,12 @@ export class DocumentsController {
     return this.documentsService.upload(dto, file, organizationId, actorUserId);
   }
 
+  @Get(':id/preview')
+  @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
+  async preview(@Param('id') id: string, @OrganizationId() organizationId: string) {
+    return this.documentsService.download(id, organizationId, true);
+  }
+
   @Get(':id/download')
   @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
   async download(@Param('id') id: string, @OrganizationId() organizationId: string) {
