@@ -93,6 +93,26 @@ describe('UsersService organization-scoped reads', () => {
     };
   }
 
+  it('excludes legacy global administrators from tenant management without loading their profiles', async () => {
+    const global = validMembership('platform-user');
+    global.roles.name = 'admin_platform'; global.roles.scope = 'global';
+    responses.organization_members = [{data: [global, validMembership()], error: null}];
+    responses.user_profiles = [{data: [validProfile()], error: null}];
+    const users = await service.findAll(organizationId);
+    expect(users.map(user => user.userId)).toEqual([targetUserId]);
+    expect(calls[1].inFilters).toEqual([['user_id', [targetUserId]]]);
+  });
+
+  it.each(['foreign-tenant', 'unknown-global-role', 'mismatched-id'])('still rejects malformed global membership: %s', async (kind) => {
+    const global = validMembership('platform-user');
+    global.roles.name = 'admin_platform'; global.roles.scope = 'global';
+    if (kind === 'foreign-tenant') global.roles.organization_id = 'another-org';
+    if (kind === 'unknown-global-role') global.roles.name = 'unexpected';
+    if (kind === 'mismatched-id') global.roles.id = 'other-role';
+    responses.organization_members = [{data: [global], error: null}];
+    await expect(service.findAll(organizationId)).rejects.toThrow(InternalServerErrorException);
+  });
+
   it('A — list starts from organization_members and scopes organization', async () => {
     responses.organization_members = [{ data: [], error: null }];
 
