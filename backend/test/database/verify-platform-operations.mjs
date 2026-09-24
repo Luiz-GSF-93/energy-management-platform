@@ -10,7 +10,7 @@ try{
  CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);
  CREATE TABLE organizations(id text PRIMARY KEY,name text,deleted_at timestamptz,updated_at timestamptz);
  CREATE TABLE roles(id text PRIMARY KEY,organization_id text,name text,scope text,permissions jsonb);
- CREATE TABLE user_roles(user_id uuid,role_id text);
+ CREATE TABLE user_roles(user_id text,role_id text);
  CREATE TABLE permissions(id text PRIMARY KEY,code text UNIQUE,name text,module text,resource text,action text);
  CREATE TABLE audit_logs(id text PRIMARY KEY,organization_id text,user_id uuid,action text,resource_type text,resource_id text,changes jsonb,status text,ip_address text,user_agent text);
  INSERT INTO auth.users VALUES('${admin}'),('${other}');

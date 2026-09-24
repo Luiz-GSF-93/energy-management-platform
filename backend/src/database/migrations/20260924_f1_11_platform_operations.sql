@@ -42,9 +42,9 @@ LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$
  AND s.revoked_at IS NULL AND s.expires_at>now()
  AND (SELECT count(*) FROM public.roles rr WHERE rr.organization_id=o.id AND rr.scope='organization' AND rr.name='admin_org')=1
  AND (SELECT count(*) FROM public.user_roles ur JOIN public.roles gr ON gr.id=ur.role_id
-      WHERE ur.user_id=target_user_id AND gr.scope='global' AND jsonb_typeof(gr.permissions)='array')=1
+      WHERE ur.user_id::text=target_user_id::text AND gr.scope='global' AND jsonb_typeof(gr.permissions)='array')=1
  AND EXISTS(SELECT 1 FROM public.user_roles ur JOIN public.roles gr ON gr.id=ur.role_id
-      WHERE ur.user_id=target_user_id AND gr.scope='global'
+      WHERE ur.user_id::text=target_user_id::text AND gr.scope='global'
       AND gr.permissions ? '5f6e284b-07b2-4e3c-aec3-a331c071719a');
 $$;
 
@@ -71,7 +71,7 @@ BEGIN
  IF jsonb_typeof(target_registration)<>'object' OR octet_length(target_registration::text)>16000 THEN
    RAISE EXCEPTION 'Invalid organization registration'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id=ur.role_id
-   WHERE ur.user_id=target_user_id AND r.scope='global' AND r.permissions ? 'ede45b9c-8af4-4b47-8490-9d386a3efb13') THEN
+   WHERE ur.user_id::text=target_user_id::text AND r.scope='global' AND r.permissions ? 'ede45b9c-8af4-4b47-8490-9d386a3efb13') THEN
    RAISE EXCEPTION 'Organization update not authorized' USING ERRCODE='42501'; END IF;
  SELECT registration INTO previous FROM public.organizations WHERE id=target_organization_id AND deleted_at IS NULL FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION 'Organization not found'; END IF;
