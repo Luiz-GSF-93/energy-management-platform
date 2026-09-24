@@ -1,0 +1,15 @@
+import console from 'node:console';
+import assert from 'node:assert/strict';
+import {resolveLoginContext} from '../app/lib/auth/resolve-context.ts';
+let count=0; const denied={status:403};
+const deps=()=>({context:async()=>{throw denied},platform:async()=>{throw denied},clearOperation:()=>{},organizations:async()=>[{organizationId:'new-org',role:'operacional'}],switchOrganization:async()=>{},forbidden:e=>e?.status===403});
+let d=deps(),calls=0,selected;
+d.context=async()=>{if(calls++===0)throw denied;return {org:'new-org'}};d.switchOrganization=async id=>{selected=id};
+assert.deepEqual(await resolveLoginContext(d,true),{org:'new-org'});assert.equal(selected,'new-org');count++;
+d=deps();d.platform=async()=>({global:true});d.organizations=async()=>{throw new Error('must not load')};assert.deepEqual(await resolveLoginContext(d,true),{global:true});count++;
+d=deps();d.context=async()=>({org:'current'});d.platform=async()=>{throw new Error('must not load')};assert.deepEqual(await resolveLoginContext(d,true),{org:'current'});count++;
+d=deps();d.organizations=async()=>[];await assert.rejects(()=>resolveLoginContext(d,true),/vínculo ativo/);count++;
+d=deps();d.organizations=async()=>{throw new Error('must not load')};await assert.rejects(()=>resolveLoginContext(d,false),e=>e===denied);count++;
+d=deps();d.context=async()=>{throw {status:500}};await assert.rejects(()=>resolveLoginContext(d,true),e=>e.status===500);count++;
+d=deps();d.switchOrganization=async()=>{throw new Error('revoked')};await assert.rejects(()=>resolveLoginContext(d,true),/revoked/);count++;
+console.log('PASS',count,'login organization recovery checks');
