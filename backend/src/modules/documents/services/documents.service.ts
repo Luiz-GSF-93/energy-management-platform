@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
 import { LicensesService } from '../../licenses/services/licenses.service';
+import { validateWriteDto } from '../../../common/validation/validate-write-dto';
 
 @Injectable()
 export class DocumentsService {
@@ -49,6 +50,7 @@ export class DocumentsService {
 
   async create(createDocumentDto: CreateDocumentDto, organizationId: string) {
     await this.requireDocumentManagement(organizationId);
+    createDocumentDto = await validateWriteDto(CreateDocumentDto, createDocumentDto);
 
     const { data, error } = await this.supabaseService
       .getClient()
@@ -67,6 +69,7 @@ export class DocumentsService {
     updateDocumentDto: UpdateDocumentDto,
   ) {
     await this.requireDocumentManagement(organizationId);
+    updateDocumentDto = await validateWriteDto(UpdateDocumentDto, updateDocumentDto);
 
     const { data, error } = await this.supabaseService
       .getClient()

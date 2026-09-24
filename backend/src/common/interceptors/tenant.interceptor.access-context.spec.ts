@@ -86,7 +86,7 @@ describe('TenantInterceptor — AccessContext compatibility', () => {
     expect(request.body.organization_id).toBe('target-org');
   });
 
-  it('C — organization context still injects organization_id', async () => {
+  it('C — organization context does not contaminate the DTO with organization_id', async () => {
     const interceptor = new TenantInterceptor(makeReflector());
 
     const request: any = {
@@ -119,7 +119,7 @@ describe('TenantInterceptor — AccessContext compatibility', () => {
       interceptor.intercept(makeContext(request), next() as any),
     );
 
-    expect(request.body.organization_id).toBe('org-a');
+    expect(request.body).toEqual({ name: 'Example' });
   });
 
   it('D — organization context still rejects cross-organization body', () => {
@@ -159,7 +159,7 @@ describe('TenantInterceptor — AccessContext compatibility', () => {
     ).toThrow(BadRequestException);
   });
 
-  it('E — legacy tenantContext behavior remains compatible', async () => {
+  it('E — legacy tenantContext remains available without mutating the DTO', async () => {
     const interceptor = new TenantInterceptor(makeReflector());
 
     const request: any = {
@@ -180,7 +180,8 @@ describe('TenantInterceptor — AccessContext compatibility', () => {
       interceptor.intercept(makeContext(request), next() as any),
     );
 
-    expect(request.body.organization_id).toBe('org-a');
+    expect(request.body).toEqual({});
+    expect(request.tenantContext.organizationId).toBe('org-a');
   });
 
   it('F — recovery behavior remains unchanged', async () => {

@@ -52,7 +52,7 @@ export class TenantInterceptor implements NestInterceptor {
 
     const organizationId = request.tenantContext?.organizationId;
 
-    if (request.body && request.body.organization_id) {
+    if (request.body && Object.prototype.hasOwnProperty.call(request.body, 'organization_id')) {
       if (request.body.organization_id !== organizationId) {
         throw new BadRequestException(
           'Cannot modify data from a different organization',
@@ -60,9 +60,8 @@ export class TenantInterceptor implements NestInterceptor {
       }
     }
 
-    if (request.body && !request.body.organization_id) {
-      request.body.organization_id = organizationId;
-    }
+    // Tenant authority lives in the authenticated context, never in a DTO.
+    // Injecting organization_id here made strict DTOs reject legitimate writes.
 
     return next.handle().pipe(
       tap(() => {
