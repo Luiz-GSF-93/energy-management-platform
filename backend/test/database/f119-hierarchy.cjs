@@ -1,0 +1,27 @@
+const {PGlite}=require('@electric-sql/pglite');
+const {readFileSync}=require('node:fs');
+const assert=require('node:assert/strict');
+(async()=>{
+ const db=new PGlite();
+ await db.exec("CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE TABLE permissions(id text PRIMARY KEY,code text UNIQUE); CREATE TABLE roles(id text PRIMARY KEY,name text,scope text,organization_id text,permissions jsonb); CREATE TABLE audit_logs(id text,organization_id text,user_id text,action text,resource_type text,resource_id text,changes jsonb,status text);");
+ const old=readFileSync('src/database/migrations/20260924_f1_12_organization_create_repair.sql','utf8');
+ const resolver=old.slice(old.indexOf('CREATE OR REPLACE FUNCTION'),old.indexOf('-- ATOMIC ORGANIZATION CREATE'));
+ const codes=[...new Set([...resolver.matchAll(/\('(?:admin_org|gestor|operacional|consulta)', '([^']+)'\)/g)].map(x=>x[1]))];
+ for(const code of codes) await db.query('INSERT INTO permissions VALUES($1,$1)',[code]);
+ await db.exec(resolver);
+ await db.exec("INSERT INTO roles SELECT role_name,role_name,'organization','org-a',permission_ids FROM resolve_canonical_organization_rbac(); INSERT INTO roles VALUES('custom','gestor','organization','org-b',jsonb_build_array('settings.profile.view')),('global','gestor','platform',NULL,'[]');");
+ const migration=readFileSync('src/database/migrations/20260924_f1_19_gestor_hierarchy.sql','utf8');
+ await db.exec(migration);
+ let rows=(await db.query("SELECT * FROM roles WHERE id='gestor'")).rows;
+ assert.equal(rows[0].permissions.length,40); assert(rows[0].permissions.includes('operacao.pld.sync'));
+ const operator=(await db.query("SELECT permissions FROM roles WHERE id='operacional'")).rows[0].permissions;
+ assert(operator.every(p=>rows[0].permissions.includes(p)));
+ assert.deepEqual((await db.query("SELECT permissions FROM roles WHERE id='custom'")).rows[0].permissions,['settings.profile.view']);
+ assert.deepEqual((await db.query("SELECT permissions FROM roles WHERE id='global'")).rows[0].permissions,[]);
+ assert.equal((await db.query('SELECT * FROM audit_logs')).rows.length,1);
+ await db.exec(migration); assert.equal((await db.query('SELECT * FROM audit_logs')).rows.length,1);
+ await db.exec("DELETE FROM permissions WHERE code='operacao.pld.sync'");
+ await assert.rejects(()=>db.exec(migration),/rbac_permission_catalog_incomplete/); await db.exec('ROLLBACK');
+ assert.equal((await db.query("SELECT permissions FROM roles WHERE id='gestor'")).rows[0].permissions.length,40);
+ console.log('PASS F1.19: canonical hierarchy, custom/global isolation, audit, idempotence, incomplete catalog rollback'); await db.close();
+})().catch(e=>{console.error(e);process.exitCode=1;});
