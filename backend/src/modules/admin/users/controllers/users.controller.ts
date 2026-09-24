@@ -56,7 +56,7 @@ export class UsersController {
 
   @Get('roles')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
-  async roles(@Tenant() tenant:TenantContext) { return this.usersService.availableRoles(tenant.organizationId,tenant.accessMode==='platform_operation'); }
+  async roles(@Tenant() tenant:TenantContext) { return this.usersService.availableRoles(tenant.organizationId,tenant.accessMode==='platform_operation',tenant.permissions); }
 
   @Patch(':userId/details')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])

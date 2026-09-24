@@ -1221,10 +1221,10 @@ export class UsersService {
     if(!data || data.length!==1 || !Array.isArray(data[0].permissions) || data[0].permissions.some((p:string)=>!actorPermissions.includes(p))) throw new BadRequestException('Você não pode atribuir uma função com permissões superiores às suas.');
   }
 
-  async availableRoles(organizationId: string,platformOperation=false) {
-    const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope').eq('organization_id',organizationId).eq('scope','organization');
+  async availableRoles(organizationId: string,platformOperation=false,actorPermissions:string[]=[]) {
+    const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope,permissions').eq('organization_id',organizationId).eq('scope','organization');
     if(error || !Array.isArray(data) || data.some(r=>r.organization_id!==organizationId || r.scope!=='organization')) throw new InternalServerErrorException('Failed to load organization roles');
-    return data.filter(r=>platformOperation || r.name!=='admin_org').map(r=>({id:r.id,name:r.name}));
+    return data.filter(r=>(platformOperation || r.name!=='admin_org') && Array.isArray(r.permissions) && r.permissions.every((p:string)=>actorPermissions.includes(p))).map(r=>({id:r.id,name:r.name}));
   }
 
   async updateAffiliation(targetUserId: string, affiliationType: UserAffiliationType, auditContext: {actorUserId:string;organizationId:string;ipAddress?:string;userAgent?:string}) {
