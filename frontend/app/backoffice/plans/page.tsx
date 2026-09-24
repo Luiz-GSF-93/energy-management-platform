@@ -1,0 +1,22 @@
+'use client';
+import {FormEvent,useEffect,useState} from 'react';
+import BackofficeShell from '@/app/components/BackofficeShell';
+import ProtectedRoute from '@/app/components/ProtectedRoute';
+import {Alert,Button,Card,Input} from '@/app/components/ui';
+import {apiRequest} from '@/app/lib/api/client';
+import {Plan,planModules} from '@/app/lib/api/plans';
+import {useAuth} from '@/app/providers';
+function Plans(){
+ const {hasPermission}=useAuth();const manage=hasPermission('af285642-16b0-405a-982c-58de1a10f987');
+ const [rows,setRows]=useState<Plan[]>([]),[editing,setEditing]=useState<Plan|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
+ useEffect(()=>{let cancelled=false;apiRequest<Plan[]>('/api/v1/admin/plans').then(r=>{if(!cancelled)setRows(r);}).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setLoading(false);});return()=>{cancelled=true;};},[]);
+ async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy)return;const form=event.currentTarget,f=new FormData(form),body:Record<string,unknown>={name:String(f.get('name')||'').trim(),description:String(f.get('description')||''),active:f.has('active')};
+ for(const key of ['documents_limit','max_consumer_units','max_users'])body[key]=Number(f.get(key));for(const [key]of planModules)body[key]=f.has(key);if(editing)body.version=editing.version;
+ setBusy(true);setError('');setMessage('');try{await apiRequest('/api/v1/admin/plans'+(editing?'/'+editing.id:''),{method:editing?'PATCH':'POST',body});setRows(await apiRequest<Plan[]>('/api/v1/admin/plans'));setEditing(null);form.reset();setMessage('Plano salvo. As licenças existentes mantêm os limites da versão aplicada.');}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}finally{setBusy(false);}}
+ return <section className="backoffice-page"><h1>Catálogo de planos</h1><p>Defina limites e módulos para as licenças das organizações. Desativar um plano impede novas contratações desse plano e preserva as licenças existentes.</p>{error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
+ {manage?<Card title={editing?'Editar plano':'Novo plano'}><form key={editing?editing.id+':'+editing.version:'new'} onSubmit={save} className="organizations-create__form"><Input label="Nome do plano" name="name" required minLength={2} maxLength={120} defaultValue={editing?.name||''} disabled={busy}/><Input label="Descrição" name="description" maxLength={2000} defaultValue={editing?.description||''} disabled={busy}/>
+ {([['max_users','Limite de usuários'],['max_consumer_units','Limite de unidades'],['documents_limit','Limite de documentos']] as const).map(([key,label])=><Input key={key} label={label} name={key} type="number" min={0} max={2147483647} step={1} required defaultValue={editing?.[key]??0} disabled={busy}/>)}
+ {planModules.map(([key,label])=><label key={key}><input type="checkbox" name={key} defaultChecked={editing?.[key]??false} disabled={busy}/> {label}</label>)}<label><input type="checkbox" name="active" defaultChecked={editing?.active??true} disabled={busy}/> Disponível para novas licenças</label><p>Habilitar um módulo no plano não substitui as permissões dos usuários nem disponibiliza funcionalidades ainda em desenvolvimento.</p><Button type="submit" disabled={busy}>{busy?'Salvando…':'Salvar plano'}</Button>{editing?<Button variant="secondary" disabled={busy} onClick={()=>setEditing(null)}>Cancelar edição</Button>:null}</form></Card>:null}
+ {loading?<p>Carregando planos…</p>:!rows.length?<p>Nenhum plano cadastrado.</p>:rows.map(p=><Card key={p.id} title={p.name}><p>{p.description}</p><p>Versão {p.version} · {p.active?'Disponível':'Desativado'}</p><p>{p.max_users} usuários · {p.max_consumer_units} unidades · {p.documents_limit} documentos</p><p>Módulos: {planModules.filter(([key])=>p[key]).map(([,label])=>label).join(', ')||'Nenhum'}</p>{manage?<Button variant="secondary" disabled={busy} onClick={()=>{setEditing(p);setError('');setMessage('');}}>Editar plano</Button>:null}</Card>)}</section>;
+}
+export default function Page(){const {context,hasPermission}=useAuth();return <ProtectedRoute><BackofficeShell>{context?.scope==='global'&&hasPermission('e23a5c98-8b68-4ed2-aef8-70a7166407e4')?<Plans/>:<p>Acesso restrito à administração de planos da plataforma.</p>}</BackofficeShell></ProtectedRoute>;}

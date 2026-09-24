@@ -18,6 +18,10 @@ export type LicenseCapability =
   | 'free_market_management';
 
 export interface LicenseRecord {
+  plan_id?: string | null;
+  plan_version?: number | null;
+  plan_snapshot?: Record<string, unknown> | null;
+  max_users?: number | null;
   id: string;
   organization_id: string;
   license_type: string;
@@ -333,6 +337,11 @@ export class LicensesService {
       return before;
     }
 
+    if (before.plan_id && ['license_type','documents_limit','max_consumer_units','document_management','advanced_analytics','report_generation','free_market_management'].some(key => key in effectivePayload)) {
+      effectivePayload.plan_id = null;
+      effectivePayload.plan_version = null;
+      effectivePayload.plan_snapshot = null;
+    }
     effectivePayload.updated_at = new Date().toISOString();
 
     let updateQuery = client

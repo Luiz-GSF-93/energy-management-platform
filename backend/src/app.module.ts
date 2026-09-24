@@ -1,3 +1,4 @@
+import { PlansModule } from './modules/plans/plans.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -31,6 +32,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     AdminModule,
     LicensesModule,
     DashboardModule,
+    PlansModule,
   ],
   controllers: [AppController],
   providers: [
