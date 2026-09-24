@@ -23,7 +23,8 @@ import type {
   LoginRequest,
   OrganizationAuthContext,
 } from '@/app/lib/api';
-import { session } from '@/app/lib/auth/session';
+import { session, tokenClaims } from '@/app/lib/auth/session';
+import SessionNotice from '@/app/components/SessionNotice';
 
 type AuthStatus =
   | 'loading'
@@ -110,6 +111,7 @@ export function AuthProvider({
         await resolveAccessContext();
 
       setContext(nextContext);
+      session.expectUser(nextContext.user.id);
       setStatus('authenticated');
     } catch (error) {
       if (
@@ -158,9 +160,8 @@ export function AuthProvider({
         );
       }
 
-      session.setAccessToken(
-        result.access_token,
-      );
+      session.setTokens(result);
+      session.expectUser(tokenClaims(result.access_token).sub || null);
 
       try {
         const nextContext =
@@ -287,6 +288,7 @@ export function AuthProvider({
     <AuthenticationContext.Provider
       value={value}
     >
+      {status === 'authenticated' && context ? <SessionNotice context={context} /> : null}
       {children}
     </AuthenticationContext.Provider>
   );

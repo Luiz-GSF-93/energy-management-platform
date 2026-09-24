@@ -50,6 +50,7 @@ export default function ProtectedRoute({
             justifyContent: 'center',
           }}
         >
+          <a href="/auth/login">Entrar novamente</a>
           <Button
             variant="secondary"
             onClick={() => {
