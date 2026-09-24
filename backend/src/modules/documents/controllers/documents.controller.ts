@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { DocumentsService } from '../services/documents.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
-import { OrganizationId } from '../../../common/decorators/tenant.decorator';
+import { OrganizationId, UserId } from '../../../common/decorators/tenant.decorator';
 import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions';
 
@@ -22,8 +22,9 @@ export class DocumentsController {
   async create(
     @Body() createDocumentDto: CreateDocumentDto,
     @OrganizationId() organizationId: string,
+    @UserId() actorUserId: string,
   ) {
-    return this.documentsService.create(createDocumentDto, organizationId);
+    return this.documentsService.create(createDocumentDto, organizationId, actorUserId);
   }
 
   @Get()
