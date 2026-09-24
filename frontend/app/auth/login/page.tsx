@@ -5,6 +5,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -142,6 +143,7 @@ export default function LoginPage() {
                   : 'Entrar'}
               </Button>
             </div>
+            <Link href="/auth/forgot-password">Esqueci minha senha</Link>
           </form>
         </Card>
       </div>
