@@ -79,7 +79,18 @@ export class UsersService {
       );
     }
 
-    const membershipRows = (memberships || []) as UserMembershipRow[];
+    // Legacy bootstrap global administrators are managed by the platform.
+    // Keep tenant mutations restricted to organization roles.
+    const membershipRows = ((memberships || []) as UserMembershipRow[]).filter((membership) => {
+      const role = Array.isArray(membership.roles)
+        ? membership.roles.length === 1 ? membership.roles[0] : null
+        : membership.roles;
+      return !(membership.organization_id === organizationId &&
+        typeof membership.user_id === 'string' && membership.user_id.length > 0 &&
+        typeof membership.role_id === 'string' && membership.role_id.length > 0 &&
+        role?.id === membership.role_id && role.organization_id === organizationId &&
+        role.scope === 'global' && role.name === 'admin_platform');
+    });
 
     if (membershipRows.length === 0) {
       return [];
