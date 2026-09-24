@@ -39,7 +39,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
-    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions);
+    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions,tenant.accessMode==='platform_operation');
     return this.usersService.invite(dto, {
       actorUserId: tenant.userId,
       organizationId: tenant.organizationId,
@@ -56,7 +56,7 @@ export class UsersController {
 
   @Get('roles')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
-  async roles(@Tenant() tenant:TenantContext) { return this.usersService.availableRoles(tenant.organizationId); }
+  async roles(@Tenant() tenant:TenantContext) { return this.usersService.availableRoles(tenant.organizationId,tenant.accessMode==='platform_operation'); }
 
   @Patch(':userId/details')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])
@@ -98,7 +98,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
-    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions);
+    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions,tenant.accessMode==='platform_operation');
     return this.usersService.updateRole(
       userId,
       dto.roleId,
