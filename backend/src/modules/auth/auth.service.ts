@@ -133,11 +133,13 @@ export class AuthService {
         },
         organizations: validMemberships.map((membership: any) => ({
           id: membership.organization_id,
+          name: membership.organizations.name,
           role: membership.roles.name,
           role_id: membership.roles.id,
         })),
         currentOrganization: {
           id: currentMembership.organization_id,
+          name: currentMembership.organizations.name,
           role: currentRole.name,
           permissions: Array.isArray(currentRole.permissions)
             ? currentRole.permissions

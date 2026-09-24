@@ -1,0 +1,10 @@
+import { UsersService } from './users.service';
+import { UsersController } from '../controllers/users.controller';
+describe('Platform-only organization admin assignment',()=>{
+ function setup(){const data=[{id:'admin',name:'admin_org',organization_id:'org',scope:'organization',permissions:['invite']},{id:'manager',name:'gestor',organization_id:'org',scope:'organization',permissions:['invite']}];let selected:string|undefined;const q:any={select:()=>q,eq:(key:string,value:string)=>{if(key==='id')selected=value;return q;},then:(resolve:any)=>Promise.resolve({data:selected?data.filter(r=>r.id===selected):data,error:null}).then(resolve)};return new UsersService({getClient:()=>({from:()=>q})} as any,{} as any);}
+ it('blocks an organization admin despite equal permissions',async()=>{await expect(setup().assertAssignable('admin','org',['invite'])).rejects.toThrow('Somente');});
+ it('allows platform operation with existing permission checks',async()=>{await expect(setup().assertAssignable('admin','org',['invite'],true)).resolves.toBeUndefined();await expect(setup().assertAssignable('admin','org',[],true)).rejects.toThrow('superiores');});
+ it('allows ordinary roles within actor permissions',async()=>{await expect(setup().assertAssignable('manager','org',['invite'])).resolves.toBeUndefined();});
+ it('hides administrator from tenant role options',async()=>{expect(await setup().availableRoles('org')).toEqual([{id:'manager',name:'gestor'}]);expect(await setup().availableRoles('org',true)).toHaveLength(2);});
+ it.each(['invite','updateRole'])('guards %s before any mutation',async(method)=>{const service:any={assertAssignable:jest.fn().mockRejectedValue(new Error('blocked')),invite:jest.fn(),updateRole:jest.fn()};const c:any=new UsersController(service),dto={roleId:'admin'},tenant={organizationId:'org',permissions:['invite']};await expect(method==='invite'?c.invite(dto,tenant,{}):c.updateRole('target',dto,tenant,{})).rejects.toThrow('blocked');expect(service.assertAssignable).toHaveBeenCalledWith('admin','org',['invite'],false);expect(service.invite).not.toHaveBeenCalled();expect(service.updateRole).not.toHaveBeenCalled();});
+});

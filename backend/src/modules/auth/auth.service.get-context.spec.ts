@@ -111,12 +111,14 @@ describe('AuthService.getContext — Phase 5.5c', () => {
       organizations: [
         {
           id: 'org-a',
+          name: 'Organization org-a',
           role: 'manager',
           role_id: 'role-a',
         },
       ],
       currentOrganization: {
         id: 'org-a',
+        name: 'Organization org-a',
         role: 'manager',
         permissions: ['contracts.read'],
       },
@@ -145,11 +147,13 @@ describe('AuthService.getContext — Phase 5.5c', () => {
     expect(result.organizations).toEqual([
       {
         id: 'org-b',
+        name: 'Organization org-b',
         role: 'operator',
         role_id: 'role-b',
       },
       {
         id: 'org-a',
+        name: 'Organization org-a',
         role: 'manager',
         role_id: 'role-a',
       },
@@ -157,6 +161,7 @@ describe('AuthService.getContext — Phase 5.5c', () => {
 
     expect(result.currentOrganization).toEqual({
       id: 'org-a',
+      name: 'Organization org-a',
       role: 'manager',
       permissions: ['contracts.read'],
     });
@@ -268,11 +273,13 @@ describe('AuthService.getContext — Phase 5.5c', () => {
     expect(result.organizations).toEqual([
       {
         id: 'org-a',
+        name: 'Organization org-a',
         role: 'manager',
         role_id: 'role-a',
       },
       {
         id: 'org-b',
+        name: 'Organization org-b',
         role: 'operator',
         role_id: 'role-b',
       },

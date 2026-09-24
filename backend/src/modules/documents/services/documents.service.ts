@@ -7,6 +7,9 @@ import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto
 import { LicensesService } from '../../licenses/services/licenses.service';
 import { validateWriteDto } from '../../../common/validation/validate-write-dto';
 
+// A PostgreSQL constraint rejection proves the INSERT did not commit.
+class DocumentInsertRejected extends InternalServerErrorException {}
+
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
@@ -76,6 +79,10 @@ export class DocumentsService {
   }
   private async insertRecord(row: Record<string, unknown>) {
     const { data, error } = await this.table().insert([row]).select().single();
+    if (error && ['23502', '23503', '23514'].includes(error.code)) {
+      this.logger.error('Document insert rejected by constraint: ' + error.code);
+      throw new DocumentInsertRejected('Não foi possível registrar o documento. Tente novamente após a correção administrativa.');
+    }
     this.check(error);
     return data;
   }
@@ -102,7 +109,7 @@ export class DocumentsService {
       return await this.insertRecord({ ...row, file_verified: true, storage_bucket: DOCUMENT_BUCKET, file_verified_at: new Date().toISOString() });
     } catch (error) {
       const status = (error as any)?.getStatus?.();
-      if (insertionStarted && status !== 403 && status !== 409) {
+      if (insertionStarted && status !== 403 && status !== 409 && !(error instanceof DocumentInsertRejected)) {
         // A lost response does not mean the INSERT rolled back. Never remove
         // bytes while a committed document may reference them.
         try {
