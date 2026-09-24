@@ -1,3 +1,6 @@
+import { FileInterceptor } from '@nestjs/platform-express';
+import { UploadDocumentDto } from '../dto/upload-document.dto';
+import { MAX_DOCUMENT_BYTES, DocumentFile } from '../services/document-file';
 import {
   Controller,
   Get,
@@ -6,6 +9,8 @@ import {
   Param,
   Put,
   Delete,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { DocumentsService } from '../services/documents.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
@@ -25,6 +30,20 @@ export class DocumentsController {
     @UserId() actorUserId: string,
   ) {
     return this.documentsService.create(createDocumentDto, organizationId, actorUserId);
+  }
+
+  @Post('upload')
+  @RequirePermission([PERMISSIONS.DOCUMENTS_UPLOAD])
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1, fields: 6, fieldSize: 8192, parts: 7 } }))
+  async upload(@Body() dto: UploadDocumentDto, @UploadedFile() file: DocumentFile,
+    @OrganizationId() organizationId: string, @UserId() actorUserId: string) {
+    return this.documentsService.upload(dto, file, organizationId, actorUserId);
+  }
+
+  @Get(':id/download')
+  @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
+  async download(@Param('id') id: string, @OrganizationId() organizationId: string) {
+    return this.documentsService.download(id, organizationId);
   }
 
   @Get()

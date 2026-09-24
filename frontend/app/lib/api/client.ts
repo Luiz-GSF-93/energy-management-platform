@@ -64,9 +64,11 @@ export async function apiRequest<T>(
   } = options;
 
   const requestHeaders = new Headers(headers);
+  const multipart = typeof FormData !== 'undefined' && body instanceof FormData;
 
   if (
     body !== undefined &&
+    !multipart &&
     !requestHeaders.has('Content-Type')
   ) {
     requestHeaders.set(
@@ -99,7 +101,7 @@ export async function apiRequest<T>(
       body:
         body === undefined
           ? undefined
-          : JSON.stringify(body),
+          : multipart ? body as FormData : JSON.stringify(body),
     },
   );
 
