@@ -28,29 +28,69 @@ describe('OrganizationsService — CREATE/UPDATE persistent audit', () => {
     };
   }
 
-  it('A — CREATE persists audit with authenticated actor', async () => {
-    const created = {
-      id: 'created-org',
-      name: 'Created',
-      description: null,
-      created_at: '2026-09-22T10:00:00.000Z',
-      updated_at: '2026-09-22T10:00:00.000Z',
-      deleted_at: null,
+  function createRpcRow(overrides: Record<string, any> = {}) {
+    return {
+      organization_id: expect.any(String),
+      organization_name: 'Created',
+      organization_description: null,
+      organization_created_at: '2026-09-22T10:00:00.000Z',
+      organization_updated_at: '2026-09-22T10:00:00.000Z',
+      organization_deleted_at: null,
+      role_count: 4,
+      ...overrides,
+    };
+  }
+
+  function createRpcHarness(options: {
+    rpcError?: any;
+    rpcRows?: any;
+    rpcThrow?: boolean;
+    auditFailure?: boolean;
+    rollbackError?: any;
+  } = {}) {
+    const rollback = {
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockResolvedValue({
+        error: options.rollbackError ?? null,
+      }),
     };
 
-    const single = jest.fn().mockResolvedValue({
-      data: created,
-      error: null,
-    });
-    const select = jest.fn(() => ({ single }));
-    const insert = jest.fn(() => ({ select }));
+    const remove = jest.fn(() => rollback);
+
+    const rpc = options.rpcThrow
+      ? jest.fn().mockRejectedValue(new Error('transport failure'))
+      : jest.fn().mockImplementation(
+          async (_name: string, args: any) => ({
+            data:
+              options.rpcRows !== undefined
+                ? options.rpcRows
+                : [
+                    createRpcRow({
+                      organization_id:
+                        args.target_organization_id,
+                      organization_name:
+                        args.target_name,
+                      organization_description:
+                        args.target_description,
+                    }),
+                  ],
+            error: options.rpcError ?? null,
+          }),
+        );
 
     const client = {
-      from: jest.fn(() => ({ insert })),
+      rpc,
+      from: jest.fn(() => ({
+        delete: remove,
+      })),
     };
 
     const auditService = {
-      logCreate: jest.fn().mockResolvedValue(undefined),
+      logCreate: options.auditFailure
+        ? jest.fn().mockRejectedValue(
+            new Error('audit failed'),
+          )
+        : jest.fn().mockResolvedValue(undefined),
     };
 
     const service = new OrganizationsService(
@@ -58,72 +98,242 @@ describe('OrganizationsService — CREATE/UPDATE persistent audit', () => {
       auditService as any,
     );
 
-    await expect(
-      service.create({ name: ' Created ' }, auditContext),
-    ).resolves.toEqual(created);
+    return {
+      service,
+      client,
+      rpc,
+      auditService,
+      rollback,
+      remove,
+    };
+  }
 
-    expect(auditService.logCreate).toHaveBeenCalledWith({
+  it('A — CREATE provisions canonical RBAC before persistent audit', async () => {
+    const h = createRpcHarness();
+
+    const result = await h.service.create(
+      {
+        name: ' Created ',
+        description: ' Description ',
+      },
+      auditContext,
+    );
+
+    expect(h.rpc).toHaveBeenCalledTimes(1);
+
+    const [rpcName, rpcArgs] =
+      h.rpc.mock.calls[0];
+
+    expect(rpcName).toBe(
+      'create_organization_with_canonical_rbac',
+    );
+
+    expect(rpcArgs).toEqual({
+      target_organization_id: expect.any(String),
+      target_name: 'Created',
+      target_description: 'Description',
+    });
+
+    expect(result).toEqual({
+      id: rpcArgs.target_organization_id,
+      name: 'Created',
+      description: 'Description',
+      created_at: '2026-09-22T10:00:00.000Z',
+      updated_at: '2026-09-22T10:00:00.000Z',
+    });
+
+    expect(
+      h.auditService.logCreate,
+    ).toHaveBeenCalledWith({
       userId: 'platform-user',
-      organizationId: 'created-org',
+      organizationId:
+        rpcArgs.target_organization_id,
       resourceType: 'organization',
-      resourceId: 'created-org',
-      after: created,
+      resourceId:
+        rpcArgs.target_organization_id,
+      after: result,
       ipAddress: '127.0.0.1',
       userAgent: 'f1.5.5-test',
     });
   });
 
-  it('B — CREATE compensates only the just-created state when audit fails', async () => {
-    const created = {
-      id: 'created-org',
-      name: 'Created',
-      description: null,
-      created_at: '2026-09-22T10:00:00.000Z',
-      updated_at: '2026-09-22T10:00:00.000Z',
-      deleted_at: null,
-    };
+  it.each([
+    [
+      'P3110',
+      'Invalid organization creation request',
+    ],
+    [
+      'P3111',
+      'Organization identifier already exists',
+    ],
+    [
+      'P3112',
+      'Organization RBAC provisioning integrity failure',
+    ],
+  ])(
+    'B — CREATE maps RPC error %s and does not audit',
+    async (code, message) => {
+      const h = createRpcHarness({
+        rpcError: {
+          code,
+          message: 'database failure',
+        },
+      });
 
-    const single = jest.fn().mockResolvedValue({
-      data: created,
-      error: null,
+      await expect(
+        h.service.create(
+          { name: 'Created' },
+          auditContext,
+        ),
+      ).rejects.toThrow(message);
+
+      expect(
+        h.auditService.logCreate,
+      ).not.toHaveBeenCalled();
+
+      expect(h.client.from).not.toHaveBeenCalled();
+    },
+  );
+
+  it('B2 — CREATE fails closed on unknown RPC error', async () => {
+    const h = createRpcHarness({
+      rpcError: {
+        code: 'XXXXX',
+        message: 'unknown failure',
+      },
     });
-    const select = jest.fn(() => ({ single }));
-    const insert = jest.fn(() => ({ select }));
-
-    const rollback = {
-      eq: jest.fn().mockReturnThis(),
-      is: jest.fn().mockResolvedValue({ error: null }),
-    };
-    const remove = jest.fn(() => rollback);
-
-    const client = {
-      from: jest
-        .fn()
-        .mockReturnValueOnce({ insert })
-        .mockReturnValueOnce({ delete: remove }),
-    };
-
-    const auditService = {
-      logCreate: jest.fn().mockRejectedValue(new Error('audit failed')),
-    };
-
-    const service = new OrganizationsService(
-      { getClient: () => client } as any,
-      auditService as any,
-    );
 
     await expect(
-      service.create({ name: 'Created' }, auditContext),
+      h.service.create(
+        { name: 'Created' },
+        auditContext,
+      ),
+    ).rejects.toThrow(
+      'Failed to create organization with canonical RBAC',
+    );
+
+    expect(
+      h.auditService.logCreate,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('B3 — CREATE fails closed when RPC transport throws', async () => {
+    const h = createRpcHarness({
+      rpcThrow: true,
+    });
+
+    await expect(
+      h.service.create(
+        { name: 'Created' },
+        auditContext,
+      ),
+    ).rejects.toThrow(
+      'Failed to create organization with canonical RBAC',
+    );
+
+    expect(
+      h.auditService.logCreate,
+    ).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    [],
+    [{}, {}],
+  ])(
+    'B4 — CREATE rejects malformed RPC row cardinality',
+    async (rpcRows) => {
+      const h = createRpcHarness({
+        rpcRows,
+      });
+
+      await expect(
+        h.service.create(
+          { name: 'Created' },
+          auditContext,
+        ),
+      ).rejects.toThrow(
+        'Organization RBAC provisioning could not be confirmed',
+      );
+
+      expect(
+        h.auditService.logCreate,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it('B5 — CREATE rejects incomplete canonical RBAC result', async () => {
+    const h = createRpcHarness({
+      rpcRows: [
+        createRpcRow({
+          organization_id: 'wrong-id',
+          role_count: 3,
+        }),
+      ],
+    });
+
+    await expect(
+      h.service.create(
+        { name: 'Created' },
+        auditContext,
+      ),
+    ).rejects.toThrow(
+      'Organization RBAC provisioning integrity violation',
+    );
+
+    expect(
+      h.auditService.logCreate,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('B6 — CREATE compensates guarded organization state when audit fails', async () => {
+    const h = createRpcHarness({
+      auditFailure: true,
+    });
+
+    await expect(
+      h.service.create(
+        { name: 'Created' },
+        auditContext,
+      ),
     ).rejects.toThrow('audit failed');
 
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect(rollback.eq).toHaveBeenNthCalledWith(1, 'id', 'created-org');
-    expect(rollback.eq).toHaveBeenNthCalledWith(
+    expect(h.remove).toHaveBeenCalledTimes(1);
+
+    expect(h.rollback.eq).toHaveBeenNthCalledWith(
+      1,
+      'id',
+      expect.any(String),
+    );
+
+    expect(h.rollback.eq).toHaveBeenNthCalledWith(
       2,
       'updated_at',
-      created.updated_at,
+      '2026-09-22T10:00:00.000Z',
     );
-    expect(rollback.is).toHaveBeenCalledWith('deleted_at', null);
+
+    expect(h.rollback.is).toHaveBeenCalledWith(
+      'deleted_at',
+      null,
+    );
+  });
+
+  it('B7 — CREATE surfaces critical integrity failure when audit compensation fails', async () => {
+    const h = createRpcHarness({
+      auditFailure: true,
+      rollbackError: {
+        message: 'rollback unavailable',
+      },
+    });
+
+    await expect(
+      h.service.create(
+        { name: 'Created' },
+        auditContext,
+      ),
+    ).rejects.toThrow(
+      'Organization audit failed and compensation failed',
+    );
   });
 
   it('C — UPDATE audits exact before and after states', async () => {

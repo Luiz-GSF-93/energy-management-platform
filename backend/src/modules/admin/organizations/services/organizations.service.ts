@@ -90,55 +90,124 @@ export class OrganizationsService {
     }
 
     const id = randomUUID();
-    const now = new Date().toISOString();
+    const normalizedName = dto.name.trim();
+    const normalizedDescription =
+      dto.description?.trim() || null;
 
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('organizations')
-      .insert([
+    const client = this.supabaseService.getClient();
+
+    let rpcRows: any = null;
+    let rpcError: any = null;
+
+    try {
+      const result = await client.rpc(
+        'create_organization_with_canonical_rbac',
         {
-          id,
-          name: dto.name.trim(),
-          description: dto.description?.trim() || null,
-          created_at: now,
-          updated_at: now,
-          deleted_at: null,
+          target_organization_id: id,
+          target_name: normalizedName,
+          target_description: normalizedDescription,
         },
-      ])
-      .select()
-      .single();
+      );
 
-    if (error || !data) {
-      throw new Error(`Supabase error: ${error?.message || 'create failed'}`);
+      rpcRows = result.data;
+      rpcError = result.error;
+    } catch {
+      throw new InternalServerErrorException(
+        'Failed to create organization with canonical RBAC',
+      );
     }
+
+    if (rpcError) {
+      const code =
+        typeof rpcError?.code === 'string'
+          ? rpcError.code
+          : '';
+
+      switch (code) {
+        case 'P3110':
+          throw new BadRequestException(
+            'Invalid organization creation request',
+          );
+
+        case 'P3111':
+          throw new ConflictException(
+            'Organization identifier already exists',
+          );
+
+        case 'P3112':
+          throw new InternalServerErrorException(
+            'Organization RBAC provisioning integrity failure',
+          );
+
+        default:
+          throw new InternalServerErrorException(
+            'Failed to create organization with canonical RBAC',
+          );
+      }
+    }
+
+    if (!Array.isArray(rpcRows) || rpcRows.length !== 1) {
+      throw new InternalServerErrorException(
+        'Organization RBAC provisioning could not be confirmed',
+      );
+    }
+
+    const result = rpcRows[0] as any;
+
+    if (
+      result?.organization_id !== id ||
+      result?.organization_name !== normalizedName ||
+      (result?.organization_description ?? null) !==
+        normalizedDescription ||
+      typeof result?.organization_created_at !== 'string' ||
+      result.organization_created_at.length === 0 ||
+      typeof result?.organization_updated_at !== 'string' ||
+      result.organization_updated_at.length === 0 ||
+      result?.organization_deleted_at !== null ||
+      result?.role_count !== 4
+    ) {
+      throw new InternalServerErrorException(
+        'Organization RBAC provisioning integrity violation',
+      );
+    }
+
+    const created = {
+      id: result.organization_id,
+      name: result.organization_name,
+      description:
+        result.organization_description ?? null,
+      created_at: result.organization_created_at,
+      updated_at: result.organization_updated_at,
+    };
 
     try {
       await this.auditService.logCreate({
         userId: auditContext.actorUserId,
-        organizationId: data.id,
+        organizationId: created.id,
         resourceType: 'organization',
-        resourceId: data.id,
-        after: data,
+        resourceId: created.id,
+        after: created,
         ipAddress: auditContext.ipAddress,
         userAgent: auditContext.userAgent,
       });
     } catch (auditError) {
-      const { error: rollbackError } = await this.supabaseService
-        .getClient()
+      const { error: rollbackError } = await client
         .from('organizations')
         .delete()
-        .eq('id', data.id)
-        .eq('updated_at', data.updated_at)
+        .eq('id', created.id)
+        .eq('updated_at', created.updated_at)
         .is('deleted_at', null);
 
       if (rollbackError) {
-        throw new Error('Organization audit failed and compensation failed');
+        throw new InternalServerErrorException(
+          'Organization audit failed and compensation failed',
+        );
       }
 
       throw auditError;
     }
 
-    return data;
+    return created;
   }
 
   async update(
