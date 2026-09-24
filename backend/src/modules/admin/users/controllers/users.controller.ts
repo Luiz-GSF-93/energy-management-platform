@@ -1,3 +1,4 @@
+import { UpdateMembershipStatusDto } from '../dto/update-membership-status.dto';
 import { UpdateUserDetailsDto } from '../dto/update-user-details.dto';
 import {
   Body,
@@ -74,6 +75,17 @@ export class UsersController {
     return this.usersService.findOne(userId, tenant.organizationId);
   }
 
+  @Patch(':userId/status')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE, PERMISSIONS.ORGANIZATION_USERS_DELETE])
+  @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
+  async status(@Param('userId') userId: string, @Body() dto: UpdateMembershipStatusDto, @Tenant() tenant: TenantContext, @Req() request: Request) {
+    return this.usersService.setMembershipStatus(userId, dto.status, {
+      actorUserId: tenant.userId, organizationId: tenant.organizationId,
+      actorPermissions: tenant.permissions, platformOperation: tenant.accessMode === 'platform_operation',
+      ipAddress: request.ip, userAgent: request.get('user-agent'),
+    });
+  }
+
   @Delete(':userId')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_DELETE])
   async deactivate(
@@ -83,6 +95,8 @@ export class UsersController {
   ) {
     return this.usersService.deactivate(userId, {
       actorUserId: tenant.userId,
+      actorPermissions: tenant.permissions,
+      platformOperation: tenant.accessMode === 'platform_operation',
       organizationId: tenant.organizationId,
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),

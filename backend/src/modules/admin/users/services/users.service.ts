@@ -1,6 +1,8 @@
+import { PERMISSIONS } from '../../../../common/constants/permissions';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -350,173 +352,37 @@ export class UsersService {
     };
   }
 
-  async deactivate(
-    targetUserId: string,
-    auditContext: {
-      actorUserId: string;
-      organizationId: string;
-      ipAddress?: string;
-      userAgent?: string;
-    },
-  ): Promise<{
-    userId: string;
-    membershipStatus: 'inactive';
-  }> {
-    const {
-      actorUserId,
-      organizationId,
-      ipAddress,
-      userAgent,
-    } = auditContext;
+  async deactivate(targetUserId: string, context: {
+    actorUserId: string; organizationId: string; ipAddress?: string; userAgent?: string;
+    actorPermissions?: string[]; platformOperation?: boolean;
+  }) { return this.setMembershipStatus(targetUserId, 'inactive', context); }
 
-    if (targetUserId === actorUserId) {
-      throw new BadRequestException(
-        'Self-deactivation of the active organization membership is not allowed',
-      );
+  async setMembershipStatus(targetUserId: string, status: 'active' | 'inactive', context: {
+    actorUserId: string; organizationId: string; ipAddress?: string; userAgent?: string;
+    actorPermissions?: string[]; platformOperation?: boolean;
+  }) {
+    const permission = status === 'active' ? PERMISSIONS.ORGANIZATION_USERS_UPDATE : PERMISSIONS.ORGANIZATION_USERS_DELETE;
+    if (!context.actorPermissions?.includes(permission)) throw new ForbiddenException('Sem permissão para alterar este acesso.');
+    if (targetUserId === context.actorUserId) throw new BadRequestException('Você não pode alterar o próprio acesso por esta ação.');
+    const member = await this.findOne(targetUserId, context.organizationId);
+    await this.assertAssignable(member.role.id, context.organizationId, context.actorPermissions, context.platformOperation);
+    const expected = status === 'active' ? 'inactive' : 'active';
+    if (member.membershipStatus !== expected) throw new ConflictException('O acesso já foi alterado. Atualize a lista.');
+    const {data, error} = await this.supabaseService.getClient().rpc('set_organization_member_status', {
+      target_organization_id: context.organizationId, target_user_id: targetUserId,
+      actor_user_id: context.actorUserId, target_status: status, expected_status: expected,
+      expected_role_id: member.role.id, audit_ip: context.ipAddress || null, audit_agent: context.userAgent || null,
+    });
+    if (error) {
+      if (error.code === '42501') throw new ForbiddenException('Sem permissão para alterar este acesso.');
+      if (error.code === 'P3230') throw new NotFoundException('Usuário não encontrado nesta organização.');
+      if (error.code === 'P3231') throw new ConflictException('O acesso ou a função mudou. Atualize a lista.');
+      if (error.code === 'P3232') throw new BadRequestException('Mantenha ao menos um Administrador da organização ou Gestor ativo.');
+      if (error.code === 'P3152') throw new BadRequestException('O limite de usuários ativos da licença foi atingido.');
+      throw new InternalServerErrorException('Não foi possível alterar o acesso. Nenhuma alteração foi confirmada.');
     }
-
-    const { data: memberships, error: membershipError } =
-      await this.supabaseService
-        .getClient()
-        .from('organization_members')
-        .select('id, user_id, organization_id, role_id, status')
-        .eq('user_id', targetUserId)
-        .eq('organization_id', organizationId)
-        .eq('status', 'active');
-
-    if (membershipError) {
-      throw new InternalServerErrorException(
-        'Failed to resolve active organization membership',
-      );
-    }
-
-    if (!memberships || memberships.length === 0) {
-      throw new NotFoundException(
-        'Active organization membership not found',
-      );
-    }
-
-    if (memberships.length !== 1) {
-      throw new InternalServerErrorException(
-        'Organization membership integrity violation',
-      );
-    }
-
-    const membership = memberships[0];
-
-    if (
-      !membership ||
-      typeof membership.id !== 'string' ||
-      membership.id.length === 0 ||
-      membership.user_id !== targetUserId ||
-      membership.organization_id !== organizationId ||
-      membership.status !== 'active'
-    ) {
-      throw new InternalServerErrorException(
-        'Organization membership integrity violation',
-      );
-    }
-
-    const { data: updatedMemberships, error: updateError } =
-      await this.supabaseService
-        .getClient()
-        .from('organization_members')
-        .update({
-          status: 'inactive',
-        })
-        .eq('id', membership.id)
-        .eq('user_id', targetUserId)
-        .eq('organization_id', organizationId)
-        .eq('status', 'active')
-        .select('id, user_id, organization_id, status');
-
-    if (updateError) {
-      throw new InternalServerErrorException(
-        'Failed to deactivate organization membership',
-      );
-    }
-
-    if (
-      !updatedMemberships ||
-      updatedMemberships.length !== 1
-    ) {
-      throw new InternalServerErrorException(
-        'Organization membership changed concurrently',
-      );
-    }
-
-    const updatedMembership = updatedMemberships[0];
-
-    if (
-      !updatedMembership ||
-      updatedMembership.id !== membership.id ||
-      updatedMembership.user_id !== targetUserId ||
-      updatedMembership.organization_id !== organizationId ||
-      updatedMembership.status !== 'inactive'
-    ) {
-      throw new InternalServerErrorException(
-        'Organization membership integrity violation after deactivation',
-      );
-    }
-
-    try {
-      await this.auditService.logUserMembershipDeactivation({
-        actorUserId,
-        organizationId,
-        targetUserId,
-        membershipId: membership.id,
-        beforeStatus: 'active',
-        afterStatus: 'inactive',
-        ipAddress,
-        userAgent,
-      });
-    } catch {
-      const { data: rolledBackMemberships, error: rollbackError } =
-        await this.supabaseService
-          .getClient()
-          .from('organization_members')
-          .update({
-            status: 'active',
-          })
-          .eq('id', membership.id)
-          .eq('user_id', targetUserId)
-          .eq('organization_id', organizationId)
-          .eq('status', 'inactive')
-          .select('id, user_id, organization_id, status');
-
-      if (
-        rollbackError ||
-        !rolledBackMemberships ||
-        rolledBackMemberships.length !== 1
-      ) {
-        throw new InternalServerErrorException(
-          'CRITICAL: membership deactivation audit failed and rollback could not be confirmed',
-        );
-      }
-
-      const rolledBackMembership = rolledBackMemberships[0];
-
-      if (
-        !rolledBackMembership ||
-        rolledBackMembership.id !== membership.id ||
-        rolledBackMembership.user_id !== targetUserId ||
-        rolledBackMembership.organization_id !== organizationId ||
-        rolledBackMembership.status !== 'active'
-      ) {
-        throw new InternalServerErrorException(
-          'CRITICAL: membership deactivation audit failed and rollback integrity could not be confirmed',
-        );
-      }
-
-      throw new InternalServerErrorException(
-        'Membership deactivation audit failed; operation was reverted',
-      );
-    }
-
-    return {
-      userId: targetUserId,
-      membershipStatus: 'inactive',
-    };
+    if (data !== true) throw new InternalServerErrorException('Não foi possível confirmar a alteração do acesso. Atualize a lista.');
+    return {userId: targetUserId, membershipStatus: status};
   }
 
   async updateRole(
