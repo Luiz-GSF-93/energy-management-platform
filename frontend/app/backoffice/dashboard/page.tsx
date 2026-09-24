@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/app/providers';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
-import { EmptyState } from '@/app/components/ui';
+import DashboardMetrics from '@/app/components/DashboardMetrics';
 
 export default function DashboardPage() {
   const { context, hasPermission } = useAuth();
@@ -34,14 +34,7 @@ export default function DashboardPage() {
               {hasPermission('8f105b02-4443-49de-b188-847e0284e7ed') ? <p><Link href="/backoffice/documents">Enviar e consultar documentos</Link></p> : null}
             </>}
           </section>
-          <EmptyState
-            title="Indicadores ainda não configurados"
-            description={
-              'Os indicadores serão exibidos quando os ' +
-              'contratos de agregação do dashboard forem ' +
-              'implementados com dados reais do backend.'
-            }
-          />
+          {context?<DashboardMetrics key={context.scope==='global'?'global':context.currentOrganization.id} organizationId={context.scope==='global'?null:context.currentOrganization.id}/>:null}
         </section>
       </BackofficeShell>
     </ProtectedRoute>

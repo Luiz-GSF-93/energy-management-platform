@@ -1,0 +1,13 @@
+'use client';
+import {useEffect,useState} from 'react';
+import Link from 'next/link';
+import {apiRequest} from '@/app/lib/api/client';
+import {Alert,Button,Card} from '@/app/components/ui';
+type Data={scope:string;organizationId:string|null;updatedAt:string;metrics:{key:string;label:string;value:number;href:string}[];license?:{name:string;documentsLimit:number;documentsUsed:number;endDate:string|null}|null};
+export default function DashboardMetrics({organizationId}:{organizationId:string|null}){
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0);
+ useEffect(()=>{let cancelled=false;apiRequest<Data>(organizationId?'/api/v1/dashboard':'/api/v1/admin/dashboard').then(result=>{if(result.organizationId!==organizationId)throw new Error('O contexto dos indicadores mudou. Atualize a página.');if(!cancelled)setData(result);}).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Não foi possível carregar os indicadores.');}).finally(()=>{if(!cancelled)setLoading(false);});return()=>{cancelled=true;};},[organizationId,revision]);
+ return <section aria-label="Indicadores do cadastro"><h2>Indicadores do cadastro</h2><Button variant="secondary" disabled={loading} onClick={()=>{setLoading(true);setError('');setData(null);setRevision(v=>v+1);}}>{loading?'Atualizando…':'Atualizar indicadores'}</Button>{error?<Alert variant="error">{error}</Alert>:null}{loading?<p>Consultando dados da {organizationId?'organização':'plataforma'}…</p>:null}
+ {data&&!loading?<><p>Consulta realizada em {new Date(data.updatedAt).toLocaleString('pt-BR')}.</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>{data.metrics.map(m=><Card key={m.key} title={m.label}><p style={{fontSize:'2rem',fontWeight:700}}>{m.value.toLocaleString('pt-BR')}</p>{m.href?<Link href={m.href}>Abrir área</Link>:null}</Card>)}</div>{data.license!==undefined?<Card title="Licença vigente">{data.license?<><p>{data.license.name}</p><p>Documentos utilizados: {data.license.documentsUsed} de {data.license.documentsLimit}</p><p>{data.license.endDate?'Validade até '+data.license.endDate.split('-').reverse().join('/'):'Sem data final cadastrada'}</p></>:<p>Nenhuma licença vigente. Consulte Licenças e módulos.</p>}</Card>:null}{!data.metrics.length?<p>Não há indicadores disponíveis para suas permissões atuais.</p>:null}</>:null}
+ <p>As contagens representam o cadastro atual. Indicadores de consumo, custos e economia dependem das faturas processadas e validadas.</p></section>;
+}

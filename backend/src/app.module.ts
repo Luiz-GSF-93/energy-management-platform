@@ -1,3 +1,4 @@
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -29,6 +30,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     DocumentsModule,
     AdminModule,
     LicensesModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
