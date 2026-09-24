@@ -21,6 +21,8 @@ import {
 } from '@/app/lib/navigation';
 import { useAuth } from '@/app/providers';
 
+const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
+
 export default function Sidebar() {
   const router = useRouter();
 
@@ -110,8 +112,8 @@ export default function Sidebar() {
           <p className="backoffice-brand__context">
             {context
               ? context.scope === 'global'
-                ? `Perfil global: ${context.role}`
-                : `Perfil: ${context.currentOrganization.role}`
+                ? `Perfil global: ${roleLabels[context.role] || context.role}`
+                : `Perfil: ${roleLabels[context.currentOrganization.role] || context.currentOrganization.role}`
               : 'Backoffice'}
           </p>
         </div>

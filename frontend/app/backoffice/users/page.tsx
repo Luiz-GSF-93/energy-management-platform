@@ -21,7 +21,7 @@ function Users(){
  setRows(await getUsers());setEditing(null);form.reset();
  }catch(ex){setError(ex instanceof Error?ex.message:'Não foi possível salvar.');}finally{setBusy(false);}}
  if(!view)return <p>Você não possui permissão para consultar usuários.</p>;
- return <section className="backoffice-page"><h1>Usuários da organização</h1><p>O vínculo interno ou externo é específico desta organização. A função define as permissões. Um consultor pode participar de várias organizações.</p>
+ return <section className="backoffice-page"><h1>Usuários da organização</h1><p>O vínculo interno ou externo é específico desta organização. A função define as permissões. Um consultor pode participar de várias organizações.</p><p>Administrador da organização gerencia somente esta organização. Essa função não concede administração global da plataforma.</p>
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
  {(editing?update:invite)?<Card title={editing?'Editar usuário nesta organização':'Convidar ou vincular usuário'}><form className="organizations-create__form" key={editing?.userId||'invite'} onSubmit={save}>
  <Input label="Nome nesta organização" name="name" minLength={2} maxLength={120} required defaultValue={editing?.name||''} disabled={busy}/>

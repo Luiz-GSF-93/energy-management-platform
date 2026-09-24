@@ -33,7 +33,7 @@ describe('Private document upload',()=>{
  it('blocks known duplicate before storage',async()=>{
   docs.maybeSingle.mockResolvedValue({data:{id},error:null});await expect(service.upload(dto,file,'org-a',id)).rejects.toMatchObject({status:409});expect(storage.upload).not.toHaveBeenCalled();
  });
- it.each([{code:'23505',message:'duplicate'},{code:'P0001',message:'DOCUMENT_QUOTA_EXCEEDED'}])('compensates a confirmed rejected insert %p',async error=>{
+ it.each([{code:'23502'},{code:'23503'},{code:'23514'},{code:'23505',message:'duplicate'},{code:'P0001',message:'DOCUMENT_QUOTA_EXCEEDED'}])('compensates a confirmed rejected insert %p',async error=>{
   docs.single.mockResolvedValue({data:null,error});await expect(service.upload(dto,file,'org-a',id)).rejects.toBeDefined();
   expect(storage.remove).toHaveBeenCalledWith([storage.upload.mock.calls[0][0]]);
  });
