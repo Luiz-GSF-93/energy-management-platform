@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateConsumerUnitDto, UpdateConsumerUnitDto } from '../dto/create-consumer-unit.dto';
 import { validateWriteDto } from '../../../common/validation/validate-write-dto';
@@ -7,6 +7,27 @@ import { validateWriteDto } from '../../../common/validation/validate-write-dto'
 export class ConsumerUnitsService {
   constructor(private supabaseService: SupabaseService) {}
 
+  private toRow(dto: CreateConsumerUnitDto | UpdateConsumerUnitDto) {
+    const columns = {
+      customerId: 'customer_id', name: 'name', code: 'consumer_unit_number',
+      distributor: 'distributor', tariffGroup: 'tariff_group', tariffModality: 'tariff_modality',
+      contractedDemand: 'contracted_demand', address: 'address', city: 'city', state: 'state',
+      installedCapacity: 'installed_capacity', voltageClass: 'voltage', status: 'status',
+    };
+    return Object.fromEntries(Object.entries(dto)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [columns[key as keyof typeof columns], value]));
+  }
+
+  private fail(error: { code?: string }) {
+    if (error.code === '23505') throw new ConflictException('Consumer unit already exists in this organization');
+    if (error.code === '23503') throw new ConflictException('Consumer unit has related records or its customer is unavailable');
+    if (['23502', '23514', '22001', '22P02'].includes(error.code || '')) {
+      throw new BadRequestException('Invalid consumer unit data');
+    }
+    throw new InternalServerErrorException('Unable to access consumer units');
+  }
+
   async findAll(organizationId: string) {
     const { data, error } = await this.supabaseService
       .getClient()
@@ -14,7 +35,7 @@ export class ConsumerUnitsService {
       .select('*')
       .eq('organization_id', organizationId);
 
-    if (error) throw new Error(error.message);
+    if (error) this.fail(error);
     return data;
   }
 
@@ -25,9 +46,10 @@ export class ConsumerUnitsService {
       .select('*')
       .eq('id', id)
       .eq('organization_id', organizationId)
-      .single();
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) this.fail(error);
+    if (!data) throw new NotFoundException('Consumer unit not found');
     return data;
   }
 
@@ -36,14 +58,20 @@ export class ConsumerUnitsService {
     organizationId: string,
   ) {
     createConsumerUnitDto = await validateWriteDto(CreateConsumerUnitDto, createConsumerUnitDto);
+    // The service-role client bypasses RLS: scope the parent as well as the child.
+    const customer = await this.supabaseService.getClient().from('customers')
+      .select('id').eq('id', createConsumerUnitDto.customerId)
+      .eq('organization_id', organizationId).is('deleted_at', null).maybeSingle();
+    if (customer.error) this.fail(customer.error);
+    if (!customer.data) throw new NotFoundException('Customer not found');
     const { data, error } = await this.supabaseService
       .getClient()
       .from('consumer_units')
-      .insert([{ ...createConsumerUnitDto, organization_id: organizationId }])
+      .insert([{ ...this.toRow(createConsumerUnitDto), organization_id: organizationId }])
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) this.fail(error);
     return data;
   }
 
@@ -56,13 +84,14 @@ export class ConsumerUnitsService {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('consumer_units')
-      .update(updateConsumerUnitDto)
+      .update(this.toRow(updateConsumerUnitDto))
       .eq('id', id)
       .eq('organization_id', organizationId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) this.fail(error);
+    if (!data) throw new NotFoundException('Consumer unit not found');
     return data;
   }
 
@@ -74,9 +103,10 @@ export class ConsumerUnitsService {
       .eq('id', id)
       .eq('organization_id', organizationId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) this.fail(error);
+    if (!data) throw new NotFoundException('Consumer unit not found');
     return data;
   }
 }
