@@ -317,16 +317,10 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
     expect(h.auditService.logUserInvite).not.toHaveBeenCalled();
   });
 
-  it('rejects affiliation mismatch without rewriting profile', async () => {
-    const h = harness({
-      affiliationType: 'internal',
-    });
-
-    await expect(
-      h.service.invite(dto as any, auditContext),
-    ).rejects.toBeInstanceOf(ConflictException);
-
-    expect(h.auditService.logUserInvite).not.toHaveBeenCalled();
+  it('allows different affiliation per organization without rewriting profile', async () => {
+    const h=harness({affiliationType:'internal'});
+    await expect(h.service.invite(dto as any,auditContext)).resolves.toMatchObject({membershipStatus:'active'});
+    expect(h.membershipInsert.insert).toHaveBeenCalledWith(expect.objectContaining({affiliation_type:'external',organization_id:organizationId,display_name:'Invitee User'}));
   });
 
   it('fails closed when Auth identity exists without profile', async () => {
@@ -466,6 +460,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
         data: {
           name: 'Invitee User',
         },
+        redirectTo: expect.stringContaining('/auth/accept-invite'),
       },
     );
 

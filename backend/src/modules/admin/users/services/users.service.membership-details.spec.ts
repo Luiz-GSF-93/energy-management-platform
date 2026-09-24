@@ -1,0 +1,11 @@
+import {UsersService} from './users.service';
+describe('Membership details and role assignment boundaries',()=>{
+ const context={actorUserId:'actor',organizationId:'org-a'};
+ function harness(result:any={data:true,error:null}){const rpc=jest.fn().mockResolvedValue(result);return {rpc,service:new UsersService({getClient:()=>({rpc})} as any,{} as any)};}
+ it('binds target organization and actor to server context',async()=>{const {service,rpc}=harness();await service.updateDetails('target',{name:' Person ',affiliationType:'external'},context);expect(rpc).toHaveBeenCalledWith('update_organization_member_details',expect.objectContaining({target_organization_id:'org-a',actor_user_id:'actor',target_user_id:'target',target_name:'Person',target_affiliation:'external'}));});
+ it('affiliation-only update does not overwrite name',async()=>{const {service,rpc}=harness();await service.updateAffiliation('target','internal',context);expect(rpc.mock.calls[0][1].target_name).toBeNull();});
+ it('rejects invalid classification without database write',async()=>{const {service,rpc}=harness();await expect(service.updateAffiliation('target','invalid' as any,context)).rejects.toThrow('Invalid affiliation');expect(rpc).not.toHaveBeenCalled();});
+ it('maps absent or foreign member to not found',async()=>{const {service}=harness({data:null,error:{code:'P3130'}});await expect(service.updateAffiliation('foreign','external',context)).rejects.toThrow('Active organization membership not found');});
+ it.each([{data:null,error:{code:'XX000'}},{data:false,error:null}])('fails closed on unsuccessful transaction %p',async(result)=>{const {service}=harness(result);await expect(service.updateAffiliation('target','external',context)).rejects.toThrow('Failed to update');});
+ it('prevents granting permissions beyond the actor',async()=>{const q:any={select:()=>q,eq:()=>q,then:(resolve:any)=>Promise.resolve({data:[{permissions:['view','update']}],error:null}).then(resolve)};const service=new UsersService({getClient:()=>({from:()=>q})} as any,{} as any);await expect(service.assertAssignable('r','org-a',['view'])).rejects.toThrow('superiores');await expect(service.assertAssignable('r','org-a',['view','update'])).resolves.toBeUndefined();});
+});
