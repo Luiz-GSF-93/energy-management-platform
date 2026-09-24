@@ -682,3 +682,7 @@ a {
 .users-card__details dd {
   text-align: right;
 }
+
+.session-notice {position:sticky;top:0;z-index:100;padding:16px 24px;background:#283044;color:#f1f5f9;border:2px solid #facc15;}
+.session-notice button {padding:8px 16px;background:#59cbe8;color:#07111f;border-radius:6px;margin:8px 0;}
+.session-notice input {max-width:360px;}

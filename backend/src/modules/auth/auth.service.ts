@@ -59,6 +59,15 @@ export class AuthService {
     };
   }
 
+  async renew(refresh_token: string) {
+    const {data,error}=await this.supabaseService.createAuthClient().auth.refreshSession({refresh_token});
+    if(error || !data?.session) {
+      if(error && (!error.status || error.status>=500 || error.status===429)) throw new InternalServerErrorException('Renovação temporariamente indisponível. Tente novamente.');
+      throw new UnauthorizedException('Sua sessão precisa de um novo login.');
+    }
+    return {access_token:data.session.access_token,refresh_token:data.session.refresh_token};
+  }
+
   async getContext(tenant: TenantContext) {
     if (tenant.accessMode === 'platform_operation') {
       return { scope: 'organization', accessMode: tenant.accessMode,

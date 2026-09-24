@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Body, Param, Req, UsePipes, ValidationPipe } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, AcceptInviteDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, AcceptInviteDto, RefreshSessionDto } from './dto/auth.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Tenant } from '../../common/decorators/tenant.decorator';
 import { Access } from '../../common/decorators/access-context.decorator';
@@ -26,6 +26,13 @@ export class AuthController {
   @Public()
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Post('refresh')
+  @Public()
+  @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
+  async renew(@Body() dto: RefreshSessionDto) {
+    return this.authService.renew(dto.refresh_token);
   }
 
   @Post('login')

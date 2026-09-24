@@ -1,5 +1,9 @@
 import { IsEmail, IsString, MinLength, MaxLength } from 'class-validator';
 
+export class RefreshSessionDto {
+  @IsString() @MinLength(10) @MaxLength(4096) refresh_token!: string;
+}
+
 export class RegisterDto {
   @IsEmail()
   email!: string;

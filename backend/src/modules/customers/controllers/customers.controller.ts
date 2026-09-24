@@ -32,6 +32,10 @@ export class CustomersController {
     return this.customersService.findAll(organizationId);
   }
 
+  @Get('cnpj/:cnpj')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_CREATE])
+  async lookupCnpj(@Param('cnpj') cnpj:string) {return this.customersService.lookupCnpj(cnpj);}
+
   @Get(':id')
   @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_VIEW])
   async findOne(

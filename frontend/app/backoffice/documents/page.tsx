@@ -22,6 +22,7 @@ function DocumentsContent() {
   const [loading,setLoading] = useState(true);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
+  const [attempt,setAttempt] = useState(0);
   const currentOrg = useRef(organizationId);
 
   const canUpload = hasPermission(uploadPermission);
@@ -35,10 +36,10 @@ function DocumentsContent() {
       canUpload ? apiRequest<Customer[]>('/api/v1/customers') : Promise.resolve([]),
       canUpload ? apiRequest<Unit[]>('/api/v1/consumer-units') : Promise.resolve([]),
     ]).then(([d,c,u]) => { if (!cancelled) { setDocuments(d);setCustomers(c);setUnits(u); } })
-      .catch(() => { if (!cancelled) setError('Não foi possível carregar os dados. Verifique sua licença e as permissões de documentos, clientes e unidades.'); })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Não foi possível carregar os dados. Tente novamente.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled=true; currentOrg.current=''; };
-  },[organizationId,canUpload,canView]);
+  },[organizationId,canUpload,canView,attempt]);
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return;
     const form=event.currentTarget; const data=new FormData(form); const file=data.get('file');
@@ -63,9 +64,9 @@ function DocumentsContent() {
   if (!organizationId || !canView) return <p role="alert">Selecione uma organização com permissão para consultar documentos.</p>;
   return <section className="backoffice-page">
     <header className="backoffice-page__header"><h1 className="backoffice-page__title">Documentos</h1><p>Envie faturas e documentos para a unidade consumidora. Os arquivos ficam privados.</p></header>
-    {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
+    {error && <div><p role="alert">{error}</p><button type="button" disabled={busy} onClick={()=>{setError('');setAttempt(n=>n+1);}}>Tentar carregar novamente</button></div>}{notice && <p role="status">{notice}</p>}
     {loading ? <p role="status">Carregando documentos…</p> : <>
-      {canUpload && <form key={organizationId} onSubmit={send} style={{display:'grid',gap:16,maxWidth:680,padding:24,border:'1px solid #dbe3ec',borderRadius:12,background:'white'}}>
+      {canUpload && <form key={organizationId} onSubmit={send} style={{display:'grid',gap:16,maxWidth:680,padding:24,border:'1px solid #dbe3ec',borderRadius:12,background:'var(--color-surface)',color:'var(--color-text)'}}>
         <h2>Enviar documento</h2>
         <label>Cliente<select name="customerId" required value={customer} disabled={busy} onChange={e=>setCustomer(e.target.value)} style={{display:'block',width:'100%',padding:10}}><option value="">Selecione</option>{customers.map(c=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></label>
         <label>Unidade consumidora<select key={customer} name="consumerUnitId" required disabled={busy || !customer} defaultValue="" style={{display:'block',width:'100%',padding:10}}><option value="">Selecione</option>{units.filter(u=>u.customer_id===customer).map(u=><option key={u.id} value={u.id}>{u.name || u.consumer_unit_number} — {u.consumer_unit_number}</option>)}</select></label>

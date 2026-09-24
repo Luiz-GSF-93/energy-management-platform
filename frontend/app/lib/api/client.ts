@@ -1,4 +1,5 @@
 import { session } from '@/app/lib/auth/session';
+import {freshToken,sessionAttention} from '@/app/lib/auth/renew';
 
 export class ApiError extends Error {
   constructor(
@@ -80,7 +81,7 @@ export async function apiRequest<T>(
   if (authenticated) {
     const selectedOrganization = session.getOrganizationSession();
     if (selectedOrganization) requestHeaders.set('x-platform-organization-session', selectedOrganization);
-    const token = session.getAccessToken();
+    const token = await freshToken();
 
     if (!token) {
       throw new ApiError(
@@ -108,8 +109,11 @@ export async function apiRequest<T>(
   );
 
   if (!response.ok) {
+    const message=await readErrorMessage(response);
+    if(authenticated && response.status===401) sessionAttention('Seu acesso precisa ser renovado. O formulário continua aberto.');
+    if(authenticated && message==='Organization session expired or access revoked') sessionAttention('O acesso à organização expirou ou foi revogado. Use Renovar acesso; o formulário continua aberto.');
     throw new ApiError(
-      await readErrorMessage(response),
+      message,
       response.status,
     );
   }

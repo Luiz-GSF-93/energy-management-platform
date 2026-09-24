@@ -61,7 +61,7 @@ describe('HTTP validation + tenant interceptor + RBAC', () => {
   });
 
   it('accepts valid customer creation and derives organization from context', async () => {
-    const body = { company_name: 'Example', document: '12345678000190' };
+    const body = { company_name: 'Example', document: '11222333000181' };
     expect((await send('/customers', body)).status).toBe(201);
     expect(insert).toHaveBeenCalledWith([{ ...body, organization_id: 'org-a' }]);
   });
