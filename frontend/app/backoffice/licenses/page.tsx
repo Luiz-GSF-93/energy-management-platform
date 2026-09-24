@@ -1,12 +1,13 @@
 'use client';
 import { FormEvent, useEffect, useState } from 'react';
+import LicenseFromPlan from '@/app/components/LicenseFromPlan';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
 import { Alert, Button, Card, Input } from '@/app/components/ui';
 import { apiRequest } from '@/app/lib/api/client';
 import { useAuth } from '@/app/providers';
 
-type License = { id:string;license_type:string;status:string;documents_limit:number;documents_used:number;start_date:string;end_date:string|null;renewal_date:string;max_consumer_units:number;document_management:boolean;advanced_analytics:boolean;report_generation:boolean;free_market_management:boolean };
+type License = { plan_id?:string|null;plan_version?:number|null;max_users?:number|null; id:string;license_type:string;status:string;documents_limit:number;documents_used:number;start_date:string;end_date:string|null;renewal_date:string;max_consumer_units:number;document_management:boolean;advanced_analytics:boolean;report_generation:boolean;free_market_management:boolean };
 const modules=[['documentManagement','document_management','Documentos'],['advancedAnalytics','advanced_analytics','Análises avançadas'],['reportGeneration','report_generation','Relatórios'],['freeMarketManagement','free_market_management','Gestão do mercado livre']] as const;
 function Licenses(){
  const {hasPermission}=useAuth();
@@ -26,7 +27,8 @@ function Licenses(){
  if(!view)return <p>Acesso à licença não autorizado.</p>;
  return <section className="backoffice-page"><h1>Licença e módulos</h1><p>Configure a licença da organização ativa. Uma licença não substitui as permissões dos usuários.</p>
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
- {loading?<p>Carregando licenças...</p>:rows.map(l=><Card key={l.id} title={l.license_type}><p>Status: {l.status} · Documentos: {l.documents_used||0}/{l.documents_limit}</p><p>Vigência: {l.start_date} a {l.end_date||'sem término definido'}</p>{update?<Button variant="secondary" disabled={busy} onClick={()=>{setEditing(l);setMessage('');}}>Editar licença</Button>:null}</Card>)}
+ {create?<LicenseFromPlan onCreated={async()=>{setRows(await apiRequest<License[]>('/api/v1/licenses'));}}/>:null}
+ {loading?<p>Carregando licenças...</p>:rows.map(l=><Card key={l.id} title={l.license_type}><p>{l.plan_id?'Plano aplicado: versão '+l.plan_version:'Licença personalizada'} · Limite de usuários: {l.max_users??'não definido'}</p><p>Status: {l.status} · Documentos: {l.documents_used||0}/{l.documents_limit}</p><p>Vigência: {l.start_date} a {l.end_date||'sem término definido'}</p>{update?<Button variant="secondary" disabled={busy} onClick={()=>{setEditing(l);setMessage('');}}>Editar licença</Button>:null}</Card>)}
  {(editing?update:create)?<Card title={editing?'Editar licença':'Nova licença'}><form key={editing?.id||'new'} onSubmit={save} className="organizations-create__form">
  <Input label="Plano / tipo de licença" name="licenseType" required defaultValue={editing?.license_type||''} disabled={busy}/>
  <Input label="Início da vigência" name="startDate" type="date" required defaultValue={editing?.start_date||''} disabled={busy}/>

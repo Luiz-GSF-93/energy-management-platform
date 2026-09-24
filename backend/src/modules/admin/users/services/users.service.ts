@@ -1121,6 +1121,9 @@ export class UsersService {
           );
 
       if (membershipInsertError) {
+        if ((membershipInsertError as any)?.code === 'P3152') {
+          throw new ConflictException('O limite de usuários da licença foi atingido nesta organização.');
+        }
         if ((membershipInsertError as any)?.code === '23505') {
           throw new ConflictException(
             'Organization membership was created concurrently',

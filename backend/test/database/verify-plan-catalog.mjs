@@ -1,0 +1,42 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite(),actor='11111111-1111-4111-8111-111111111111';let checks=0;
+const ok=(v,m)=>{assert.ok(v,m);checks++;};
+try{
+await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+CREATE TABLE permissions(id uuid PRIMARY KEY,code text UNIQUE,name text,module text,resource text,action text);
+CREATE TABLE roles(id text PRIMARY KEY,name text,scope text,permissions jsonb);
+CREATE TABLE user_roles(user_id uuid,role_id text);
+CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);
+CREATE TABLE organization_members(id text PRIMARY KEY,user_id uuid,organization_id text,status text);
+CREATE TABLE audit_logs(id text,organization_id text NOT NULL,user_id uuid,action text,resource_type text,resource_id text,changes jsonb,status text,ip_address text,user_agent text);
+CREATE TABLE licenses(id text PRIMARY KEY,organization_id text,license_type text,documents_limit int,documents_used int,renewal_date date,start_date date,end_date date,status text,active bool,max_consumer_units int,document_management bool,advanced_analytics bool,report_generation bool,free_market_management bool);
+INSERT INTO roles VALUES('global','admin_platform','global','[]');INSERT INTO user_roles VALUES('${actor}','global');INSERT INTO organizations VALUES('a',null),('b',null),('gone',now());`);
+const migration=readFileSync(new URL('../../src/database/migrations/20260924_f1_15_plan_catalog.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);
+const def={name:'Essencial',description:'Teste isolado',active:true,documents_limit:10,max_consumer_units:2,max_users:1,document_management:true,advanced_analytics:false,report_generation:false,free_market_management:false};
+const save=async(id,version,d=def,user=actor)=>(await db.query('SELECT save_catalog_plan($1,$2,$3,$4,null,null) AS p',[id,version,JSON.stringify(d),user])).rows[0].p;
+const apply=async(org,id,version)=>(await db.query("SELECT create_license_from_plan($1,$2,$3,CURRENT_DATE,null,CURRENT_DATE,$4,null,null) AS l",[org,id,version,actor])).rows[0].l;
+const p=await save(null,null);ok(p.version===1,'initial version');
+await assert.rejects(()=>save(null,null,def),e=>e.code==='23505');checks++;
+await assert.rejects(()=>save(p.id,99),e=>e.code==='P3151');checks++;
+await assert.rejects(()=>save(null,null,{...def,name:'Denied'},'22222222-2222-4222-8222-222222222222'),e=>e.code==='42501');checks++;
+const l=await apply('a',p.id,1);ok(l.plan_version===1&&l.max_users===1&&l.documents_limit===10,'snapshot copied');
+await save(p.id,1,{...def,documents_limit:20});ok((await db.query('SELECT documents_limit FROM licenses WHERE id=$1',[l.id])).rows[0].documents_limit===10,'catalog change is not retroactive');
+await assert.rejects(()=>apply('b',p.id,1),e=>e.code==='P3151');checks++;
+await assert.rejects(()=>apply('gone',p.id,2),e=>e.code==='P3150');checks++;
+await db.exec(`INSERT INTO organization_members VALUES('a1','${actor}','a','active');`);
+await assert.rejects(()=>db.exec(`INSERT INTO organization_members VALUES('a2','${actor}','a','active')`),e=>e.code==='P3152');checks++;
+await db.exec(`INSERT INTO organization_members VALUES('b1','${actor}','b','active'),('b2','${actor}','b','active')`);ok(true,'other unlicensed organization unaffected');
+await assert.rejects(()=>apply('b',p.id,2),e=>e.code==='P3152');checks++;
+await db.exec("UPDATE organization_members SET status='inactive' WHERE id='a1';");await db.exec(`INSERT INTO organization_members VALUES('a2','${actor}','a','active')`);ok(true,'deactivation frees one place');
+await assert.rejects(()=>db.exec("UPDATE organization_members SET status='active' WHERE id='a1'"),e=>e.code==='P3152');checks++;
+await assert.rejects(()=>db.exec('UPDATE licenses SET max_users=0 WHERE organization_id=\'a\''),e=>e.code==='P3152');checks++;
+await save(p.id,2,{...def,active:false});await assert.rejects(()=>apply('a',p.id,3),e=>e.code==='P3150');checks++;
+const forRollback=await save(null,null,{...def,name:'Rollback'});await db.exec("INSERT INTO organizations VALUES('c',null)");
+await db.exec("CREATE FUNCTION fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit failure'; END$$;CREATE TRIGGER reject_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_audit();CREATE TRIGGER reject_plan_audit BEFORE INSERT ON platform_plan_audit FOR EACH ROW EXECUTE FUNCTION fail_audit();");
+await assert.rejects(()=>apply('c',forRollback.id,1));ok((await db.query("SELECT count(*)::integer AS n FROM licenses WHERE organization_id='c'")).rows[0].n===0,'audit failure rolls license back');
+await assert.rejects(()=>save(p.id,3,{...def,name:'Changed'}));ok((await db.query('SELECT name,version FROM plan_catalog WHERE id=$1',[p.id])).rows[0].version===3,'audit failure rolls plan back');
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>db.query('SELECT * FROM plan_catalog'),e=>e.code==='42501');await assert.rejects(()=>apply('a',p.id,3),e=>e.code==='42501');checks+=2;await db.exec('RESET ROLE');}
+console.log('PASS',checks,'catalog, snapshot, quota and access checks');
+}finally{await db.close();}
