@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateContractDto, UpdateContractDto } from '../dto/create-contract.dto';
+import { validateWriteDto } from '../../../common/validation/validate-write-dto';
+import { LicensesService } from '../../licenses/services/licenses.service';
 
 @Injectable()
 export class ContractsService {
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private licensesService: LicensesService,
+  ) {}
 
   async findAll(organizationId: string) {
     const { data, error } = await this.supabaseService
@@ -31,6 +36,8 @@ export class ContractsService {
   }
 
   async create(createContractDto: CreateContractDto, organizationId: string) {
+    await this.licensesService.requireEntitlement(organizationId, 'free_market_management');
+    createContractDto = await validateWriteDto(CreateContractDto, createContractDto);
     const { data, error } = await this.supabaseService
       .getClient()
       .from('energy_contracts')
@@ -47,6 +54,7 @@ export class ContractsService {
     organizationId: string,
     updateContractDto: UpdateContractDto,
   ) {
+    updateContractDto = await validateWriteDto(UpdateContractDto, updateContractDto);
     const { data, error } = await this.supabaseService
       .getClient()
       .from('energy_contracts')
