@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { AuditService } from '../../../../common/services/audit.service';
 import { SupabaseService } from '../../../../services/supabase.service';
 import {
@@ -1020,6 +1021,8 @@ export class UsersService {
           await client
             .from('user_profiles')
             .insert({
+              // The deployed profile primary key is text NOT NULL without a default.
+              id: randomUUID(),
               user_id: targetUserId,
               email: normalizedEmail,
               name: normalizedName,

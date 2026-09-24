@@ -229,6 +229,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
       auditService,
       membershipInsert,
       membershipDelete,
+      profileInsert,
       profileDelete,
       compensationOrder,
     };
@@ -465,6 +466,12 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
     );
 
     expect(h.authAdmin.deleteUser).not.toHaveBeenCalled();
+    // Production user_profiles.id has no database default (NOT NULL).
+    expect(h.profileInsert.insert).toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+      user_id: userId,
+      organization_id: organizationId,
+    }));
     expect(h.compensationOrder).toEqual([]);
 
     expect(h.auditService.logUserInvite).toHaveBeenCalledWith(
