@@ -394,6 +394,11 @@ export class UsersService {
       throw new InternalServerErrorException('Não foi possível alterar o acesso. Nenhuma alteração foi confirmada.');
     }
     if (data !== true) throw new InternalServerErrorException('Não foi possível confirmar a alteração do acesso. Atualize a lista.');
+    if (status === 'active') {
+      // Distinct key for each confirmed reactivation, separate from the original invitation.
+      const notificationStatus = await this.notifyMembership(randomUUID(), member.email, context.organizationId, member.role.name, member.affiliationType || 'internal', 'reactivated');
+      return {userId: targetUserId, membershipStatus: status, notificationStatus};
+    }
     return {userId: targetUserId, membershipStatus: status};
   }
 
@@ -1094,12 +1099,12 @@ export class UsersService {
     }
   }
 
-  private async notifyMembership(membershipId: string, email: string, organizationId: string, roleName: string, affiliationType: string): Promise<MembershipNotificationStatus> {
+  private async notifyMembership(membershipId: string, email: string, organizationId: string, roleName: string, affiliationType: string, event?: 'reactivated'): Promise<MembershipNotificationStatus> {
     // Notification is best-effort after the membership audit succeeds. Never roll back access on mail failure.
     try {
       const {data,error} = await this.supabaseService.getClient().from('organizations').select('id,name').eq('id',organizationId);
       if(error || data?.length!==1 || data[0].id!==organizationId || typeof data[0].name!=='string') return 'failed';
-      return await sendMembershipNotification({membershipId,email,organizationName:data[0].name,roleName,affiliationType});
+      return await sendMembershipNotification({membershipId,email,organizationName:data[0].name,roleName,affiliationType,event});
     } catch {return 'failed';}
   }
 
