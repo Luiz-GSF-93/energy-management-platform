@@ -1,3 +1,4 @@
+import { sendMembershipNotification, MembershipNotificationStatus } from './membership-notification';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
 import {
   BadRequestException,
@@ -623,6 +624,7 @@ export class UsersService {
     membershipId: string;
     membershipStatus: 'active';
     provisioningPath: 'new_identity' | 'existing_identity';
+    notificationStatus?: MembershipNotificationStatus;
   }> {
     const client = this.supabaseService.getClient();
     const authClient = this.supabaseService.createAuthClient();
@@ -1071,6 +1073,7 @@ export class UsersService {
         membershipId: confirmedMembershipId,
         membershipStatus: 'active',
         provisioningPath,
+        ...(provisioningPath === 'existing_identity' ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType)} : {}),
       };
     } catch (error) {
       // Compensate owned writes at most once per invite execution.
@@ -1089,6 +1092,24 @@ export class UsersService {
 
       throw error;
     }
+  }
+
+  private async notifyMembership(membershipId: string, email: string, organizationId: string, roleName: string, affiliationType: string): Promise<MembershipNotificationStatus> {
+    // Notification is best-effort after the membership audit succeeds. Never roll back access on mail failure.
+    try {
+      const {data,error} = await this.supabaseService.getClient().from('organizations').select('id,name').eq('id',organizationId);
+      if(error || data?.length!==1 || data[0].id!==organizationId || typeof data[0].name!=='string') return 'failed';
+      return await sendMembershipNotification({membershipId,email,organizationName:data[0].name,roleName,affiliationType});
+    } catch {return 'failed';}
+  }
+
+  async notifyExistingMember(userId: string, context: {organizationId:string; actorPermissions:string[]; platformOperation:boolean}) {
+    const member=await this.findOne(userId,context.organizationId);
+    if(member.membershipStatus!=='active') throw new BadRequestException('O vínculo deve estar ativo para enviar o aviso.');
+    await this.assertAssignable(member.role.id,context.organizationId,context.actorPermissions,context.platformOperation);
+    const {data,error}=await this.supabaseService.getClient().from('organization_members').select('id').eq('user_id',userId).eq('organization_id',context.organizationId).eq('status','active').eq('role_id',member.role.id);
+    if(error || data?.length!==1 || typeof data[0].id!=='string') throw new ConflictException('O vínculo mudou. Atualize a lista.');
+    return {notificationStatus:await this.notifyMembership(data[0].id,member.email,context.organizationId,member.role.name,member.affiliationType || 'internal')};
   }
 
   async assertAssignable(roleId:string,organizationId:string,actorPermissions:string[],platformOperation=false) {

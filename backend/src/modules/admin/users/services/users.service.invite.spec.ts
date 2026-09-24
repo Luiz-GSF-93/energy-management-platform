@@ -245,6 +245,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
       membershipId,
       membershipStatus: 'active',
       provisioningPath: 'existing_identity',
+      notificationStatus: 'failed',
     });
 
     expect(h.authAdmin.getUserById).toHaveBeenCalledWith(userId);

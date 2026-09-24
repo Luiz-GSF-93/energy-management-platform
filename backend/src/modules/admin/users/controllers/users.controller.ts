@@ -49,6 +49,12 @@ export class UsersController {
     });
   }
 
+  @Post(':userId/notification')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_INVITE])
+  async notification(@Param('userId') userId:string,@Tenant() tenant:TenantContext) {
+    return this.usersService.notifyExistingMember(userId,{organizationId:tenant.organizationId,actorPermissions:tenant.permissions,platformOperation:tenant.accessMode==='platform_operation'});
+  }
+
   @Get()
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
   async findAll(@Tenant() tenant: TenantContext) {

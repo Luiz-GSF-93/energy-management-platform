@@ -1,4 +1,5 @@
 'use client';
+import {resolveLoginContext} from '@/app/lib/auth/resolve-context';
 import { apiRequest } from '@/app/lib/api/client';
 
 import {
@@ -62,21 +63,14 @@ function isOrganizationContext(
   );
 }
 
-async function resolveAccessContext():
-  Promise<AuthContext> {
-  try {
-    return await getAuthContext();
-  } catch (error) {
-    if (
-      !(error instanceof ApiError) ||
-      error.status !== 403
-    ) {
-      throw error;
-    }
-  }
-
-  session.setOrganizationSession(null);
-  return getPlatformContext();
+async function resolveAccessContext(recoverOrganization=false): Promise<AuthContext> {
+ return resolveLoginContext({
+  context:getAuthContext, platform:getPlatformContext,
+  clearOperation:()=>session.setOrganizationSession(null),
+  organizations:()=>apiRequest<Array<{organizationId:string;role:string}>>('/api/v1/auth/my-organizations'),
+  switchOrganization:switchOrganizationRequest,
+  forbidden:(error)=>error instanceof ApiError && error.status===403,
+ },recoverOrganization);
 }
 
 export function AuthProvider({
@@ -165,7 +159,7 @@ export function AuthProvider({
 
       try {
         const nextContext =
-          await resolveAccessContext();
+          await resolveAccessContext(true);
 
         setContext(nextContext);
         setStatus('authenticated');
