@@ -62,4 +62,12 @@ describe('Private document upload',()=>{
  it.each([Buffer.from('<html>bad</html>'),Buffer.from('%PDF-1.4 incomplete')])('rejects unsupported/truncated signature',buffer=>{expect(()=>inspectDocument({...file,buffer})).toThrow();});
  it('rejects mismatched declared MIME',()=>{expect(()=>inspectDocument({...file,mimetype:'image/png'})).toThrow();});
  it('enforces actual buffer size',()=>{expect(()=>inspectDocument({...file,buffer:Buffer.alloc(MAX_DOCUMENT_BYTES+1)})).toThrow();});
+ it('signs preview without forcing attachment, preserving private scope',async()=>{
+  docs.maybeSingle.mockResolvedValue({data:{id,consumer_unit_id:id,file_verified:true,storage_bucket:'energy-documents-private',file_path:'org-a/'+id+'/file.pdf',original_filename:'invoice.pdf'},error:null});
+  expect((await service.download(id,'org-a',true)).expiresIn).toBe(60);
+  expect(docs.eq).toHaveBeenCalledWith('organization_id','org-a');
+  expect(storage.createSignedUrl).toHaveBeenCalledWith('org-a/'+id+'/file.pdf',60,{download:false});
+ });
+ it('does not sign preview for another tenant',async()=>{await expect(service.download(id,'org-b',true)).rejects.toMatchObject({status:404});expect(storage.createSignedUrl).not.toHaveBeenCalled();});
+ it('does not preview unverified files',async()=>{docs.maybeSingle.mockResolvedValue({data:{id,file_verified:false},error:null});await expect(service.download(id,'org-a',true)).rejects.toMatchObject({status:409});expect(storage.createSignedUrl).not.toHaveBeenCalled();});
 });

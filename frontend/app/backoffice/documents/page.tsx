@@ -54,6 +54,21 @@ function DocumentsContent() {
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.'); }
     finally { setBusy(false); }
   }
+  async function preview(id: string) {
+    const org=organizationId;setError('');
+    const viewer=window.open('about:blank','_blank');
+    if (!viewer) { setError('Permita abrir uma nova aba para visualizar o documento.'); return; }
+    viewer.opener=null;
+    viewer.document.title='Carregando documento — Expert Energy';
+    try {
+      const result=await apiRequest<{url:string}>('/api/v1/documents/'+encodeURIComponent(id)+'/preview');
+      if (currentOrg.current!==org) { viewer.close(); return; }
+      if (!viewer.closed) viewer.location.replace(result.url);
+    } catch (e) {
+      viewer.close();
+      if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível visualizar o arquivo.');
+    }
+  }
   async function download(id: string) {
     const org=organizationId;setError('');
     try {
@@ -77,7 +92,7 @@ function DocumentsContent() {
         <button type="submit" disabled={busy || !customer} style={{padding:12,background:'#123c66',color:'white',borderRadius:8}}>{busy?'Enviando…':'Enviar arquivo'}</button>
       </form>}
       <h2>Arquivos cadastrados</h2>
-      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{d.file_verified?'Arquivo recebido':'Cadastro sem arquivo verificado'}</td><td>{d.file_verified && <button type="button" onClick={()=>void download(d.id)}>Baixar</button>}</td></tr>)}</tbody></table></div>}
+      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{d.file_verified?'Arquivo recebido':'Cadastro sem arquivo verificado'}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}</td></tr>)}</tbody></table></div>}
     </>}
   </section>;
 }
