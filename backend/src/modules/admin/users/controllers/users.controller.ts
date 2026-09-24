@@ -1,3 +1,4 @@
+import { UpdateUserDetailsDto } from '../dto/update-user-details.dto';
 import {
   Body,
   Controller,
@@ -38,6 +39,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
+    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions);
     return this.usersService.invite(dto, {
       actorUserId: tenant.userId,
       organizationId: tenant.organizationId,
@@ -50,6 +52,17 @@ export class UsersController {
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
   async findAll(@Tenant() tenant: TenantContext) {
     return this.usersService.findAll(tenant.organizationId);
+  }
+
+  @Get('roles')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_VIEW])
+  async roles(@Tenant() tenant:TenantContext) { return this.usersService.availableRoles(tenant.organizationId); }
+
+  @Patch(':userId/details')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])
+  @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
+  async details(@Param('userId') userId:string,@Body() dto:UpdateUserDetailsDto,@Tenant() tenant:TenantContext,@Req() req:Request) {
+    return this.usersService.updateDetails(userId,dto,{actorUserId:tenant.userId,organizationId:tenant.organizationId,ipAddress:req.ip,userAgent:req.get('user-agent')});
   }
 
   @Get(':userId')
@@ -76,6 +89,7 @@ export class UsersController {
     });
   }
 
+  @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
   @Patch(':userId/role')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])
   async updateRole(
@@ -84,6 +98,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
+    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions);
     return this.usersService.updateRole(
       userId,
       dto.roleId,
@@ -96,6 +111,7 @@ export class UsersController {
     );
   }
 
+  @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
   @Patch(':userId/affiliation')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])
   async updateAffiliation(

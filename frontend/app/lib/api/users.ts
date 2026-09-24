@@ -13,7 +13,7 @@ export interface OrganizationUser {
   userId: string;
   email: string;
   name: string | null;
-  affiliationType: UserAffiliationType;
+  affiliationType: UserAffiliationType | null;
   membershipStatus: string;
   role: OrganizationUserRole;
   invitedAt: string | null;

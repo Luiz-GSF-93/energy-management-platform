@@ -18,6 +18,7 @@ describe('UsersController.invite — F1.2.4c.2.2a', () => {
 
   function createHarness() {
     const usersService = {
+      assertAssignable: jest.fn().mockResolvedValue(undefined),
       invite: jest.fn().mockResolvedValue({
         userId: '44444444-4444-4444-8444-444444444444',
         membershipStatus: 'active',

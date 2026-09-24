@@ -1,6 +1,6 @@
-import { Controller, Post, Get, Body, Param, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Req, UsePipes, ValidationPipe } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, AcceptInviteDto } from './dto/auth.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Tenant } from '../../common/decorators/tenant.decorator';
 import { Access } from '../../common/decorators/access-context.decorator';
@@ -14,6 +14,13 @@ import {
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('accept-invite')
+  @RecoveryEndpoint()
+  @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
+  async acceptInvite(@Body() dto:AcceptInviteDto,@Req() request:any) {
+    return this.authService.acceptInvite(request.authenticatedUser.userId,dto.password);
+  }
 
   @Post('register')
   @Public()

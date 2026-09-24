@@ -17,6 +17,7 @@ describe('UsersController.updateRole', () => {
     findAll: jest.fn(),
     findOne: jest.fn(),
     updateAffiliation: jest.fn(),
+    assertAssignable: jest.fn().mockResolvedValue(undefined),
     updateRole,
   };
 

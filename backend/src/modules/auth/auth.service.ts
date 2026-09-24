@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -277,6 +277,15 @@ export class AuthService {
   /**
    * Troca a organização ativa do usuário.
    */
+
+  async acceptInvite(userId:string,password:string) {
+    const client=this.supabaseService.createAuthClient();
+    const {data,error}=await client.auth.admin.getUserById(userId);
+    if(error || !data?.user?.invited_at) throw new ForbiddenException('Convite inválido ou indisponível');
+    const result=await client.auth.admin.updateUserById(userId,{password});
+    if(result.error) throw new BadRequestException('Não foi possível definir a senha. Verifique os requisitos de segurança.');
+    return {success:true};
+  }
 
   async switchOrganization(
     userId: string,

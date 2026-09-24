@@ -24,6 +24,8 @@ interface UserMembershipRow {
   organization_id?: unknown;
   role_id?: unknown;
   status?: unknown;
+  affiliation_type?: unknown;
+  display_name?: unknown;
   invited_at?: unknown;
   accepted_at?: unknown;
   roles?: UserRoleRow | UserRoleRow[] | null;
@@ -40,7 +42,7 @@ export interface OrganizationUserView {
   userId: string;
   email: string;
   name: string | null;
-  affiliationType: UserAffiliationType;
+  affiliationType: UserAffiliationType | null;
   membershipStatus: string;
   role: {
     id: string;
@@ -64,7 +66,7 @@ export class UsersService {
     const { data: memberships, error: membershipError } = await client
       .from('organization_members')
       .select(
-        'user_id, organization_id, role_id, status, invited_at, accepted_at, roles(id, name, organization_id, scope)',
+        'user_id, organization_id, role_id, status, affiliation_type, display_name, invited_at, accepted_at, roles(id, name, organization_id, scope)',
       )
       .eq('organization_id', organizationId);
 
@@ -150,7 +152,7 @@ export class UsersService {
     const { data: memberships, error: membershipError } = await client
       .from('organization_members')
       .select(
-        'user_id, organization_id, role_id, status, invited_at, accepted_at, roles(id, name, organization_id, scope)',
+        'user_id, organization_id, role_id, status, affiliation_type, display_name, invited_at, accepted_at, roles(id, name, organization_id, scope)',
       )
       .eq('user_id', targetUserId)
       .eq('organization_id', organizationId);
@@ -227,6 +229,8 @@ export class UsersService {
     userId: string;
     membershipStatus: string;
     role: { id: string; name: string };
+    affiliationType: UserAffiliationType | null;
+    displayName: string | null;
     invitedAt: string | null;
     acceptedAt: string | null;
   } {
@@ -285,7 +289,12 @@ export class UsersService {
       );
     }
 
+    if (membership.affiliation_type != null && !USER_AFFILIATION_TYPES.includes(membership.affiliation_type as UserAffiliationType)) {
+      throw new InternalServerErrorException('Invalid organization affiliation');
+    }
     return {
+      affiliationType: (membership.affiliation_type ?? null) as UserAffiliationType | null,
+      displayName: typeof membership.display_name === 'string' ? membership.display_name : null,
       userId: membership.user_id,
       membershipStatus: membership.status,
       role: {
@@ -308,7 +317,9 @@ export class UsersService {
       userId: string;
       membershipStatus: string;
       role: { id: string; name: string };
-      invitedAt: string | null;
+      affiliationType: UserAffiliationType | null;
+    displayName: string | null;
+    invitedAt: string | null;
       acceptedAt: string | null;
     },
     profile: UserProfileRow,
@@ -319,10 +330,7 @@ export class UsersService {
       profile.email.length === 0 ||
       (profile.name !== null &&
         profile.name !== undefined &&
-        typeof profile.name !== 'string') ||
-      !USER_AFFILIATION_TYPES.includes(
-        profile.affiliation_type as UserAffiliationType,
-      )
+        typeof profile.name !== 'string')
     ) {
       throw new InternalServerErrorException(
         'Data integrity error: invalid user profile',
@@ -332,8 +340,8 @@ export class UsersService {
     return {
       userId: membership.userId,
       email: profile.email,
-      name: typeof profile.name === 'string' ? profile.name : null,
-      affiliationType: profile.affiliation_type as UserAffiliationType,
+      name: membership.displayName ?? (typeof profile.name === 'string' ? profile.name : null),
+      affiliationType: membership.affiliationType,
       membershipStatus: membership.membershipStatus,
       role: membership.role,
       invitedAt: membership.invitedAt,
@@ -988,6 +996,7 @@ export class UsersService {
             data: {
               name: normalizedName,
             },
+            redirectTo: new URL('/auth/accept-invite', process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000').toString(),
           });
 
         if (
@@ -1043,12 +1052,6 @@ export class UsersService {
       if (!targetUserId || !profile) {
         throw new InternalServerErrorException(
           'Invite target resolution failed',
-        );
-      }
-
-      if (profile.affiliation_type !== dto.affiliationType) {
-        throw new ConflictException(
-          'Existing user affiliation does not match invite request',
         );
       }
 
@@ -1108,6 +1111,9 @@ export class UsersService {
             user_id: targetUserId,
             organization_id: auditContext.organizationId,
             role_id: dto.roleId,
+            affiliation_type: dto.affiliationType,
+            display_name: normalizedName,
+            invited_at: new Date().toISOString(),
             status: 'active',
           })
           .select(
@@ -1202,150 +1208,32 @@ export class UsersService {
     }
   }
 
-  async updateAffiliation(
-    targetUserId: string,
-    affiliationType: UserAffiliationType,
-    auditContext: {
-      actorUserId: string;
-      organizationId: string;
-      ipAddress?: string;
-      userAgent?: string;
-    },
-  ): Promise<{
-    userId: string;
-    affiliationType: UserAffiliationType;
-  }> {
-    if (
-      !USER_AFFILIATION_TYPES.includes(
-        affiliationType as UserAffiliationType,
-      )
-    ) {
-      throw new BadRequestException('Invalid affiliation type');
-    }
+  async assertAssignable(roleId:string,organizationId:string,actorPermissions:string[]) {
+    const {data,error}=await this.supabaseService.getClient().from('roles').select('id,organization_id,scope,permissions').eq('id',roleId).eq('organization_id',organizationId).eq('scope','organization');
+    if(error) throw new InternalServerErrorException('Failed to check role assignment');
+    if(!data || data.length!==1 || !Array.isArray(data[0].permissions) || data[0].permissions.some((p:string)=>!actorPermissions.includes(p))) throw new BadRequestException('Você não pode atribuir uma função com permissões superiores às suas.');
+  }
 
-    const client = this.supabaseService.getClient();
+  async availableRoles(organizationId: string) {
+    const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope').eq('organization_id',organizationId).eq('scope','organization');
+    if(error || !Array.isArray(data) || data.some(r=>r.organization_id!==organizationId || r.scope!=='organization')) throw new InternalServerErrorException('Failed to load organization roles');
+    return data.map(r=>({id:r.id,name:r.name}));
+  }
 
-    // Target must belong actively to the actor's current organization.
-    // Affiliation itself never grants organization access.
-    const { data: memberships, error: membershipError } = await client
-      .from('organization_members')
-      .select('user_id, organization_id, status')
-      .eq('user_id', targetUserId)
-      .eq('organization_id', auditContext.organizationId)
-      .eq('status', 'active');
+  async updateAffiliation(targetUserId: string, affiliationType: UserAffiliationType, auditContext: {actorUserId:string;organizationId:string;ipAddress?:string;userAgent?:string}) {
+    await this.updateDetails(targetUserId,{affiliationType},auditContext);
+    return {userId:targetUserId,affiliationType};
+  }
 
-    if (membershipError) {
-      throw new InternalServerErrorException(
-        'Failed to validate target organization membership',
-      );
-    }
-
-    if (!memberships || memberships.length === 0) {
-      throw new NotFoundException(
-        'User not found in current organization',
-      );
-    }
-
-    if (memberships.length > 1) {
-      throw new InternalServerErrorException(
-        'Data integrity error: multiple active target memberships found',
-      );
-    }
-
-    const { data: profiles, error: profileError } = await client
-      .from('user_profiles')
-      .select('user_id, affiliation_type')
-      .eq('user_id', targetUserId);
-
-    if (profileError) {
-      throw new InternalServerErrorException(
-        'Failed to load target user profile',
-      );
-    }
-
-    if (!profiles || profiles.length === 0) {
-      throw new NotFoundException('User profile not found');
-    }
-
-    if (profiles.length > 1) {
-      throw new InternalServerErrorException(
-        'Data integrity error: multiple target profiles found',
-      );
-    }
-
-    const before = profiles[0].affiliation_type as UserAffiliationType;
-
-    // Idempotent: no DB write and no audit noise.
-    if (before === affiliationType) {
-      return {
-        userId: targetUserId,
-        affiliationType,
-      };
-    }
-
-    const { data: updatedProfiles, error: updateError } = await client
-      .from('user_profiles')
-      .update({
-        affiliation_type: affiliationType,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', targetUserId)
-      .eq('affiliation_type', before)
-      .select('user_id, affiliation_type');
-
-    if (updateError) {
-      throw new InternalServerErrorException(
-        'Failed to update user affiliation',
-      );
-    }
-
-    if (!updatedProfiles || updatedProfiles.length !== 1) {
-      throw new InternalServerErrorException(
-        'User affiliation changed concurrently',
-      );
-    }
-
-    try {
-      await this.auditService.logUserAffiliationChange({
-        actorUserId: auditContext.actorUserId,
-        organizationId: auditContext.organizationId,
-        targetUserId,
-        before,
-        after: affiliationType,
-        ipAddress: auditContext.ipAddress,
-        userAgent: auditContext.userAgent,
-      });
-    } catch {
-      // Compensate only if our written value is still current.
-      // This prevents overwriting a concurrent later change.
-      const { data: revertedProfiles, error: rollbackError } = await client
-        .from('user_profiles')
-        .update({
-          affiliation_type: before,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', targetUserId)
-        .eq('affiliation_type', affiliationType)
-        .select('user_id');
-
-      if (
-        rollbackError ||
-        !revertedProfiles ||
-        revertedProfiles.length !== 1
-      ) {
-        throw new InternalServerErrorException(
-          'Audit logging failed and affiliation rollback could not be confirmed',
-        );
-      }
-
-      throw new InternalServerErrorException(
-        'Audit logging failed; affiliation update reverted',
-      );
-    }
-
-    return {
-      userId: targetUserId,
-      affiliationType,
-    };
+  async updateDetails(targetUserId:string, dto:{affiliationType:UserAffiliationType;name?:string}, context:{actorUserId:string;organizationId:string;ipAddress?:string;userAgent?:string}) {
+    if(!USER_AFFILIATION_TYPES.includes(dto.affiliationType)) throw new BadRequestException('Invalid affiliation type');
+    const {data,error}=await this.supabaseService.getClient().rpc('update_organization_member_details',{
+      target_organization_id:context.organizationId,target_user_id:targetUserId,actor_user_id:context.actorUserId,
+      target_affiliation:dto.affiliationType,target_name:dto.name?.trim() ?? null,
+      audit_ip:context.ipAddress ?? null,audit_agent:context.userAgent ?? null,
+    });
+    if(error?.code==='P3130') throw new NotFoundException('Active organization membership not found');
+    if(error || data!==true) throw new InternalServerErrorException('Failed to update organization user details');
+    return {userId:targetUserId,affiliationType:dto.affiliationType};
   }
 }
