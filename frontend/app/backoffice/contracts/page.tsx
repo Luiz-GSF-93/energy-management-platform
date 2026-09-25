@@ -11,12 +11,14 @@ import CommercialTerms from './CommercialTerms';
 import {Customer,Unit,PERM} from './types';
 const tabs=[['distributor','Distribuidora e unidades'],['supply','Fornecedor Mercado Livre'],['management','Honorários da gestão'],['services','Intermediação e outros']] as const;
 function Workspace(){const {hasPermission}=useAuth();const [customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[revision,setRevision]=useState(0),[customerId,setCustomer]=useState(''),[tab,setTab]=useState<string>('distributor'),[dirty,setDirty]=useState(false),[search,setSearch]=useState('');
+ const [pendingChange,setPendingChange]=useState<(()=>void)|null>(null);
  const canView=hasPermission(PERM.view),viewCustomers=hasPermission('cbb2e904-0718-4eec-9396-dba899118cdd'),viewUnits=hasPermission('b142bd7b-05a3-45ee-befd-e593066c2775');
  useEffect(()=>{let cancelled=false;if(!canView)return;Promise.all([apiRequest('/api/v1/contracts'),viewCustomers?apiRequest<Customer[]>('/api/v1/customers'):Promise.resolve([]),viewUnits?apiRequest<Unit[]>('/api/v1/consumer-units'):Promise.resolve([])]).then(([,c,u])=>{if(!cancelled){setCustomers(c);setUnits(u);setLoading(false);}}).catch(e=>{if(!cancelled){setError(e.message);setLoading(false);}});return()=>{cancelled=true;};},[canView,viewCustomers,viewUnits,revision]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
- function change(action:()=>void){if(dirty&&!window.confirm('Há campos não salvos. Trocar de área ou cliente descartará esse preenchimento. Continuar?'))return;setDirty(false);action();}
+ function change(action:()=>void){if(dirty){setPendingChange(()=>action);return;}action();}
  if(!canView)return <p>Acesso não autorizado aos contratos.</p>;
  return <section className="backoffice-page"><h1>Contratos e configuração energética</h1><p>Organize a estrutura e os contratos de cada cliente. Selecione uma área para consultar ou cadastrar seus dados específicos.</p>
+ {pendingChange?<div role="alert" className="ds-card"><p>Há campos não salvos. Trocar de área ou cliente descartará esse preenchimento.</p><Button variant="secondary" onClick={()=>setPendingChange(null)}>Permanecer no formulário</Button><Button onClick={()=>{setDirty(false);pendingChange();setPendingChange(null);}}>Descartar e continuar</Button></div>:null}
  {error?<><Alert variant="error">{error}</Alert><Button onClick={()=>{setError('');setLoading(true);setRevision(v=>v+1);}}>Tentar novamente</Button></>:null}
  {loading?<p>Carregando organização, licença e clientes...</p>:!error?<>
  <div className="ds-card" style={{display:'grid',gap:12}}><Input label="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome do cliente"/>
