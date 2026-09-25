@@ -13,6 +13,7 @@ try{
  const fixture=JSON.parse(readFileSync(new URL('./contracts-fixture.json',import.meta.url),'utf8').replace(/^\uFEFF/,''));
  for(const t of ['customers','consumer_units']){const cols=fixture.columns.filter(c=>c.table===t).map(c=>q(c.name)+' '+c.type+(c.not_null?' NOT NULL':'')+(c.default?' DEFAULT '+c.default:''));await db.exec('CREATE TABLE '+q(t)+' ('+cols.join(',')+',PRIMARY KEY(id));GRANT ALL ON '+q(t)+' TO service_role');}
  const migration=readFileSync(new URL('../../src/database/migrations/20260925_f1_34_monthly_inputs.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ const billedMigration=readFileSync(new URL('../../src/database/migrations/20260925_f1_48_billed_demand.sql',import.meta.url),'utf8');await db.exec(billedMigration);await db.exec(billedMigration);ok(true);
  const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
  await db.exec("INSERT INTO organizations VALUES ('org-a'),('org-b');INSERT INTO customers(id,organization_id,company_name,document) VALUES ('"+a+"','org-a','A','A'),('"+b+"','org-b','B','B');INSERT INTO consumer_units(id,organization_id,customer_id,consumer_unit_number,distributor,tariff_group) VALUES ('"+a+"','org-a','"+a+"','A','D','A4'),('"+b+"','org-b','"+b+"','B','D','A4');SET ROLE service_role");
  let entitled=true;const client={getClient:()=>({from:t=>new Query(t)})},licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(new Error('No license'),{getStatus:()=>403});}};
@@ -37,6 +38,24 @@ try{
  await assert.rejects(()=>db.query("UPDATE calculation_monthly_inputs SET month='2027-03' WHERE id=$1",[partial.id]),e=>e.code==='P3402');checks++;
  await assert.rejects(()=>db.query("DELETE FROM calculation_monthly_inputs WHERE id=$1",[partial.id]),e=>e.code==='42501');checks++;
  await assert.rejects(()=>db.exec("UPDATE calculation_monthly_input_events SET actor_id='spoof'"),e=>e.code==='42501');checks++;
+
+ await db.query("UPDATE consumer_units SET tariff_group='A',tariff_modality='GREEN' WHERE id=$1",[a]);
+ const billing={...body,month:'2028-02',billedDemand:{ACL:{single:'12',source:'Fatura ACL'},ACR:{single:'15',source:'Regra ACR'}}};
+ const bd=await s.create(billing,t);ok(bd.billed_demand.ACL.single==='12'&&bd.billed_demand.ACR.single==='15');
+ const revised=await s.update(bd.id,{...billing,billedDemand:{ACL:{single:'13',source:'Fatura corrigida'}},revision:1},t);ok(revised.billed_demand.ACL.single==='13'&&!revised.billed_demand.ACR);
+ await deny(()=>s.validate(bd.id,{revision:2},{...t,role:'operador'}),403);
+ await assert.rejects(()=>db.query("UPDATE calculation_monthly_inputs SET status='VALIDATED',billed_demand=$2 WHERE id=$1",[bd.id,JSON.stringify({ACL:{single:'20',source:'not saved'}})]),e=>e.code==='P3402');checks++;
+ const bv=await s.validate(bd.id,{revision:2},t);ok(bv.billed_demand.ACL.single==='13');ok((await s.events(bd.id,t))[0].snapshot.billed_demand.ACL.source==='Fatura corrigida');
+ await deny(()=>s.update(bd.id,{...billing,revision:3},t),409);await deny(()=>s.one(bd.id,other),404);
+ const corr=await s.create({...billing,previousId:bd.id,correctionReason:'Rever demanda'},t);ok(corr.version===2&&(await s.one(bd.id,t)).billed_demand.ACL.single==='13');
+ for(const billedDemand of [{ACL:{single:1,source:'F'}},{ACL:{single:'-1',source:'F'}},{ACL:{single:'1',source:''}},{ACL:{single:'1',peak:'2',source:'F'}},{OTHER:{}},{ACL:{single:'1',source:'F',unknown:1}}])await deny(()=>s.create({...billing,month:'2028-03',billedDemand},t),400);
+ const partialDemand=await s.create({...billing,month:'2028-03',billedDemand:{ACL:{peak:'2',source:'F'}}},t);await deny(()=>s.validate(partialDemand.id,{revision:1},t),400);
+ await assert.rejects(()=>db.query("UPDATE calculation_monthly_inputs SET status='VALIDATED' WHERE id=$1",[partialDemand.id]),e=>e.code==='P3401');checks++;
+ await assert.rejects(()=>db.query("UPDATE calculation_monthly_inputs SET billed_demand=$2 WHERE id=$1",[partialDemand.id,JSON.stringify({ACL:{single:'1e2',source:'F'}})]),e=>e.code==='P3401');checks++;
+ await assert.rejects(()=>db.query("UPDATE calculation_monthly_inputs SET billed_demand=$2 WHERE id=$1",[partialDemand.id,JSON.stringify({ACL:{single:'2',source:''}})]),e=>e.code==='P3401');checks++;
+ await db.query("UPDATE consumer_units SET tariff_modality='BLUE' WHERE id=$1",[a]);
+ const bb=await s.create({...billing,month:'2028-04',billedDemand:{ACL:{peak:'10',offPeak:'20',source:'Azul'}}},t);await s.validate(bb.id,{revision:1},t);ok((await s.one(bb.id,t)).billed_demand.ACL.offPeak==='20');
+
  entitled=false;await deny(()=>s.list({consumerUnitId:a,month:'2026-09'},t),403);await deny(()=>s.create({...body,month:'2028-01'},t),403);entitled=true;
  await db.query('UPDATE customers SET deleted_at=now() WHERE id=$1',[a]);await deny(()=>s.one(r.id,t),404);await deny(()=>s.create({...body,month:'2028-01'},t),404);
  await db.exec('RESET ROLE;SET ROLE anon');await assert.rejects(()=>db.exec('SELECT * FROM calculation_monthly_inputs'),e=>e.code==='42501');checks++;

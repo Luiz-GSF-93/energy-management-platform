@@ -90,3 +90,7 @@ describe('explicit common-base inside group',()=>{
  it('supports an explicitly sequenced tax using a grouped predecessor',()=>{const c={...tax(),id:'c',component_code:'COFINS',amount_text:'10',treatment:'OUTSIDE',tax_basis:{...tax().tax_basis,interaction:'SEQUENTIAL',taxes:[{parameterId:'t',revision:2}]}};const r=run([tariff,grouped(),peer(),c]);expect(r.lines.find(l=>l.id==='c')?.amount).toBe('12.67');});
  it('does not infer group from textual justification',()=>blocked(run([tariff,{...tax(),base_rule:'Joint ICMS PIS'},peer()])));
 });
+
+describe('explicit demand monetary tax base',()=>{
+ it('uses approved net demand rubric only when explicitly referenced',()=>{const p={...tariff,component_code:'TUSD_DEMAND',measure:'BRL_KW',time_band:'ALL',amount_text:'20'};const m={...measurement,billed_demand:{ACR:{single:'15',source:'Regra ACR conferida'}}};expect(run([p,tax()],[m]).lines[0]).toMatchObject({base:'300.00',amount:'75.00'});blocked(run([p,tax()]));});
+});

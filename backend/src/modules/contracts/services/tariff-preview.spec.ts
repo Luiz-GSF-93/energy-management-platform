@@ -47,3 +47,17 @@ describe('tariff preview safety and traceability',()=>{
  it('does not replace missing measurement with zero',()=>pending(run([{...p,component_code:'REACTIVE',measure:'BRL_KVARH',time_band:'ALL'}],[{...m,measurements:{...m.measurements,reactiveTotal:null}}])));
  it('does not mutate input or depend on source ordering',()=>{const off={...p,id:'off',time_band:'OFF_PEAK'},before=JSON.stringify({p,m});expect(run([p,off])).toEqual(run([off,p]));expect(JSON.stringify({p,m})).toBe(before);});
 });
+
+describe('explicit normal billed demand',()=>{
+ const demand={...p,component_code:'TUSD_DEMAND',measure:'BRL_KW',time_band:'ALL',amount_text:'20'};
+ const billed={...m,billed_demand:{ACR:{single:'15',peak:null,offPeak:null,source:'Regra ACR conferida'},ACL:{single:'12',peak:null,offPeak:null,source:'Fatura ACL p2'}}};
+ it('uses scenario quantity, not measured demand',()=>{const r=run([demand], [billed]);expect(r.lines[0]).toMatchObject({quantity:'15',amount:'300.00',quantityUnit:'kW',quantitySource:'Regra ACR conferida',measurementKey:'billedDemand.ACR.single'});expect(run([{...demand,scenario:'ACL'}],[billed]).lines[0].amount).toBe('240.00');});
+ it('never copies quantity from the other scenario',()=>pending(run([demand],[{...m,billed_demand:{ACL:billed.billed_demand.ACL}}])));
+ it('accepts explicit zero',()=>expect(run([demand],[{...billed,billed_demand:{ACR:{...billed.billed_demand.ACR,single:'0'}}}]).lines[0].amount).toBe('0.00'));
+ it.each([null,'','1e2','-1',15,'1.0000001'])('rejects missing or malformed quantity %s',single=>pending(run([demand],[{...billed,billed_demand:{ACR:{...billed.billed_demand.ACR,single}}}])));
+ it('rejects missing evidence',()=>pending(run([demand],[{...billed,billed_demand:{ACR:{single:'15',source:''}}}])));
+ it('rejects green peak tariff',()=>pending(run([{...demand,time_band:'PEAK'}],[billed])));
+ it('handles blue peak and off peak independently',()=>{const blue={...u,tariff_modality:'BLUE'},bm={...m,unit_context:blue,measurements:normalizeMeasurements({...m.measurements,demandSingle:null,demandPeak:'10',demandOffPeak:'20'}),billed_demand:{ACR:{single:null,peak:'12',offPeak:'25',source:'Cenário azul'}}};const ps=[{...demand,unit_context:blue,time_band:'PEAK'},{...demand,id:'off',unit_context:blue,time_band:'OFF_PEAK'}];expect(run(ps,[bm],blue).lines.map(l=>l.amount).sort()).toEqual(['240.00','500.00']);pending(run([{...ps[0],time_band:'ALL'}],[bm],blue));pending(run(ps,[{...bm,billed_demand:{ACR:{peak:'12',source:'incompleto'}}}],blue));});
+ it('does not use draft correction or foreign billed demand',()=>{pending(run([demand],[billed,{...billed,id:'v2',version:2,status:'DRAFT'}]));pending(run([demand],[{...billed,organization_id:'foreign'}]));});
+ it('does not calculate overrun from normal billed quantity',()=>pending(run([{...demand,component_code:'OTHER_OVERRUN'}],[billed])));
+});
