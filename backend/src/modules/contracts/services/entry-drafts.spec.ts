@@ -1,0 +1,14 @@
+import {entryIssues,entryPayload} from './entry-drafts';
+const customer='00000000-0000-4000-8000-000000000001';
+describe('guided entry',()=>{
+ it('keeps missing fields pending instead of turning them into zero',()=>{expect(entryIssues('management',entryPayload('management',customer,{}))).toEqual(expect.arrayContaining(['contractNumber','fixedFeeMonthly','startDate','endDate']));});
+ it('sets the tenant customer and prevents active supplier creation',()=>{expect(entryPayload('supply',customer,{status:'ACTIVE',customerId:'other'})).toEqual({status:'DRAFT'});expect(entryPayload('management',customer,{customerId:'other'}).customerId).toBe(customer);});
+ it('accepts complete fixed fees with zero explicitly informed',()=>{expect(entryIssues('management',{customerId:customer,contractNumber:'M1',startDate:'2026-01-01',endDate:'2026-12-31',remunerationModel:'FIXED',fixedFeeMonthly:0,savingsPercentage:0,applicationRules:'Regra'})).toEqual([]);});
+ it('rejects hidden properties and reversed dates',()=>{const issues=entryIssues('management',{startDate:'2026-12-31',endDate:'2026-01-01',organization_id:'other'});expect(issues).toContain('organization_id');expect(issues).toContain('endDate');});
+ it('requires both blue demand bands',()=>{expect(entryIssues('distributor',{customerId:customer,name:'U',code:'1',distributor:'D',tariffGroup:'A',tariffSubgroup:'A4',tariffModality:'BLUE'})).toEqual(expect.arrayContaining(['contractedDemandPeak','contractedDemandOffPeak']));});
+ it('flags incompatible tariff subgroup',()=>{expect(entryIssues('distributor',{tariffGroup:'B',tariffSubgroup:'A4',tariffModality:'GREEN'})).toContain('tariffSubgroup');});
+ it('flags paired flexibility and empty seasonal table',()=>{expect(entryIssues('supply',{flexibilityMinPercent:90,seasonalityMode:'BOTH'})).toEqual(expect.arrayContaining(['flexibilityMinPercent','seasonalVolumes','seasonalityRule']));});
+ it('requires indexed pricing evidence and guarantee values',()=>{expect(entryIssues('supply',{pricingMode:'INDEXED',guaranteeType:'BANK_GUARANTEE'})).toEqual(expect.arrayContaining(['adjustmentIndex','adjustmentDate','adjustmentRule','guaranteeAmount','guaranteeInstitution']));});
+ it('keeps a price gap and invalid seasonal total pending',()=>{const p={startDate:'2026-01-01',endDate:'2026-12-31',annualPrices:[{startDate:'2026-02-01',endDate:'2026-12-31',pricePerMwh:100,priceStatus:'FINAL'}],seasonalityMode:'MONTHLY',seasonalVolumes:[{year:2026,annualVolumeMwh:120,monthlyPercentages:Array(12).fill(0)}]};expect(entryIssues('supply',p)).toEqual(expect.arrayContaining(['annualPrices','seasonalVolumes']));});
+ it('requires a service price unless contractual custom rule',()=>{expect(entryIssues('services',{billingBasis:'PER_MWH'})).toContain('agreedValue');expect(entryIssues('services',{billingBasis:'CUSTOM'})).not.toContain('agreedValue');});
+});

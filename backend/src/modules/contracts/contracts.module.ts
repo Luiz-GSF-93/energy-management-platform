@@ -1,3 +1,6 @@
+import {EntryDraftController} from './controllers/entry-drafts.controller';
+import {EntryDraftService} from './services/entry-drafts.service';
+import {ConsumerUnitsModule} from '../consumer-units/consumer-units.module';
 import {MonthlyCostsController} from './controllers/monthly-costs.controller';
 import {MonthlyCostsService} from './services/monthly-costs.service';
 import {MonthlyInputsController} from './controllers/monthly-inputs.controller';
@@ -15,9 +18,9 @@ import { SupabaseService } from '../../services/supabase.service';
 import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
-  imports: [LicensesModule],
-  controllers: [MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
-  providers: [MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
+  imports: [LicensesModule,ConsumerUnitsModule],
+  controllers: [EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
 export class ContractsModule {}

@@ -71,6 +71,7 @@ export class ConsumerUnitsService {
   async create(
     createConsumerUnitDto: CreateConsumerUnitDto,
     organizationId: string,
+    entry: Record<string,unknown> = {},
   ) {
     createConsumerUnitDto = await validateWriteDto(CreateConsumerUnitDto, createConsumerUnitDto);
     // The service-role client bypasses RLS: scope the parent as well as the child.
@@ -82,7 +83,7 @@ export class ConsumerUnitsService {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('consumer_units')
-      .insert([{ ...this.toRow(createConsumerUnitDto), organization_id: organizationId }])
+      .insert([{ ...this.toRow(createConsumerUnitDto), ...entry, organization_id: organizationId }])
       .select()
       .single();
 
