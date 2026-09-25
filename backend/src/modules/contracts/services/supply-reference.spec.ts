@@ -26,3 +26,5 @@ describe('supplier contractual reference',()=>{
  it('retains warnings for mixed text rules and never returns savings',()=>{const r=preview({...contract(),seasonality_mode:'BOTH'});expect(r.lines).toHaveLength(1);expect(r.warnings.join(' ')).toContain('regra textual');expect(r).not.toHaveProperty('savings');expect(r).not.toHaveProperty('total');});
  it('does not mutate input and is deterministic',()=>{const c=contract(),before=JSON.stringify(c);expect(preview(c)).toEqual(preview(c));expect(JSON.stringify(c)).toBe(before);});
 });
+
+it('normalizes database timestamps without changing contractual day',()=>{const c=contract();c.start_date='2026-01-01T00:00:00+00:00';c.end_date='2026-12-31T00:00:00.000Z';expect(preview(c).lines[0].amount).toBe('30014.81');c.annual_prices=[];const r=preview(c,'2026-10',[{id:'h',contract_id:'s',start_date:'2026-01-01 00:00:00',end_date:'2026-12-31T00:00:00Z',price_per_mwh:250}]);expect(r.lines[0].amount).toBe('30000.00');});

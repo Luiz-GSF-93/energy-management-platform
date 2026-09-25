@@ -5,6 +5,10 @@ const day=(v:unknown):v is string=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.te
 export type SupplyReference={formulaVersion:'supply-reference-1.0';lines:{contractId:string;number:string;annualVolumeMwh:string;monthlyPercent:string;volumeMwh:string;pricePerMwh:string;exactAmount:string;amount:string;priceSource:string;priceStart:string;priceEnd:string;seasonalityMode:string}[];pending:{contractId:string;number:string;reason:string}[];warnings:string[]};
 /** Contractual reference only; never a payable invoice or a published settlement. */
 export function supplyReference(unit:any,month:string,contracts:any[],prices:any[]):SupplyReference{
+ // Database contract/history dates may be timestamps; contractual coverage uses their calendar date.
+ const calendar=(v:unknown)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.]\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(v)?v.slice(0,10):v;
+ contracts=contracts.map(c=>({...c,start_date:calendar(c.start_date),end_date:calendar(c.end_date)}));
+ prices=prices.map(p=>({...p,start_date:calendar(p.start_date),end_date:calendar(p.end_date)}));
  const period=monthPeriod(month),year=Number(month.slice(0,4)),index=Number(month.slice(5))-1;
  const result:SupplyReference={formulaVersion:'supply-reference-1.0',lines:[],pending:[],warnings:[
  'Referência contratual = volume anual × percentual do mês ÷ 100 × preço final por MWh. Não é valor faturável, custo total ACL ou economia.',
