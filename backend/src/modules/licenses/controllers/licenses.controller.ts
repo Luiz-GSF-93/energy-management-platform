@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Body,
   Controller,
   Get,
@@ -36,12 +38,9 @@ export class LicensesController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
-    return this.licensesService.create(dto, {
-      actorUserId: tenant.userId,
-      organizationId: tenant.organizationId,
-      ipAddress: request.ip,
-      userAgent: request.get('user-agent'),
-    });
+    if(tenant.accessMode!=='platform_operation')throw new ForbiddenException('Somente o administrador da plataforma pode criar licenças.');
+    throw new BadRequestException('Selecione um plano do catálogo em Licença e módulos.');
+
   }
 
   @Patch(':licenseId')
@@ -59,12 +58,9 @@ export class LicensesController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
-    return this.licensesService.update(licenseId, dto, {
-      actorUserId: tenant.userId,
-      organizationId: tenant.organizationId,
-      ipAddress: request.ip,
-      userAgent: request.get('user-agent'),
-    });
+    if(tenant.accessMode!=='platform_operation')throw new ForbiddenException('Somente o administrador da plataforma pode alterar licenças.');
+    throw new BadRequestException('Use a seleção de plano para alterar a licença e seus módulos.');
+
   }
 
   @Get()

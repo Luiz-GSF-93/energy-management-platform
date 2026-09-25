@@ -18,6 +18,7 @@ export type LicenseCapability =
   | 'free_market_management';
 
 export interface LicenseRecord {
+  documents_unlimited?: boolean;
   plan_id?: string | null;
   plan_version?: number | null;
   plan_snapshot?: Record<string, unknown> | null;

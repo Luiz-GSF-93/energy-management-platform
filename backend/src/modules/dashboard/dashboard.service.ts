@@ -35,10 +35,10 @@ export class DashboardService {
       const value=await this.count(table,org,key==='users'?[['status','active']]:[],notDeleted);
       metrics.push({key,label,value,href});
     }
-    let license: {name:string,documentsLimit:number,documentsUsed:number,endDate:string|null}|null|undefined;
+    let license: {name:string,documentsLimit:number,documentsUnlimited?:boolean,documentsUsed:number,endDate:string|null}|null|undefined;
     if(permitted.has(P.ORGANIZATION_LICENSES_VIEW)||permitted.has(P.DOCUMENTS_VIEW)) {
       const effective=await this.licenses.resolveEffectiveLicense(org);
-      if(permitted.has(P.ORGANIZATION_LICENSES_VIEW)) license=effective?{name:effective.license_type,documentsLimit:effective.documents_limit,documentsUsed:effective.documents_used??0,endDate:effective.end_date}:null;
+      if(permitted.has(P.ORGANIZATION_LICENSES_VIEW)) license=effective?{name:effective.license_type,documentsLimit:effective.documents_limit,...(effective.documents_unlimited?{documentsUnlimited:true}:{}),documentsUsed:effective.documents_used??0,endDate:effective.end_date}:null;
       if(permitted.has(P.DOCUMENTS_VIEW)&&effective?.document_management===true){
         metrics.push({key:'documents',label:'Documentos cadastrados',value:await this.count('documents',org),href:'/backoffice/documents'});
         metrics.push({key:'pendingDocuments',label:'Documentos com processamento pendente',value:await this.count('documents',org,[['processing_status','PENDING']]),href:'/backoffice/documents'});

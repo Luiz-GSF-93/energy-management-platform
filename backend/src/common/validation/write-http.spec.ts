@@ -83,15 +83,12 @@ describe('HTTP validation + tenant interceptor + RBAC', () => {
     expect((await send('/customers', { company_name: 'Example', document: '123' })).status).toBe(403);
     expect(from).not.toHaveBeenCalled();
   });
-  it('does not inject organization_id into the strict license DTO', async () => {
+  it('rejects legacy license creation by organization even with all permissions', async () => {
     const response = await send('/licenses', {
       licenseType: 'TEST', documentsLimit: 100,
       renewalDate: '2027-01-01', startDate: '2026-09-01',
     });
-    expect(response.status).toBe(201);
-    expect(licenses.create).toHaveBeenCalledWith(
-      expect.not.objectContaining({ organization_id: expect.anything() }),
-      expect.objectContaining({ organizationId: 'org-a', actorUserId: 'user-a' }),
-    );
+    expect(response.status).toBe(403);
+    expect(licenses.create).not.toHaveBeenCalled();
   });
 });

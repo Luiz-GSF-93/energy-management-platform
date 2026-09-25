@@ -20,6 +20,9 @@ export class DocumentsService {
   }
   private check(error: any) {
     if (!error) return;
+    if(error.code==='P3392')throw new ConflictException('O administrador da plataforma precisa vincular esta licença a um plano antes de novos cadastros.');
+    if(error.code==='P3391')throw new ForbiddenException('Limite de documentos mantidos atingido. Solicite upgrade do plano.');
+    if(error.code==='P3390')throw new ForbiddenException('É necessária uma licença ativa para enviar documentos.');
     if (error.code === 'P0001' && error.message === 'DOCUMENT_QUOTA_EXCEEDED') throw new ForbiddenException('Cota de documentos da licença esgotada');
     if (error.code === 'P0001' && error.message === 'DOCUMENT_LICENSE_REQUIRED') throw new ForbiddenException('Licença de documentos indisponível');
     if (error.code === '23505') throw new ConflictException('Document already registered in this organization');
