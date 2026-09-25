@@ -28,7 +28,7 @@ export default tseslint.config(
 
   ...tseslint.configs.recommended,
   {
-    files: ['test/entry-wizard.cjs','test/license-governance.cjs','test/tariff-preview.cjs','test/monthly-cost-ledger.cjs','test/preparation-navigation.cjs'],
+    files: ['test/entry-wizard.cjs','test/license-governance.cjs','test/tariff-preview.cjs','test/monthly-cost-ledger.cjs','test/preparation-navigation.cjs','test/supply-reference.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node, ...globals.browser } },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },

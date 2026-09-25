@@ -5,6 +5,7 @@ import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {PreparationQueryDto} from '../dto/preparation.dto';
 import {prepareMonth,monthPeriod} from './preparation';
 import {previewTariffs} from './tariff-preview';
+import {supplyReference} from './supply-reference';
 import {monthlyCostLedger} from './monthly-cost-ledger';
 @Injectable()
 export class CalculationPreparationService {
@@ -23,6 +24,6 @@ export class CalculationPreparationService {
  this.all(()=>this.table('calculation_monthly_costs').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('month',d.month))]);
  const period=monthPeriod(d.month),ids=contracts.filter(c=>['ACTIVE','APPROVED'].includes(c.status)&&c.contract_type==='ENERGY_PURCHASE'&&String(c.start_date).slice(0,10)<=period.end&&(!c.end_date||String(c.end_date).slice(0,10)>=period.start)).map(c=>c.id),prices:any[]=[];
  for(let i=0;i<ids.length;i+=100){const batch=ids.slice(i,i+100);prices.push(...await this.all(()=>this.table('contract_price_history').select('*').in('contract_id',batch)));}
- return {...prepareMonth(u,d.month,parameters,contracts,prices,management,services,monthly,monthlyCosts),costLedger:monthlyCostLedger(u,d.month,monthlyCosts),tariffPreview:previewTariffs(u,d.month,period,parameters,monthly),checkedAt:new Date().toISOString()};
+ return {...prepareMonth(u,d.month,parameters,contracts,prices,management,services,monthly,monthlyCosts),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:monthlyCostLedger(u,d.month,monthlyCosts),tariffPreview:previewTariffs(u,d.month,period,parameters,monthly),checkedAt:new Date().toISOString()};
  }
 }
