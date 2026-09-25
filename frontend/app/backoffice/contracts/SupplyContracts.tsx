@@ -17,7 +17,7 @@ const types:Record<string,string>={ENERGY_PURCHASE:'Compra de energia',ENERGY_SA
 const frequencies:Record<string,string>={ANNUAL:'Anual',SEMIANNUAL:'Semestral',QUARTERLY:'Trimestral',MONTHLY:'Mensal',CUSTOM:'Personalizado'};
 const date=(value:string)=>value?.slice(0,10).split('-').reverse().join('/')||'—';
 const number=(value:number)=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:6});
-export default function SupplyContracts({customerId,onDirty}:{customerId:string;onDirty:(dirty:boolean)=>void}){
+export default function SupplyContracts({customerId,onDirty,allowNew=true}:{allowNew?:boolean;customerId:string;onDirty:(dirty:boolean)=>void}){
  const {hasPermission}=useAuth();
  const view=hasPermission(P.view),create=hasPermission(P.create),update=hasPermission(P.update),viewCustomers=hasPermission(P.customers),viewUnits=hasPermission(P.units);
  const [rows,setRows]=useState<Contract[]>([]),[customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]);
@@ -63,7 +63,7 @@ export default function SupplyContracts({customerId,onDirty}:{customerId:string;
  return <section className="backoffice-page"><h2>Fornecedor Mercado Livre</h2><p>Contratos da organização ativa, vinculados a clientes e unidades consumidoras. O acesso exige licença vigente com Gestão do Mercado Livre.</p>
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}{lookupError?<Alert variant="error">{lookupError}</Alert>:null}
  <Button variant="secondary" disabled={busy||loading} onClick={()=>{setLoading(true);setError('');setLookupError('');setRevision(v=>v+1);}}>Atualizar lista</Button>
- {((create&&!!customerId)||editing)&&!loading&&!loadFailed?<Card title={editing?'Editar rascunho '+editing.contract_number:'Novo contrato'}>
+ {((allowNew&&create&&!!customerId)||editing)&&!loading&&!loadFailed?<Card title={editing?'Editar rascunho '+editing.contract_number:'Novo contrato'}>
  {!editing&&(!viewCustomers||!viewUnits)?<p>O cadastro requer permissão de consulta de clientes e unidades consumidoras.</p>:<form key={(editing?.id||'new')+formVersion} onSubmit={save} onChange={()=>onDirty(true)} className="organizations-create__form">
  {!editing?<>
  <label>Unidade consumidora<select key={customer} className="ds-input" name="consumerUnitId" required disabled={busy||!customer} defaultValue=""><option value="">Selecione</option>{units.filter(u=>u.customer_id===customer).map(u=><option key={u.id} value={u.id}>{u.name} — {u.consumer_unit_number}</option>)}</select></label>

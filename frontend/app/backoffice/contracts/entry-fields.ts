@@ -1,0 +1,39 @@
+import {AnnualPrice} from './SupplyTermsFields';
+import {SeasonalYear} from './SupplyOperatingFields';
+export type EntryKind='distributor'|'supply'|'management'|'services';
+export type Payload=Record<string,string|number|boolean|null|undefined|AnnualPrice[]|SeasonalYear[]> & {annualPrices?:AnnualPrice[];seasonalVolumes?:SeasonalYear[]};
+export type Field={key:string;label:string;type?:'text'|'number'|'date'|'textarea'|'select'|'unit';options?:Record<string,string>;required?:boolean;maxLength?:number;max?:number;show?:(p:Payload)=>boolean};
+export type Step={title:string;help:string;fields?:Field[];special?:'operating'|'terms'};
+const f=(key:string,label:string,type:Field['type']='text',required=false,options?:Record<string,string>):Field=>({key,label,type,required,options});
+export const entryKinds:Record<EntryKind,string>={distributor:'Distribuidora e unidade',supply:'Fornecedor Mercado Livre',management:'Honorários da gestão',services:'Intermediação e outros'};
+const dates=[f('startDate','Início da vigência','date',true),f('endDate','Término da vigência','date',true)];
+const blue=(p:Payload)=>p.tariffModality==='BLUE';
+export const entrySteps:Record<EntryKind,Step[]>={
+ distributor:[
+ {title:'Identificação da instalação',help:'Cadastre uma nova unidade para o cliente escolhido. Para alterar uma unidade existente, use Editar configuração na consulta.',fields:[f('name','Nome da unidade','text',true),f('code','Código da instalação / unidade','text',true),f('distributor','Distribuidora','text',true)]},
+ {title:'Dados elétricos',help:'O grupo e a modalidade determinam os campos de demanda aplicáveis.',fields:[f('tariffGroup','Grupo tarifário','select',true,{A:'A',B:'B'}),f('tariffSubgroup','Subgrupo tarifário','select',true,{A1:'A1 (>230 kV)',A2:'A2 (88 a 138 kV)',A3:'A3 (69 kV)',A3a:'A3a (30 a 44 kV)',A4:'A4 (2,3 a 25 kV)',AS:'AS (Subterrâneo)',B1:'B1 Residencial',B2:'B2 Rural',B3:'B3 Comercial/Industrial de pequeno porte',B4:'B4 Iluminação Pública'}),f('tariffModality','Modalidade tarifária','select',true,{BLUE:'Azul',GREEN:'Verde',WHITE:'Branca',CONVENTIONAL:'Convencional'}),f('consumptionClass','Classe de consumo','select',false,{INDUSTRIAL:'Industrial',COMMERCIAL:'Comercial',RURAL:'Rural',PUBLIC_AUTHORITY:'Poder Público',PUBLIC_SERVICE:'Serviço Público',RESIDENTIAL:'Residencial'}),f('freeMarket','Cadastrada no Mercado Livre','select',false,{true:'Sim',false:'Não'}),f('voltageClass','Tensão / classe de tensão')]},
+ {title:'Demanda e tarifas',help:'Os valores ausentes não serão tratados como zero. A comparação ACL × ACR também exige os parâmetros aprovados de cálculo.',fields:[{...f('contractedDemand','Demanda contratada (kW)','number'),show:p=>!blue(p)},{...f('demandTariff','Tarifa de demanda (R$/kW)','number'),show:p=>!blue(p)},...['Peak','OffPeak'].flatMap((s,i)=>[{...f('contractedDemand'+s,'Demanda contratada '+(i?'fora ponta':'de ponta')+' (kW)','number',true),show:blue},{...f('demandTariff'+s,'Tarifa de demanda '+(i?'fora ponta':'de ponta')+' (R$/kW)','number'),show:blue}]),f('energyTariffPeak','Energia de ponta (R$/kWh)','number'),f('energyTariffOffPeak','Energia fora ponta (R$/kWh)','number'),f('reactiveEnergyTariff','Energia reativa (R$/kVArh)','number')]},
+ {title:'Último ajuste e localização',help:'Se houver ajuste de demanda, informe a data e os valores daquela contratação.',fields:[f('lastDemandAdjustmentDate','Data do último ajuste','date'),f('lastDemandValue','Última demanda única contratada (kW)','number'),f('lastDemandPeak','Última demanda de ponta contratada (kW)','number'),f('lastDemandOffPeak','Última demanda fora ponta contratada (kW)','number'),f('address','Endereço da instalação'),f('city','Cidade'),f('state','Estado')]}
+ ],
+ supply:[
+ {title:'Identificação e vigência',help:'Escolha a unidade deste cliente e a vigência do contrato de energia.',fields:[f('consumerUnitId','Unidade consumidora','unit',true),f('contractNumber','Número do contrato','text',true),f('supplierId','Fornecedor / comercializadora'),f('contractType','Tipo de contrato','select',true,{ENERGY_PURCHASE:'Compra de energia',ENERGY_SALE:'Venda de energia'}),...dates]},
+ {title:'Volume e preço de referência',help:'O preço único é usado quando não houver tabela por ano. A tabela poderá ser preenchida na etapa de preços e garantia.',fields:[f('contractedVolumeMwh','Quantidade contratada (MWh)','number',true),f('currentPrice','Preço único (R$/MWh)','number'),f('energySource','Fonte de energia')]},
+ {title:'Flexibilidade e sazonalidade',help:'Você pode usar regra contratual, distribuição mensal ou ambas.',special:'operating'},
+ {title:'Preços, reajuste e garantia',help:'Informe preços por vigência, o índice aplicável e a garantia solicitada.',special:'terms'},
+ {title:'Observações',help:'Registre condições adicionais antes da revisão.',fields:[f('notes','Condições comerciais e observações','textarea')]}
+ ],
+ management:[
+ {title:'Referência e vigência',help:'O honorário é cadastrado para o cliente como um todo. Não repita o valor em cada unidade.',fields:[f('contractNumber','Número / referência da vigência','text',true),...dates]},
+ {title:'Modelo e valores',help:'O percentual variável é aplicado sobre a economia líquida, após deduzir os custos e o honorário fixo.',fields:[f('remunerationModel','Modelo de honorário','select',true,{FIXED:'Fixo mensal',HYBRID:'Híbrido: fixo + percentual sobre economia líquida'}),f('fixedFeeMonthly','Honorário fixo mensal (R$)','number',true),{...f('savingsPercentage','Percentual sobre economia líquida (%)','number',true),max:100,show:p=>p.remunerationModel==='HYBRID'}]},
+ {title:'Condições de aplicação',help:'A vigência somente entrará no histórico após a confirmação de registro.',fields:[f('applicationRules','Regras de aplicação e condições comerciais','textarea',true)]}
+ ],
+ services:[
+ {title:'Identificação e abrangência',help:'Informe a contraparte e se o serviço vale para o cliente inteiro ou para uma unidade.',fields:[f('contractNumber','Número / referência do contrato','text',true),f('agreementType','Natureza do contrato','select',true,{INTERMEDIATION:'Intermediação',OTHER:'Outro serviço'}),f('counterparty','Intermediário / prestador','text',true),f('description','Objeto do contrato','textarea',true),f('consumerUnitId','Abrangência','unit')]},
+ {title:'Vigência e cobrança',help:'O cadastro não gera cobrança nem inclui automaticamente valores na economia.',fields:[...dates,f('billingBasis','Base de cobrança','select',true,{FIXED_MONTHLY:'Valor mensal (R$)',PER_MWH:'Preço por MWh',PERCENTAGE:'Percentual (%)',CUSTOM:'Regra contratual específica'}),f('agreedValue','Valor ou percentual contratado','number')]},
+ {title:'Condições de aplicação',help:'Descreva a base, periodicidade e exceções.',fields:[f('applicationRules','Regras de aplicação e condições comerciais','textarea',true)]}
+ ]
+};
+export const fieldLabels:Record<string,string>=Object.fromEntries(Object.values(entrySteps).flatMap(ss=>ss.flatMap(s=>(s.fields||[]).map(f=>[f.key,f.label]))));
+Object.assign(fieldLabels,{annualPrices:'Tabela de preços por período',seasonalVolumes:'Distribuição sazonal por ano',flexibilityMinPercent:'Limites de flexibilidade',flexibilityMaxPercent:'Flexibilidade máxima',seasonalityRule:'Regra de sazonalidade',adjustmentIndex:'Índice de reajuste',adjustmentDate:'Data-base de reajuste',adjustmentRule:'Regra de reajuste',guaranteeType:'Tipo de garantia',guaranteeAmount:'Valor da garantia',guaranteeInstitution:'Instituição da garantia',guaranteeDescription:'Descrição da garantia',pricingMode:'Forma de precificação'});
+export const issueLabel=(key:string)=>fieldLabels[key.split('.')[0]]||'Revise as condições informadas';
+export function initialEntry(kind:EntryKind):Payload{return kind==='supply'?{contractType:'ENERGY_PURCHASE'}:kind==='management'?{remunerationModel:'FIXED',savingsPercentage:0}:kind==='services'?{agreementType:'INTERMEDIATION',billingBasis:'FIXED_MONTHLY'}:{};}

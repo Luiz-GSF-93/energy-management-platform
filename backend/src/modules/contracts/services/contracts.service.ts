@@ -61,7 +61,7 @@ export class ContractsService {
     if (!data) throw new NotFoundException('Contract not found');
     return data;
   }
-  async create(input: CreateContractDto, organizationId: string) {
+  async create(input: CreateContractDto, organizationId: string, entry: Record<string,unknown> = {}) {
     await this.licensesService.requireEntitlement(organizationId, 'free_market_management');
     const dto = await validateWriteDto(CreateContractDto, input);
     this.dates(dto.startDate, dto.endDate);
@@ -78,7 +78,7 @@ export class ContractsService {
       if (!management.data) throw new NotFoundException('Management contract not found for this customer');
     }
     const { data, error } = await this.table().insert([{
-      ...this.mapped(dto), organization_id: organizationId, customer_id: customer.data.id,
+      ...this.mapped(dto), ...entry, organization_id: organizationId, customer_id: customer.data.id,
       consumer_unit_id: unit.data.id, status: dto.status ?? 'DRAFT',
     }]).select().single();
     this.check(error);
