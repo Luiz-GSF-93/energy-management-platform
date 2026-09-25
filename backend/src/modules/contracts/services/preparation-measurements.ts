@@ -5,7 +5,7 @@ export function prepareMeasurements(unit:any,month:string,rows:any[]){
  const add=(code:string,message:string)=>findings.push({code,section:'Medições',severity:'BLOCKER',message});
  const scoped=rows.filter(r=>r.organization_id===unit.organization_id&&r.customer_id===unit.customer_id&&r.consumer_unit_id===unit.id&&r.month===month).sort((a,b)=>b.version-a.version);
  const drafts=scoped.filter(r=>r.status==='DRAFT'),validated=scoped.filter(r=>r.status==='VALIDATED'),latest=validated[0];
- const summary={status:!scoped.length?'MISSING':drafts.length?'DRAFT_PENDING':latest?'VALIDATED':'INVALID',draftCount:drafts.length,validatedCount:validated.length,validatedVersion:latest?{id:latest.id,version:latest.version,revision:latest.revision,validatedAt:latest.validated_at,source:latest.source_reference,measurements:latest.measurements}:null};
+ const summary={status:!scoped.length?'MISSING':drafts.length?'DRAFT_PENDING':latest?'VALIDATED':'INVALID',draftCount:drafts.length,validatedCount:validated.length,validatedVersion:latest?{id:latest.id,version:latest.version,revision:latest.revision,validatedAt:latest.validated_at,source:latest.source_reference,measurements:latest.measurements,billedDemand:latest.billed_demand??null}:null};
  if(!scoped.length)add('MEASUREMENTS_MISSING','Cadastre e valide as medições da unidade nesta competência em Dados mensais.');
  if(drafts.length)add('MEASUREMENTS_DRAFT',latest?'Existe uma correção em rascunho. Revise e valide a nova versão antes de apurar.':'As medições estão em rascunho. Solicite a validação por Gestor ou Administrador.');
  const versions=scoped.map(r=>r.version);
