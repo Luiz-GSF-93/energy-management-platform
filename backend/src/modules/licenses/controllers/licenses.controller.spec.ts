@@ -30,44 +30,15 @@ describe('LicensesController', () => {
     ]);
   });
 
-  it('creates using validated tenant and request audit context', async () => {
-    const dto: any = {
-      licenseType: 'foundation',
-      documentsLimit: 100,
-      renewalDate: '2027-01-01',
-      startDate: '2026-09-21',
-    };
-
-    const tenant: any = {
-      userId: 'user-1',
-      organizationId: 'org-1',
-    };
-
-    const request: any = {
-      ip: '203.0.113.10',
-      get: jest.fn((name: string) =>
-        name === 'user-agent' ? 'F1.4i.2-test' : undefined,
-      ),
-    };
-
-    const created = { id: 'license-1' };
-    create.mockResolvedValue(created);
-
-    await expect(
-      controller.create(dto, tenant, request),
-    ).resolves.toEqual(created);
-
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(create).toHaveBeenCalledWith(dto, {
-      actorUserId: tenant.userId,
-      organizationId: tenant.organizationId,
-      ipAddress: request.ip,
-      userAgent: 'F1.4i.2-test',
-    });
-
-    expect(request.get).toHaveBeenCalledWith('user-agent');
+  it.each(['create','update'] as const)('denies organization-managed %s even with license permissions',async method=>{
+    const call=method==='create'?controller.create({} as any,{} as any,{} as any):controller.update('id',{} as any,{} as any,{} as any);
+    await expect(call).rejects.toMatchObject({status:403});expect(create).not.toHaveBeenCalled();expect(update).not.toHaveBeenCalled();
   });
-
+  it.each(['create','update'] as const)('requires catalog route for platform %s',async method=>{
+    const ctx:any={accessMode:'platform_operation'};
+    const call=method==='create'?controller.create({} as any,ctx,{} as any):controller.update('id',{} as any,ctx,{} as any);
+    await expect(call).rejects.toMatchObject({status:400});expect(create).not.toHaveBeenCalled();expect(update).not.toHaveBeenCalled();
+  });
   it('requires organization license update permission', () => {
     const permissions = Reflect.getMetadata(
       PERMISSIONS_KEY,
@@ -77,41 +48,6 @@ describe('LicensesController', () => {
     expect(permissions).toEqual([
       PERMISSIONS.ORGANIZATION_LICENSES_UPDATE,
     ]);
-  });
-
-  it('updates using validated tenant and request audit context', async () => {
-    const dto: any = {
-      status: 'suspended',
-    };
-
-    const tenant: any = {
-      userId: 'user-1',
-      organizationId: 'org-1',
-    };
-
-    const request: any = {
-      ip: '203.0.113.10',
-      get: jest.fn((name: string) =>
-        name === 'user-agent' ? 'F1.4i.3-test' : undefined,
-      ),
-    };
-
-    const updated = { id: 'license-1', status: 'SUSPENDED' };
-    update.mockResolvedValue(updated);
-
-    await expect(
-      controller.update('license-1', dto, tenant, request),
-    ).resolves.toEqual(updated);
-
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith('license-1', dto, {
-      actorUserId: tenant.userId,
-      organizationId: tenant.organizationId,
-      ipAddress: request.ip,
-      userAgent: 'F1.4i.3-test',
-    });
-
-    expect(request.get).toHaveBeenCalledWith('user-agent');
   });
 
   it('requires organization license view permission', () => {

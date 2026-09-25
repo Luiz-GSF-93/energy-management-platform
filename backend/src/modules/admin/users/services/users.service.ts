@@ -390,7 +390,9 @@ export class UsersService {
       if (error.code === 'P3230') throw new NotFoundException('Usuário não encontrado nesta organização.');
       if (error.code === 'P3231') throw new ConflictException('O acesso ou a função mudou. Atualize a lista.');
       if (error.code === 'P3232') throw new BadRequestException('Mantenha ao menos um Administrador da organização ou Gestor ativo.');
-      if (error.code === 'P3152') throw new BadRequestException('O limite de usuários ativos da licença foi atingido.');
+      if(error.code==='P3392')throw new BadRequestException('Solicite ao administrador da plataforma a vinculação da licença a um plano.');
+      if(error.code==='P3390')throw new BadRequestException('É necessária uma licença ativa para reativar usuários.');
+      if (['P3152','P3391'].includes(error.code)) throw new BadRequestException('O limite de usuários ativos da licença foi atingido.');
       throw new InternalServerErrorException('Não foi possível alterar o acesso. Nenhuma alteração foi confirmada.');
     }
     if (data !== true) throw new InternalServerErrorException('Não foi possível confirmar a alteração do acesso. Atualize a lista.');
@@ -1008,7 +1010,9 @@ export class UsersService {
           );
 
       if (membershipInsertError) {
-        if ((membershipInsertError as any)?.code === 'P3152') {
+        if ((membershipInsertError as any)?.code === 'P3392')throw new ConflictException('Solicite ao administrador da plataforma a vinculação da licença a um plano.');
+        if ((membershipInsertError as any)?.code === 'P3390')throw new ConflictException('É necessária uma licença ativa para cadastrar usuários.');
+        if (['P3152','P3391'].includes((membershipInsertError as any)?.code)) {
           throw new ConflictException('O limite de usuários da licença foi atingido nesta organização.');
         }
         if ((membershipInsertError as any)?.code === '23505') {

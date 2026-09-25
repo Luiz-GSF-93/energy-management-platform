@@ -1,2 +1,2 @@
-export type Plan={id:string;name:string;description:string;active:boolean;version:number;documents_limit:number;max_consumer_units:number;max_users:number;document_management:boolean;advanced_analytics:boolean;report_generation:boolean;free_market_management:boolean};
+export type Plan={id:string;name:string;description:string;active:boolean;version:number;documents_limit:number;documents_unlimited:boolean;max_consumer_units:number;max_users:number;document_management:boolean;advanced_analytics:boolean;report_generation:boolean;free_market_management:boolean};
 export const planModules=[['document_management','Documentos'],['advanced_analytics','Análises avançadas'],['report_generation','Relatórios'],['free_market_management','Gestão do mercado livre']] as const;

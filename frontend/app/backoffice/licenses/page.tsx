@@ -1,45 +1,28 @@
 'use client';
-import { FormEvent, useEffect, useState } from 'react';
-import LicenseFromPlan from '@/app/components/LicenseFromPlan';
+import {FormEvent,useCallback,useEffect,useState} from 'react';
+import LicenseFromPlan,{PlanLicense} from '@/app/components/LicenseFromPlan';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
-import { Alert, Button, Card, Input } from '@/app/components/ui';
-import { apiRequest } from '@/app/lib/api/client';
-import { useAuth } from '@/app/providers';
-
-type License = { plan_id?:string|null;plan_version?:number|null;max_users?:number|null; id:string;license_type:string;status:string;documents_limit:number;documents_used:number;start_date:string;end_date:string|null;renewal_date:string;max_consumer_units:number;document_management:boolean;advanced_analytics:boolean;report_generation:boolean;free_market_management:boolean };
-const modules=[['documentManagement','document_management','Documentos'],['advancedAnalytics','advanced_analytics','Análises avançadas'],['reportGeneration','report_generation','Relatórios'],['freeMarketManagement','free_market_management','Gestão do mercado livre']] as const;
+import {Alert,Button,Card,Input} from '@/app/components/ui';
+import {apiRequest} from '@/app/lib/api/client';
+import {planModules} from '@/app/lib/api/plans';
+import {useAuth} from '@/app/providers';
+type Upgrade={id:string;note:string;created_at:string};
+type Usage={used:{users:number;units:number;documents:number};license:PlanLicense|null;requests:Upgrade[];updatedAt:string};
 function Licenses(){
- const {hasPermission}=useAuth();
- const [rows,setRows]=useState<License[]>([]),[editing,setEditing]=useState<License|null>(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true);
+ const {context,hasPermission}=useAuth();const platform=context?.scope!=='global'&&context?.accessMode==='platform_operation';
  const view=hasPermission('8c5673e4-115c-4ab7-bb11-3b410eddcad3');
- const create=hasPermission('c8cf7769-bfe2-4383-b3e4-f45619724c50'),update=hasPermission('5a645f0d-8c70-42c2-b7d6-631371d3a613');
- useEffect(()=>{let cancelled=false;if(!view)return;apiRequest<License[]>('/api/v1/licenses').then(r=>{if(!cancelled)setRows(r);}).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setLoading(false);});return()=>{cancelled=true;};},[view]);
- async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(busy)return;const form=e.currentTarget,f=new FormData(form);const body:Record<string,unknown>={};
-  for(const key of ['licenseType','startDate','renewalDate'])body[key]=String(f.get(key)||'').trim();
-  if(f.get('endDate'))body.endDate=String(f.get('endDate'));
-  body.documentsLimit=Number(f.get('documentsLimit'));body.maxConsumerUnits=Number(f.get('maxConsumerUnits'));
-  for(const [key] of modules)body[key]=f.has(key);if(editing)body.status=String(f.get('status'));
-  setBusy(true);setError('');setMessage('');
-  try{await apiRequest('/api/v1/licenses'+(editing?'/'+encodeURIComponent(editing.id):''),{method:editing?'PATCH':'POST',body});setRows(await apiRequest<License[]>('/api/v1/licenses'));setEditing(null);form.reset();setMessage('Licença salva. Os módulos continuam sujeitos à disponibilidade de cada funcionalidade.');}
-  catch(ex){setError(ex instanceof Error?ex.message:'Falha ao salvar.');}finally{setBusy(false);}
- }
+ const [rows,setRows]=useState<PlanLicense[]>([]),[usage,setUsage]=useState<Usage|null>(null),[editing,setEditing]=useState<PlanLicense|null>(null),[creating,setCreating]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ const load=useCallback(()=>Promise.all([apiRequest<PlanLicense[]>('/api/v1/licenses'),apiRequest<Usage>('/api/v1/licenses/usage')]).then(([r,u])=>{setRows(r);setUsage(u);setError('');}).catch(e=>{setUsage(null);setError(e instanceof Error?e.message:'Não foi possível consultar o consumo.');}),[]);
+ useEffect(()=>{if(!view)return;void load();const refresh=()=>{if(document.visibilityState==='visible')void load();};window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);const timer=window.setInterval(refresh,30000);return()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);window.clearInterval(timer);};},[view,load]);
+ async function request(e:FormEvent<HTMLFormElement>){e.preventDefault();if(busy)return;const note=String(new FormData(e.currentTarget).get('note')||'');setBusy(true);setError('');try{await apiRequest('/api/v1/licenses/upgrade-requests',{method:'POST',body:{note}});setMessage('Solicitação registrada para o administrador da plataforma.');await load();}catch(e){setError(e instanceof Error?e.message:'Falha ao solicitar upgrade.');}finally{setBusy(false);}}
  if(!view)return <p>Acesso à licença não autorizado.</p>;
- return <section className="backoffice-page"><h1>Licença e módulos</h1><p>Configure a licença da organização ativa. Uma licença não substitui as permissões dos usuários.</p>
- {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
- {create?<LicenseFromPlan onCreated={async()=>{setRows(await apiRequest<License[]>('/api/v1/licenses'));}}/>:null}
- {loading?<p>Carregando licenças...</p>:rows.map(l=><Card key={l.id} title={l.license_type}><p>{l.plan_id?'Plano aplicado: versão '+l.plan_version:'Licença personalizada'} · Limite de usuários: {l.max_users??'não definido'}</p><p>Status: {l.status} · Documentos: {l.documents_used||0}/{l.documents_limit}</p><p>Vigência: {l.start_date} a {l.end_date||'sem término definido'}</p>{update?<Button variant="secondary" disabled={busy} onClick={()=>{setEditing(l);setMessage('');}}>Editar licença</Button>:null}</Card>)}
- {(editing?update:create)?<Card title={editing?'Editar licença':'Nova licença'}><form key={editing?.id||'new'} onSubmit={save} className="organizations-create__form">
- <Input label="Plano / tipo de licença" name="licenseType" required defaultValue={editing?.license_type||''} disabled={busy}/>
- <Input label="Início da vigência" name="startDate" type="date" required defaultValue={editing?.start_date||''} disabled={busy}/>
- <Input label="Término da vigência" name="endDate" type="date" defaultValue={editing?.end_date||''} disabled={busy}/>
- <Input label="Data de renovação" name="renewalDate" type="date" required defaultValue={editing?.renewal_date||''} disabled={busy}/>
- <Input label="Limite de documentos" name="documentsLimit" type="number" min={0} step={1} required defaultValue={editing?.documents_limit??100} disabled={busy}/>
- <Input label="Limite de unidades consumidoras" name="maxConsumerUnits" type="number" min={0} step={1} required defaultValue={editing?.max_consumer_units??10} disabled={busy}/>
- {modules.map(([key,column,label])=><label key={key}><input type="checkbox" name={key} defaultChecked={editing?.[column]??false} disabled={busy}/> {label}</label>)}
- <p>Análises avançadas e relatórios ainda dependem da implementação dos respectivos módulos.</p>
- {editing?<label>Status<select className="ds-input" name="status" defaultValue={editing.status.toLowerCase()} disabled={busy}><option value="active">Ativa</option><option value="suspended">Suspensa</option><option value="expired">Expirada</option><option value="cancelled">Cancelada</option></select></label>:null}
- <Button type="submit" disabled={busy}>{busy?'Salvando...':'Salvar licença'}</Button>{editing?<Button variant="secondary" disabled={busy} onClick={()=>setEditing(null)}>Cancelar edição</Button>:null}
- </form></Card>:null}</section>;
+ const l=usage?.license;
+ return <section className="backoffice-page"><h1>{platform?'Licença e módulos':'Meu plano e consumo'}</h1><p>Planos, limites e módulos são definidos exclusivamente pelo administrador da plataforma.</p>{error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}<Button variant="secondary" onClick={()=>void load()}>Atualizar consumo</Button>
+ {usage?<Card title={l?l.license_type:'Sem licença vigente'}>{l&&!l.plan_id?<Alert>Licença anterior ao catálogo. O administrador da plataforma deve selecionar um plano para permitir novos cadastros. Os registros existentes foram preservados.</Alert>:null}{!l?<p>Solicite ao administrador da plataforma uma licença vigente para novos cadastros.</p>:null}<table><thead><tr><th>Recurso</th><th>Contratado</th><th>Utilizado</th><th>Disponível</th></tr></thead><tbody>{([['users','Usuários ativos',l?.max_users,false],['units','Unidades cadastradas',l?.max_consumer_units,false],['documents','Documentos mantidos',l?.documents_limit,l?.documents_unlimited]] as const).map(([key,label,cap,unlimited])=><tr key={key}><td>{label}</td><td>{unlimited?'Ilimitado':cap??'Não definido'}</td><td>{usage.used[key]}</td><td>{unlimited?'Ilimitado':cap==null?'—':Math.max(0,cap-usage.used[key])}</td></tr>)}</tbody></table><p>Usuários internos e externos com vínculo ativo ocupam vaga. Unidades inativas continuam contabilizadas. Documentos não têm renovação mensal.</p>{l?<p>Módulos liberados: {planModules.filter(([k])=>l[k]).map(([,name])=>name).join(', ')||'Nenhum'}</p>:null}<p>Atualizado em {new Date(usage.updatedAt).toLocaleString('pt-BR')}.</p></Card>:null}
+ {usage?.requests.map(r=><Card key={r.id} title="Upgrade solicitado — aguardando análise"><p>{r.note}</p><p>{new Date(r.created_at).toLocaleString('pt-BR')}</p></Card>)}
+ {!platform&&usage&&!usage.requests.length?<Card title="Solicitar upgrade"><form onSubmit={request} className="organizations-create__form"><Input label="O que sua organização precisa ampliar?" name="note" required minLength={3} maxLength={2000} disabled={busy}/><Button type="submit" disabled={busy}>Enviar solicitação</Button></form></Card>:null}
+ {platform?<><Button disabled={busy} onClick={()=>{setEditing(null);setCreating(true);}}>Criar licença com plano</Button>{creating||editing?<LicenseFromPlan key={editing?.id||'new'} editing={editing} onCancel={()=>{setCreating(false);setEditing(null);}} onCreated={async()=>{setCreating(false);setEditing(null);await load();}}/>:null}</>:null}
+ <h2>Licenças da organização</h2>{rows.map(row=><Card key={row.id} title={row.license_type}><p>{row.plan_id?'Plano aplicado — versão '+row.plan_version:'Regularização de plano pendente'} · {row.status}</p><p>Vigência: {row.start_date} a {row.end_date||'sem término definido'}</p>{platform?<Button variant="secondary" onClick={()=>{setCreating(false);setEditing(row);}}>{row.plan_id?'Alterar plano / licença':'Selecionar plano e regularizar'}</Button>:null}</Card>)}</section>;
 }
 export default function Page(){const {context}=useAuth();const id=context&&context.scope!=='global'?context.currentOrganization.id:'';return <ProtectedRoute><BackofficeShell>{id?<Licenses key={id}/>:<p>Selecione uma organização na administração da plataforma.</p>}</BackofficeShell></ProtectedRoute>;}

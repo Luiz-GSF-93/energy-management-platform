@@ -29,7 +29,7 @@ export default function DashboardPage() {
               <Link href="/backoffice/organizations">Gerenciar organizações</Link>
             </> : <>
               <p>Você está trabalhando em {context?.currentOrganization.name || context?.currentOrganization.id}. Os dados e as ações ficam vinculados a essa organização.</p>
-              {hasPermission('8c5673e4-115c-4ab7-bb11-3b410eddcad3') ? <p><Link href="/backoffice/licenses">Configurar licença e módulos</Link></p> : null}
+              {hasPermission('8c5673e4-115c-4ab7-bb11-3b410eddcad3') ? <p><Link href="/backoffice/licenses">Consultar plano, consumo e módulos</Link></p> : null}
               {hasPermission('cbb2e904-0718-4eec-9396-dba899118cdd') ? <p><Link href="/backoffice/setup">Cadastrar clientes e unidades</Link></p> : null}
               {hasPermission('60f9690a-145b-4dba-b23f-9f945baca296') ? <p><Link href="/backoffice/contracts">Cadastrar e consultar contratos</Link></p> : null}
               {hasPermission('8f105b02-4443-49de-b188-847e0284e7ed') ? <p><Link href="/backoffice/documents">Enviar e consultar documentos</Link></p> : null}

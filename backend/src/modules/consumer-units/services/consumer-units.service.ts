@@ -35,6 +35,9 @@ export class ConsumerUnitsService {
   }
 
   private fail(error: { code?: string }) {
+    if(error.code==='P3392')throw new ConflictException('O administrador da plataforma precisa vincular esta licença a um plano antes de novos cadastros.');
+    if(error.code==='P3391')throw new ConflictException('Limite de unidades atingido. Solicite upgrade do plano ao administrador da plataforma.');
+    if(error.code==='P3390')throw new ConflictException('É necessária uma licença ativa para cadastrar unidades.');
     if (error.code === '23505') throw new ConflictException('Consumer unit already exists in this organization');
     if (error.code === '23503') throw new ConflictException('Consumer unit has related records or its customer is unavailable');
     if (['23502', '23514', '22001', '22P02', 'P3281'].includes(error.code || '')) {
