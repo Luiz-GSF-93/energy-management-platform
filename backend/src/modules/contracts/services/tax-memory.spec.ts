@@ -69,3 +69,24 @@ describe('sequential tax composition',()=>{
  it('does not silently ignore dependencies in independent mode',()=>{const p=ind();p.tax_basis={...p.tax_basis,taxes:[{parameterId:'b',revision:2}]};expect(run([tariff,p]).lines).toEqual([]);});
  it('keeps zero tax as an explicit numeric dependency',()=>expect(line([tariff,ind({amount_text:'0'}),seq()])?.amount).toBe('10.00'));
 });
+
+describe('explicit common-base inside group',()=>{
+ const grouped=(patch:any={},codes=['ICMS','PIS'])=>({...tax(),...patch,tax_basis:{...tax().tax_basis,interaction:'SHARED_INSIDE',groupCodes:codes}});
+ const peer=(patch:any={})=>grouped({id:'pis',label:'PIS',component_code:'PIS',amount_text:'5',...patch});
+ it('uses the declared common denominator and traces every revision',()=>{const r=run([tariff,grouped(),peer()]);expect(r.pending).toEqual([]);expect(r.lines.map(l=>l.amount).sort()).toEqual(['26.67','6.67']);expect(r.lines[0]).toMatchObject({combinedRate:'25.000000',divisor:'0.75000000'});expect(r.lines[0].sharedGroup).toHaveLength(2);});
+ it('retains exact recurring result instead of rounded group sum',()=>{const r=run([tariff,grouped(),peer()]);const l=r.lines.find(l=>l.code==='ICMS')!;expect(BigInt(l.numerator)*3n).toBe(BigInt(l.denominator)*80n);});
+ it('is deterministic across input and group code order',()=>expect(run([peer(),tariff,grouped({},['PIS','ICMS'])])).toEqual(run([tariff,grouped(),peer()])));
+ it('blocks every member if another is missing',()=>blocked(run([tariff,grouped()])));
+ it.each(['organization_id','customer_id','consumer_unit_id','scenario'])('never completes a group from another %s',key=>blocked(run([tariff,grouped(),peer({[key]:'foreign'})])));
+ it('requires matching group declarations',()=>{const q=peer();q.tax_basis.groupCodes=['ICMS','PIS','COFINS'];blocked(run([tariff,grouped(),q]));});
+ it.each(['DRAFT','RETIRED'])('blocks group when a peer is %s',status=>blocked(run([tariff,grouped(),peer({status})])));
+ it('blocks different approved vigencies even if both cover the month',()=>blocked(run([tariff,grouped(),peer({start_date:'2026-02-01'})])));
+ it('blocks different rubric identities despite identical monetary values',()=>{const q=peer();q.tax_basis.items=[{parameterId:'other',revision:2,operation:'INCLUDE'}];blocked(run([tariff,{...tariff,id:'other',component_code:'TUSD_ENERGY'},grouped(),q]));});
+ it('blocks a peer with stale reference revision',()=>{const q=peer();q.tax_basis.items[0].revision=999;blocked(run([tariff,grouped(),q]));});
+ it('requires all group treatments to be inside',()=>blocked(run([tariff,grouped(),peer({treatment:'OUTSIDE'})])));
+ it.each(['80','90'])('rejects combined rate reaching or exceeding 100: %s',amount_text=>blocked(run([tariff,grouped(),peer({amount_text})])));
+ it('preserves explicit zero rates',()=>{const r=run([tariff,grouped({amount_text:'0'}),peer({amount_text:'0'})]);expect(r.lines.every(l=>l.amount==='0.00'&&l.divisor==='1.00000000')).toBe(true);expect(r.lines).toHaveLength(2);});
+ it.each([[],['ICMS'],['ICMS','ICMS'],['PIS','COFINS'],['ICMS','invalid']].map(codes=>({codes})))('rejects invalid group %j',({codes})=>blocked(run([tariff,grouped({},codes)])));
+ it('supports an explicitly sequenced tax using a grouped predecessor',()=>{const c={...tax(),id:'c',component_code:'COFINS',amount_text:'10',treatment:'OUTSIDE',tax_basis:{...tax().tax_basis,interaction:'SEQUENTIAL',taxes:[{parameterId:'t',revision:2}]}};const r=run([tariff,grouped(),peer(),c]);expect(r.lines.find(l=>l.id==='c')?.amount).toBe('12.67');});
+ it('does not infer group from textual justification',()=>blocked(run([tariff,{...tax(),base_rule:'Joint ICMS PIS'},peer()])));
+});

@@ -24,7 +24,7 @@ export function composeTaxes(result:TaxMemory,taxes:any[]):TaxMemory{
   try{
    let base=fraction(BigInt(line.exactBase.replace('.','')),SCALE);const sources:NonNullable<Line['taxReferences']>=[];
    for(const ref of refs){const matches=taxes.filter(t=>t.id===ref.parameterId),dep=matches[0];
-    if(matches.length!==1||dep.id===p.id||dep.organization_id!==p.organization_id||dep.customer_id!==p.customer_id||dep.consumer_unit_id!==p.consumer_unit_id||dep.scenario!==p.scenario||dep.component_code===p.component_code||dep.status!=='APPROVED'||dep.revision!==ref.revision||dep.start_date>p.start_date||dep.end_date<p.end_date||!['INDEPENDENT','SEQUENTIAL'].includes(dep.tax_basis?.interaction))return reject('Tributo referenciado indisponível, alterado ou fora da vigência. Revise a composição.');
+    if(matches.length!==1||dep.id===p.id||dep.organization_id!==p.organization_id||dep.customer_id!==p.customer_id||dep.consumer_unit_id!==p.consumer_unit_id||dep.scenario!==p.scenario||dep.component_code===p.component_code||dep.status!=='APPROVED'||dep.revision!==ref.revision||dep.start_date>p.start_date||dep.end_date<p.end_date||!['INDEPENDENT','SEQUENTIAL','SHARED_INSIDE'].includes(dep.tax_basis?.interaction))return reject('Tributo referenciado indisponível, alterado ou fora da vigência. Revise a composição.');
     const value=resolve(dep.id,depth+1);if(!value)return reject('Um tributo da composição possui pendência; nenhum valor foi emitido para esta regra.');
     base=add(base,{n:BigInt(value.numerator),d:BigInt(value.denominator)});
     sources.push({id:dep.id,revision:dep.revision,code:dep.component_code,amount:value.amount,numerator:value.numerator,denominator:value.denominator});
