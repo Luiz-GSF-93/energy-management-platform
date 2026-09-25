@@ -1,0 +1,23 @@
+import {prepareMeasurements} from './preparation-measurements';
+import {normalizeMeasurements} from './monthly-inputs';
+const u={id:'u',organization_id:'o',customer_id:'c',tariff_group:'A',tariff_modality:'GREEN'};
+const row={id:'m',organization_id:'o',customer_id:'c',consumer_unit_id:'u',month:'2026-08',version:1,revision:2,status:'VALIDATED',validated_at:'2026-09-01',validated_by:'actor',source_reference:'Fatura',unit_context:{tariff_group:'A',tariff_modality:'GREEN'},measurements:normalizeMeasurements({consumptionTotal:'0.3',consumptionPeak:'0.1',consumptionOffPeak:'0.2',demandSingle:'0'})};
+const run=(rows:any[]=[row],unit:any=u)=>prepareMeasurements(unit,'2026-08',rows);
+const codes=(r:any)=>r.findings.map((f:any)=>f.code);
+describe('monthly measurements in preparation',()=>{
+ it('reports absence without inventing zero',()=>{expect(run([]).status).toBe('MISSING');expect(codes(run([]))).toContain('MEASUREMENTS_MISSING');});
+ it.each(['organization_id','customer_id','consumer_unit_id','month'])('excludes foreign %s',key=>expect(run([{...row,[key]:'foreign'}]).validatedVersion).toBeNull());
+ it('accepts exact decimals and measured zero',()=>{expect(run().findings).toEqual([]);expect(run().validatedVersion?.measurements.demandSingle).toBe('0');});
+ it('flags first draft',()=>expect(codes(run([{...row,status:'DRAFT'}]))).toContain('MEASUREMENTS_DRAFT'));
+ it('blocks pending correction while identifying previous validated version',()=>{const r=run([row,{...row,id:'next',version:2,status:'DRAFT'}]);expect(r.status).toBe('DRAFT_PENDING');expect(r.validatedVersion?.id).toBe('m');expect(codes(r)).toContain('MEASUREMENTS_DRAFT');});
+ it('selects latest validated version independent of ordering',()=>expect(run([row,{...row,id:'v2',version:2}]).validatedVersion?.id).toBe('v2'));
+ it('detects duplicate versions',()=>expect(codes(run([row,row]))).toContain('MEASUREMENTS_HISTORY'));
+ it('detects stale electrical context',()=>expect(codes(run([row],{...u,state:'SP'}))).toContain('MEASUREMENTS_CONTEXT'));
+ it('detects missing validation evidence',()=>expect(codes(run([{...row,validated_by:null}]))).toContain('MEASUREMENTS_EVIDENCE'));
+ it('does not accept total-only measurement for green modality',()=>expect(codes(run([{...row,measurements:normalizeMeasurements({consumptionTotal:'10'})}]))).toEqual(expect.arrayContaining(['MEASUREMENTS_BANDS','MEASUREMENTS_DEMAND'])));
+ it('requires both blue demand bands',()=>expect(codes(run([{...row,unit_context:{...row.unit_context,tariff_modality:'BLUE'}}],{...u,tariff_modality:'BLUE'}))).toContain('MEASUREMENTS_DEMAND'));
+ it('does not invent required group B demand',()=>expect(codes(run([{...row,unit_context:{tariff_group:'B',tariff_modality:'CONVENTIONAL'},measurements:normalizeMeasurements({consumptionTotal:'0'})}],{...u,tariff_group:'B',tariff_modality:'CONVENTIONAL'}))).not.toContain('MEASUREMENTS_DEMAND'));
+ it.each([null,{}, {consumptionTotal:'NaN'}, {...row.measurements,consumptionTotal:12}])('fails closed on malformed measurements',m=>expect(run([{...row,measurements:m}]).status).toBe('INVALID'));
+ it('rejects inconsistent sum',()=>expect(codes(run([{...row,measurements:{...row.measurements,consumptionTotal:'0.4'}}]))).toContain('MEASUREMENTS_INCONSISTENT'));
+ it('does not mutate input',()=>{const before=JSON.stringify(row);run();expect(JSON.stringify(row)).toBe(before);});
+});
