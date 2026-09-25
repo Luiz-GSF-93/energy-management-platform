@@ -8,6 +8,7 @@ import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
 
+import {CorrectionContext} from './preparation-navigation';
 type Contract=SupplyTerms & OperatingTerms & {id:string;customer_id:string;consumer_unit_id:string;contract_number:string;contract_type:string;contracted_volume_mwh:number;current_price:number;start_date:string;end_date:string;status:string;supplier_id?:string;energy_source?:string;adjustment_index?:string;adjustment_frequency?:string;notes?:string};
 type Customer={id:string;company_name:string};
 type Unit={id:string;customer_id:string;name:string;consumer_unit_number:string};
@@ -17,7 +18,7 @@ const types:Record<string,string>={ENERGY_PURCHASE:'Compra de energia',ENERGY_SA
 const frequencies:Record<string,string>={ANNUAL:'Anual',SEMIANNUAL:'Semestral',QUARTERLY:'Trimestral',MONTHLY:'Mensal',CUSTOM:'Personalizado'};
 const date=(value:string)=>value?.slice(0,10).split('-').reverse().join('/')||'—';
 const number=(value:number)=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:6});
-export default function SupplyContracts({customerId,onDirty,allowNew=true}:{allowNew?:boolean;customerId:string;onDirty:(dirty:boolean)=>void}){
+export default function SupplyContracts({customerId,onDirty,allowNew=true,initialContext}:{initialContext?:CorrectionContext;allowNew?:boolean;customerId:string;onDirty:(dirty:boolean)=>void}){
  const {hasPermission}=useAuth();
  const view=hasPermission(P.view),create=hasPermission(P.create),update=hasPermission(P.update),viewCustomers=hasPermission(P.customers),viewUnits=hasPermission(P.units);
  const [rows,setRows]=useState<Contract[]>([]),[customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]);
@@ -59,7 +60,7 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true}:{allo
  catch(e){setError(e instanceof Error?e.message:'Não foi possível ativar.');}finally{pending.current=false;setBusy(false);}}
  if(!view)return <p>Acesso não autorizado aos contratos.</p>;
  const legacy=rows.filter(c=>!['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&(!filter||c.customer_id===filter));
- const visible=rows.filter(c=>['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&(!filter||c.customer_id===filter)&&(!query||(c.contract_number+' '+(c.supplier_id||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+ const visible=rows.filter(c=>(!initialContext||c.consumer_unit_id===initialContext.unitId)&&(!initialContext?.recordId||c.id===initialContext.recordId)&&['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&(!filter||c.customer_id===filter)&&(!query||(c.contract_number+' '+(c.supplier_id||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase())));
  return <section className="backoffice-page"><h2>Fornecedor Mercado Livre</h2><p>Contratos da organização ativa, vinculados a clientes e unidades consumidoras. O acesso exige licença vigente com Gestão do Mercado Livre.</p>
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}{lookupError?<Alert variant="error">{lookupError}</Alert>:null}
  <Button variant="secondary" disabled={busy||loading} onClick={()=>{setLoading(true);setError('');setLookupError('');setRevision(v=>v+1);}}>Atualizar lista</Button>

@@ -686,3 +686,5 @@ a {
 .session-notice {position:sticky;top:0;z-index:100;padding:16px 24px;background:#283044;color:#f1f5f9;border:2px solid #facc15;}
 .session-notice button {padding:8px 16px;background:#59cbe8;color:#07111f;border-radius:6px;margin:8px 0;}
 .session-notice input {max-width:360px;}
+
+.preparation-finding-link{font:inherit;color:inherit;text-align:left;background:transparent;border:0;padding:4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;line-height:1.6;width:100%}.preparation-finding-link:hover{color:#55c7e1}.preparation-finding-link:focus-visible{outline:2px solid #55c7e1;outline-offset:3px;border-radius:4px}
