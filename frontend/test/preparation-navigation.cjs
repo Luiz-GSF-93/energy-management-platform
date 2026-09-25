@@ -26,7 +26,7 @@ await act(async()=>root.render(React.createElement('div')));calls=[];await act(a
 await act(async()=>root.render(React.createElement('div')));
 const Params=require('../app/backoffice/contracts/CalculationParameters.tsx').default;
 const param={id:'p',customer_id:'c',consumer_unit_id:'u',kind:'TAX',component_code:'ICMS',label:'ICMS selecionado',scenario:'ACL',time_band:'ALL',measure:'PERCENT',amount_text:'18',treatment:'INSIDE',direction:'DEBIT',base_rule:'',start_date:'2026-01-01',end_date:'2026-12-31',status:'DRAFT',revision:1,source:'Fonte',unit_context:{}};
-parameterRows=[{...param,id:'base-tariff',kind:'TARIFF',component_code:'TE',label:'Base aprovada',status:'APPROVED',treatment:'NET',measure:'BRL_KWH',amount_text:'1'},param,{...param,id:'p2',scenario:'ACR',label:'Outro cenário'},{...param,id:'p3',consumer_unit_id:'other-unit',label:'Outra unidade'}];calls=[];
+parameterRows=[{...param,id:'tax-origin',component_code:'PIS',label:'PIS de origem',status:'APPROVED',tax_basis:{version:1,interaction:'INDEPENDENT',items:[]}},{...param,id:'base-tariff',kind:'TARIFF',component_code:'TE',label:'Base aprovada',status:'APPROVED',treatment:'NET',measure:'BRL_KWH',amount_text:'1'},param,{...param,id:'p2',scenario:'ACR',label:'Outro cenário'},{...param,id:'p3',consumer_unit_id:'other-unit',label:'Outra unidade'}];calls=[];
 await act(async()=>root.render(React.createElement(Params,{customerId:'c',units,initialContext:target,onDirty:()=>{}})));
 ok(document.body.textContent.includes('ICMS selecionado')&&!document.body.textContent.includes('Outro cenário')&&!document.body.textContent.includes('Outra unidade'),'parameter list scoped by unit scenario and tax');
 ok(!document.querySelector('form'),'existing parameters shown before new form');
@@ -42,5 +42,7 @@ const rubric=Array.from(document.querySelectorAll('label')).find(l=>l.textConten
 await change(rubric,'INCLUDE');ok(rule().value==='INDEPENDENT','changing base preserves explicit rule');
 await change(rule(),'');ok(rule().value===''&&rubric.value==='INCLUDE','clearing interaction preserves rubric');
 await change(rule(),'INDEPENDENT');const scenario=Array.from(document.querySelectorAll('label')).find(l=>l.firstChild?.textContent==='Cenário').querySelector('select');await change(scenario,'ACR');ok(rule().value==='','changing scenario clears interaction and base');
+await change(scenario,'ACL');await change(rule(),'SEQUENTIAL');ok(document.body.textContent.includes('Tributos que integram esta base'),'sequential source selector visible');
+const origin=()=>Array.from(document.querySelectorAll('label')).find(l=>l.textContent.startsWith('PIS de origem'))?.querySelector('input[type=checkbox]');ok(origin()&&!origin().checked,'approved origin available and never preselected');await act(async()=>origin().click());ok(origin().checked,'explicit source selected');await change(rule(),'INDEPENDENT');await change(rule(),'SEQUENTIAL');ok(!origin().checked,'mode change clears old tax references');ok(calls.every(c=>!c.options),'composing form sends no writes before save');
 console.log(checks+' preparation navigation checks passed');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
