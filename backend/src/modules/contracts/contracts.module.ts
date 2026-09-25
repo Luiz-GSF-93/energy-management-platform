@@ -1,3 +1,5 @@
+import {MonthlyCostsController} from './controllers/monthly-costs.controller';
+import {MonthlyCostsService} from './services/monthly-costs.service';
 import {MonthlyInputsController} from './controllers/monthly-inputs.controller';
 import {MonthlyInputsService} from './services/monthly-inputs.service';
 import {CalculationPreparationController} from './controllers/preparation.controller';
@@ -14,8 +16,8 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule],
-  controllers: [MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
-  providers: [MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
+  controllers: [MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
 export class ContractsModule {}

@@ -1,0 +1,21 @@
+import 'reflect-metadata';
+import {costIssues,normalizeCosts} from './monthly-costs';
+import {MonthlyCostDto} from '../dto/monthly-costs.dto';
+import {validateWriteDto} from '../../../common/validation/validate-write-dto';
+import {MonthlyCostsController} from '../controllers/monthly-costs.controller';
+import {PERMISSIONS_KEY} from '../../../common/decorators/require-permission.decorator';
+import {PERMISSIONS as P} from '../../../common/constants/permissions';
+const item={id:'10000000-0000-4000-8000-000000000001',label:' Encargo ',category:'CCEE',scenario:'ACL',effect:'COST',amount:'0.01',source:' Relatório ',taxTreatment:'INCLUDED'};
+const c={noCosts:false,items:[item]};
+describe('monthly costs',()=>{
+ it('preserves cents and large amounts as strings',()=>{expect(normalizeCosts(c).items[0].amount).toBe('0.01');expect(normalizeCosts({...c,items:[{...item,amount:'999999999999.99'}]}).items[0].amount).toBe('999999999999.99');});
+ it('trims evidence without mutating input',()=>{const before=JSON.stringify(c);expect(normalizeCosts(c).items[0].source).toBe('Relatório');expect(JSON.stringify(c)).toBe(before);});
+ it('does not treat an unreviewed empty list as zero',()=>{expect(costIssues({noCosts:false,items:[]},false)).toEqual([]);expect(costIssues({noCosts:false,items:[]},true)).toHaveLength(1);});
+ it('accepts explicit reviewed absence',()=>expect(costIssues({noCosts:true,items:[]},true)).toEqual([]));
+ it('rejects absence with items',()=>expect(costIssues({...c,noCosts:true})).toHaveLength(1));
+ it('requires unique item ids',()=>expect(costIssues({...c,items:[item,item]})).toHaveLength(1));
+ it('blocks validation of unspecified tax treatment',()=>expect(costIssues({...c,items:[{...item,taxTreatment:'UNSPECIFIED'}]},true)).toHaveLength(1));
+ it.each(['COST','CREDIT'])('accepts explicit zero for %s',effect=>expect(costIssues({...c,items:[{...item,effect,amount:'0'}]},true)).toEqual([]));
+ it.each(['ACL','ACR'])('accepts scenario %s',async scenario=>{const r=await validateWriteDto(MonthlyCostDto,{consumerUnitId:item.id,month:'2026-09',costs:{...c,items:[{...item,scenario}]},sourceReference:'Documento',notes:'',correctionReason:''});expect(r.costs.items[0].scenario).toBe(scenario);});
+ it.each([['list',P.ORGANIZATION_CONTRACTS_VIEW],['events',P.ORGANIZATION_CONTRACTS_VIEW],['create',P.ORGANIZATION_CONTRACTS_CREATE],['update',P.ORGANIZATION_CONTRACTS_UPDATE],['validate',P.ORGANIZATION_CONTRACTS_UPDATE]])('protects %s', (method,permission)=>expect(Reflect.getMetadata(PERMISSIONS_KEY,MonthlyCostsController.prototype[method as keyof MonthlyCostsController])).toEqual([permission]));
+});
