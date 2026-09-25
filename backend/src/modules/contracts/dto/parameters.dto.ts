@@ -1,5 +1,18 @@
-import {IsString,IsUUID,IsIn,IsInt,Min,MaxLength,Matches,IsDateString,IsOptional} from 'class-validator';
+import {IsString,IsUUID,IsIn,IsInt,Min,MaxLength,Matches,IsDateString,IsOptional,IsObject, IsArray,ArrayMaxSize,ArrayUnique,ValidateNested} from 'class-validator';
+import {Type} from 'class-transformer';
+export class BaseItemDto {
+ @IsUUID() parameterId!:string;
+ @IsInt() @Min(1) revision!:number;
+ @IsIn(['INCLUDE','EXCLUDE']) operation!:string;
+}
+export class TaxBasisDto {
+ @IsIn([1]) version!:number;
+ @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>BaseItemDto) items!:BaseItemDto[];
+}
 export class ParameterDto {
+ @IsOptional() @IsObject() @ValidateNested() @Type(()=>TaxBasisDto) taxBasis?:TaxBasisDto|null;
+ @IsOptional() @IsArray() @ArrayMaxSize(20) @ArrayUnique() @Matches(/^(ICMS|PIS|COFINS|IOF|OTHER_[A-Z0-9_]+)$/,{each:true}) embeddedTaxCodes?:string[];
+
  @IsUUID() consumerUnitId!:string;
  @IsIn(['TARIFF','TAX','COST']) kind!:string;
  @IsString() @Matches(/^[A-Z][A-Z0-9_]{0,39}$/) componentCode!:string;
