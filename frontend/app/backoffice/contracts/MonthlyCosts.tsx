@@ -1,9 +1,10 @@
 'use client';
-import {FormEvent,useState} from 'react';
+import {FormEvent,useEffect,useState} from 'react';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
 import {Unit,PERM} from './types';
+import {CorrectionContext} from './preparation-navigation';
 const categories={CCEE:'CCEE',EXPOSURE:'Exposição / curto prazo',CHARGE:'Encargos',OTHER:'Outros ajustes'};
 const taxes={UNSPECIFIED:'Pendente de classificação',INCLUDED:'Tributos incluídos no valor',EXCLUDED:'Tributos não incluídos',NOT_APPLICABLE:'Não se aplica'};
 type CostItem={id:string;label:string;category:string;scenario:string;effect:string;amount:string;source:string;taxTreatment:string};
@@ -12,10 +13,11 @@ type Row={id:string;consumer_unit_id:string;month:string;version:number;revision
 type Event={id:string;revision:number;action:string;recorded_at:string;snapshot:Row};
 type Editor={id?:string;revision?:number;previousId:string|null;costs:Costs;sourceReference:string;notes:string;correctionReason:string};
 const blank=():Costs=>({noCosts:false,items:[]});
-export default function MonthlyCosts({customerId,units,onDirty}:{customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
- const {hasPermission}=useAuth();const [unitId,setUnit]=useState(''),[year,setYear]=useState(''),[month,setMonth]=useState('');
- const [rows,setRows]=useState<Row[]|null>(null),[canValidate,setValidate]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[editor,setEditor]=useState<Editor|null>(null),[discard,setDiscard]=useState(false),[confirm,setConfirm]=useState<Row|null>(null),[history,setHistory]=useState<{id:string;events:Event[]}|null>(null);
+export default function MonthlyCosts({customerId,units,onDirty,initialContext}:{initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
+ const {hasPermission}=useAuth();const [unitId,setUnit]=useState(initialContext?.unitId||''),[year,setYear]=useState(initialContext?.month.slice(0,4)||''),[month,setMonth]=useState(initialContext?.month.slice(5,7)||'');
+ const [rows,setRows]=useState<Row[]|null>(null),[canValidate,setValidate]=useState(false),[busy,setBusy]=useState(!!initialContext&&initialContext.customerId===customerId&&units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)),[error,setError]=useState(''),[message,setMessage]=useState(''),[editor,setEditor]=useState<Editor|null>(null),[discard,setDiscard]=useState(false),[confirm,setConfirm]=useState<Row|null>(null),[history,setHistory]=useState<{id:string;events:Event[]}|null>(null);
  const period=year+'-'+month,available=units.filter(u=>u.customer_id===customerId),create=hasPermission(PERM.create),update=hasPermission(PERM.update);
+ useEffect(()=>{if(!initialContext||initialContext.customerId!==customerId||!units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId))return;let cancelled=false;apiRequest<{rows:Row[];canValidate:boolean}>('/api/v1/calculation-monthly-costs?consumerUnitId='+encodeURIComponent(initialContext.unitId)+'&month='+encodeURIComponent(initialContext.month)).then(r=>{if(!cancelled){setRows(r.rows);setValidate(r.canValidate);}}).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Falha na consulta.');}).finally(()=>{if(!cancelled)setBusy(false);});return()=>{cancelled=true;};},[initialContext,customerId,units]);
  function clearResults(){setRows(null);setError('');setMessage('');setConfirm(null);setHistory(null);}
  function close(){setEditor(null);setDiscard(false);onDirty(false);}
  function patch(p:Partial<Editor>){setEditor(d=>d?{...d,...p}:d);onDirty(true);}
