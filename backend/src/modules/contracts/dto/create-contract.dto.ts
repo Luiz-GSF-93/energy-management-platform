@@ -1,6 +1,7 @@
+import {SupplyTermsDto} from './supply-terms.dto';
 import { IsString, IsOptional, IsUUID, IsDateString, IsNumber, IsIn, Min, MaxLength, Matches, ValidateIf } from 'class-validator';
 
-export class CreateContractDto {
+export class CreateContractDto extends SupplyTermsDto {
   @IsUUID()
   consumerUnitId!: string;
   @IsString() @Matches(/\S/) @MaxLength(50)
@@ -36,7 +37,10 @@ export class CreateContractDto {
 }
 
 // Parent, number and start date are immutable; only drafts may be changed.
-export class UpdateContractDto {
+export class UpdateContractDto extends SupplyTermsDto {
+ @IsOptional() @IsString() @MaxLength(50) adjustmentIndex?:string;
+ @IsOptional() @IsDateString({strict:true}) adjustmentDate?:string;
+ @ValidateIf((_o,v)=>v!==undefined) @IsIn(['ANNUAL','SEMIANNUAL','QUARTERLY','MONTHLY','CUSTOM']) adjustmentFrequency?:string;
   @ValidateIf((_o, v) => v !== undefined) @IsDateString({ strict: true })
   endDate?: string;
   @ValidateIf((_o, v) => v !== undefined) @IsNumber() @Min(0)

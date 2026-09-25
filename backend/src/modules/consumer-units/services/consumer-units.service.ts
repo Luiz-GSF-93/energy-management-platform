@@ -9,6 +9,21 @@ export class ConsumerUnitsService {
 
   private toRow(dto: CreateConsumerUnitDto | UpdateConsumerUnitDto) {
     const columns = {
+      contractedDemandPeak: 'contracted_demand_peak',
+      contractedDemandOffPeak: 'contracted_demand_off_peak',
+      demandTariff: 'demand_tariff',
+      demandTariffPeak: 'demand_tariff_peak',
+      demandTariffOffPeak: 'demand_tariff_off_peak',
+      energyTariffPeak: 'energy_tariff_peak',
+      energyTariffOffPeak: 'energy_tariff_off_peak',
+      reactiveEnergyTariff: 'reactive_energy_tariff',
+      lastDemandValue: 'last_demand_value',
+      lastDemandPeak: 'last_demand_peak',
+      lastDemandOffPeak: 'last_demand_off_peak',
+      tariffSubgroup: 'tariff_subgroup',
+      consumptionClass: 'consumption_class',
+      freeMarket: 'free_market',
+      lastDemandAdjustmentDate: 'last_demand_adjustment_date',
       customerId: 'customer_id', name: 'name', code: 'consumer_unit_number',
       distributor: 'distributor', tariffGroup: 'tariff_group', tariffModality: 'tariff_modality',
       contractedDemand: 'contracted_demand', address: 'address', city: 'city', state: 'state',
@@ -22,8 +37,8 @@ export class ConsumerUnitsService {
   private fail(error: { code?: string }) {
     if (error.code === '23505') throw new ConflictException('Consumer unit already exists in this organization');
     if (error.code === '23503') throw new ConflictException('Consumer unit has related records or its customer is unavailable');
-    if (['23502', '23514', '22001', '22P02'].includes(error.code || '')) {
-      throw new BadRequestException('Invalid consumer unit data');
+    if (['23502', '23514', '22001', '22P02', 'P3281'].includes(error.code || '')) {
+      throw new BadRequestException('Dados elétricos inválidos. Confira grupo, subgrupo, demandas e último ajuste.');
     }
     throw new InternalServerErrorException('Unable to access consumer units');
   }

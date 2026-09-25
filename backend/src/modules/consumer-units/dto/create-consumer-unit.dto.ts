@@ -1,6 +1,24 @@
-import { IsString, IsOptional, IsUUID, IsNumber, MaxLength, Matches, Min, IsIn, ValidateIf } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsNumber, MaxLength, Matches, Min, IsIn, ValidateIf, IsBoolean, IsDateString } from 'class-validator';
 
-export class CreateConsumerUnitDto {
+class ElectricalFieldsDto {
+ @IsOptional() @IsIn(['A1','A2','A3','A3a','A4','AS','B1','B2','B3','B4']) tariffSubgroup?: string | null;
+ @IsOptional() @IsIn(['INDUSTRIAL','COMMERCIAL','RURAL','PUBLIC_AUTHORITY','PUBLIC_SERVICE','RESIDENTIAL']) consumptionClass?: string | null;
+ @IsOptional() @IsBoolean() freeMarket?: boolean | null;
+ @IsOptional() @IsDateString({strict:true}) @Matches(/^\d{4}-\d{2}-\d{2}$/) lastDemandAdjustmentDate?: string | null;
+ @IsOptional() @IsNumber() @Min(0) contractedDemandPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) contractedDemandOffPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) demandTariff?: number | null;
+ @IsOptional() @IsNumber() @Min(0) demandTariffPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) demandTariffOffPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) energyTariffPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) energyTariffOffPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) reactiveEnergyTariff?: number | null;
+ @IsOptional() @IsNumber() @Min(0) lastDemandValue?: number | null;
+ @IsOptional() @IsNumber() @Min(0) lastDemandPeak?: number | null;
+ @IsOptional() @IsNumber() @Min(0) lastDemandOffPeak?: number | null;
+}
+
+export class CreateConsumerUnitDto extends ElectricalFieldsDto {
   @IsUUID()
   customerId!: string;
 
@@ -59,7 +77,7 @@ export class CreateConsumerUnitDto {
   voltageClass?: string;
 }
 
-export class UpdateConsumerUnitDto {
+export class UpdateConsumerUnitDto extends ElectricalFieldsDto {
   @IsOptional()
   @IsString()
   @Matches(/\S/)

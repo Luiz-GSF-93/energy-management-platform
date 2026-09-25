@@ -5,6 +5,7 @@ import { validateWriteDto } from '../../../common/validation/validate-write-dto'
 import { LicensesService } from '../../licenses/services/licenses.service';
 
 const columns: Record<string, string> = {
+  annualPrices:'annual_prices', pricingMode:'pricing_mode', adjustmentRule:'adjustment_rule', guaranteeType:'guarantee_type', guaranteeAmount:'guarantee_amount', guaranteeInstitution:'guarantee_institution', guaranteeDescription:'guarantee_description',
   contractNumber: 'contract_number', contractType: 'contract_type',
   contractedVolumeMwh: 'contracted_volume_mwh', currentPrice: 'current_price',
   startDate: 'start_date', endDate: 'end_date', energyType: 'energy_type',
@@ -20,6 +21,8 @@ export class ContractsService {
   private table(name = 'energy_contracts') { return this.supabaseService.getClient().from(name); }
   private check(error: any) {
     if (!error) return;
+    if (error.code === 'P3281') throw new BadRequestException('Confira a tabela de preços, a vigência, a regra de reajuste e os dados da garantia.');
+    if (error.code === 'P3282') throw new ConflictException('Condições de contrato ativado são preservadas.');
     if (error.code === '23505') throw new ConflictException('Já existe um contrato com este número. Use um número único.');
     throw new InternalServerErrorException('Não foi possível consultar ou salvar os contratos.');
   }
