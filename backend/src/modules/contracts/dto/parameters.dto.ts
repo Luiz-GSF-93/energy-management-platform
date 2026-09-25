@@ -10,8 +10,9 @@ export class TaxReferenceDto {
  @IsInt() @Min(1) revision!:number;
 }
 export class TaxBasisDto {
+ @IsOptional() @IsArray() @ArrayMaxSize(20) @ArrayUnique() @Matches(/^(ICMS|PIS|COFINS|IOF|OTHER_[A-Z0-9_]+)$/,{each:true}) groupCodes?:string[];
  @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({each:true}) @Type(()=>TaxReferenceDto) taxes?:TaxReferenceDto[];
- @IsOptional() @IsIn(['INDEPENDENT','SEQUENTIAL']) interaction?:string;
+ @IsOptional() @IsIn(['INDEPENDENT','SEQUENTIAL','SHARED_INSIDE']) interaction?:string;
  @IsIn([1]) version!:number;
  @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>BaseItemDto) items!:BaseItemDto[];
 }
