@@ -1,0 +1,28 @@
+import {supplyReference} from './supply-reference';
+const unit={id:'u',organization_id:'o',customer_id:'c',free_market:true};
+const contract=()=>({id:'s',organization_id:'o',customer_id:'c',consumer_unit_id:'u',contract_type:'ENERGY_PURCHASE',status:'ACTIVE',contract_number:'Contrato teste',start_date:'2026-01-01',end_date:'2026-12-31',seasonality_mode:'MONTHLY',seasonal_volumes:[{year:2026,annualVolumeMwh:'1200',monthlyPercentages:['10','10','10','10','10','10','10','10','10','10','0','0']}],annual_prices:[{startDate:'2026-01-01',endDate:'2026-12-31',pricePerMwh:'250.123456',priceStatus:'FINAL'}]});
+const preview=(c:any=contract(),month='2026-10',prices:any[]=[])=>supplyReference(unit,month,[c],prices);
+describe('supplier contractual reference',()=>{
+ it('calculates explicit monthly percentage and preserves exact product',()=>{const r=preview();expect(r.lines[0]).toMatchObject({volumeMwh:'120.000000000000',amount:'30014.81',exactAmount:'30014.814720000000000000',priceSource:'Tabela contratual por vigência'});expect(r.pending).toEqual([]);});
+ it('rounds half a cent upwards only at monetary display',()=>{const c=contract();c.seasonal_volumes[0].annualVolumeMwh='1';c.annual_prices[0].pricePerMwh='0.05';expect(preview(c).lines[0].amount).toBe('0.01');expect(preview(c).lines[0].exactAmount).toBe('0.005000000000000000');});
+ it('retains fractional MWh without premature rounding',()=>{const c=contract();c.seasonal_volumes[0].annualVolumeMwh='0.000001';c.seasonal_volumes[0].monthlyPercentages=['99.9999','0.0001',...Array(10).fill('0')];c.annual_prices[0].pricePerMwh='999999999999';const r=preview(c,'2026-02');expect(r.lines[0].volumeMwh).toBe('0.000000000001');expect(r.lines[0].amount).toBe('1.00');});
+ it('distinguishes explicit zero allocation from missing data',()=>{expect(preview(contract(),'2026-11').lines[0].amount).toBe('0.00');const c=contract();c.seasonal_volumes=[];expect(preview(c).lines).toEqual([]);});
+ it.each(['organization_id','customer_id','consumer_unit_id'])('isolates %s',key=>{expect(preview({...contract(),[key]:'foreign'}).lines).toEqual([]);});
+ it.each(['DRAFT','PAUSED','EXPIRED'])('does not use %s contract',status=>{expect(preview({...contract(),status}).lines).toEqual([]);});
+ it('does not divide legacy total by twelve',()=>{const r=preview({...contract(),seasonality_mode:'RULE',contracted_volume_mwh:1200});expect(r.lines).toEqual([]);expect(r.pending[0].reason).toContain('dividido por 12');});
+ it('rejects duplicate seasonal year',()=>{const c=contract();c.seasonal_volumes.push(c.seasonal_volumes[0]);expect(preview(c).pending[0].reason).toContain('duplicada');});
+ it.each([[],Array(12).fill('10'),['100.0001',...Array(11).fill('0')],['-1','101',...Array(10).fill('0')],['100.00001',...Array(11).fill('0')]].map(values=>({values})))('rejects malformed percentages $values',({values})=>{const c=contract();c.seasonal_volumes[0].monthlyPercentages=values;expect(preview(c).lines).toEqual([]);});
+ it.each(['-1','1e6','NaN','9007199254740993','0.0000001'])('rejects unsupported annual volume %s',value=>{const c=contract();c.seasonal_volumes[0].annualVolumeMwh=value;expect(preview(c).lines).toEqual([]);});
+ it('rejects monthly allocation outside contract dates',()=>{const c=contract();c.start_date='2026-03-01';expect(preview(c).lines).toEqual([]);});
+ it('rejects partial month contract',()=>{expect(preview({...contract(),start_date:'2026-10-02'}).lines).toEqual([]);});
+ it('rejects concurrent contracts instead of double counting',()=>{expect(supplyReference(unit,'2026-10',[contract(),{...contract(),id:'other'}],[]).lines).toEqual([]);});
+ it('rejects base price',()=>{const c=contract();c.annual_prices[0].priceStatus='BASE';expect(preview(c).lines).toEqual([]);});
+ it('rejects partial price',()=>{const c=contract();c.annual_prices[0].startDate='2026-10-15';expect(preview(c).lines).toEqual([]);});
+ it('rejects duplicate prices',()=>{const c=contract();c.annual_prices.push(c.annual_prices[0]);expect(preview(c).lines).toEqual([]);});
+ it('rejects conflicting price sources',()=>{const r=preview(contract(),'2026-10',[{id:'h',contract_id:'s',start_date:'2026-01-01',end_date:'2026-12-31',price_per_mwh:250}]);expect(r.lines).toEqual([]);expect(r.pending[0].reason).toContain('Concilie');});
+ it('uses isolated historical price with source',()=>{const c=contract();c.annual_prices=[];const r=preview(c,'2026-10',[{id:'h',contract_id:'s',start_date:'2026-01-01',end_date:'2026-12-31',price_per_mwh:250},{id:'other',contract_id:'foreign',price_per_mwh:10}]);expect(r.lines[0].amount).toBe('30000.00');expect(r.lines[0].priceSource).toContain('h');});
+ it.each(['1e2','1.1234567','-1','',null])('rejects malformed price %s',price=>{const c:any=contract();c.annual_prices[0].pricePerMwh=price;expect(preview(c).lines).toEqual([]);});
+ it('requires free-market context',()=>{expect(supplyReference({...unit,free_market:false},'2026-10',[contract()],[]).lines).toEqual([]);});
+ it('retains warnings for mixed text rules and never returns savings',()=>{const r=preview({...contract(),seasonality_mode:'BOTH'});expect(r.lines).toHaveLength(1);expect(r.warnings.join(' ')).toContain('regra textual');expect(r).not.toHaveProperty('savings');expect(r).not.toHaveProperty('total');});
+ it('does not mutate input and is deterministic',()=>{const c=contract(),before=JSON.stringify(c);expect(preview(c)).toEqual(preview(c));expect(JSON.stringify(c)).toBe(before);});
+});
