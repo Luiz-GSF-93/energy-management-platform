@@ -6,6 +6,7 @@ export class BaseItemDto {
  @IsIn(['INCLUDE','EXCLUDE']) operation!:string;
 }
 export class TaxBasisDto {
+ @IsOptional() @IsIn(['INDEPENDENT']) interaction?:string;
  @IsIn([1]) version!:number;
  @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>BaseItemDto) items!:BaseItemDto[];
 }

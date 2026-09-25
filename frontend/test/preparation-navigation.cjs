@@ -26,7 +26,7 @@ await act(async()=>root.render(React.createElement('div')));calls=[];await act(a
 await act(async()=>root.render(React.createElement('div')));
 const Params=require('../app/backoffice/contracts/CalculationParameters.tsx').default;
 const param={id:'p',customer_id:'c',consumer_unit_id:'u',kind:'TAX',component_code:'ICMS',label:'ICMS selecionado',scenario:'ACL',time_band:'ALL',measure:'PERCENT',amount_text:'18',treatment:'INSIDE',direction:'DEBIT',base_rule:'',start_date:'2026-01-01',end_date:'2026-12-31',status:'DRAFT',revision:1,source:'Fonte',unit_context:{}};
-parameterRows=[param,{...param,id:'p2',scenario:'ACR',label:'Outro cenário'},{...param,id:'p3',consumer_unit_id:'other-unit',label:'Outra unidade'}];calls=[];
+parameterRows=[{...param,id:'base-tariff',kind:'TARIFF',component_code:'TE',label:'Base aprovada',status:'APPROVED',treatment:'NET',measure:'BRL_KWH',amount_text:'1'},param,{...param,id:'p2',scenario:'ACR',label:'Outro cenário'},{...param,id:'p3',consumer_unit_id:'other-unit',label:'Outra unidade'}];calls=[];
 await act(async()=>root.render(React.createElement(Params,{customerId:'c',units,initialContext:target,onDirty:()=>{}})));
 ok(document.body.textContent.includes('ICMS selecionado')&&!document.body.textContent.includes('Outro cenário')&&!document.body.textContent.includes('Outra unidade'),'parameter list scoped by unit scenario and tax');
 ok(!document.querySelector('form'),'existing parameters shown before new form');
@@ -34,5 +34,13 @@ await act(async()=>Array.from(document.querySelectorAll('button')).find(b=>b.tex
 const val=label=>Array.from(document.querySelectorAll('label')).find(l=>l.firstChild?.textContent===label)?.querySelector('select')?.value;
 ok(val('Unidade do parâmetro')==='u'&&val('Categoria do parâmetro')==='TAX','missing form context');
 ok(calls.every(c=>!c.options),'opening correction creates no record');
+const rule=()=>Array.from(document.querySelectorAll('label')).find(l=>l.firstChild?.textContent==='Regra para esta unidade e vigência')?.querySelector('select');
+const change=async(el,value)=>{await act(async()=>{el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));});};
+ok(rule()?.value==='','no independent rule selected automatically');
+await change(rule(),'INDEPENDENT');ok(rule().value==='INDEPENDENT','explicit independent rule selected');
+const rubric=Array.from(document.querySelectorAll('label')).find(l=>l.textContent.startsWith('Base aprovada'))?.querySelector('select');
+await change(rubric,'INCLUDE');ok(rule().value==='INDEPENDENT','changing base preserves explicit rule');
+await change(rule(),'');ok(rule().value===''&&rubric.value==='INCLUDE','clearing interaction preserves rubric');
+await change(rule(),'INDEPENDENT');const scenario=Array.from(document.querySelectorAll('label')).find(l=>l.firstChild?.textContent==='Cenário').querySelector('select');await change(scenario,'ACR');ok(rule().value==='','changing scenario clears interaction and base');
 console.log(checks+' preparation navigation checks passed');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -39,3 +39,13 @@ describe('configured isolated tax memory',()=>{
 });
 
 it('does not crash on a malformed peer tax reference',()=>{const r=run([tariff,tax(),{...tax(),id:'peer',component_code:'PIS',tax_basis:{version:1,items:[null]}}]);expect(r.pending.some(p=>p.id==='peer')).toBe(true);});
+
+describe('explicit independent rules per unit and validity',()=>{
+ const independent=(overrides:any={})=>({...tax(),...overrides,tax_basis:{...tax().tax_basis,interaction:'INDEPENDENT'}});
+ it('calculates independent shared base with inside and outside treatments',()=>{const r=run([tariff,independent(),independent({id:'pis',component_code:'PIS',amount_text:'1.65',treatment:'OUTSIDE'})]);expect(r.pending).toEqual([]);expect(r.lines.map(l=>l.amount).sort()).toEqual(['1.65','25.00']);expect(r.lines[0].interaction).toBe('INDEPENDENT');expect(r.lines[0].peers).toHaveLength(1);expect(r.lines[0].peers![0].revision).toBe(2);});
+ it('requires explicit rule on every participating tax',()=>blocked(run([tariff,independent(),{...tax(),id:'pis',component_code:'PIS'}])));
+ it('does not accept unsupported interaction',()=>blocked(run([tariff,{...tax(),tax_basis:{...tax().tax_basis,interaction:'AUTO'}}])));
+ it('does not infer a combined denominator for two inside taxes',()=>{const r=run([tariff,independent(),independent({id:'pis',component_code:'PIS',amount_text:'5'})]);expect(r.lines.map(l=>l.amount).sort()).toEqual(['25.00','5.26']);});
+ it('does not use a rule from another unit or scenario',()=>{const r=run([tariff,tax(),independent({id:'pis',component_code:'PIS',consumer_unit_id:'foreign'})]);expect(r.lines).toHaveLength(1);expect(r.lines[0].peers).toEqual([]);});
+ it('does not bypass monthly validity or reference revisions',()=>{const t=independent({start_date:'2026-08-02'});blocked(run([tariff,t]));const s=independent();s.tax_basis.items[0].revision=999;blocked(run([tariff,s]));});
+});
