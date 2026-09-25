@@ -69,6 +69,12 @@ describe('Contract persistence boundary', () => {
     queries.energy_contracts.single.mockResolvedValue({ data: null, error: { code: '23505', message: 'secret' } });
     await expect(service.create(body, 'org-a')).rejects.toMatchObject({ status: 409 });
     queries.energy_contracts.single.mockResolvedValue({ data: null, error: { code: 'XX000', message: 'secret' } });
-    await expect(service.create(body, 'org-a')).rejects.toThrow('Unable to access contracts');
+    await expect(service.create(body, 'org-a')).rejects.toThrow('Não foi possível consultar ou salvar os contratos.');
+  });
+  it.each(['list','read','update','delete'])('blocks %s before database access when entitlement is denied', async action => {
+    entitlement.mockRejectedValue(new Error('license required'));
+    const run = action === 'list' ? () => service.findAll('org-a') : action === 'read' ? () => service.findOne(id,'org-a') : action === 'update' ? () => service.update(id,'org-a',{status:'ACTIVE'}) : () => service.delete(id,'org-a');
+    await expect(run()).rejects.toThrow('license required');
+    expect(from).not.toHaveBeenCalled();
   });
 });

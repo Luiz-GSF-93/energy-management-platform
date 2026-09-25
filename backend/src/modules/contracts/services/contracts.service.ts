@@ -20,8 +20,8 @@ export class ContractsService {
   private table(name = 'energy_contracts') { return this.supabaseService.getClient().from(name); }
   private check(error: any) {
     if (!error) return;
-    if (error.code === '23505') throw new ConflictException('Contract number already exists');
-    throw new InternalServerErrorException('Unable to access contracts');
+    if (error.code === '23505') throw new ConflictException('Já existe um contrato com este número. Use um número único.');
+    throw new InternalServerErrorException('Não foi possível consultar ou salvar os contratos.');
   }
   private mapped(dto: object) {
     const result: Record<string, unknown> = {};
@@ -37,11 +37,13 @@ export class ContractsService {
     }
   }
   async findAll(organizationId: string) {
+    await this.licensesService.requireEntitlement(organizationId, 'free_market_management');
     const { data, error } = await this.table().select('*').eq('organization_id', organizationId);
     this.check(error);
     return data;
   }
   async findOne(id: string, organizationId: string) {
+    await this.licensesService.requireEntitlement(organizationId, 'free_market_management');
     const { data, error } = await this.table().select('*').eq('id', id).eq('organization_id', organizationId).maybeSingle();
     this.check(error);
     if (!data) throw new NotFoundException('Contract not found');
@@ -73,11 +75,11 @@ export class ContractsService {
   async update(id: string, organizationId: string, input: UpdateContractDto) {
     const dto = await validateWriteDto(UpdateContractDto, input);
     const current = await this.findOne(id, organizationId);
-    if (current.status !== 'DRAFT') throw new ConflictException('Historical contracts cannot be overwritten; an amendment is required');
+    if (current.status !== 'DRAFT') throw new ConflictException('Contratos ativados não podem ser sobrescritos. É necessário um aditivo.');
     if (dto.endDate) this.dates(String(current.start_date).slice(0, 10), dto.endDate);
     const { data, error } = await this.table().update(this.mapped(dto)).eq('id', id).eq('organization_id', organizationId).eq('status', 'DRAFT').select().maybeSingle();
     this.check(error);
-    if (!data) throw new ConflictException('Contract changed; reload before editing');
+    if (!data) throw new ConflictException('O contrato foi alterado. Atualize a lista antes de editar.');
     return data;
   }
   async delete(id: string, organizationId: string) {
