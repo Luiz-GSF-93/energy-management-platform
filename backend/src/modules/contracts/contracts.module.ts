@@ -1,3 +1,5 @@
+import {CalculationParametersService} from './services/parameters.service';
+import {CalculationParametersController} from './controllers/parameters.controller';
 import {ContractConfigurationsService} from './services/configurations.service';
 import {ContractConfigurationsController} from './controllers/configurations.controller';
 import { Module } from '@nestjs/common';
@@ -8,8 +10,8 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule],
-  controllers: [ContractsController,ContractConfigurationsController],
-  providers: [ContractsService,ContractConfigurationsService, SupabaseService],
+  controllers: [CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
 export class ContractsModule {}
