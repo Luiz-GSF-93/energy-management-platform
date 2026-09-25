@@ -23,7 +23,7 @@ function Workspace(){const {hasPermission}=useAuth();const [customers,setCustome
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
  function change(action:()=>void){if(dirty){setPendingChange(()=>action);return;}action();}
  if(!canView)return <p>Acesso não autorizado aos contratos.</p>;
- return <section className="backoffice-page"><h1>Contratos e configuração energética</h1><p>Organize a estrutura e os contratos de cada cliente. Selecione uma área para consultar ou cadastrar seus dados específicos.</p>
+ return <section className="backoffice-page"><h1>Contratos e configuração energética</h1><p>Use Inserir novo para preencher um cadastro por etapas. Nas áreas abaixo, consulte os contratos e a estrutura energética de cada cliente.</p>
  {pendingChange?<div role="alert" className="ds-card"><p>Há campos não salvos. Trocar de área ou cliente descartará esse preenchimento.</p><Button variant="secondary" onClick={()=>setPendingChange(null)}>Permanecer no formulário</Button><Button onClick={()=>{setDirty(false);pendingChange();setPendingChange(null);}}>Descartar e continuar</Button></div>:null}
  {error?<><Alert variant="error">{error}</Alert><Button onClick={()=>{setError('');setLoading(true);setRevision(v=>v+1);}}>Tentar novamente</Button></>:null}
  {loading?<p>Carregando organização, licença e clientes...</p>:!error?<>
