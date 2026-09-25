@@ -1,0 +1,23 @@
+import 'reflect-metadata';
+import {prepareCosts} from './preparation-costs';
+const u={id:'u',organization_id:'o',customer_id:'c',tariff_group:'A',tariff_modality:'GREEN'};
+const item={id:'10000000-0000-4000-8000-000000000001',label:'Encargo',category:'CCEE',scenario:'ACL',effect:'CREDIT',amount:'0.01',source:'Documento',taxTreatment:'INCLUDED'};
+const row={id:'m',organization_id:'o',customer_id:'c',consumer_unit_id:'u',month:'2026-08',version:1,revision:2,status:'VALIDATED',validated_at:'2026-09-01',validated_by:'actor',source_reference:'Fatura',unit_context:{tariff_group:'A',tariff_modality:'GREEN'},costs:{noCosts:false,items:[item]}};
+const run=(rows:any[]=[row],unit:any=u)=>prepareCosts(unit,'2026-08',rows);
+const codes=(r:any)=>r.findings.map((f:any)=>f.code);
+describe('costs in preparation',()=>{
+ it('requires reviewed costs or explicit absence',()=>{expect(run([]).status).toBe('MISSING');expect(codes(run([]))).toContain('COSTS_MISSING');});
+ it.each(['organization_id','customer_id','consumer_unit_id','month'])('isolates %s',k=>expect(run([{...row,[k]:'other'}]).validatedVersion).toBeNull());
+ it('recognizes reviewed absence',()=>expect(run([{...row,costs:{noCosts:true,items:[]}}]).status).toBe('NO_COSTS_DECLARED'));
+ it('does not accept empty unreviewed costs',()=>expect(codes(run([{...row,costs:{noCosts:false,items:[]}}]))).toContain('COSTS_INCONSISTENT'));
+ it('blocks correction while preserving latest validated reference',()=>{const r=run([row,{...row,id:'next',version:2,status:'DRAFT'}]);expect(r.status).toBe('DRAFT_PENDING');expect(r.validatedVersion?.id).toBe('m');expect(codes(r)).toContain('COSTS_DRAFT');});
+ it('selects newest validated version independently of order',()=>expect(run([{...row,id:'next',version:2},row]).validatedVersion?.id).toBe('next'));
+ it('preserves exact credit cents and zero',()=>{expect(run().validatedVersion?.costs.items[0]).toMatchObject({effect:'CREDIT',amount:'0.01'});expect(run([{...row,costs:{noCosts:false,items:[{...item,amount:'0'}]}}]).validatedVersion?.costs.items[0].amount).toBe('0');});
+ it.each([null,{},[],{noCosts:true,items:null},{noCosts:false,items:[{...item,amount:10}]},{noCosts:false,items:[{...item,amount:'-1'}]},{noCosts:false,items:[{...item,unknown:'x'}]}])('fails closed for malformed costs',c=>{expect(run([{...row,costs:c}]).status).toBe('INVALID');expect(run([{...row,costs:c}]).validatedVersion).toBeNull();});
+ it('flags duplicated history',()=>expect(codes(run([row,row]))).toContain('COSTS_HISTORY'));
+ it('flags changed electrical context',()=>expect(codes(run([row],{...u,state:'SP'}))).toContain('COSTS_CONTEXT'));
+ it('flags absent evidence',()=>expect(codes(run([{...row,validated_by:null}]))).toContain('COSTS_EVIDENCE'));
+ it('blocks unclassified taxes',()=>expect(codes(run([{...row,costs:{noCosts:false,items:[{...item,taxTreatment:'UNSPECIFIED'}]}}]))).toContain('COSTS_INCONSISTENT'));
+ it('flags excluded taxes without calculating gross-up',()=>{const r=run([{...row,costs:{noCosts:false,items:[{...item,taxTreatment:'EXCLUDED'}]}}]);expect(codes(r)).toContain('COSTS_TAX_EXCLUDED');expect(r).not.toHaveProperty('total');});
+ it('does not mutate inputs',()=>{const before=JSON.stringify(row);run();expect(JSON.stringify(row)).toBe(before);});
+});
