@@ -9,6 +9,7 @@ import {ParameterDto,UpdateParameterDto,ParameterRevisionDto,RetireParameterDto}
 export class CalculationParametersController {
  constructor(private service:CalculationParametersService){}
  @Get() @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) list(@Tenant() t:TenantContext){return this.service.list(t.organizationId);}
+ @Get('checks') @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) checks(@Tenant() t:TenantContext){return this.service.checks(t.organizationId);}
  @Get(':id/events') @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) events(@Param('id',ParseUUIDPipe) id:string,@Tenant() t:TenantContext){return this.service.events(id,t.organizationId);}
  @Post() @RequirePermission([P.ORGANIZATION_CONTRACTS_CREATE]) create(@Body() d:ParameterDto,@Tenant() t:TenantContext){return this.service.create(d,t.organizationId,t.userId);}
  @Put(':id') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE]) update(@Param('id',ParseUUIDPipe) id:string,@Body() d:UpdateParameterDto,@Tenant() t:TenantContext){return this.service.update(id,d,t.organizationId,t.userId);}
