@@ -1,6 +1,6 @@
 'use client';
 import {Alert,Card} from '@/app/components/ui';
-export type TariffPreviewData={formulaVersion:string;measurement:{id:string;version:number;revision:number;source:string}|null;lines:{parameterId:string;revision:number;label:string;scenario:string;timeBand:string;measure:string;rate:string;quantity:string;quantityUnit:string;exactAmount:string;amount:string;treatment:string;embeddedTaxCodes:string[];source:string;formula:string;quantitySource?:string;startDate:string;endDate:string}[];pending:{parameterId:string;label:string;scenario:string;reason:string}[];warnings:string[]};
+export type TariffPreviewData={formulaVersion:string;measurement:{id:string;version:number;revision:number;source:string}|null;lines:{parameterId:string;revision:number;label:string;scenario:string;component?:string;timeBand:string;measure:string;rate:string;quantity:string;quantityUnit:string;exactAmount:string;amount:string;treatment:string;embeddedTaxCodes:string[];source:string;formula:string;quantitySource?:string;startDate:string;endDate:string}[];pending:{parameterId:string;label:string;scenario:string;reason:string}[];warnings:string[]};
 const decimal=(v:string)=>v.replace('.',',');
 const band:Record<string,string>={ALL:'Todos os postos',PEAK:'Ponta',OFF_PEAK:'Fora ponta'};
 const measure:Record<string,string>={BRL_KW:'R$/kW',BRL_KWH:'R$/kWh',BRL_MWH:'R$/MWh',BRL_KVARH:'R$/kVArh'};
