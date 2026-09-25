@@ -26,7 +26,7 @@ try{
  await db.query("INSERT INTO calculation_parameters(id,organization_id,customer_id,consumer_unit_id,kind,component_code,label,scenario,time_band,measure,amount_text,treatment,base_rule,direction,source,start_date,end_date,unit_context,created_by,updated_by) VALUES ($1,'org-a',$2,$2,'TAX','OTHER_LEGACY','Legado','ACR','ALL','PERCENT','5','OUTSIDE','Regra antiga','DEBIT','Fonte antiga','2025-01-01','2025-12-31','{}','actor','actor')",[legacyId,a]);
  await db.query("UPDATE calculation_parameters SET status='APPROVED' WHERE id=$1",[legacyId]);
  const beforeLegacy=(await db.query('SELECT * FROM calculation_parameters WHERE id=$1',[legacyId])).rows[0];
- await db.exec('RESET ROLE');await db.exec(basisMigration);await db.exec(basisMigration);const interactionMigration=readFileSync(new URL('../../src/database/migrations/20260925_f1_45_tax_interaction.sql',import.meta.url),'utf8');await db.exec(interactionMigration);await db.exec(interactionMigration);await db.exec('SET ROLE service_role');
+ await db.exec('RESET ROLE');await db.exec(basisMigration);await db.exec(basisMigration);const interactionMigration=readFileSync(new URL('../../src/database/migrations/20260925_f1_45_tax_interaction.sql',import.meta.url),'utf8');await db.exec(interactionMigration);await db.exec(interactionMigration);const sequentialMigration=readFileSync(new URL('../../src/database/migrations/20260925_f1_46_sequential_taxes.sql',import.meta.url),'utf8');await db.exec(sequentialMigration);await db.exec(sequentialMigration);await db.exec('SET ROLE service_role');
  const afterLegacy=(await db.query('SELECT * FROM calculation_parameters WHERE id=$1',[legacyId])).rows[0];ok(afterLegacy.status==='APPROVED'&&afterLegacy.revision===beforeLegacy.revision&&afterLegacy.tax_basis===null);
  let entitled=true;const client={getClient:()=>({from:t=>new Query(t)})},licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(new Error('No license'),{getStatus:()=>403});}};
  const service=new CalculationParametersService(client,licenses),deny=async(fn,status)=>{await assert.rejects(fn,e=>e.getStatus?.()===status);checks++;};
@@ -75,6 +75,18 @@ try{
  await deny(()=>service.create({...tax,treatment:'INCLUDED',taxBasis:{...base(peak),interaction:'INDEPENDENT'}},'org-a','actor-a'),400);
  await assert.rejects(()=>db.query("UPDATE calculation_parameters SET tax_basis=tax_basis-'interaction' WHERE id=$1",[independent.id]),e=>e.code==='P3302');checks++;
  await assert.rejects(()=>db.query("UPDATE calculation_parameters SET tax_basis=jsonb_set(tax_basis,'{interaction}','\"AUTO\"') WHERE id=$1",[incomplete.id]),e=>e.code==='P3311');checks++;
+ const seqBasis={...base(peak),interaction:'SEQUENTIAL',taxes:[{parameterId:independentApproved.id,revision:independentApproved.revision}]};
+ const seqBody={...tax,componentCode:'OTHER_SEQUENCE',taxBasis:seqBasis};
+ const sequence=await service.create(seqBody,'org-a','actor-a');ok(sequence.tax_basis.taxes[0].parameterId===independent.id);
+ const sequenceApproved=await service.approve(sequence.id,{revision:1},'org-a','approver');ok(sequenceApproved.status==='APPROVED');
+ ok((await service.events(sequence.id,'org-a')).some(e=>e.snapshot.tax_basis?.taxes?.[0]?.revision===independentApproved.revision&&e.action==='APPROVED'));
+ for(const taxes of [[null],[{parameterId:independent.id,revision:0}],[...seqBasis.taxes,...seqBasis.taxes],[{parameterId:other.id,revision:2}],[{parameterId:tx.id,revision:1}],[{parameterId:independent.id,revision:999}]])await deny(()=>service.create({...seqBody,taxBasis:{...seqBasis,taxes}},'org-a','actor-a'),400);
+ await deny(()=>service.create({...seqBody,taxBasis:{...seqBasis,interaction:'INDEPENDENT'}},'org-a','actor-a'),400);
+ const emptySeq=await service.create({...seqBody,taxBasis:{...seqBasis,taxes:[]}},'org-a','actor-a');await deny(()=>service.approve(emptySeq.id,{revision:1},'org-a','actor-a'),400);
+ const longSeq=await service.create({...seqBody,endDate:'2027-01-01'},'org-a','actor-a');await deny(()=>service.approve(longSeq.id,{revision:1},'org-a','actor-a'),400);
+ await assert.rejects(()=>db.query("UPDATE calculation_parameters SET tax_basis=jsonb_set(tax_basis,'{taxes}','[]') WHERE id=$1",[sequence.id]),e=>e.code==='P3302');checks++;
+ await assert.rejects(()=>db.query("UPDATE calculation_parameters SET tax_basis=jsonb_set(tax_basis,'{taxes}',$2::jsonb) WHERE id=$1",[emptySeq.id,JSON.stringify([{parameterId:emptySeq.id,revision:1}])]),e=>e.code==='P3311');checks++;
+ await service.retire(independent.id,{revision:independentApproved.revision,reason:'Test retirement'},'org-a','approver');ok((await service.checks('org-a')).find(x=>x.id===sequence.id).issues.length>0);
  const configured=await service.update(tx.id,{...tax,taxBasis:base(peak),revision:1},'org-a','actor-a');ok(configured.tax_basis.items[0].parameterId===peak.id);
  const approvedTax=await service.approve(tx.id,{revision:2},'org-a','actor-a');ok(approvedTax.status==='APPROVED');ok((await service.checks('org-a')).find(x=>x.id===tx.id).issues.length===0);
  ok((await service.events(tx.id,'org-a')).some(e=>e.snapshot.tax_basis?.items[0]?.revision===peak.revision));

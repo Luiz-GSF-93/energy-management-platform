@@ -49,3 +49,23 @@ describe('explicit independent rules per unit and validity',()=>{
  it('does not use a rule from another unit or scenario',()=>{const r=run([tariff,tax(),independent({id:'pis',component_code:'PIS',consumer_unit_id:'foreign'})]);expect(r.lines).toHaveLength(1);expect(r.lines[0].peers).toEqual([]);});
  it('does not bypass monthly validity or reference revisions',()=>{const t=independent({start_date:'2026-08-02'});blocked(run([tariff,t]));const s=independent();s.tax_basis.items[0].revision=999;blocked(run([tariff,s]));});
 });
+
+describe('sequential tax composition',()=>{
+ const ind=(patch:any={})=>({...tax(),...patch,tax_basis:{...tax().tax_basis,interaction:'INDEPENDENT'}});
+ const seq=(refs:any[]=[{parameterId:'t',revision:2}],patch:any={})=>({...tax(),id:'b',component_code:'PIS',label:'PIS',amount_text:'10',treatment:'OUTSIDE',...patch,tax_basis:{...tax().tax_basis,interaction:'SEQUENTIAL',taxes:refs}});
+ const line=(ps:any[])=>run(ps).lines.find(l=>l.id==='b');
+ it('adds only explicitly selected tax to net base',()=>{const r=line([tariff,ind(),seq()]);expect(r?.amount).toBe('12.50');expect(r?.base).toBe('125.00');expect(r?.taxReferences?.[0]).toMatchObject({id:'t',revision:2,amount:'25.00'});});
+ it('grosses up own rate after adding selected predecessor',()=>expect(line([tariff,ind(),seq(undefined,{treatment:'INSIDE'})])?.amount).toBe('13.89'));
+ it('preserves recurring rational value instead of adding rounded tax',()=>{const r=line([tariff,ind({amount_text:'18'}),seq(undefined,{amount_text:'100'})]);expect(r?.amount).toBe('121.95');expect(BigInt(r!.numerator)*82n).toBe(BigInt(r!.denominator)*10000n);});
+ it('resolves reverse input order and multiple dependency levels',()=>{const c={...seq([{parameterId:'b',revision:2}]),id:'c2',component_code:'COFINS'};const r=run([c,seq(),ind(),tariff]);expect(r.lines.find(l=>l.id==='c2')?.amount).toBe('11.25');expect(r).toEqual(run([tariff,ind(),seq(),c]));});
+ it.each(['organization_id','customer_id','consumer_unit_id','scenario'])('rejects dependency in foreign %s',key=>expect(line([tariff,ind({[key]:'foreign'}),seq()])).toBeUndefined());
+ it.each([{revision:3},{status:'RETIRED'},{status:'DRAFT'},{start_date:'2026-08-02'},{end_date:'2026-08-30'},{unit_context:{state:'RJ'}}])('blocks unavailable dependency %j',patch=>expect(line([tariff,ind(patch),seq()])).toBeUndefined());
+ it('requires predecessor validity across the dependent entire validity',()=>expect(line([tariff,ind({start_date:'2026-08-01'}),seq()])).toBeUndefined());
+ it('propagates pending measurement/base through chain',()=>{const r=run([tariff,ind(),seq()],[]);expect(r.lines).toEqual([]);});
+ it.each([[],[null],[{parameterId:'t',revision:0}],[{parameterId:'t',revision:2},{parameterId:'t',revision:2}],Array.from({length:21},(_,i)=>({parameterId:'x'+i,revision:2}))].map(refs=>({refs})))('rejects malformed dependency list %j',({refs})=>expect(line([tariff,ind(),seq(refs)])).toBeUndefined());
+ it('rejects self reference',()=>expect(line([tariff,ind(),seq([{parameterId:'b',revision:2}])])).toBeUndefined());
+ it('detects circular references without recursion failure',()=>{const a={...seq([{parameterId:'b',revision:2}]),id:'t',component_code:'ICMS'};const r=run([tariff,a,seq()]);expect(r.lines).toEqual([]);expect(r.pending.some(p=>p.reason.includes('circular'))).toBe(true);});
+ it('rejects unconfigured predecessor',()=>expect(line([tariff,tax(),seq()])).toBeUndefined());
+ it('does not silently ignore dependencies in independent mode',()=>{const p=ind();p.tax_basis={...p.tax_basis,taxes:[{parameterId:'b',revision:2}]};expect(run([tariff,p]).lines).toEqual([]);});
+ it('keeps zero tax as an explicit numeric dependency',()=>expect(line([tariff,ind({amount_text:'0'}),seq()])?.amount).toBe('10.00'));
+});

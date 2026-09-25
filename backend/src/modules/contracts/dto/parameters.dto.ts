@@ -5,8 +5,13 @@ export class BaseItemDto {
  @IsInt() @Min(1) revision!:number;
  @IsIn(['INCLUDE','EXCLUDE']) operation!:string;
 }
+export class TaxReferenceDto {
+ @IsUUID() parameterId!:string;
+ @IsInt() @Min(1) revision!:number;
+}
 export class TaxBasisDto {
- @IsOptional() @IsIn(['INDEPENDENT']) interaction?:string;
+ @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({each:true}) @Type(()=>TaxReferenceDto) taxes?:TaxReferenceDto[];
+ @IsOptional() @IsIn(['INDEPENDENT','SEQUENTIAL']) interaction?:string;
  @IsIn([1]) version!:number;
  @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>BaseItemDto) items!:BaseItemDto[];
 }
