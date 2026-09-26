@@ -16,3 +16,11 @@ describe('persisted intake access boundaries',()=>{
  it('does not interpret legacy evidence without snapshot as approval',async()=>{const s=setup();delete s.responses.document_ocr_results.data.evidence.assessment;expect((await s.service.status('org','doc')).intake).toBeNull();});
  it('does not diagnose an unfinished job',async()=>{const s=setup();s.responses.document_ocr_jobs.data.state='POLLING';expect((await s.service.status('org','doc')).intake).toBeNull();expect(s.queries).toHaveLength(1);});
 });
+
+describe('technical readout access',()=>{
+ it('keeps tenant, document and immutable job scope with processing disabled',async()=>{const s=setup();s.connector.isConfigured.mockReturnValue(false);expect(await s.service.readout('org','doc',{section:'fields'})).toMatchObject({rows:[]});for(const q of s.queries)expect(q.eq).toHaveBeenCalledWith('organization_id','org');expect(s.queries.find(q=>q.table==='document_ocr_results').eq).toHaveBeenCalledWith('job_id','job');});
+ it.each([{page:'-1'},{page:['1','2']},{offset:'NaN'},{section:'raw'},{secret:'1'},{page:'1001'}])('rejects malformed query before database access: %j',async query=>{const s=setup();await expect(s.service.readout('org','doc',query)).rejects.toThrow();expect(s.queries).toHaveLength(0);});
+ it('rejects mismatched origin',async()=>{const s=setup();s.responses.document_ocr_results.data.file_hash='other';await expect(s.service.readout('org','doc',{})).rejects.toThrow('origem da extração');});
+ it('rejects mismatched assessment binding',async()=>{const s=setup();s.assessment.source.unitId='other';await expect(s.service.readout('org','doc',{})).rejects.toThrow('origem da extração');});
+ it('does not expose unfinished or missing results',async()=>{const s=setup();s.responses.document_ocr_jobs.data.state='POLLING';await expect(s.service.readout('org','doc',{})).rejects.toThrow('concluída');expect(s.queries).toHaveLength(1);});
+});

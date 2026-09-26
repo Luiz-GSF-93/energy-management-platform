@@ -12,3 +12,5 @@ describe('OCR queue API boundaries',()=>{
  it('cannot enqueue a document not found in this tenant',async()=>{const s=setup();s.query.maybeSingle.mockResolvedValue({data:null,error:null});await expect(s.service.enqueue('org','other','actor')).rejects.toThrow('Documento não encontrado.');expect(s.client.rpc).not.toHaveBeenCalled();});
  it('does not expose operation URL to the browser',async()=>{const s=setup();expect(await s.service.enqueue('org','doc','actor')).not.toHaveProperty('operation_url');});
 });
+
+it('requires document view permission for technical readout',()=>expect(Reflect.getMetadata(PERMISSIONS_KEY,OcrController.prototype.readout)).toEqual([PERMISSIONS.DOCUMENTS_VIEW]));

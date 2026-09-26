@@ -1,4 +1,4 @@
-import {Controller,Get,Post,Param} from '@nestjs/common';
+import {Controller,Get,Post,Param,Query} from '@nestjs/common';
 import {OrganizationId,UserId} from '../../common/decorators/tenant.decorator';
 import {RequirePermission} from '../../common/decorators/require-permission.decorator';
 import {PERMISSIONS} from '../../common/constants/permissions';
@@ -9,6 +9,9 @@ export class OcrController {
  @Post(':id/ocr')
  @RequirePermission([PERMISSIONS.ENERGIA_OCR_PROCESS])
  enqueue(@Param('id') id:string,@OrganizationId() org:string,@UserId() actor:string){return this.queue.enqueue(org,id,actor);}
+ @Get(':id/ocr/readout')
+ @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
+ readout(@Param('id') id:string,@OrganizationId() org:string,@Query() query:Record<string,unknown>){return this.queue.readout(org,id,query);}
  @Get(':id/ocr')
  @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
  status(@Param('id') id:string,@OrganizationId() org:string){return this.queue.status(org,id);}

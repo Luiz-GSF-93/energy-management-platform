@@ -1,7 +1,8 @@
+import {invoiceReadout,ocrReadoutSummary,ReadoutQuery} from './invoice-readout';
 import {extractGdEvidence} from './gd-evidence';
 import { extractElectricalEvidence } from './electrical-evidence';
 import { assessmentMatchesDocument } from './invoice-assessment';
-import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { AzureInvoiceConnector } from './azure-invoice.connector';
@@ -25,7 +26,25 @@ export class OcrQueueService {
   const intake=data?.state==='SUCCEEDED'?await this.intake(org,document,data.id):null;
   return {enabled:this.connector.isConfigured(),job:data?this.publicJob(data):null,intake};
  }
+ async readout(org:string,document:string,query:Record<string,unknown>){
+  if(Object.keys(query).some(k=>!['page','section','offset'].includes(k)))throw new BadRequestException('Consulta inválida.');
+  const integer=(v:unknown,max:number)=>{if(v===undefined)return 0;if(typeof v!=='string'||!/^\d+$/.test(v)||Number(v)>max)throw new BadRequestException('Página ou posição inválida.');return Number(v);};
+  const page=integer(query.page,1000),offset=integer(query.offset,20000000),section=query.section??'fields';
+  if(typeof section!=='string'||!['text','fields','pairs','tables'].includes(section))throw new BadRequestException('Seção inválida.');
+  await this.licenses.requireEntitlement(org,'document_management');
+  const {data,error}=await this.db.getClient().from('document_ocr_jobs').select('id,state').eq('organization_id',org).eq('document_id',document).maybeSingle();
+  if(error)throw new ServiceUnavailableException('Não foi possível consultar a leitura.');
+  if(!data||data.state!=='SUCCEEDED')throw new NotFoundException('Leitura concluída não encontrada.');
+  const verified=await this.verified(org,document,data.id);
+  if(!verified)throw new ServiceUnavailableException('A origem da extração requer conferência administrativa.');
+  try{return invoiceReadout(verified.raw,{page,offset,section} as ReadoutQuery);}catch{throw new BadRequestException('Página não encontrada.');}
+ }
  private async intake(org:string,document:string,job:string){
+  const verified=await this.verified(org,document,job);if(!verified)return null;
+  const {raw,assessment}=verified;
+  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
+ }
+ private async verified(org:string,document:string,job:string){
   const db=this.db.getClient();
   const [source,result]=await Promise.all([
    db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,reference_month,file_hash,document_type,file_verified').eq('organization_id',org).eq('id',document).maybeSingle(),
@@ -37,7 +56,7 @@ export class OcrQueueService {
   const assessment=result.data.evidence?.assessment;
   if(!assessmentMatchesDocument(assessment,doc))return null;
   if(!['REJECT_AUTOMATION','REVIEW_REQUIRED'].includes(assessment.intake?.decision))return null;
-  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,electrical:extractElectricalEvidence(result.data.raw_result),gd:extractGdEvidence(result.data.raw_result)};
+  return {raw:result.data.raw_result,assessment};
  }
  private publicJob(job:any){return {id:job.id,state:job.state,createdAt:job.created_at,updatedAt:job.updated_at,errorCode:job.error_code??null};}
 }
