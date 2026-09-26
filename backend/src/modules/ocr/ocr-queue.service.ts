@@ -1,3 +1,4 @@
+import { extractElectricalEvidence } from './electrical-evidence';
 import { assessInvoiceIntake } from './invoice-intake';
 import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
@@ -39,7 +40,7 @@ export class OcrQueueService {
    db.from('documents').select('id').eq('organization_id',org).eq('consumer_unit_id',doc.consumer_unit_id).eq('reference_month',doc.reference_month).eq('document_type','INVOICE_DISTRIBUTOR').neq('id',document).limit(1),
   ]);
   if(customer.error||unit.error||duplicates.error)throw new ServiceUnavailableException('Não foi possível conferir os cadastros e a duplicidade.');
-  return {...assessInvoiceIntake(result.data.raw_result,{customer:customer.data,unit:unit.data,referenceMonth:String(doc.reference_month??'').slice(0,7),otherDocumentInPeriod:!!duplicates.data?.length}),checkedAt:new Date().toISOString()};
+  return {...assessInvoiceIntake(result.data.raw_result,{customer:customer.data,unit:unit.data,referenceMonth:String(doc.reference_month??'').slice(0,7),otherDocumentInPeriod:!!duplicates.data?.length}),checkedAt:new Date().toISOString(),electrical:extractElectricalEvidence(result.data.raw_result)};
  }
  private publicJob(job:any){return {id:job.id,state:job.state,createdAt:job.created_at,updatedAt:job.updated_at,errorCode:job.error_code??null};}
 }
