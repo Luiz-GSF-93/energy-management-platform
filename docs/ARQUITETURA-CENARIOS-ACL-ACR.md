@@ -104,3 +104,8 @@ A preparação soma tarifas, fornecedor e custos adicionais mediante origens aut
 ## F1.58 — Prévia consolidada do cliente
 
 Consulta explícita reúne todas as unidades cadastradas do cliente na mesma competência. Qualquer composição pendente bloqueia o consolidado. Calcula diferença operacional, fixo integral por unidade e variável sobre a economia consolidada antes do fixo, com piso zero somente do variável e rateio em centavos. A interface apresenta valores preliminares, fontes e correções por unidade. Não representa publicação ou faturamento; tributos específicos dos honorários e snapshots continuam pendentes. Ver [entrega F1.58](ENTREGA-F1.58.md).
+
+
+## F1.59 — Histórico imutável de revisões por unidade
+
+Revisão interna preserva fontes e diagnóstico do motor existente, inclusive bloqueios, em calculation_review_snapshots. Estado exclusivamente DRAFT, sem aprovação/publicação nem alteração do legado monthly_energy_settlements. Origem é capturada durante um intervalo de consultas, não em transação única; não equivale ao fechamento financeiro consolidado do cliente. Ver ENTREGA-F1.59.md.
