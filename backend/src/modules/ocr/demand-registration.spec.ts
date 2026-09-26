@@ -1,0 +1,20 @@
+import {demandRegistration as resolve,loadDemandRegistration} from './demand-registration';
+const doc={organization_id:'o',customer_id:'c',consumer_unit_id:'u',reference_month:'2026-08-01'};
+const unit={id:'u',organization_id:'o',customer_id:'c',tariff_group:'A',tariff_modality:'GREEN',contracted_demand:'500.000',last_demand_value:'500',last_demand_adjustment_date:'2026-01-01'};
+describe('Demand registration context',()=>{
+ it('links a dated reference without granting import',()=>expect(resolve(unit,doc)).toMatchObject({state:'DATED_REFERENCE',canImport:false,adjustmentDate:'2026-01-01'}));
+ it.each(['id','organization_id','customer_id'])('rejects foreign %s',k=>expect(resolve({...unit,[k]:'foreign'},doc).values).toEqual([]));
+ it('does not apply a later adjustment to the past',()=>expect(resolve({...unit,last_demand_adjustment_date:'2026-09-01'},doc).state).toBe('BEFORE_ADJUSTMENT'));
+ it('requires split review for midmonth change',()=>expect(resolve({...unit,last_demand_adjustment_date:'2026-08-15'},doc).state).toBe('CHANGE_WITHIN_MONTH'));
+ it('accepts first day only as reference',()=>expect(resolve({...unit,last_demand_adjustment_date:'2026-08-01'},doc).state).toBe('DATED_REFERENCE'));
+ it.each([null,'2026-02-30','yesterday'])('does not guess date %s',v=>expect(resolve({...unit,last_demand_adjustment_date:v},doc).state).toBe('MISSING_DATE'));
+ it('rejects changed amount',()=>expect(resolve({...unit,contracted_demand:'600'},doc).state).toBe('VALUE_CONFLICT'));
+ it('compares decimals without floating point loss',()=>expect(resolve({...unit,contracted_demand:'999999999999.000001',last_demand_value:'999999999999.000002'},doc).state).toBe('VALUE_CONFLICT'));
+ it('does not confuse 50 and 500',()=>expect(resolve({...unit,last_demand_value:'50'},doc).state).toBe('VALUE_CONFLICT'));
+ it.each(['-1','NaN','1e3',null])('rejects invalid amount %s',v=>expect(resolve({...unit,contracted_demand:v},doc).state).toBe('MISSING_DEMAND'));
+ it('requires two demands for blue',()=>expect(resolve({...unit,tariff_modality:'BLUE'},doc).state).toBe('MISSING_DEMAND'));
+ it('links both blue periods separately',()=>expect(resolve({...unit,tariff_modality:'BLUE',contracted_demand_peak:'100',contracted_demand_off_peak:'200',last_demand_peak:'100',last_demand_off_peak:'200'},doc).values.map(v=>v.current)).toEqual(['100','200']));
+ it('rejects unknown modality',()=>expect(resolve({...unit,tariff_modality:null},doc).state).toBe('MODALITY_REVIEW'));
+ it('scopes lookup to organization customer and unit',async()=>{const q:any={select:jest.fn().mockReturnThis(),eq:jest.fn().mockReturnThis(),maybeSingle:jest.fn().mockResolvedValue({data:unit,error:null})};expect((await loadDemandRegistration({from:()=>q},doc)).state).toBe('DATED_REFERENCE');expect(q.eq.mock.calls).toEqual([['organization_id','o'],['customer_id','c'],['id','u']]);});
+ it('fails closed on lookup error',async()=>expect((await loadDemandRegistration({from:()=>{throw Error('db');}},doc)).state).toBe('UNAVAILABLE'));
+});

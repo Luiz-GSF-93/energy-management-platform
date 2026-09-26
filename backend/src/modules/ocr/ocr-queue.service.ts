@@ -1,3 +1,4 @@
+import {loadDemandRegistration} from './demand-registration';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {invoiceReadout,ocrReadoutSummary,ReadoutQuery} from './invoice-readout';
 import {extractGdEvidence} from './gd-evidence';
@@ -51,8 +52,10 @@ export class OcrQueueService {
  }
  private async intake(org:string,document:string,job:string){
   const verified=await this.verified(org,document,job);if(!verified)return null;
-  const {raw,assessment}=verified;
-  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,layout:extractCpflPaulistaLayout(raw),electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
+  const {raw,assessment,doc}=verified;
+  const layout=extractCpflPaulistaLayout(raw);
+  if(layout.preparation)Object.assign(layout.preparation.demand,{registration:await loadDemandRegistration(this.db.getClient(),doc)});
+  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,layout,electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
  }
  private async verified(org:string,document:string,job:string){
   const db=this.db.getClient();
