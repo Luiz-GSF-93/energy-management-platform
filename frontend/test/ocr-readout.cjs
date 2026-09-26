@@ -21,6 +21,7 @@ const result=(text,page=1)=>({page,section:'fields',total:1,offset:0,nextOffset:
  ok(document.body.textContent.includes('Energia página 2'));ok(!document.body.textContent.includes('Resposta antiga'));ok(document.body.textContent.includes('Revisão necessária'));
  await page(1);await act(async()=>pending[2].reject(Error('private backend error')));ok(document.body.textContent.includes('Tente novamente'));ok(!document.body.textContent.includes('private backend error'));
  await click('Tentar novamente');await act(async()=>pending[3].resolve(result('<img src=x onerror=alert(1)>')));ok(!document.querySelector('img'));ok(document.body.textContent.includes('<img src=x'));
- await page(2);await click('Fechar');await act(async()=>pending[4].resolve(result('Resposta após fechamento')));ok(!document.querySelector('dialog').open);ok(!document.body.textContent.includes('Resposta após fechamento'));
+ await page(2);await act(async()=>pending[4].resolve(result('')));ok(document.body.textContent.includes('Não identificado'));ok(document.querySelector('dialog').textContent.includes('Confiança: Não informada'));
+ await page(1);await click('Fechar');await act(async()=>pending[5].resolve(result('Resposta após fechamento')));ok(!document.querySelector('dialog').open);ok(!document.body.textContent.includes('Resposta após fechamento'));
  await act(async()=>root.unmount());console.log('OCR technical readout: '+checks+' checks passed');
  }catch(e){console.error(e);process.exitCode=1;}finally{dom.window.close();}})();
