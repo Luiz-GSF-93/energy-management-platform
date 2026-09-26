@@ -36,7 +36,7 @@ export class DocumentsService {
   }
   async findAll(organizationId: string) {
     await this.requireDocumentManagement(organizationId);
-    const { data, error } = await this.table().select('*').eq('organization_id', organizationId);
+    const { data, error } = await this.table('documents_with_intake').select('*').eq('organization_id', organizationId);
     this.check(error);
     return data;
   }

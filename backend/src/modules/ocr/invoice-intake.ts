@@ -14,6 +14,7 @@ function period(value:string):string {
 /** Conservative candidates only. No fuzzy identity matching or due-date fallback. */
 export function assessInvoiceIntake(raw:Record<string,any>,context:IntakeContext){
  const evidence=extractInvoiceEvidence(raw);const checks:IntakeCheck[]=[];
+ if(!context.customer||!context.unit)checks.push({field:'registration',label:'Vínculo cadastral',state:'MISMATCH',message:'Cliente ou unidade vinculada indisponível no cadastro. Importação bloqueada.',confidence:null,pages:[]});
  const pair=(labels:string[]):OcrEvidence|null=>{
   const matches=(Array.isArray(raw.keyValuePairs)?raw.keyValuePairs:[]).filter((p:any)=>labels.includes(normalize(p?.key?.content)));
   if(matches.length!==1)return null;const p=matches[0];const value=p.value;

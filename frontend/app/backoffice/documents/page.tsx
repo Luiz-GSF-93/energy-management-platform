@@ -8,10 +8,12 @@ import { apiRequest } from '@/app/lib/api/client';
 
 type Customer = { id: string; company_name: string };
 type Unit = { id: string; customer_id: string; name?: string; consumer_unit_number: string };
-type Document = { document_type: string; id: string; original_filename: string; reference_month: string; file_verified: boolean; processing_status: string };
+type Document = { intake_state?: string; document_type: string; id: string; original_filename: string; reference_month: string; file_verified: boolean; processing_status: string };
 const types = [['INVOICE_DISTRIBUTOR','Fatura da distribuidora'],['INVOICE_SUPPLIER','Fatura do fornecedor'],['CONTRACT_ENERGY','Contrato de energia'],['CONTRACT_MANAGEMENT','Contrato de gestão'],['CCEE_SETTLEMENT','Liquidação CCEE'],['CCEE_CHARGES','Encargos CCEE'],['TAX_DOCUMENT','Documento fiscal'],['COMPLIANCE_REPORT','Relatório de conformidade'],['OTHER','Outro']];
 const uploadPermission = '8f3ff5eb-157a-468a-91af-6f89d92e23a7';
 const viewPermission = '8f105b02-4443-49de-b188-847e0284e7ed';
+const receiptLabels:Record<string,string>={QUARANTINED:'Recebida — aguardando análise',PENDING_RECEIPT:'Arquivo ainda não verificado',IN_REVIEW:'Em conferência',REJECTED:'Rejeitada para processamento',REVIEW_REQUIRED:'Conferência humana necessária'};
+function receiptLabel(d:Document){return d.document_type==='INVOICE_DISTRIBUTOR'?(receiptLabels[d.intake_state??(d.file_verified?'QUARANTINED':'PENDING_RECEIPT')]??'Recebida — aguardando análise'):(d.file_verified?'Arquivo recebido':'Cadastro sem arquivo verificado');}
 function DocumentsContent() {
   const { context, hasPermission } = useAuth();
   const organizationId = context && context.scope !== 'global' ? context.currentOrganization.id : '';
@@ -51,7 +53,7 @@ function DocumentsContent() {
     try {
       const saved=await apiRequest<Document>('/api/v1/documents/upload',{method:'POST',body:data});
       if (currentOrg.current!==org) return;
-      setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice('Arquivo enviado e armazenado com acesso privado. A leitura automática ainda não está disponível.');
+      setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.');
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.'); }
     finally { setBusy(false); }
   }
@@ -94,7 +96,7 @@ function DocumentsContent() {
         <button type="submit" disabled={busy || !customer} style={{padding:12,background:'#123c66',color:'white',borderRadius:8}}>{busy?'Enviando…':'Enviar arquivo'}</button>
       </form>}
       <h2>Arquivos cadastrados</h2>
-      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{d.file_verified?'Arquivo recebido — conteúdo não validado':'Cadastro sem arquivo verificado'}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
+      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{receiptLabel(d)}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
     </>}
   </section>;
 }
