@@ -1,8 +1,9 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import OcrElectricalEvidence, {type ElectricalEvidence} from './OcrElectricalEvidence';
 import {apiRequest} from '@/app/lib/api/client';
 type Job={id:string;state:string;errorCode:string|null};
-type Intake={decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
+type Intake={electrical?:ElectricalEvidence;decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
 type Status={enabled:boolean;job:Job|null;intake?:Intake|null};
 const labels:Record<string,string>={QUEUED:'Na fila',SUBMITTING:'Enviando para leitura',POLLING:'Leitura em andamento',SUCCEEDED:'Extração recebida — aguarda conferência',FAILED:'Leitura interrompida',SUBMISSION_UNKNOWN:'Envio indeterminado — requer verificação administrativa'};
 export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:boolean}){
@@ -20,5 +21,6 @@ export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:
    <p>Comparação com o cadastro atual. Não representa aprovação da fatura.</p>
    <ul>{status.intake.checks.map(check=><li key={check.field}><strong>{check.label}: {check.state==='MATCH'?'Compatível':check.state==='MISMATCH'?'Divergente':'Conferir'}</strong><p>{check.message}</p>{check.confidence!==null&&<small>Confiança: {(check.confidence*100).toFixed(0)}%{check.pages.length?' · Página(s): '+check.pages.join(', '):''}</small>}</li>)}</ul>
   </details>}
+  {status?.intake?.electrical&&<OcrElectricalEvidence evidence={status.intake.electrical}/>}
  </div>;
 }
