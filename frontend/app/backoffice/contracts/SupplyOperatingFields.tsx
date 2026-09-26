@@ -14,9 +14,9 @@ export default function SupplyOperatingFields({value,busy,onDirty}:{value?:Opera
  const change=(i:number,patch:Partial<SeasonalYear>)=>{setYears(old=>old.map((r,n)=>n===i?{...r,...patch}:r));onDirty(true);};
  return <fieldset disabled={busy}><legend>Flexibilidade, modulação e sazonalidade</legend>
  <div className="organizations-create__form">
- <p>Informe os limites como percentual do volume contratado: 100% corresponde ao volume de referência; por exemplo, mínimo 90% e máximo 110%.</p>
+ <p>Campos informativos do cadastro original: ambos expressam percentuais totais do volume (por exemplo, 70% a 130%). Para o motor, após ativar o contrato, confirme em Faturamento automático o mínimo de 70% e a tolerância superior de 30%. Esses campos não substituem a condição de faturamento confirmada.</p>
  <Input label="Flexibilidade mínima (%)" name="flexibilityMinPercent" type="number" min="0" step="0.0001" defaultValue={value?.flexibility_min_percent??''}/>
- <Input label="Flexibilidade máxima (%)" name="flexibilityMaxPercent" type="number" min="0" step="0.0001" defaultValue={value?.flexibility_max_percent??''}/>
+ <Input label="Flexibilidade máxima informativa (% total do volume)" name="flexibilityMaxPercent" type="number" min="0" step="0.0001" defaultValue={value?.flexibility_max_percent??''}/>
  <label>Modulação<select className="ds-input" name="modulation" defaultValue={value?.modulation||''}><option value="">Não informada</option>{Object.entries(modulations).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
  <label>Submercado<select className="ds-input" name="submarket" defaultValue={value?.submarket||''}><option value="">Não informado</option>{Object.entries(submarkets).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
  <label>Sazonalidade<select className="ds-input" name="seasonalityMode" value={mode} onChange={e=>{setMode(e.target.value);onDirty(true);}}><option value="">Não informada</option><option value="RULE">Regra contratual</option><option value="MONTHLY">Distribuição mensal</option><option value="BOTH">Regra e distribuição mensal</option></select></label>
