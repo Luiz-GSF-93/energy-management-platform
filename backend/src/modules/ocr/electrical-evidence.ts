@@ -14,7 +14,7 @@ export function decimalFromInvoice(value:string):string|null {
  return (negative?'-':'')+digits+(fraction!==undefined?'.'+fraction:'');
 }
 export function classifyElectricalLine(description:string){
- let d=normalized(description);const off=/\bFORA PONTA\b/.test(d);d=d.replace(/\bFORA PONTA\b/g,' ');const peak=/\bPONTA\b/.test(d);
+ let d=normalized(description);const off=/\b(?:FORA(?: DE)?|F) PONTA\b/.test(d);d=d.replace(/\b(?:FORA(?: DE)?|F) PONTA\b/g,' ');const peak=/\bPONTA\b/.test(d);
  const period:ElectricalRow['period']=off&&!peak?'OFF_PEAK':peak&&!off?'PEAK':'UNSPECIFIED';
  const te=/\bTE\b/.test(d),tusd=/\bTUSD\b/.test(d);let component:ElectricalComponent='OTHER';
  if(te&&tusd)return {component,period};
@@ -37,7 +37,7 @@ export function electricalField(raw:Record<string,any>,input:any,numeric=false):
  const value=text(input?.content);const content=text(raw.content);const pagesRaw=Array.isArray(raw.pages)?raw.pages:[];
  const spans=Array.isArray(input?.spans)?input.spans.filter((s:any)=>Number.isInteger(s.offset)&&s.offset>=0&&Number.isInteger(s.length)&&s.length>0&&s.offset+s.length<=content.length).map((s:any)=>({offset:s.offset,length:s.length})):[];
  const pages:number[]=[...new Set<number>((Array.isArray(input?.boundingRegions)?input.boundingRegions:[]).map((r:any)=>r.pageNumber).filter((n:any)=>pagesRaw.some((p:any)=>p.pageNumber===n)&&Number.isInteger(n)))];
- const confidence=typeof input?.confidence==='number'&&Number.isFinite(input.confidence)&&input.confidence>=0&&input.confidence<=1?input.confidence:null;
+ const confidence=value.trim()&&typeof input?.confidence==='number'&&Number.isFinite(input.confidence)&&input.confidence>=0&&input.confidence<=1?input.confidence:null;
  const decimal=numeric?decimalFromInvoice(value):null;const issues:string[]=[];
  if(!value.trim())issues.push('MISSING_VALUE');
  const source=spans.map((s:any)=>content.slice(s.offset,s.offset+s.length)).join(' ');

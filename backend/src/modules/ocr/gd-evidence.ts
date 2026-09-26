@@ -27,7 +27,7 @@ export function extractGdEvidence(raw:Record<string,any>){
  const pairs=Array.isArray(raw.keyValuePairs)?raw.keyValuePairs:[];
  pairs.slice(0,500).forEach((p:any,i:number)=>{
   const label=norm(p?.key?.content),value=norm(p?.value?.content);
-  if(['GERACAO DISTRIBUIDA','MICRO E MINI GERACAO','PARTICIPACAO NO SCEE'].includes(label)&&value&&!['NAO','N','0','NAO SE APLICA'].includes(value))signals=true;
+  if(['GERACAO DISTRIBUIDA','MICRO E MINI GERACAO','PARTICIPACAO NO SCEE'].includes(label)&&value&&!['NAO','N','0','NAO SE APLICA'].includes(value)){if(['SIM','S','PARTICIPANTE','GERADOR','BENEFICIARIO'].includes(value))signals=true;else issues.push('GD_PARTICIPATION_VALUE_AMBIGUOUS');}
   add('keyValuePairs['+i+']',{...p.key,confidence:p.confidence},{...p.value,confidence:p.confidence});
  });
  if(pairs.length>500)issues.push('GD_LIMIT_REACHED');
