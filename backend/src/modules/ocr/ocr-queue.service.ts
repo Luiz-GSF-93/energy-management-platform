@@ -40,6 +40,15 @@ export class OcrQueueService {
   if(!verified)throw new ServiceUnavailableException('A origem da extração requer conferência administrativa.');
   try{return invoiceReadout(verified.raw,{page,offset,section} as ReadoutQuery);}catch{throw new BadRequestException('Página não encontrada.');}
  }
+ async reviewSource(org:string,document:string){
+  await this.licenses.requireEntitlement(org,'document_management');
+  const r=await this.db.getClient().from('document_ocr_jobs').select('id,state').eq('organization_id',org).eq('document_id',document).maybeSingle();
+  if(r.error)throw new ServiceUnavailableException('Não foi possível consultar a extração.');
+  if(!r.data||r.data.state!=='SUCCEEDED')throw new NotFoundException('Extração concluída não encontrada.');
+  const source=await this.verified(org,document,r.data.id);
+  if(!source)throw new ServiceUnavailableException('A origem da extração requer conferência administrativa.');
+  return {...source,jobId:r.data.id};
+ }
  private async intake(org:string,document:string,job:string){
   const verified=await this.verified(org,document,job);if(!verified)return null;
   const {raw,assessment}=verified;
@@ -57,7 +66,7 @@ export class OcrQueueService {
   const assessment=result.data.evidence?.assessment;
   if(!assessmentMatchesDocument(assessment,doc))return null;
   if(!['REJECT_AUTOMATION','REVIEW_REQUIRED'].includes(assessment.intake?.decision))return null;
-  return {raw:result.data.raw_result,assessment};
+  return {raw:result.data.raw_result,assessment,doc};
  }
  private publicJob(job:any){return {id:job.id,state:job.state,createdAt:job.created_at,updatedAt:job.updated_at,errorCode:job.error_code??null};}
 }
