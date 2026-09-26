@@ -1,3 +1,4 @@
+import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {invoiceReadout,ocrReadoutSummary,ReadoutQuery} from './invoice-readout';
 import {extractGdEvidence} from './gd-evidence';
 import { extractElectricalEvidence } from './electrical-evidence';
@@ -42,7 +43,7 @@ export class OcrQueueService {
  private async intake(org:string,document:string,job:string){
   const verified=await this.verified(org,document,job);if(!verified)return null;
   const {raw,assessment}=verified;
-  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
+  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,layout:extractCpflPaulistaLayout(raw),electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
  }
  private async verified(org:string,document:string,job:string){
   const db=this.db.getClient();
