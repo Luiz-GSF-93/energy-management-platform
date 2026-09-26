@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.supplier_billing_rules (
  source text NOT NULL,reason text NOT NULL DEFAULT '',created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(contract_id,version)
 );
 ALTER TABLE public.supplier_billing_rules ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.supplier_billing_rules FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.supplier_billing_rules FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT,INSERT ON public.supplier_billing_rules TO service_role;
 CREATE OR REPLACE FUNCTION public.guard_supplier_billing_rule() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 DECLARE c record; latest record;
