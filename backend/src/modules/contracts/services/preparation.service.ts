@@ -1,3 +1,4 @@
+import {distributorSubtotal} from './distributor-subtotal';
 import {Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
 import {SupabaseService} from '../../../services/supabase.service';
 import {LicensesService} from '../../licenses/services/licenses.service';
@@ -26,6 +27,7 @@ export class CalculationPreparationService {
  const period=monthPeriod(d.month),ids=contracts.filter(c=>['ACTIVE','APPROVED'].includes(c.status)&&c.contract_type==='ENERGY_PURCHASE'&&String(c.start_date).slice(0,10)<=period.end&&(!c.end_date||String(c.end_date).slice(0,10)>=period.start)).map(c=>c.id),prices:any[]=[];
  for(let i=0;i<ids.length;i+=100){const batch=ids.slice(i,i+100);prices.push(...await this.all(()=>this.table('contract_price_history').select('*').in('contract_id',batch)));}
  const tariffPreview=previewTariffs(u,d.month,period,parameters,monthly);
- return {...prepareMonth(u,d.month,parameters,contracts,prices,management,services,monthly,monthlyCosts),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:monthlyCostLedger(u,d.month,monthlyCosts),tariffPreview,taxMemory:taxMemory(u,d.month,parameters,tariffPreview),checkedAt:new Date().toISOString()};
+ const taxes=taxMemory(u,d.month,parameters,tariffPreview);
+ return {...prepareMonth(u,d.month,parameters,contracts,prices,management,services,monthly,monthlyCosts),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:monthlyCostLedger(u,d.month,monthlyCosts),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,parameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
  }
 }
