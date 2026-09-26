@@ -1,6 +1,7 @@
+import {transcriptionEvidence,type TranscriptionEvidence} from './transcription-evidence';
 /** Read-only candidates. Labels do not prove invoice type, tax basis or financial approval. */
 export type ElectricalComponent = 'TE'|'TUSD_ENERGY'|'DEMAND_CONTRACTED'|'DEMAND_MEASURED'|'DEMAND_UNUSED'|'DEMAND_EXCESS'|'DEMAND_BILLED'|'REACTIVE_ENERGY'|'PENALTY'|'INTEREST'|'ICMS'|'PIS'|'COFINS'|'IOF'|'OTHER';
-export interface ElectricalField {text:string;decimal:string|null;confidence:number|null;pages:number[];spans:{offset:number;length:number}[];issues:string[];}
+export interface ElectricalField {transcription?:TranscriptionEvidence;text:string;decimal:string|null;confidence:number|null;pages:number[];spans:{offset:number;length:number}[];issues:string[];}
 export interface ElectricalRow {index:number;source:string;component:ElectricalComponent;period:'PEAK'|'OFF_PEAK'|'UNSPECIFIED';description:ElectricalField;quantity:ElectricalField;unit:ElectricalField;unitPrice:ElectricalField;amount:ElectricalField;confidence:number|null;issues:string[];}
 const text=(value:unknown)=>typeof value==='string'?value:'';
 const normalized=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
@@ -45,7 +46,7 @@ export function electricalField(raw:Record<string,any>,input:any,numeric=false):
  if(confidence===null)issues.push('MISSING_CONFIDENCE');else if(confidence<0.45)issues.push('CONFIDENCE_BELOW_45');else if(confidence<=0.85)issues.push('CONFIDENCE_REQUIRES_REVIEW');
  if(numeric&&decimal===null)issues.push('INVALID_DECIMAL');
  if(input?.valueCurrency?.currencyCode&&input.valueCurrency.currencyCode!=='BRL')issues.push('NON_BRL_CURRENCY');
- return {text:value.slice(0,2000),decimal,confidence,pages,spans,issues};
+ return {transcription:transcriptionEvidence(raw,input),text:value.slice(0,2000),decimal,confidence,pages,spans,issues};
 }
 function row(raw:Record<string,any>,fields:any,index:number,source:string):ElectricalRow{
  const description=electricalField(raw,fields.Description),quantity=electricalField(raw,fields.Quantity,true),unit=electricalField(raw,fields.Unit),unitPrice=electricalField(raw,fields.UnitPrice,true),amount=electricalField(raw,fields.Amount,true);
