@@ -1,6 +1,6 @@
 # Parâmetros e comparação ACL × ACR — proposta de implantação
 
-Status: Etapa 4 em implantação. A F1.57 acrescenta composição operacional somente leitura das rubricas revisadas ACL/ACR. O fechamento financeiro, a economia consolidada e a publicação ainda estão pendentes. As seções iniciais registram a arquitetura e os requisitos; as entregas ao final detalham o que foi implementado.
+Status: Etapa 4 em implantação. A F1.58 acrescenta prévia consolidada do cliente com honorários, usando a composição operacional F1.57. O fechamento financeiro com congelamento de fontes, aprovação e publicação ainda está pendente. As seções iniciais registram a arquitetura e os requisitos; as entregas ao final detalham o que foi implementado.
 
 ## Enquadramento no Prompt Mestre
 
@@ -100,3 +100,7 @@ Parâmetros COST podem declarar monetary_source em vez de amount_text. São refe
 ## F1.57 — Composição operacional
 
 A preparação soma tarifas, fornecedor e custos adicionais mediante origens automáticas aprovadas, acrescentando cada tributo uma vez. A composição exige identificação, revisão, vigência, tratamento e classificação das rubricas; preserva os tributos já incluídos e não repete a NF regular. Créditos e fontes não conciliadas permanecem bloqueados. A interface apresenta subtotais e pendências por cenário. Ainda não soma honorários nem calcula economia ou publica resultados. Ver [entrega F1.57](ENTREGA-F1.57.md).
+
+## F1.58 — Prévia consolidada do cliente
+
+Consulta explícita reúne todas as unidades cadastradas do cliente na mesma competência. Qualquer composição pendente bloqueia o consolidado. Calcula diferença operacional, fixo integral por unidade e variável sobre a economia consolidada antes do fixo, com piso zero somente do variável e rateio em centavos. A interface apresenta valores preliminares, fontes e correções por unidade. Não representa publicação ou faturamento; tributos específicos dos honorários e snapshots continuam pendentes. Ver [entrega F1.58](ENTREGA-F1.58.md).
