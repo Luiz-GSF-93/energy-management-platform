@@ -1,3 +1,4 @@
+import {extractCpflMeasurements,cpflReference} from './cpfl-measurements';
 import {reconcileCpflOperations} from './cpfl-reconciliation';
 import {electricalField, decimalFromInvoice, classifyElectricalLine, type ElectricalField} from './electrical-evidence';
 import {invoiceLayoutLibrary} from './layout-library';
@@ -60,7 +61,8 @@ export function extractCpflPaulistaLayout(raw:any){
  const issuerMatched=issuerNames.some(n=>issuer===n||firstPageLines.some(l=>l===n||l.startsWith(n+' ')));
  const classifications=pairs.filter(p=>norm(p?.key?.content)==='CLASSIFICACAO').map(p=>norm(p?.value?.content));
  const groupA=classifications.some(v=>/\bA[1-4]\b|\bAS\b/.test(v));
- const result=()=>({version:'cpfl-paulista-a@1.0.0',layoutId:issuerMatched&&groupA?'cpfl-paulista-a':null,name:issuerMatched&&groupA?'CPFL Paulista · Grupo A':'Layout ainda não identificado',status:'IN_HOMOLOGATION',canImport:false,library:invoiceLayoutLibrary,columns:cpflColumns,fields,operations,blocks,issues:[...new Set(issues)],coverage:[
+ let measurements:ReturnType<typeof extractCpflMeasurements>|null=null;
+ const result=()=>({measurements,version:'cpfl-paulista-a@1.1.0',layoutId:issuerMatched&&groupA?'cpfl-paulista-a':null,name:issuerMatched&&groupA?'CPFL Paulista · Grupo A':'Layout ainda não identificado',status:'IN_HOMOLOGATION',canImport:false,library:invoiceLayoutLibrary,columns:cpflColumns,fields,operations,blocks,issues:[...new Set(issues)],coverage:[
   {label:'Identificação e período',mapped:['customer','customerTaxId','serviceAddress','unit','reference','dueDate','currentReading','previousReading'].filter(k=>fields.some(f=>f.name===k&&f.value.text.trim())).length,expected:8},
   {label:'Dados fiscais',mapped:['invoiceNumber','series','issueDate'].filter(k=>fields.some(f=>f.name===k&&f.value.text.trim())).length,expected:3},
   {label:'Colunas da tabela de operações',mapped:cpflColumns.filter(([k])=>operations.some(r=>r.fields[k]?.text.trim())).length,expected:11}
@@ -134,6 +136,8 @@ export function extractCpflPaulistaLayout(raw:any){
  if(!operations.length)issues.push('OPERATIONS_NOT_MAPPED');
  if(operations.some(r=>r.issues.length))issues.push('OPERATION_REVIEW_REQUIRED');
  for(const name of new Set(fields.map(f=>f.name))){const candidates=fields.filter(f=>f.name===name&&f.value.text.trim());if(new Set(candidates.map(f=>norm(f.value.text))).size>1)issues.push('CONFLICTING_'+name.toUpperCase());}
+ const refs=[...new Set(fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
+ measurements=extractCpflMeasurements(raw,refs.length===1?refs[0]:null);
  issues.push('IDENTITY_AND_PROFILE_REQUIRE_REVIEW','TOTALS_REQUIRE_RECONCILIATION','HOMOLOGATION_PENDING');
  return result();
 }
