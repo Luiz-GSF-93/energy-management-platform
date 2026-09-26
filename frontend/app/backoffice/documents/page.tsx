@@ -1,5 +1,6 @@
 'use client';
 import { FormEvent, useEffect, useState, useRef } from 'react';
+import OcrDocumentStatus from './OcrDocumentStatus';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
 import { useAuth } from '@/app/providers';
@@ -7,7 +8,7 @@ import { apiRequest } from '@/app/lib/api/client';
 
 type Customer = { id: string; company_name: string };
 type Unit = { id: string; customer_id: string; name?: string; consumer_unit_number: string };
-type Document = { id: string; original_filename: string; reference_month: string; file_verified: boolean; processing_status: string };
+type Document = { document_type: string; id: string; original_filename: string; reference_month: string; file_verified: boolean; processing_status: string };
 const types = [['INVOICE_DISTRIBUTOR','Fatura da distribuidora'],['INVOICE_SUPPLIER','Fatura do fornecedor'],['CONTRACT_ENERGY','Contrato de energia'],['CONTRACT_MANAGEMENT','Contrato de gestão'],['CCEE_SETTLEMENT','Liquidação CCEE'],['CCEE_CHARGES','Encargos CCEE'],['TAX_DOCUMENT','Documento fiscal'],['COMPLIANCE_REPORT','Relatório de conformidade'],['OTHER','Outro']];
 const uploadPermission = '8f3ff5eb-157a-468a-91af-6f89d92e23a7';
 const viewPermission = '8f105b02-4443-49de-b188-847e0284e7ed';
@@ -92,7 +93,7 @@ function DocumentsContent() {
         <button type="submit" disabled={busy || !customer} style={{padding:12,background:'#123c66',color:'white',borderRadius:8}}>{busy?'Enviando…':'Enviar arquivo'}</button>
       </form>}
       <h2>Arquivos cadastrados</h2>
-      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{d.file_verified?'Arquivo recebido':'Cadastro sem arquivo verificado'}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}</td></tr>)}</tbody></table></div>}
+      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{d.file_verified?'Arquivo recebido':'Cadastro sem arquivo verificado'}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
     </>}
   </section>;
 }

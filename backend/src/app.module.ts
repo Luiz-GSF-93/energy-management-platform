@@ -1,3 +1,4 @@
+import { OcrModule } from './modules/ocr/ocr.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
@@ -33,6 +34,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     LicensesModule,
     DashboardModule,
     PlansModule,
+    OcrModule,
   ],
   controllers: [AppController],
   providers: [
