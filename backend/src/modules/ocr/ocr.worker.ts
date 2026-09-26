@@ -1,3 +1,4 @@
+import {extractGdEvidence} from './gd-evidence';
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
@@ -39,7 +40,7 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
     if(polled.status==='failed'){await this.change(job,'FAIL',{p_error:'ANALYSIS_FAILED'});return;}
     // Completion + evidence are atomic; a failed acknowledgement is safe to resume by GET.
     const assessment=await captureInvoiceAssessment(this.db.getClient(),job,polled.result);
-    await this.change(job,'COMPLETE',{p_result:polled.result,p_evidence:{...extractInvoiceEvidence(polled.result),assessment}});return;
+    await this.change(job,'COMPLETE',{p_result:polled.result,p_evidence:{...extractInvoiceEvidence(polled.result),gd:extractGdEvidence(polled.result),assessment}});return;
    }
    const {data:doc,error:docError}=await this.db.getClient().from('documents').select('*').eq('id',job.document_id).eq('organization_id',job.organization_id).maybeSingle();
    if(docError)throw new Error('OCR_SOURCE_LOOKUP_PENDING');

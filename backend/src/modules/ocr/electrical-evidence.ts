@@ -18,6 +18,7 @@ export function classifyElectricalLine(description:string){
  const period:ElectricalRow['period']=off&&!peak?'OFF_PEAK':peak&&!off?'PEAK':'UNSPECIFIED';
  const te=/\bTE\b/.test(d),tusd=/\bTUSD\b/.test(d);let component:ElectricalComponent='OTHER';
  if(te&&tusd)return {component,period};
+ if(/\bCREDITO\b|\bCREDITOS\b|\bCOMPENSADA\b|\bCOMPENSADO\b|\bINJETADA\b|\bSUBVENCAO\b|\bDESC\b|\bDESCONTO\b/.test(d))return {component,period};
  if(/\bMULTA\b/.test(d))component='PENALTY';
  else if(/\bJUROS\b/.test(d))component='INTEREST';
  else if(/\bDEMANDA\b/.test(d)){
@@ -32,7 +33,7 @@ export function classifyElectricalLine(description:string){
  else {const taxes=(['ICMS','PIS','COFINS','IOF'] as const).filter(t=>new RegExp('\\b'+t+'\\b').test(d));if(taxes.length===1)component=taxes[0];}
  return {component,period};
 }
-function field(raw:Record<string,any>,input:any,numeric=false):ElectricalField{
+export function electricalField(raw:Record<string,any>,input:any,numeric=false):ElectricalField{
  const value=text(input?.content);const content=text(raw.content);const pagesRaw=Array.isArray(raw.pages)?raw.pages:[];
  const spans=Array.isArray(input?.spans)?input.spans.filter((s:any)=>Number.isInteger(s.offset)&&s.offset>=0&&Number.isInteger(s.length)&&s.length>0&&s.offset+s.length<=content.length).map((s:any)=>({offset:s.offset,length:s.length})):[];
  const pages:number[]=[...new Set<number>((Array.isArray(input?.boundingRegions)?input.boundingRegions:[]).map((r:any)=>r.pageNumber).filter((n:any)=>pagesRaw.some((p:any)=>p.pageNumber===n)&&Number.isInteger(n)))];
@@ -47,7 +48,7 @@ function field(raw:Record<string,any>,input:any,numeric=false):ElectricalField{
  return {text:value.slice(0,2000),decimal,confidence,pages,spans,issues};
 }
 function row(raw:Record<string,any>,fields:any,index:number,source:string):ElectricalRow{
- const description=field(raw,fields.Description),quantity=field(raw,fields.Quantity,true),unit=field(raw,fields.Unit),unitPrice=field(raw,fields.UnitPrice,true),amount=field(raw,fields.Amount,true);
+ const description=electricalField(raw,fields.Description),quantity=electricalField(raw,fields.Quantity,true),unit=electricalField(raw,fields.Unit),unitPrice=electricalField(raw,fields.UnitPrice,true),amount=electricalField(raw,fields.Amount,true);
  const classified=classifyElectricalLine(description.text);const issues:string[]=[];const values=[description,quantity,unit,unitPrice,amount];
  if(classified.component==='OTHER')issues.push('UNMAPPED_COMPONENT');
  const u=normalized(unit.text);
@@ -62,7 +63,7 @@ function row(raw:Record<string,any>,fields:any,index:number,source:string):Elect
 const headers:Record<string,string>={'DESCRICAO':'Description','DESCRICAO DO ITEM':'Description','ITENS DA FATURA':'Description','QUANTIDADE':'Quantity','QTD':'Quantity','UNIDADE':'Unit','UN':'Unit','TARIFA':'UnitPrice','TARIFA UNITARIA':'UnitPrice','VALOR UNITARIO':'UnitPrice','PRECO UNITARIO':'UnitPrice','VALOR':'Amount','VALOR TOTAL':'Amount','TOTAL':'Amount'};
 export function extractElectricalEvidence(raw:Record<string,any>){
  const documents=Array.isArray(raw.documents)?raw.documents:[];const issues:string[]=[];const rows:ElectricalRow[]=[];
- if(documents.length!==1)return {version:'electrical-evidence-v1',canImport:false,rows,issues:['INVOICE_COUNT_NOT_ONE'],taxDetails:[]};
+ if(documents.length!==1)return {version:'electrical-evidence-v2',canImport:false,rows,issues:['INVOICE_COUNT_NOT_ONE'],taxDetails:[]};
  const fields=documents[0]?.fields??{};const items=fields.Items?.valueArray;
  if(Array.isArray(items)&&items.length){
   if(items.length>500)issues.push('ITEM_LIMIT_REACHED');
@@ -86,7 +87,7 @@ export function extractElectricalEvidence(raw:Record<string,any>){
  if(rows.some(r=>r.component==='OTHER'))issues.push('UNMAPPED_ITEMS');
  // TaxDetails has no reliable tax name: preserve values without guessing ICMS/PIS/COFINS.
  const taxes=Array.isArray(fields.TaxDetails?.valueArray)?fields.TaxDetails.valueArray:[];
- const taxDetails=taxes.slice(0,100).map((entry:any,index:number)=>({index,amount:field(raw,entry?.valueObject?.Amount,true),rate:field(raw,entry?.valueObject?.Rate),tax:'UNIDENTIFIED',basis:'UNVERIFIED'}));
+ const taxDetails=taxes.slice(0,100).map((entry:any,index:number)=>({index,amount:electricalField(raw,entry?.valueObject?.Amount,true),rate:electricalField(raw,entry?.valueObject?.Rate),tax:'UNIDENTIFIED',basis:'UNVERIFIED'}));
  if(taxes.length>100)issues.push('TAX_LIMIT_REACHED');
- return {version:'electrical-evidence-v1',canImport:false,rows,issues:[...new Set(issues)],taxDetails};
+ return {version:'electrical-evidence-v2',canImport:false,rows,issues:[...new Set(issues)],taxDetails};
 }

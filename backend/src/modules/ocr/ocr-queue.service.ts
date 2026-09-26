@@ -1,3 +1,4 @@
+import {extractGdEvidence} from './gd-evidence';
 import { extractElectricalEvidence } from './electrical-evidence';
 import { assessmentMatchesDocument } from './invoice-assessment';
 import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
@@ -36,7 +37,7 @@ export class OcrQueueService {
   const assessment=result.data.evidence?.assessment;
   if(!assessmentMatchesDocument(assessment,doc))return null;
   if(!['REJECT_AUTOMATION','REVIEW_REQUIRED'].includes(assessment.intake?.decision))return null;
-  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,electrical:extractElectricalEvidence(result.data.raw_result)};
+  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,electrical:extractElectricalEvidence(result.data.raw_result),gd:extractGdEvidence(result.data.raw_result)};
  }
  private publicJob(job:any){return {id:job.id,state:job.state,createdAt:job.created_at,updatedAt:job.updated_at,errorCode:job.error_code??null};}
 }

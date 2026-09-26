@@ -1,3 +1,4 @@
+import {ocrPreparationCandidates} from './preparation-ocr';
 import {customerFinancialPreview,CustomerUnitInput} from './customer-financial-preview';
 import {operationalComposition} from './operational-composition';
 import {operationalTaxBases} from './operational-tax-bases';
@@ -48,10 +49,12 @@ export class CalculationPreparationService {
  for(let i=0;i<ids.length;i+=100){const batch=ids.slice(i,i+100);prices.push(...await this.all(()=>this.table('contract_price_history').select('*').in('contract_id',batch)));}
  // ACL supplier TE is contractual energy. Legacy manually entered ACL TE must not be counted twice.
  const tariffParameters=parameters.filter(p=>!(u.free_market===true&&p.scenario==='ACL'&&p.kind==='TARIFF'&&p.component_code==='TE'));
+ const ocrDocuments=await ocrPreparationCandidates(this.db.getClient(),u,d.month);
  const supplier=contractSupplierCost(u,d.month,contracts,prices,billingRules,monthly,monthlyCosts);
  const prepared=prepareMonth(u,d.month,parameters,contracts,prices,management,services,monthly,monthlyCosts);
  if(supplier.pricePerMwh!==null)prepared.findings=prepared.findings.filter(f=>!['PRICE_GAP','PRICE_OVERLAP','PRICE_SOURCES','PRICE_SPLIT','INDEX_PENDING','MONTHLY_VOLUME'].some(code=>f.code===code+':'+supplier.contract?.id));
  for(const requirement of supplier.requirements)prepared.findings.push({code:'SUPPLIER_AUTO:'+ (supplier.contract?.id||'')+':'+requirement.code,section:requirement.tab==='monthly'?'Medições':requirement.tab==='costs'?'Custos mensais':requirement.tab==='distributor'?'Unidade':'Fornecedor',severity:'BLOCKER',message:requirement.message});
+ if(ocrDocuments.some(doc=>doc.gd?.detected)&&!prepared.findings.some(f=>f.code==='OCR_GD_PENDING'))prepared.findings.push({code:'OCR_GD_PENDING',section:'GD / OCR',severity:'BLOCKER',message:'A fatura possui indícios de GD. Confira créditos, compensação, rateio e vigência antes de calcular; os candidatos OCR ainda não são lançamentos aprovados.'});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
  prepared.counts.reviews=prepared.findings.filter(f=>f.severity==='REVIEW').length;
  const tariffPreview=previewTariffs(u,d.month,period,tariffParameters,monthly);
@@ -60,7 +63,7 @@ export class CalculationPreparationService {
  const taxes=taxMemory(u,d.month,parameters,tariffPreview,operational);
  for(const pending of operational.pending)prepared.findings.push({code:'PARAMETER_ISSUE:'+pending.parameterId,section:'Bases operacionais',severity:'BLOCKER',message:pending.label+': '+pending.reason});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
- if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules})));
- return {...prepared,operationalComposition:operationalComposition(u,d.month,tariffParameters,tariffPreview,taxes,operational,supplier,costs,prepared.findings),operationalTaxBases:operational,contractSupplierCost:supplier,managementFeeMemory:managementFeeMemory(u,d.month,management,feeRules),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
+ if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments})));
+ return {...prepared,ocrDocuments,operationalComposition:operationalComposition(u,d.month,tariffParameters,tariffPreview,taxes,operational,supplier,costs,prepared.findings),operationalTaxBases:operational,contractSupplierCost:supplier,managementFeeMemory:managementFeeMemory(u,d.month,management,feeRules),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
  }
 }
