@@ -23,8 +23,8 @@ export const entrySteps:Record<EntryKind,Step[]>={
  {title:'Observações',help:'Registre condições adicionais antes da revisão.',fields:[f('notes','Condições comerciais e observações','textarea')]}
  ],
  management:[
- {title:'Referência e vigência',help:'O honorário é cadastrado para o cliente como um todo. Não repita o valor em cada unidade.',fields:[f('contractNumber','Número / referência da vigência','text',true),...dates]},
- {title:'Modelo e valores',help:'O percentual variável é aplicado sobre a economia líquida, após deduzir os custos e o honorário fixo.',fields:[f('remunerationModel','Modelo de honorário','select',true,{FIXED:'Fixo mensal',HYBRID:'Híbrido: fixo + percentual sobre economia líquida'}),f('fixedFeeMonthly','Honorário fixo mensal (R$)','number',true),{...f('savingsPercentage','Percentual sobre economia líquida (%)','number',true),max:100,show:p=>p.remunerationModel==='HYBRID'}]},
+ {title:'Referência e vigência',help:'O contrato pertence ao cliente. O fixo é cobrado integralmente por unidade. No híbrido, somente a parcela variável usa rateio.',fields:[f('contractNumber','Número / referência da vigência','text',true),...dates]},
+ {title:'Modelo e valores',help:'O percentual variável usa a economia consolidada do cliente após os demais custos, antes dos honorários. O fixo não é deduzido dessa base. Somente o variável é rateado.',fields:[f('remunerationModel','Modelo de honorário','select',true,{FIXED:'Fixo mensal',HYBRID:'Híbrido: fixo por unidade + percentual sobre economia consolidada'}),f('fixedFeeMonthly','Honorário fixo mensal por unidade (R$)','number',true),{...f('savingsPercentage','Percentual sobre economia consolidada antes dos honorários (%)','number',true),max:100,show:p=>p.remunerationModel==='HYBRID'}]},
  {title:'Condições de aplicação',help:'A vigência somente entrará no histórico após a confirmação de registro.',fields:[f('applicationRules','Regras de aplicação e condições comerciais','textarea',true)]}
  ],
  services:[

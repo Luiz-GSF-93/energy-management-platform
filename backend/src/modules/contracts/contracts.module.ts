@@ -1,3 +1,5 @@
+import {ManagementAllocationController} from './controllers/management-allocation.controller';
+import {ManagementAllocationService} from './services/management-allocation.service';
 import {EntryDraftController} from './controllers/entry-drafts.controller';
 import {EntryDraftService} from './services/entry-drafts.service';
 import {ConsumerUnitsModule} from '../consumer-units/consumer-units.module';
@@ -19,8 +21,8 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule,ConsumerUnitsModule],
-  controllers: [EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
-  providers: [EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
+  controllers: [ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
 export class ContractsModule {}
