@@ -3,7 +3,7 @@ import {Type} from 'class-transformer';
 export class MonthlyCostItemDto {
  @IsUUID() id!:string;
  @IsString() @Matches(/\S/) @MaxLength(200) label!:string;
- @IsIn(['CCEE','EXPOSURE','CHARGE','OTHER']) category!:string;
+ @IsIn(['CCEE','EXPOSURE','CHARGE','OTHER','SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY']) category!:string;
  @IsIn(['ACL','ACR']) scenario!:string;
  @IsIn(['COST','CREDIT']) effect!:string;
  @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,2})?$/) amount!:string;
