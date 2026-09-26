@@ -5,6 +5,7 @@ export function correctionTarget(f:{code:string;section:string},base:CorrectionC
  if(code==='TAX_MISSING'){target.kind='TAX';target.scenario=a;target.component=b;}
  if(code==='TARIFF_MISSING'){target.kind='TARIFF';target.scenario=a;}
  if(['PARAMETER_GAP','PARAMETER_OVERLAP','PARAMETER_SPLIT'].includes(code)){const [scenario,kind,component]=a.split('/');Object.assign(target,{scenario,kind,component});}
+ if(code==='SUPPLIER_AUTO'&&tab==='supply')target.recordId=a||undefined;
  if(code==='DRAFT_PARAMETERS')target.drafts=true;
  if(code==='PARAMETER_ISSUE'||['PRICE_GAP','PRICE_OVERLAP','PRICE_SOURCES','PRICE_SPLIT','INDEX_PENDING','MONTHLY_VOLUME','LOAD_PROFILE','SERVICE_REVIEW'].includes(code))target.recordId=a;
  return target;

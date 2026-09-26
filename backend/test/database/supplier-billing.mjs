@@ -1,0 +1,32 @@
+// Uses isolated PostgreSQL-compatible PGlite, never production.
+import {PGlite} from '@electric-sql/pglite';import {readFileSync} from 'node:fs';import {createRequire} from 'node:module';import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url);require('reflect-metadata');const {SupplierBillingService}=require('../../dist/modules/contracts/services/supplier-billing.service.js');
+const db=new PGlite();let checks=0;const ok=x=>{assert.ok(x);checks++;};const q=n=>'"'+n.replaceAll('"','""')+'"';
+class Query{
+ constructor(table){this.table=table;this.filters=[];this.params=[];this.op='select';}
+ select(){return this;}order(k,o={ascending:true}){this.orderSql=' ORDER BY '+q(k)+(o.ascending?' ASC':' DESC');return this;}range(a,b){this.rangeSql=' LIMIT '+(b-a+1)+' OFFSET '+a;return this;}eq(k,v){this.params.push(v);this.filters.push(q(k)+'=$'+this.params.length);return this;}is(k,v){assert.equal(v,null);this.filters.push(q(k)+' IS NULL');return this;}
+ insert(rows){this.op='insert';this.values=rows[0];return this;} update(values){this.op='update';this.values=values;return this;}single(){return this.execute(true);}maybeSingle(){return this.execute(true);}then(resolve,reject){return this.execute(false).then(resolve,reject);}
+ async execute(single){const p=[...this.params];const bind=v=>{p.push(v!==null&&typeof v==='object'?JSON.stringify(v):v);return '$'+p.length;};const where=this.filters.length?' WHERE '+this.filters.join(' AND '):'';const sql=this.op==='insert'?'INSERT INTO '+q(this.table)+' ('+Object.keys(this.values).map(q).join(',')+') VALUES ('+Object.values(this.values).map(bind).join(',')+') RETURNING *':this.op==='update'?'UPDATE '+q(this.table)+' SET '+Object.entries(this.values).map(([k,v])=>q(k)+'='+bind(v)).join(',')+where+' RETURNING *':'SELECT * FROM '+q(this.table)+where+(this.orderSql||'')+(this.rangeSql||'');try{const r=await db.query(sql,p);const data=JSON.parse(JSON.stringify(r.rows));return {data:single?data[0]||null:data,error:null};}catch(error){return {data:null,error};}}
+}
+try{
+ await db.exec('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;GRANT USAGE ON SCHEMA public TO anon,authenticated,service_role');
+ await db.exec('CREATE TABLE customers(id text primary key,organization_id text,deleted_at timestamptz);CREATE TABLE consumer_units(id text primary key,organization_id text,customer_id text,free_market boolean,name text);CREATE TABLE energy_contracts(id text primary key,organization_id text,customer_id text,consumer_unit_id text,contract_type text,status text,start_date date,end_date date);GRANT ALL ON customers,consumer_units,energy_contracts TO service_role');
+ const migration=readFileSync(new URL('../../src/database/migrations/20260926_f1_54_supplier_billing.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
+ await db.query("INSERT INTO customers VALUES ($1,'org-a',null),($2,'org-b',null)",[a,b]);await db.query("INSERT INTO consumer_units VALUES ($1,'org-a',$1,true,'Unit A'),($2,'org-b',$2,true,'Unit B')",[a,b]);await db.query("INSERT INTO energy_contracts VALUES ($1,'org-a',$1,$1,'ENERGY_PURCHASE','ACTIVE','2026-01-01','2028-12-31'),($2,'org-b',$2,$2,'ENERGY_PURCHASE','ACTIVE','2026-01-01','2028-12-31')",[a,b]);await db.exec('SET ROLE service_role');
+ let entitled=true;const client={getClient:()=>({from:t=>new Query(t)})},licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(new Error('No license'),{getStatus:()=>403});}};
+ const s=new SupplierBillingService(client,licenses),t={organizationId:'org-a',userId:'actor',role:'gestor'},other={...t,organizationId:'org-b'},deny=async(fn,status)=>{await assert.rejects(fn,e=>e.getStatus?.()===status);checks++;};
+ const body={contractId:a,startDate:'2026-01-01',endDate:'2026-12-31',volumeBasis:'MONTHLY',minPercent:'70',maxTolerancePercent:'30',priceMode:'FINAL',taxTreatment:'GROSS',source:'Contract clause',reason:''};
+ const r=await s.create(body,t);ok(r.version===1&&Number(r.max_tolerance_percent)===30);ok((await s.list({contractId:a},t)).rows.length===1);
+ await deny(()=>s.create(body,t),409);await deny(()=>s.list({contractId:a},other),404);await deny(()=>s.create(body,other),404);await deny(()=>s.create(body,{...t,role:'operador'}),403);ok(!(await s.list({contractId:a},{...t,role:'operador'})).canConfigure);
+ for(const patch of [{startDate:'2025-01-01'},{endDate:'2026-02-30'},{minPercent:'131'},{maxTolerancePercent:'-1'},{maxPercent:'130'},{source:' '},{organizationId:'org-b'},{priceMode:'BASE_PLUS_INDEX',indexPercent:'10'},{priceMode:'FINAL',indexPercent:'10'}])await deny(()=>s.create({...body,...patch,previousId:r.id,reason:'Test'},t),400);
+ const r2=await s.create({...body,previousId:r.id,reason:'Correct tolerance',maxTolerancePercent:'20'},t);ok(r2.version===2);ok(Number((await s.list({contractId:a},t)).rows[1].max_tolerance_percent)===30);await deny(()=>s.create({...body,previousId:r.id,reason:'Stale'},t),409);await deny(()=>s.create({...body,previousId:r2.id},t),409);
+ await assert.rejects(()=>db.exec("UPDATE supplier_billing_rules SET source='overwrite'"),e=>e.code==='42501');checks++;await assert.rejects(()=>db.exec('DELETE FROM supplier_billing_rules'),e=>e.code==='42501');checks++;
+ const p=await s.create({...body,contractId:b},{...other,role:'consulta',accessMode:'platform_operation'});ok(p.version===1);
+ entitled=false;await deny(()=>s.list({contractId:a},t),403);entitled=true;
+ await db.query('UPDATE energy_contracts SET status=$1 WHERE id=$2',['DRAFT',a]);await deny(()=>s.create({...body,previousId:r2.id,reason:'Wrong status'},t),400);
+ await db.query('UPDATE customers SET deleted_at=now() WHERE id=$1',[a]);await deny(()=>s.list({contractId:a},t),404);
+ await db.exec('RESET ROLE');await assert.rejects(()=>db.exec("UPDATE supplier_billing_rules SET source='overwrite'"),e=>e.code==='P5402');checks++;await assert.rejects(()=>db.exec('DELETE FROM supplier_billing_rules'),e=>e.code==='P5402');checks++;
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>db.exec('SELECT * FROM supplier_billing_rules'),e=>e.code==='42501');checks++;await db.exec('RESET ROLE');}
+ console.log('Supplier billing: '+checks+' isolated database/service checks passed.');
+}finally{await db.close();}
