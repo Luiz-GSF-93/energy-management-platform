@@ -1,3 +1,4 @@
+import {includedTaxReferences} from './included-tax-declaration';
 import {TariffPreview} from './tariff-preview';
 import {sharedInsideTaxes} from './shared-inside-taxes';
 import {composeTaxes} from './tax-composition';
@@ -7,18 +8,18 @@ const day=(v:unknown):v is string=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.te
 const fixed=(n:bigint,p:number)=>{const s=n.toString().padStart(p+1,'0');return s.slice(0,-p)+'.'+s.slice(-p);};
 function exact(v:unknown,p:number){if(typeof v!=='string'||!new RegExp('^(0|[1-9][0-9]*)([.][0-9]{1,'+p+'})?$').test(v)||v.length>80)throw Error('Decimal inválido');const [a,b='']=v.split('.');return BigInt(a)*10n**BigInt(p)+BigInt(b.padEnd(p,'0'));}
 const rounded=(n:bigint,d:bigint)=>fixed((n*100n+d/2n)/d,2);
-export type TaxMemory={formulaVersion:'tax-memory-1.3';lines:{id:string;revision:number;label:string;code:string;scenario:string;treatment:string;rate:string;exactBase:string;base:string;amount:string;numerator:string;denominator:string;source:string;interaction?:string;peers?:{id:string;revision:number;code:string}[];combinedRate?:string;divisor?:string;sharedGroup?:{id:string;revision:number;code:string;rate:string}[];taxReferences?:{id:string;revision:number;code:string;amount:string;numerator:string;denominator:string}[];baseNumerator?:string;baseDenominator?:string;references:{id:string;revision:number;label:string;operation:string;exactAmount:string|null}[]}[];declarations:{id:string;label:string;scenario:string;treatment:string;source:string}[];pending:{id:string;label:string;scenario:string;reason:string}[];warnings:string[]};
+export type TaxMemory={formulaVersion:'tax-memory-1.4';lines:{id:string;revision:number;label:string;code:string;scenario:string;treatment:string;rate:string;exactBase:string;base:string;amount:string;numerator:string;denominator:string;source:string;interaction?:string;peers?:{id:string;revision:number;code:string}[];combinedRate?:string;divisor?:string;sharedGroup?:{id:string;revision:number;code:string;rate:string}[];taxReferences?:{id:string;revision:number;code:string;amount:string;numerator:string;denominator:string}[];baseNumerator?:string;baseDenominator?:string;references:{id:string;revision:number;label:string;operation:string;exactAmount:string|null}[]}[];declarations:{id:string;label:string;scenario:string;treatment:string;source:string;revision?:number;references?:{id:string;revision:number;label:string;operation:string;exactAmount:null}[]}[];pending:{id:string;label:string;scenario:string;reason:string}[];warnings:string[]};
 /** Isolated configured tax only. No legal inference, aggregate tax stack or settlement. */
 export function taxMemory(unit:any,month:string,parameters:any[],tariffs:TariffPreview):TaxMemory{
  const period=monthPeriod(month),scoped=parameters.filter(p=>p.organization_id===unit.organization_id&&p.customer_id===unit.customer_id&&p.consumer_unit_id===unit.id);
  const touches=(p:any)=>!day(p.start_date)||!day(p.end_date)||p.start_date<=period.end&&p.end_date>=period.start;
  const taxes=scoped.filter(p=>p.kind==='TAX'&&p.status==='APPROVED'&&touches(p)).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
- const result:TaxMemory={formulaVersion:'tax-memory-1.3',lines:[],declarations:[],pending:[],warnings:[
+ const result:TaxMemory={formulaVersion:'tax-memory-1.4',lines:[],declarations:[],pending:[],warnings:[
  'Memória por tributo conforme a configuração aprovada; não comprova enquadramento fiscal e não representa custo total ou economia.',
  'Por fora: tributo = base configurada × alíquota. Por dentro: tributo = base configurada × alíquota ÷ (1 − alíquota). A alíquota percentual é dividida por 100.',
  'Exclusões não entram na soma da base; não são descontadas novamente. Nenhuma regra é inferida das justificativas em texto.',
  'Rubricas compartilhadas exigem regra explícita. No cálculo sequencial, a base soma somente os tributos selecionados, com valores exatos e revisões aprovadas. O denominador conjunto exige grupo por dentro explicitamente declarado com base e vigência idênticas. Ciclos sequenciais não são permitidos. Valores já tributados não recebem novo acréscimo.',
- 'Somente rubricas tarifárias calculadas e referenciadas estão disponíveis nesta etapa. Custos, fornecedor e demanda sem memória monetária compatível não são presumidos.',
+ 'Tributos já incluídos são conferidos pelas rubricas brutas e seus códigos explícitos; não são extraídos nem acrescentados novamente. Somente rubricas tarifárias calculadas e referenciadas estão disponíveis nesta etapa. Custos, fornecedor e demanda sem memória monetária compatível não são presumidos.',
  'Os valores não são somados à memória tarifária. Consulta somente leitura, sem publicação; a apuração final deverá preservar as fontes e versões.'
  ]};
  if(!taxes.length)result.warnings.push('Nenhum tributo aprovado encontrado para esta unidade e competência.');
@@ -28,6 +29,7 @@ export function taxMemory(unit:any,month:string,parameters:any[],tariffs:TariffP
  if(!p.unit_context||['distributor','tariff_group','tariff_subgroup','tariff_modality','state','consumption_class','free_market'].some(k=>(p.unit_context[k]??null)!==(unit[k]??null))){reject('O contexto elétrico difere do tributo aprovado. Revise sua vigência.');continue;}
  if(scoped.some(q=>q!==p&&q.kind==='TAX'&&['DRAFT','APPROVED'].includes(q.status)&&q.component_code===p.component_code&&q.scenario===p.scenario&&touches(q))){reject('Há tributos concorrentes ou rascunho pendente para este código e cenário.');continue;}
  if(['EXEMPT','NOT_APPLICABLE'].includes(p.treatment)){if(p.amount_text!=null){reject('Isenção ou não aplicação deve ser registrada sem alíquota.');continue;}result.declarations.push({id:p.id,label:p.label,scenario:p.scenario,treatment:p.treatment,source:p.source});continue;}
+ if(p.treatment==='INCLUDED'){try{const references=includedTaxReferences(p,scoped,tariffs,period);result.declarations.push({id:p.id,revision:p.revision,label:p.label,scenario:p.scenario,treatment:p.treatment,source:p.source,references});}catch(e){reject(e instanceof Error?e.message:'Revise o tributo já incluído.');}continue;}
  if(!['INSIDE','OUTSIDE'].includes(p.treatment)){reject('Tratamento já incluído ou desmembramento ainda não suportado nesta memória. Nenhum imposto foi acrescido.');continue;}
  let rate:bigint;try{rate=exact(p.amount_text,6);if(rate>RATE||p.treatment==='INSIDE'&&rate===RATE)throw Error();}catch{reject('Alíquota inválida: use de 0 a 100%; por dentro exige menos de 100%.');continue;}
  const items=p.tax_basis?.items;if(p.tax_basis?.version!==1||!Array.isArray(items)||!items.length||items.length>100||items.some(i=>!i||typeof i!=='object')||!items.some(i=>i.operation==='INCLUDE')||new Set(items.map(i=>i.parameterId)).size!==items.length||items.some(i=>!['INCLUDE','EXCLUDE'].includes(i.operation)||!Number.isInteger(i.revision)||i.revision<1)){reject('Base estruturada ausente, duplicada ou inválida.');continue;}
