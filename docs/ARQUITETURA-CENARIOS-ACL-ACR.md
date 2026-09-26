@@ -8,7 +8,7 @@ As seções 9–13 organizam contratos/configuração na Etapa 3, faturas e moto
 
 ## Contratos — entregue nesta etapa
 
-Fornecedor: flexibilidade mínima/máxima como percentual do volume contratado (100% = referência), modulação Flex/Conforme a carga, submercado, sazonalidade textual, distribuição mensal ou ambas. Cada ano declara seu volume em MWh e 12 percentuais somando 100%; meses sem vigência ficam em zero. A quantidade geral legada não é reinterpretada como volume anual. Contratos ativados preservam os valores; alterações futuras exigem aditivo/versionamento.
+Fornecedor: o cadastro legado preserva sua convenção original de flexibilidade. Para o faturamento automático confirmado em F1.54, mínimo = percentual do volume contratado e máximo = tolerância acima de 100% (100 MWh, mínimo 70% e tolerância 30% resultam em limites de 70 e 130 MWh). Há compra extra somente acima do limite superior. Mesma tarifa vigente em ponta e fora ponta, com mínimo não consumido e compra extra separados. NF regular é evidência de conciliação e não se soma novamente. O contrato também registra modulação Flex/Conforme a carga, submercado, sazonalidade textual, distribuição mensal ou ambas. Cada ano declara seu volume em MWh e 12 percentuais somando 100%; meses sem vigência ficam em zero. A quantidade geral legada não é reinterpretada como volume anual. Contratos ativados preservam os valores; alterações futuras exigem aditivo/versionamento.
 
 Os quatro submercados são Sul, Sudeste/Centro-Oeste, Nordeste e Norte. Sudeste e SE/CO não devem formar cadastros separados. Fonte: [CCEE](https://www.ccee.org.br/o/ccee/documentos/CCEE_1205706).
 
@@ -34,7 +34,7 @@ Para ICMS por dentro, quando B for a base líquida pertinente e a a alíquota, o
 
 Fornecedor, distribuidora, CCEE, encargos, exposição/spot, créditos, honorários, intermediação, garantias/financiamento e outros. Cada componente informa débito/crédito, valor ou quantidade × preço, unidade, competência, origem, tributos, cenário e critério de rateio. Impedir duplicidade entre energia do fornecedor e TE do cenário de referência, entre tributo embutido e calculado e entre dados manuais e importados.
 
-Custos por organização ou cliente devem ser rateados entre unidades por regra versionada, conservando o total e os centavos residuais. Honorário fixo de um cliente não pode ser cobrado uma vez por unidade sem previsão contratual.
+Custos por organização ou cliente usam regra explícita de alocação quando aplicável. Regra de honorários confirmada pelo usuário e implementada em F1.53: o valor fixo é cobrado integralmente por unidade, sem rateio. O percentual usa a economia consolidada do cliente, antes de descontar o fixo. Somente a parcela variável é distribuída por percentuais de rateio versionados que somam 100%, conservando os centavos residuais.
 
 ## Motor determinístico e auditável
 
@@ -50,9 +50,9 @@ Definição proposta para eliminar circularidade e respeitar a dedução prévia
 
 - A = custo ACR completo e comparável.
 - L = custo ACL com fornecedor, distribuidora, CCEE, encargos, tributos, demais custos e créditos, excluindo somente os honorários de gestão calculados abaixo.
-- F = honorário fixo aplicável.
-- Base líquida antes do honorário variável = A − L − F.
-- Honorário variável = percentual contratual × max(Base líquida, 0).
+- F = soma dos honorários fixos por unidade contemplada, sem ratear o fixo.
+- Base do honorário variável = A − L, consolidada para todas as unidades do cliente. O fixo não é descontado desta base.
+- Honorário variável = percentual contratual × max(Base do honorário variável, 0).
 - Honorário total = F + variável.
 - Custo ACL final = L + honorário total.
 - Economia final do cliente = A − custo ACL final.
@@ -60,7 +60,7 @@ Definição proposta para eliminar circularidade e respeitar a dedução prévia
 
 O piso zero do honorário variável é a regra proposta e precisa constar da configuração contratual; não se inventa cobrança variável em prejuízo. Custos tributários incidentes no próprio honorário exigem regra específica de composição e arredondamento antes da aprovação. Se um contrato exigir percentual sobre economia já líquida do próprio percentual, será outra fórmula explícita, nunca uma referência circular escondida.
 
-Exemplo sem tributos adicionais sobre honorários: A=100.000; L=80.000; F=1.000; percentual=20%. Base=19.000; variável=3.800; total honorários=4.800; ACL final=84.800; economia final=15.200 (15,2%).
+Exemplo sem tributos adicionais sobre honorários: A=100.000; L=80.000; F=1.000; percentual=20%. Base=20.000; variável=4.000; total honorários=5.000; ACL final=85.000; economia final=15.000 (15%). O fixo de R$ 1.000 neste exemplo refere-se a uma unidade; com mais unidades, soma-se o fixo de cada uma, sem reduzir a base variável.
 
 ## Segurança, revisão e histórico
 
@@ -84,3 +84,10 @@ Dashboards do Backoffice e cliente devem consumir a apuração publicada. Evento
 4. Etapas seguintes: OCR, conectores CCEE, indicadores e eventos consumindo os resultados validados.
 
 Esta proposta não entrega indicadores financeiros reais antes dessas validações. Os indicadores cadastrais atuais permanecem distintos de economia energética calculada.
+
+
+## Conferência de tarifas com tributos inclusos — F1.55
+
+O subtotal da distribuidora aceita tarifas NET e GROSS aprovadas, com medição validada e cobertura integral da competência. Cada código embutido de uma tarifa GROSS deve corresponder a uma configuração tributária INCLUDED aprovada da mesma organização, cliente, unidade e cenário. Essa declaração referencia as revisões das tarifas, incluindo exatamente as rubricas que informam o código embutido e excluindo explicitamente as demais. Divergências, rascunhos, referência desatualizada ou vigência incompleta bloqueiam a soma.
+
+O subtotal soma cada tarifa uma única vez e acrescenta apenas os tributos efetivamente calculados sobre bases líquidas explícitas. Não extrai o valor do imposto embutido, não presume isenção e não aplica gross-up a preços brutos. A tela distingue tarifas aprovadas, tributos a acrescentar e códigos já inclusos. Esta memória não representa fechamento financeiro: permanecem pendentes a base tributária do fornecedor/custos, a consolidação completa por cliente, o honorário variável e os snapshots de validação/publicação.
