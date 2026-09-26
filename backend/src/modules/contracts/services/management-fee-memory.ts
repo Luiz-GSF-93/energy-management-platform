@@ -1,0 +1,16 @@
+import {allocateFee,feeMoney,feeCents} from './management-fee';
+import {monthPeriod} from './preparation';
+export function managementFeeMemory(unit:any,month:string,contracts:any[],allocations:any[]) {
+ const p=monthPeriod(month),matches=contracts.filter(c=>c.organization_id===unit.organization_id&&c.customer_id===unit.customer_id&&c.status==='ACTIVE'&&String(c.start_date).slice(0,10)<=p.end&&String(c.end_date).slice(0,10)>=p.start);
+ const result:any={formulaVersion:'management-per-unit-1.0',status:'BLOCKED',contract:null,allocation:null,fixedUnit:null,percentage:null,variableFee:null,totalFee:null,blockers:[],warnings:['O honorário fixo cadastrado é cobrado integralmente por unidade; não é rateado.','No híbrido, o percentual incide sobre a economia consolidada do cliente após os demais custos, sem descontar o fixo. Somente a parcela variável é distribuída pelo rateio confirmado.','A parcela variável exige consolidação de todas as unidades do cliente. Não é inferida da economia isolada de uma unidade.','Rateio em centavos: maiores restos; empates pelo identificador da unidade. Consulta preliminar, sem cobrança ou publicação.']};
+ if(matches.length!==1){result.blockers.push('É necessário um único contrato de honorários ativo cobrindo a competência.');return result;}
+ const c=matches[0];result.contract={id:c.id,number:c.contract_number,model:c.remuneration_model,start:c.start_date,end:c.end_date,rules:c.application_rules};
+ if(String(c.start_date).slice(0,10)>p.start||String(c.end_date).slice(0,10)<p.end){result.blockers.push('A vigência não cobre todo o mês. Não há proporcionalidade automática.');return result;}
+ const rows=allocations.filter(a=>a.organization_id===unit.organization_id&&a.customer_id===unit.customer_id&&a.contract_id===c.id&&a.month===month).sort((a,b)=>b.version-a.version);
+ const a=rows[0];if(!a){result.blockers.push('Confirme a cobrança fixa por unidade e, no híbrido, o rateio da parcela variável para esta competência.');return result;}
+ try{if(a.fixed_fee_basis!=='PER_UNIT'||!Number.isInteger(a.version)||a.version<1||rows.filter(r=>r.version===a.version).length!==1||!a.source?.trim())throw Error();
+ result.allocation={id:a.id,version:a.version,source:a.source,percentage:null};result.fixedUnit=feeMoney(feeCents(c.fixed_fee_monthly));result.percentage=String(c.savings_percentage);
+ if(c.remuneration_model==='FIXED'&&Number(c.savings_percentage)===0&&Array.isArray(a.allocations)&&!a.allocations.length){result.status='FIXED_AVAILABLE';result.variableFee='0.00';result.totalFee=result.fixedUnit;}else if(c.remuneration_model==='HYBRID'&&Number.isFinite(Number(c.savings_percentage))&&Number(c.savings_percentage)>=0&&Number(c.savings_percentage)<=100){const share=allocateFee('0',a.allocations).find(s=>s.consumerUnitId===unit.id);if(!share)throw Error();result.allocation.percentage=share.percentage;result.status='VARIABLE_PENDING';result.blockers.push('Fixo por unidade confirmado. A parcela variável e o total aguardam a consolidação de todas as unidades do cliente.');}else throw Error();
+ }catch{result.status='BLOCKED';result.fixedUnit=null;result.totalFee=null;result.blockers.push('Regra ou rateio inconsistente; confira o contrato e inclua esta unidade no rateio variável, inclusive com zero quando aplicável.');}
+ return result;
+}
