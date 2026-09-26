@@ -1,5 +1,7 @@
 'use client';
 import {FormEvent,useEffect,useRef,useState} from 'react';
+import SupplierBillingRules from './SupplierBillingRules';
+import SupplierCycle from './SupplierCycle';
 import PriceHistory from './PriceHistory';
 import SupplyOperatingFields,{OperatingTerms,OperatingSummary,readOperatingTerms} from './SupplyOperatingFields';
 import SupplyTermsFields,{SupplyTerms,guarantees,readSupplyTerms} from './SupplyTermsFields';
@@ -18,14 +20,14 @@ const types:Record<string,string>={ENERGY_PURCHASE:'Compra de energia',ENERGY_SA
 const frequencies:Record<string,string>={ANNUAL:'Anual',SEMIANNUAL:'Semestral',QUARTERLY:'Trimestral',MONTHLY:'Mensal',CUSTOM:'Personalizado'};
 const date=(value:string)=>value?.slice(0,10).split('-').reverse().join('/')||'—';
 const number=(value:number)=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:6});
-export default function SupplyContracts({customerId,onDirty,allowNew=true,initialContext}:{initialContext?:CorrectionContext;allowNew?:boolean;customerId:string;onDirty:(dirty:boolean)=>void}){
+export default function SupplyContracts({customerId,onDirty,allowNew=true,initialContext,onCorrect}:{onCorrect?:(c:CorrectionContext)=>void;initialContext?:CorrectionContext;allowNew?:boolean;customerId:string;onDirty:(dirty:boolean)=>void}){
  const {hasPermission}=useAuth();
  const view=hasPermission(P.view),create=hasPermission(P.create),update=hasPermission(P.update),viewCustomers=hasPermission(P.customers),viewUnits=hasPermission(P.units);
  const [rows,setRows]=useState<Contract[]>([]),[customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]);
  const [loadFailed,setLoadFailed]=useState(false);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[lookupError,setLookupError]=useState(''),[message,setMessage]=useState(''),[revision,setRevision]=useState(0);
  const [busy,setBusy]=useState(false),[editing,setEditing]=useState<Contract|null>(null),[activating,setActivating]=useState<string|null>(null);
- const customer=customerId,filter=customerId;const [query,setQuery]=useState(''),[priceId,setPriceId]=useState<string|null>(null);
+ const customer=customerId,filter=customerId;const [query,setQuery]=useState(''),[priceId,setPriceId]=useState<string|null>(null),[billingId,setBillingId]=useState<string|null>(initialContext?.recordId||null);
  const pending=useRef(false);const [formVersion,setFormVersion]=useState(0),[hasSchedule,setHasSchedule]=useState(false);
  useEffect(()=>{let cancelled=false;if(!view)return;
  apiRequest<Contract[]>('/api/v1/contracts').then(data=>{if(!cancelled){setRows(data);setLoadFailed(false);}}).catch(e=>{if(!cancelled){setError(e.message);setLoadFailed(true);}}).finally(()=>{if(!cancelled)setLoading(false);});
@@ -61,7 +63,7 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true,initia
  if(!view)return <p>Acesso não autorizado aos contratos.</p>;
  const legacy=rows.filter(c=>!['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&(!filter||c.customer_id===filter));
  const visible=rows.filter(c=>(!initialContext||c.consumer_unit_id===initialContext.unitId)&&(!initialContext?.recordId||c.id===initialContext.recordId)&&['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&(!filter||c.customer_id===filter)&&(!query||(c.contract_number+' '+(c.supplier_id||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase())));
- return <section className="backoffice-page"><h2>Fornecedor Mercado Livre</h2><p>Contratos da organização ativa, vinculados a clientes e unidades consumidoras. O acesso exige licença vigente com Gestão do Mercado Livre.</p>
+ return <section className="backoffice-page"><h2>Fornecedor Mercado Livre</h2>{customerId?<SupplierCycle customerId={customerId} onCorrect={onCorrect}/>:null}<p>Contratos da organização ativa, vinculados a clientes e unidades consumidoras. O acesso exige licença vigente com Gestão do Mercado Livre.</p>
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}{lookupError?<Alert variant="error">{lookupError}</Alert>:null}
  <Button variant="secondary" disabled={busy||loading} onClick={()=>{setLoading(true);setError('');setLookupError('');setRevision(v=>v+1);}}>Atualizar lista</Button>
  {((allowNew&&create&&!!customerId)||editing)&&!loading&&!loadFailed?<Card title={editing?'Editar rascunho '+editing.contract_number:'Novo contrato'}>
@@ -92,5 +94,6 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true,initia
  <details><summary>Condições do contrato</summary><OperatingSummary value={c}/><p>Garantia: {guarantees[c.guarantee_type||'']||'Não informada'}{c.guarantee_type?' · R$ '+number(c.guarantee_amount||0)+' · '+c.guarantee_institution:''}</p><p>{c.guarantee_description}</p><p>Data-base: {date(c.adjustment_date||'')}</p><p>{c.adjustment_rule}</p><p>Fonte: {c.energy_source||'Não informada'}</p><p>Reajuste: {c.adjustment_index||'Não informado'} · {frequencies[c.adjustment_frequency||'']||'Não informado'}</p><p style={{whiteSpace:'pre-wrap'}}>{c.notes||'Sem observações.'}</p></details>
  {c.status==='DRAFT'&&update&&['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)?<><Button variant="secondary" disabled={busy} onClick={()=>{setEditing(c);setHasSchedule(!!c.annual_prices?.length);setFormVersion(v=>v+1);setActivating(null);setError('');setMessage('');window.scrollTo({top:0,behavior:'smooth'});}}>Editar rascunho</Button>
  {activating===c.id?<div><p>Ativar o contrato {c.contract_number}? Após a ativação, os dados não poderão ser sobrescritos nesta tela. Confira a vigência, o volume e o preço antes de confirmar.</p><Button disabled={busy} onClick={()=>void activate(c)}>Confirmar ativação</Button><Button variant="secondary" disabled={busy} onClick={()=>setActivating(null)}>Cancelar</Button></div>:<Button disabled={busy||!!editing} onClick={()=>setActivating(c.id)}>Ativar contrato</Button>}</>:<p>Contrato preservado para consulta.</p>}
+ {c.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(c.status)?<><Button variant='secondary' onClick={()=>setBillingId(billingId===c.id?null:c.id)}>Faturamento automático / take-or-pay</Button>{billingId===c.id?<SupplierBillingRules contract={c} onDirty={onDirty}/>:null}</>:null}
  {['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&['ACTIVE','APPROVED'].includes(c.status)?<><Button variant="secondary" onClick={()=>setPriceId(priceId===c.id?null:c.id)}>Histórico de preços</Button>{priceId===c.id?<PriceHistory id={c.id} start={c.start_date} end={c.end_date} canWrite={update} onDirty={onDirty}/>:null}</>:null}</article>)}</Card>{legacy.length?<Card title="Outros contratos cadastrados anteriormente">{legacy.map(c=><article key={c.id}><h3>{c.contract_number}</h3><p>{types[c.contract_type]||c.contract_type} · {statuses[c.status]||c.status}</p><p>{date(c.start_date)} a {date(c.end_date)}</p><p>{c.notes}</p><p>Registro preservado para consulta.</p></article>)}</Card>:null}</section>;
 }
