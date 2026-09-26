@@ -1,3 +1,4 @@
+import {operationalTaxBases} from './operational-tax-bases';
 import {contractSupplierCost} from './contract-supplier-cost';
 import {managementFeeMemory} from './management-fee-memory';
 import {supplierCostMemory} from './supplier-cost-memory';
@@ -42,7 +43,10 @@ export class CalculationPreparationService {
  prepared.counts.reviews=prepared.findings.filter(f=>f.severity==='REVIEW').length;
  const tariffPreview=previewTariffs(u,d.month,period,tariffParameters,monthly);
  const costs=monthlyCostLedger(u,d.month,monthlyCosts);
- const taxes=taxMemory(u,d.month,parameters,tariffPreview);
- return {...prepared,contractSupplierCost:supplier,managementFeeMemory:managementFeeMemory(u,d.month,management,feeRules),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
+ const operational=operationalTaxBases(u,d.month,parameters,supplier,costs);
+ const taxes=taxMemory(u,d.month,parameters,tariffPreview,operational);
+ for(const pending of operational.pending)prepared.findings.push({code:'PARAMETER_ISSUE:'+pending.parameterId,section:'Bases operacionais',severity:'BLOCKER',message:pending.label+': '+pending.reason});
+ prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
+ return {...prepared,operationalTaxBases:operational,contractSupplierCost:supplier,managementFeeMemory:managementFeeMemory(u,d.month,management,feeRules),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
  }
 }
