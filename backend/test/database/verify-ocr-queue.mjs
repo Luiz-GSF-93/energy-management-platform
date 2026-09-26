@@ -1,0 +1,37 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite();let checks=0;
+const ok=(v,m)=>{assert.ok(v,m);checks++;};
+const fail=async(sql,args=[])=>{await assert.rejects(()=>db.query(sql,args));checks++;};
+try{
+ await db.exec("CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE TABLE documents(id text primary key,organization_id text,document_type text,file_verified boolean,storage_bucket text,file_hash text);");
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20260926_f1_61_ocr_queue.sql',import.meta.url),'utf8'));
+ await db.query("INSERT INTO documents VALUES('d1','org1','INVOICE_DISTRIBUTOR',true,'energy-documents-private',$1),('d2','org2','INVOICE_DISTRIBUTOR',true,'energy-documents-private',$1),('bad','org1','OTHER',true,'energy-documents-private',$1)",['a'.repeat(64)]);
+ await fail("select enqueue_document_ocr('org2','d1','actor')");
+ await fail("select enqueue_document_ocr('org1','bad','actor')");
+ await fail("select enqueue_document_ocr('org1','d1','')");
+ const enqueue=()=>db.query("select * from enqueue_document_ocr('org1','d1','actor')");
+ const j=(await enqueue()).rows[0];ok(j.state==='QUEUED','queued');ok((await enqueue()).rows[0].id===j.id,'idempotent');
+ const claimed=(await db.query('select * from claim_document_ocr()')).rows[0];ok(claimed.id===j.id&&claimed.lease_token,'claimed');ok((await db.query('select * from claim_document_ocr()')).rows.length===0,'active lease excluded');
+ const change=(action,operation=null,result=null,evidence=null)=>db.query('select * from transition_document_ocr($1,$2,$3,$4,1,null,$5,$6)',[j.id,claimed.lease_token,action,operation,result,evidence]);
+ await fail('select transition_document_ocr($1,gen_random_uuid(),$2)',[j.id,'BEGIN_SUBMISSION']);
+ await fail('select transition_document_ocr($1,$2,$3)',[j.id,claimed.lease_token,'COMPLETE']);
+ await change('BEGIN_SUBMISSION');await change('ACCEPTED','https://example.cognitiveservices.azure.com/op');
+ ok((await db.query('select state from document_ocr_jobs')).rows[0].state==='POLLING','accepted persisted');
+ await db.exec("update document_ocr_jobs set next_attempt_at=now()-interval '1 second'");
+ const polled=(await db.query('select * from claim_document_ocr()')).rows[0];
+ await db.query('select transition_document_ocr($1,$2,$3,null,1,null,$4,$5)',[j.id,polled.lease_token,'COMPLETE',{content:'synthetic'},{version:'test'}]);
+ ok((await db.query('select * from document_ocr_results')).rows.length===1,'result saved');
+ await fail("update document_ocr_results set evidence='{}'");await fail('delete from document_ocr_results');
+ ok((await db.query('select * from claim_document_ocr()')).rows.length===0,'terminal not reclaimed');
+ await db.query("select enqueue_document_ocr('org2','d2','actor')");const second=(await db.query('select * from claim_document_ocr()')).rows[0];
+ await db.query("select transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[second.id,second.lease_token]);
+ await db.query("update document_ocr_jobs set lease_until=now()-interval '1 second' where id=$1",[second.id]);
+ ok((await db.query('select * from claim_document_ocr()')).rows.length===0,'expired submission not repeated');
+ ok((await db.query('select state from document_ocr_jobs where id=$1',[second.id])).rows[0].state==='SUBMISSION_UNKNOWN','crash quarantined');
+ await fail("select transition_document_ocr($1,$2,'ACCEPTED','url')",[second.id,second.lease_token]);
+ await db.exec('SET ROLE authenticated');await fail('select * from document_ocr_jobs');await fail("select enqueue_document_ocr('org1','d1','actor')");await db.exec('RESET ROLE');
+ await db.exec('SET ROLE service_role');ok((await db.query('select * from document_ocr_jobs')).rows.length===2,'service read');await fail("update document_ocr_jobs set state='QUEUED'");await fail('delete from document_ocr_results');await db.exec('RESET ROLE');
+ console.log(checks+' OCR database checks passed; no production connection');
+}finally{await db.close();}
