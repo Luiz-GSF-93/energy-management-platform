@@ -66,7 +66,7 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true,initia
  return <section className="backoffice-page"><h2>Fornecedor Mercado Livre</h2>{customerId?<SupplierCycle customerId={customerId} onCorrect={onCorrect}/>:null}<p>Contratos da organização ativa, vinculados a clientes e unidades consumidoras. O acesso exige licença vigente com Gestão do Mercado Livre.</p>
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}{lookupError?<Alert variant="error">{lookupError}</Alert>:null}
  <Button variant="secondary" disabled={busy||loading} onClick={()=>{setLoading(true);setError('');setLookupError('');setRevision(v=>v+1);}}>Atualizar lista</Button>
- {((allowNew&&create&&!!customerId)||editing)&&!loading&&!loadFailed?<Card title={editing?'Editar rascunho '+editing.contract_number:'Novo contrato'}>
+ {((allowNew&&create&&!!customerId&&!initialContext?.recordId)||editing)&&!loading&&!loadFailed?<Card title={editing?'Editar rascunho '+editing.contract_number:'Novo contrato'}>
  {!editing&&(!viewCustomers||!viewUnits)?<p>O cadastro requer permissão de consulta de clientes e unidades consumidoras.</p>:<form key={(editing?.id||'new')+formVersion} onSubmit={save} onChange={()=>onDirty(true)} className="organizations-create__form">
  {!editing?<>
  <label>Unidade consumidora<select key={customer} className="ds-input" name="consumerUnitId" required disabled={busy||!customer} defaultValue=""><option value="">Selecione</option>{units.filter(u=>u.customer_id===customer).map(u=><option key={u.id} value={u.id}>{u.name} — {u.consumer_unit_number}</option>)}</select></label>
