@@ -1,10 +1,11 @@
 'use client';
-type Field={text:string;decimal:string|null;confidence:number|null;pages:number[];issues:string[]};
+import OcrTranscription,{type Transcription} from './OcrTranscription';
+type Field={transcription?:Transcription;text:string;decimal:string|null;confidence:number|null;pages:number[];issues:string[]};
 export type MeasurementEvidence={canImport:false;issues:string[];meterReadings:{source:string;kind:string;period:string;unit:string|null;fields:Record<string,Field>;issues:string[]}[];history:{source:string;reference:string|null;metric:string;period:string;unit:string;decimal:string|null;days:number|null;evidence:Field[];issues:string[]}[]};
 const cell={padding:12,textAlign:'left' as const,verticalAlign:'top' as const,borderBottom:'1px solid #40516b'};
 const period=(p:string)=>p==='PEAK'?'Ponta':p==='OFF_PEAK'?'Fora ponta':'Posto a conferir';
 const number=(v:string|null)=>v===null?'A conferir':v.replace('.',',');
-function Source({fields}:{fields:Field[]}){const present=fields.filter(f=>f.text.trim());const known=present.filter(f=>f.confidence!==null);const pages=Array.from(new Set(present.flatMap(f=>f.pages)));return <small>Confiança: {known.length===present.length&&known.length?(Math.min(...known.map(f=>f.confidence!))*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'% (menor valor informado)':'não informada para todos os campos'} · {pages.length?'p. '+pages.join(', '):'página a conferir'}</small>;}
+function Source({fields}:{fields:Field[]}){const present=fields.filter(f=>f.text.trim());const known=present.filter(f=>f.confidence!==null);const pages=Array.from(new Set(present.flatMap(f=>f.pages)));return <><small>Confiança: {known.length===present.length&&known.length?(Math.min(...known.map(f=>f.confidence!))*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'% (menor valor informado)':'não informada para todos os campos'} · {pages.length?'p. '+pages.join(', '):'página a conferir'}</small><details><summary>Confiança da transcrição por campo</summary>{present.map((f,i)=><p key={i}><span>{f.text}: </span><OcrTranscription evidence={f.transcription}/></p>)}</details></>;}
 export default function OcrMeasurements({evidence:e}:{evidence:MeasurementEvidence}){
  const refs=Array.from(new Set(e.history.flatMap(r=>r.reference?[r.reference]:[]))).sort().reverse();
  const series=[['CONSUMPTION','PEAK','Consumo ponta (kWh)'],['CONSUMPTION','OFF_PEAK','Consumo fora ponta (kWh)'],['DEMAND','PEAK','Demanda ponta (kW)'],['DEMAND','OFF_PEAK','Demanda fora ponta (kW)']];

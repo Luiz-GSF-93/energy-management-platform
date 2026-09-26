@@ -1,0 +1,3 @@
+'use client';
+export type Transcription={confidence:number|null;wordCount:number;state:string;method:string};
+export default function OcrTranscription({evidence:e}:{evidence?:Transcription}){if(!e||e.state!=='VERIFIED_WORDS'||e.confidence===null)return <small>Confiança da transcrição: indisponível.</small>;return <small>Confiança da transcrição: {(e.confidence*100).toLocaleString('pt-BR',{maximumFractionDigits:2})}% · {e.confidence<0.45?'baixa — conferir':e.confidence<=0.85?'revisão necessária':'alta'} · menor confiança de {e.wordCount} palavra(s) vinculada(s) ao trecho. Não aprova o campo para cálculo.</small>;}
