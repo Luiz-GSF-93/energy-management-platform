@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { AzureInvoiceConnector, OcrProviderError } from './azure-invoice.connector';
+import { captureInvoiceAssessment } from './invoice-assessment';
 import { extractInvoiceEvidence } from './invoice-evidence';
 import { DOCUMENT_BUCKET, MAX_DOCUMENT_BYTES } from '../documents/services/document-file';
 @Injectable()
@@ -37,7 +38,8 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
     if(polled.status==='running'){await this.change(job,'WAIT',{p_delay:polled.retryAfterSeconds});return;}
     if(polled.status==='failed'){await this.change(job,'FAIL',{p_error:'ANALYSIS_FAILED'});return;}
     // Completion + evidence are atomic; a failed acknowledgement is safe to resume by GET.
-    await this.change(job,'COMPLETE',{p_result:polled.result,p_evidence:extractInvoiceEvidence(polled.result)});return;
+    const assessment=await captureInvoiceAssessment(this.db.getClient(),job,polled.result);
+    await this.change(job,'COMPLETE',{p_result:polled.result,p_evidence:{...extractInvoiceEvidence(polled.result),assessment}});return;
    }
    const {data:doc,error:docError}=await this.db.getClient().from('documents').select('*').eq('id',job.document_id).eq('organization_id',job.organization_id).maybeSingle();
    if(docError)throw new Error('OCR_SOURCE_LOOKUP_PENDING');

@@ -3,14 +3,14 @@ import {OcrProviderError} from './azure-invoice.connector';
 const job={id:'job',lease_token:'lease',organization_id:'org',document_id:'doc',file_hash:'hash',state:'QUEUED',attempts:1};
 function setup(state='QUEUED'){
  const rpc=jest.fn(async(name:string)=>name==='claim_document_ocr'?{data:[{...job,state}],error:null}:{data:{},error:null});
- const source={file_verified:true,document_type:'INVOICE_DISTRIBUTOR',storage_bucket:'energy-documents-private',file_hash:'hash',file_path:'org/unit/file.pdf',consumer_unit_id:'unit',file_size_bytes:3,mime_type:'application/pdf',original_filename:'test.pdf'};
- const query:any={select:jest.fn(()=>query),eq:jest.fn(()=>query),maybeSingle:jest.fn(async()=>({data:source,error:null}))};
+ const source={id:'doc',organization_id:'org',customer_id:'customer',reference_month:'2026-08-01',file_verified:true,document_type:'INVOICE_DISTRIBUTOR',storage_bucket:'energy-documents-private',file_hash:'hash',file_path:'org/unit/file.pdf',consumer_unit_id:'unit',file_size_bytes:3,mime_type:'application/pdf',original_filename:'test.pdf'};
+ const query:any={select:jest.fn(()=>query),eq:jest.fn(()=>query),is:jest.fn(()=>query),neq:jest.fn(()=>query),limit:jest.fn(async()=>({data:[],error:null})),maybeSingle:jest.fn(async()=>({data:source,error:null}))};
  const download=jest.fn(async()=>({data:new Blob(['abc']),error:null}));
  const client={rpc,from:jest.fn(()=>query),storage:{from:jest.fn(()=>({download}))}};
  const connector={isConfigured:jest.fn(()=>true),submit:jest.fn(async()=>({url:'operation',retryAfterSeconds:5})),poll:jest.fn(async()=>({status:'running',retryAfterSeconds:5}))};
  const license={requireEntitlement:jest.fn(async()=>{})};
  const worker=new OcrWorker({getClient:()=>client} as any,license as any,connector as any);
- return {worker,rpc,source,connector,license,download};
+ return {worker,rpc,source,connector,license,download,query};
 }
 describe('durable OCR worker',()=>{
  it('does nothing while disabled',async()=>{const s=setup();s.connector.isConfigured.mockReturnValue(false);await s.worker.runOnce();expect(s.rpc).not.toHaveBeenCalled();});
@@ -22,4 +22,9 @@ describe('durable OCR worker',()=>{
  it('rejects storage paths outside the tenant',async()=>{const s=setup();s.source.file_path='other/unit/file.pdf';await s.worker.runOnce();expect(s.download).not.toHaveBeenCalled();expect(s.connector.submit).not.toHaveBeenCalled();});
  it('rechecks entitlement before sending',async()=>{const s=setup();s.license.requireEntitlement.mockRejectedValue(new Error('expired'));await s.worker.runOnce();expect(s.connector.submit).not.toHaveBeenCalled();expect((s.rpc.mock.calls.at(-1) as any)[1].p_error).toBe('LICENSE_UNAVAILABLE');});
  it('does not reclassify failed operation persistence as safe to resubmit',async()=>{const s=setup();let n=0;s.rpc.mockImplementation(async(name:string)=>{if(name==='claim_document_ocr')return {data:[job],error:null};n++;return {data:null,error:n===2?{}:null} as any;});await expect(s.worker.runOnce()).rejects.toThrow();expect(s.connector.submit).toHaveBeenCalledTimes(1);expect(s.rpc).toHaveBeenCalledTimes(3);});
+});
+
+describe('OCR completion assessment',()=>{
+ it('persists registration snapshot and decision in the atomic completion',async()=>{const s=setup('POLLING');s.connector.poll.mockResolvedValue({status:'succeeded',result:{content:'',documents:[],pages:[]}} as any);await s.worker.runOnce();const args=(s.rpc.mock.calls.at(-1) as any)[1];expect(args.p_action).toBe('COMPLETE');expect(args.p_evidence.assessment.source).toMatchObject({documentId:'doc',organizationId:'org',fileHash:'hash',unitId:'unit',referenceMonth:'2026-08'});expect(args.p_evidence.assessment.intake.canImport).toBe(false);expect(s.connector.submit).not.toHaveBeenCalled();});
+ it('does not mark completion when snapshot lookup fails',async()=>{const s=setup('POLLING');s.connector.poll.mockResolvedValue({status:'succeeded',result:{content:'',documents:[],pages:[]}} as any);s.query.maybeSingle.mockResolvedValue({data:null,error:{}});await expect(s.worker.runOnce()).rejects.toThrow('OCR_SOURCE_ASSESSMENT_PENDING');expect(s.rpc).toHaveBeenCalledTimes(1);expect(s.connector.submit).not.toHaveBeenCalled();});
 });

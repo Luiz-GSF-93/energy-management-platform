@@ -1,5 +1,5 @@
 import { extractElectricalEvidence } from './electrical-evidence';
-import { assessInvoiceIntake } from './invoice-intake';
+import { assessmentMatchesDocument } from './invoice-assessment';
 import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
@@ -19,7 +19,6 @@ export class OcrQueueService {
  }
  async status(org:string,document:string){
   await this.licenses.requireEntitlement(org,'document_management');
-  if(!this.connector.isConfigured())return {enabled:false,job:null};
   const {data,error}=await this.db.getClient().from('document_ocr_jobs').select('id,state,created_at,updated_at,error_code').eq('organization_id',org).eq('document_id',document).maybeSingle();
   if(error)throw new ServiceUnavailableException('Não foi possível consultar a leitura.');
   const intake=data?.state==='SUCCEEDED'?await this.intake(org,document,data.id):null;
@@ -28,19 +27,16 @@ export class OcrQueueService {
  private async intake(org:string,document:string,job:string){
   const db=this.db.getClient();
   const [source,result]=await Promise.all([
-   db.from('documents').select('id,customer_id,consumer_unit_id,reference_month,file_hash,document_type,file_verified').eq('organization_id',org).eq('id',document).maybeSingle(),
-   db.from('document_ocr_results').select('raw_result,file_hash').eq('organization_id',org).eq('document_id',document).eq('job_id',job).maybeSingle(),
+   db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,reference_month,file_hash,document_type,file_verified').eq('organization_id',org).eq('id',document).maybeSingle(),
+   db.from('document_ocr_results').select('raw_result,file_hash,evidence').eq('organization_id',org).eq('document_id',document).eq('job_id',job).maybeSingle(),
   ]);
   if(source.error||result.error)throw new ServiceUnavailableException('Não foi possível conferir a origem da extração.');
   const doc=source.data;
   if(!doc||!result.data||doc.file_hash!==result.data.file_hash||doc.document_type!=='INVOICE_DISTRIBUTOR'||doc.file_verified!==true)throw new ServiceUnavailableException('A origem da extração requer conferência administrativa.');
-  const [customer,unit,duplicates]=await Promise.all([
-   db.from('customers').select('company_name,document').eq('organization_id',org).eq('id',doc.customer_id).is('deleted_at',null).maybeSingle(),
-   db.from('consumer_units').select('consumer_unit_number,address,free_market').eq('organization_id',org).eq('id',doc.consumer_unit_id).eq('customer_id',doc.customer_id).maybeSingle(),
-   db.from('documents').select('id').eq('organization_id',org).eq('consumer_unit_id',doc.consumer_unit_id).eq('reference_month',doc.reference_month).eq('document_type','INVOICE_DISTRIBUTOR').neq('id',document).limit(1),
-  ]);
-  if(customer.error||unit.error||duplicates.error)throw new ServiceUnavailableException('Não foi possível conferir os cadastros e a duplicidade.');
-  return {...assessInvoiceIntake(result.data.raw_result,{customer:customer.data,unit:unit.data,referenceMonth:String(doc.reference_month??'').slice(0,7),otherDocumentInPeriod:!!duplicates.data?.length}),checkedAt:new Date().toISOString(),electrical:extractElectricalEvidence(result.data.raw_result)};
+  const assessment=result.data.evidence?.assessment;
+  if(!assessmentMatchesDocument(assessment,doc))return null;
+  if(!['REJECT_AUTOMATION','REVIEW_REQUIRED'].includes(assessment.intake?.decision))return null;
+  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,electrical:extractElectricalEvidence(result.data.raw_result)};
  }
  private publicJob(job:any){return {id:job.id,state:job.state,createdAt:job.created_at,updatedAt:job.updated_at,errorCode:job.error_code??null};}
 }
