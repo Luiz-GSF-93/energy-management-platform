@@ -67,6 +67,7 @@ export function contractSupplierCost(unit:any,month:string,contracts:any[],price
   if(ledger.status==='BLOCKED'&&costRows.some(v=>v.organization_id===unit.organization_id&&v.consumer_unit_id===unit.id&&v.customer_id===unit.customer_id&&v.month===month))need('COST_REVIEW','Revise e valide os custos desta competência antes de concluir a conferência.','costs');
   const groups=ledger.status==='AVAILABLE'?ledger.groups.filter(g=>g.scenario==='ACL'):[],expectedTreatment=a.tax_treatment==='GROSS'?'INCLUDED':'EXCLUDED';
   const extraLines=groups.flatMap(g=>g.lines.filter(l=>l.category==='SUPPLIER_EXTRA_ENERGY').map(l=>({...l,taxTreatment:g.taxTreatment})));
+  r.extraSources=extraLines.map(l=>({...l}));
   let extraCents:bigint|null=extra===0n?0n:null;
   if(extra>0n){if(!extraLines.some(l=>l.effect==='COST'))need('EXTRA_PURCHASE','Compra extra necessária: '+fixed(extra)+' MWh. Registre o valor e a fonte em Custos mensais, categoria Compra extra de energia, e valide a versão.','costs');
    else if(extraLines.some(l=>l.taxTreatment!==expectedTreatment))need('EXTRA_TAX','Compra extra e preço contratual têm tratamentos tributários diferentes. Concilie antes de totalizar.','costs');

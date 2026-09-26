@@ -54,7 +54,7 @@ export function distributorSubtotal(unit:any,month:string,parameters:any[],tarif
    const l=ls[0];
    if(!['INSIDE','OUTSIDE'].includes(l.treatment)||p.treatment!==l.treatment||!l.source?.trim()){block('Tributo '+p.label+': tratamento ou fonte incompatível.');continue;}
    if(tp.some(t=>{const refs=l.references.filter(r=>r.id===t.id&&r.revision===t.revision&&['INCLUDE','EXCLUDE'].includes(r.operation));return refs.length!==1;})){block('Tributo '+p.label+': classifique cada tarifa do cenário na base ou nas exclusões.');continue;}
-   if(l.references.some(r=>!tp.some(t=>t.id===r.id&&t.revision===r.revision))){block('Tributo '+p.label+': referência fora das tarifas consolidadas.');continue;}
+   if(l.references.some(r=>!tp.some(t=>t.id===r.id&&t.revision===r.revision))){block('Tributo '+p.label+': a base contém rubricas fora da distribuidora. Consulte a memória tributária; a composição entre fornecedor, custos e tarifas aguarda consolidação geral.');continue;}
    try{taxSum+=cents(l.amount);out.entries.push({id:p.id,revision:p.revision,kind:'TAX',label:l.label,amount:l.amount,source:l.source});}catch{block('Tributo '+p.label+': valor inválido.');}
   }
   out.entries.sort((a,b)=>(a.kind+':'+a.id).localeCompare(b.kind+':'+b.id));

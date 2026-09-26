@@ -17,6 +17,7 @@ export class TaxBasisDto {
  @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>BaseItemDto) items!:BaseItemDto[];
 }
 export class ParameterDto {
+ @IsOptional() @IsIn(["SUPPLIER_ENERGY","SUPPLIER_MINIMUM","SUPPLIER_EXTRA","MONTHLY_CCEE","MONTHLY_EXPOSURE","MONTHLY_CHARGE","MONTHLY_OTHER"]) monetarySource?:string|null;
  @IsOptional() @IsObject() @ValidateNested() @Type(()=>TaxBasisDto) taxBasis?:TaxBasisDto|null;
  @IsOptional() @IsArray() @ArrayMaxSize(20) @ArrayUnique() @Matches(/^(ICMS|PIS|COFINS|IOF|OTHER_[A-Z0-9_]+)$/,{each:true}) embeddedTaxCodes?:string[];
 
