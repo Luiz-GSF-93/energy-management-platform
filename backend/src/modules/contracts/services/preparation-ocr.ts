@@ -1,3 +1,4 @@
+import {demandRegistration} from '../../ocr/demand-registration';
 import {assessmentMatchesDocument} from '../../ocr/invoice-assessment';
 import {extractCpflPaulistaLayout} from '../../ocr/cpfl-paulista-layout';
 import {extractGdEvidence} from '../../ocr/gd-evidence';
@@ -12,6 +13,8 @@ export async function ocrPreparationCandidates(db:any,unit:any,month:string):Pro
   const matches=results.data.filter((r:any)=>r.document_id===doc.id&&r.organization_id===unit.organization_id);
   const r=matches.length===1?matches[0]:null;const a=r?.evidence?.assessment;
   const valid=doc.file_verified===true&&r?.file_hash===doc.file_hash&&assessmentMatchesDocument(a,doc)&&['REVIEW_REQUIRED','REJECT_AUTOMATION'].includes(a?.intake?.decision);
-  return {documentId:doc.id,filename:doc.original_filename,canImport:false,state:valid?a.intake.decision:'QUARANTINED',preparation:valid?extractCpflPaulistaLayout(r.raw_result).preparation:null,measurements:valid?extractCpflPaulistaLayout(r.raw_result).measurements:null,gd:valid?extractGdEvidence(r.raw_result):null};
+  const layout=valid?extractCpflPaulistaLayout(r.raw_result):null;
+  if(layout?.preparation)Object.assign(layout.preparation.demand,{registration:demandRegistration(unit,doc)});
+  return {documentId:doc.id,filename:doc.original_filename,canImport:false,state:valid?a.intake.decision:'QUARANTINED',preparation:layout?.preparation??null,measurements:layout?.measurements??null,gd:valid?extractGdEvidence(r.raw_result):null};
  });
 }
