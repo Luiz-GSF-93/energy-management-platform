@@ -1,3 +1,4 @@
+import {loadDemandHistory} from '../../ocr/demand-history';
 import {demandRegistration} from '../../ocr/demand-registration';
 import {assessmentMatchesDocument} from '../../ocr/invoice-assessment';
 import {extractCpflPaulistaLayout} from '../../ocr/cpfl-paulista-layout';
@@ -9,12 +10,12 @@ export async function ocrPreparationCandidates(db:any,unit:any,month:string):Pro
  if(!docs.data.length)return [];
  const results=await db.from('document_ocr_results').select('document_id,organization_id,file_hash,raw_result,evidence').eq('organization_id',unit.organization_id).in('document_id',docs.data.map((d:any)=>d.id)).limit(101);
  if(results.error||!Array.isArray(results.data)||results.data.length>100)throw Error('Não foi possível conferir as extrações desta competência.');
- return docs.data.map((doc:any)=>{
+ return Promise.all(docs.data.map(async(doc:any)=>{
   const matches=results.data.filter((r:any)=>r.document_id===doc.id&&r.organization_id===unit.organization_id);
   const r=matches.length===1?matches[0]:null;const a=r?.evidence?.assessment;
   const valid=doc.file_verified===true&&r?.file_hash===doc.file_hash&&assessmentMatchesDocument(a,doc)&&['REVIEW_REQUIRED','REJECT_AUTOMATION'].includes(a?.intake?.decision);
   const layout=valid?extractCpflPaulistaLayout(r.raw_result):null;
-  if(layout?.preparation)Object.assign(layout.preparation.demand,{registration:demandRegistration(unit,doc)});
+  if(layout?.preparation)Object.assign(layout.preparation.demand,{registration:{...demandRegistration(unit,doc),history:await loadDemandHistory(db,doc)}});
   return {documentId:doc.id,filename:doc.original_filename,canImport:false,state:valid?a.intake.decision:'QUARANTINED',preparation:layout?.preparation??null,measurements:layout?.measurements??null,gd:valid?extractGdEvidence(r.raw_result):null};
- });
+ }));
 }
