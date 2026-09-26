@@ -28,9 +28,10 @@ export default tseslint.config(
 
   ...tseslint.configs.recommended,
   {
-    files: ['test/entry-wizard.cjs','test/license-governance.cjs','test/tariff-preview.cjs','test/monthly-cost-ledger.cjs','test/preparation-navigation.cjs','test/supply-reference.cjs','test/tax-memory.cjs','test/billed-demand.cjs','test/scenario-comparison.cjs','test/distributor-subtotal.cjs','test/financial-costs.cjs','test/audit-authors.cjs'],
+    files: ['test/*.cjs'],
+    ignores: ['test/session-renewal.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node, ...globals.browser } },
-    rules: { '@typescript-eslint/no-require-imports': 'off' },
+    rules: { '@typescript-eslint/no-require-imports': 'off', '@typescript-eslint/no-unused-vars': ['error', {ignoreRestSiblings: true}] },
   },
 
   {
