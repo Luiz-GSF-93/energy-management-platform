@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');const C=require('../app/backoffice/documents/OcrPreparationPreview.tsx').default;
+const base={canImport:false,message:'Prévia',values:[],pending:[]};
+assert.ok(!renderToStaticMarkup(React.createElement(C,{evidence:base})).includes('Demanda: medição'));
+const demand={canImport:false,message:'Não somar postos',measured:[{period:'PEAK',decimal:'203',unit:'kW',state:'DISPLAYED_REVIEW',sources:['meter'],message:'Pode estar arredondado'},{period:'OFF_PEAK',decimal:null,unit:'kW',state:'MISSING',sources:[],message:'Ausente'}],billed:[{source:'bill',description:'<img src=x>',decimal:'234.6400',unit:'kW',state:'BILLED_UNCLASSIFIED'}],contracted:{decimal:null,message:'Não inferir'},unused:{decimal:null,message:'Exige conferência'}};
+const html=renderToStaticMarkup(React.createElement(C,{evidence:{...base,demand}}));for(const text of ['203 kW','234,6400 kW','A conferir','Não atribuída','Não inferir','Exige conferência','Importação automática: não liberada'])assert.ok(html.includes(text));assert.ok(!html.includes('<img'));console.log('Demand UI checks passed');

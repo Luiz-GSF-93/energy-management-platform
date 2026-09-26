@@ -1,9 +1,11 @@
+import {cpflDemandPreview} from './cpfl-demand-preview';
+import type {MeterReading} from './cpfl-measurements';
 import type {CpflOperation} from './cpfl-paulista-layout';
 export type PreparationValue={key:string;label:string;unit:string;decimal:string|null;state:'EXTRACTED_REVIEW'|'MISSING'|'CONFLICT';sources:string[];reasons:string[]};
 const canonical=(v:string)=>{const [whole,fraction='']=v.split('.');const tail=fraction.replace(/0+$/,'');return whole+(tail?'.'+tail:'');};
 function add(a:string,b:string){const [aw,af='']=a.split('.'),[bw,bf='']=b.split('.');const scale=Math.max(af.length,bf.length);const n=BigInt(aw+af.padEnd(scale,'0'))+BigInt(bw+bf.padEnd(scale,'0'));if(!scale)return n.toString();const digits=n.toString().padStart(scale+1,'0');return digits.slice(0,-scale)+'.'+digits.slice(-scale);}
 /** Read-only mapping of billed TUSD quantities; never sums TE and TUSD or uses rounded history. */
-export function cpflPreparationPreview(operations:CpflOperation[]){
+export function cpflPreparationPreview(operations:CpflOperation[],meters:MeterReading[]=[]){
  const values:PreparationValue[]=[];
  for(const [period,key,label] of [['PEAK','consumptionPeakKwh','Consumo na ponta'],['OFF_PEAK','consumptionOffPeakKwh','Consumo fora ponta']]){
   const rows=operations.filter(r=>r.component==='TUSD_ENERGY'&&r.period===period&&r.role==='CHARGE');
@@ -20,5 +22,5 @@ export function cpflPreparationPreview(operations:CpflOperation[]){
  }
  const [peak,off]=values;const total=peak.decimal!==null&&off.decimal!==null?add(peak.decimal,off.decimal):null;
  values.push({key:'consumptionTotalKwh',label:'Consumo total — ponta + fora ponta',unit:'kWh',decimal:total,state:total===null?'MISSING':'EXTRACTED_REVIEW',sources:[...new Set([...peak.sources,...off.sources])],reasons:[total===null?'TWO_PERIODS_REQUIRED':'REVIEW_AND_IDENTITY_REQUIRED']});
- return {version:'cpfl-preparation-preview-v1',canImport:false,values,pending:[{label:'Demanda medida, contratada e não utilizada',reason:'A quantidade faturada não prova sozinha qual parcela é medida, contratada ou não utilizada.'},{label:'Tarifas, tributos e vigências',reason:'Requerem definição de base, incidência, ambiente e vigência; transcrição não aprova parâmetros.'}],message:'Prévia de campos, sem gravação. Consumo vem do faturamento TUSD; TE serve apenas para conferir a quantidade. Histórico arredondado não substitui estes valores.'};
+ return {demand:cpflDemandPreview(operations,meters),version:'cpfl-preparation-preview-v2',canImport:false,values,pending:[{label:'Demanda medida, contratada e não utilizada',reason:'A quantidade faturada não prova sozinha qual parcela é medida, contratada ou não utilizada.'},{label:'Tarifas, tributos e vigências',reason:'Requerem definição de base, incidência, ambiente e vigência; transcrição não aprova parâmetros.'}],message:'Prévia de campos, sem gravação. Consumo vem do faturamento TUSD; TE serve apenas para conferir a quantidade. Histórico arredondado não substitui estes valores.'};
 }
