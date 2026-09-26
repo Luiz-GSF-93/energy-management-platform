@@ -1,6 +1,6 @@
 # Parâmetros e comparação ACL × ACR — proposta de implantação
 
-Status: arquitetura para a Etapa 4; não representa motor de cálculo ou cadastro tributário já publicado. A F1.29 acrescenta somente condições operacionais do fornecedor na Etapa 3.
+Status: Etapa 4 em implantação. A F1.57 acrescenta composição operacional somente leitura das rubricas revisadas ACL/ACR. O fechamento financeiro, a economia consolidada e a publicação ainda estão pendentes. As seções iniciais registram a arquitetura e os requisitos; as entregas ao final detalham o que foi implementado.
 
 ## Enquadramento no Prompt Mestre
 
@@ -96,3 +96,7 @@ O subtotal soma cada tarifa uma única vez e acrescenta apenas os tributos efeti
 ## Bases monetárias operacionais — F1.56
 
 Parâmetros COST podem declarar monetary_source em vez de amount_text. São referências versionadas de valores calculados/validados, não novas despesas. As origens são energia contratual consumida, mínimo não consumido, compra extra, CCEE, exposição, encargos e outros custos mensais. O cadastro deve explicitar tratamento e vigência; o tributo referencia o parâmetro aprovado pela base estruturada já existente. Cadastro manual legado não é reinterpretado. A memória conserva referências das fontes operacionais e bloqueia pendências, créditos sem regra, tratamentos divergentes e origem sem cobertura integral da competência. Tributo que combina distribuidora e fontes operacionais não é atribuído integralmente ao subtotal da distribuidora: a composição financeira geral permanece etapa seguinte.
+
+## F1.57 — Composição operacional
+
+A preparação soma tarifas, fornecedor e custos adicionais mediante origens automáticas aprovadas, acrescentando cada tributo uma vez. A composição exige identificação, revisão, vigência, tratamento e classificação das rubricas; preserva os tributos já incluídos e não repete a NF regular. Créditos e fontes não conciliadas permanecem bloqueados. A interface apresenta subtotais e pendências por cenário. Ainda não soma honorários nem calcula economia ou publica resultados. Ver [entrega F1.57](ENTREGA-F1.57.md).
