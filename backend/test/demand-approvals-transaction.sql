@@ -1,0 +1,23 @@
+BEGIN;
+DO $test$
+DECLARE d public.documents; a uuid; b uuid; approval uuid;
+BEGIN
+ SELECT * INTO STRICT d FROM public.documents WHERE file_verified AND file_hash IS NOT NULL LIMIT 1;
+ INSERT INTO public.documents SELECT (jsonb_populate_record(NULL::public.documents,to_jsonb(d)||jsonb_build_object('id',gen_random_uuid()::text,'document_type','OTHER','file_hash',encode(gen_random_bytes(32),'hex'),'original_filename','transaction-only-demand-test.pdf','file_path','transaction-only/'||gen_random_uuid()::text,'storage_path','transaction-only/'||gen_random_uuid()::text))).* RETURNING * INTO d;
+ INSERT INTO public.unit_demand_periods(organization_id,customer_id,consumer_unit_id,start_date,end_date,modality,single_kw,document_id,document_hash,reason,request_id,created_by) VALUES(d.organization_id,d.customer_id,d.consumer_unit_id,'2090-01-01','2090-12-31','GREEN','500',d.id,d.file_hash,'Teste transacional',gen_random_uuid(),'transaction-test') RETURNING id INTO a;
+ INSERT INTO public.unit_demand_approvals(period_id,organization_id,customer_id,consumer_unit_id,created_by,note,request_id) VALUES(a,d.organization_id,d.customer_id,d.consumer_unit_id,'transaction-test','Conferido em teste',gen_random_uuid()) RETURNING id INTO approval;
+ BEGIN UPDATE public.unit_demand_approvals SET note='changed' WHERE id=approval;RAISE EXCEPTION 'approval update allowed';EXCEPTION WHEN check_violation THEN NULL;END;
+ BEGIN DELETE FROM public.unit_demand_approvals WHERE id=approval;RAISE EXCEPTION 'approval delete allowed';EXCEPTION WHEN check_violation THEN NULL;END;
+ BEGIN INSERT INTO public.unit_demand_approvals(period_id,organization_id,customer_id,consumer_unit_id,created_by,note,request_id) VALUES(a,'foreign',d.customer_id,d.consumer_unit_id,'transaction-test','Foreign approval',gen_random_uuid());RAISE EXCEPTION 'foreign approval allowed';EXCEPTION WHEN serialization_failure THEN NULL;END;
+ BEGIN UPDATE public.unit_demand_periods SET reason='changed' WHERE id=a;RAISE EXCEPTION 'update allowed';EXCEPTION WHEN check_violation THEN NULL;END;
+ BEGIN DELETE FROM public.unit_demand_periods WHERE id=a;RAISE EXCEPTION 'delete allowed';EXCEPTION WHEN check_violation THEN NULL;END;
+ BEGIN INSERT INTO public.unit_demand_periods(organization_id,customer_id,consumer_unit_id,start_date,end_date,modality,single_kw,document_id,document_hash,reason,request_id,created_by) VALUES(d.organization_id,d.customer_id,d.consumer_unit_id,'2090-06-01','2091-01-31','GREEN','500',d.id,d.file_hash,'Teste sobreposto',gen_random_uuid(),'transaction-test');RAISE EXCEPTION 'overlap allowed';EXCEPTION WHEN exclusion_violation THEN NULL;END;
+ INSERT INTO public.unit_demand_periods(organization_id,customer_id,consumer_unit_id,start_date,end_date,modality,single_kw,document_id,document_hash,reason,supersedes_id,request_id,created_by) VALUES(d.organization_id,d.customer_id,d.consumer_unit_id,'2090-01-01','2090-12-31','GREEN','600',d.id,d.file_hash,'Correção teste',a,gen_random_uuid(),'transaction-test') RETURNING id INTO b;
+ BEGIN INSERT INTO public.unit_demand_periods(organization_id,customer_id,consumer_unit_id,start_date,end_date,modality,single_kw,document_id,document_hash,reason,supersedes_id,request_id,created_by) VALUES(d.organization_id,d.customer_id,d.consumer_unit_id,'2090-01-01','2090-12-31','GREEN','700',d.id,d.file_hash,'Correção obsoleta',a,gen_random_uuid(),'transaction-test');RAISE EXCEPTION 'stale allowed';EXCEPTION WHEN serialization_failure THEN NULL;END;
+ BEGIN INSERT INTO public.unit_demand_approvals(period_id,organization_id,customer_id,consumer_unit_id,created_by,note,request_id) VALUES(a,d.organization_id,d.customer_id,d.consumer_unit_id,'transaction-test','Stale approval',gen_random_uuid());RAISE EXCEPTION 'stale approval allowed';EXCEPTION WHEN serialization_failure THEN NULL;END;
+ IF EXISTS(SELECT 1 FROM public.unit_demand_approvals WHERE period_id=b) THEN RAISE EXCEPTION 'approval transferred';END IF;
+ IF has_table_privilege('authenticated','public.unit_demand_approvals','SELECT') OR has_table_privilege('service_role','public.unit_demand_approvals','UPDATE') THEN RAISE EXCEPTION 'approval permissions failed';END IF;
+ IF has_table_privilege('authenticated','public.unit_demand_periods','SELECT') OR has_table_privilege('service_role','public.unit_demand_periods','UPDATE') THEN RAISE EXCEPTION 'permissions failed';END IF;
+END $test$;
+ROLLBACK;
+SELECT 'PASS: immutable history, overlap, correction, stale version and permissions; rolled back' AS result;

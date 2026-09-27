@@ -11,3 +11,11 @@ describe('Demand history coverage',()=>{
  it('does not reuse old month',()=>expect(demandHistory([p({end_date:'2026-07-31'})],doc).state).toBe('MISSING'));
  it('fails closed on missing query',()=>expect(demandHistory(null,doc).state).toBe('UNAVAILABLE'));
 });
+
+describe('Demand history approval scope',()=>{
+ const a={period_id:'1',organization_id:'o',customer_id:'c',consumer_unit_id:'u',created_at:'2026-01-01'};
+ it('marks approved coverage without financial import',()=>expect(demandHistory([p()],doc,[a])).toMatchObject({state:'COVERED_VALIDATED',canImport:false,periods:[{validation:'VALIDATED'}]}));
+ it('does not transfer approval to correction',()=>expect(demandHistory([p(),p({id:'2',supersedes_id:'1'})],doc,[a])).toMatchObject({state:'COVERED_REFERENCE',periods:[{validation:'PENDING'}]}));
+ it('rejects foreign approval',()=>expect(demandHistory([p()],doc,[{...a,organization_id:'x'}]).state).toBe('UNAVAILABLE'));
+ it('preserves gap despite approval',()=>expect(demandHistory([p({start_date:'2026-08-02'})],doc,[a]).state).toBe('GAP'));
+});
