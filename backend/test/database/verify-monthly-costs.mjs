@@ -13,6 +13,7 @@ try{
  const fixture=JSON.parse(readFileSync(new URL('./contracts-fixture.json',import.meta.url),'utf8').replace(/^\uFEFF/,''));
  for(const t of ['customers','consumer_units']){const cols=fixture.columns.filter(c=>c.table===t).map(c=>q(c.name)+' '+c.type+(c.not_null?' NOT NULL':'')+(c.default?' DEFAULT '+c.default:''));await db.exec('CREATE TABLE '+q(t)+' ('+cols.join(',')+',PRIMARY KEY(id));GRANT ALL ON '+q(t)+' TO service_role');}
  const migration=readFileSync(new URL('../../src/database/migrations/20260925_f1_36_monthly_costs.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ for(const file of ['20260925_f1_51_supplier_monthly_costs.sql','20260927_f1_106_ocr_cip_costs.sql','20260927_f1_106_ocr_cip_costs.sql'])await db.exec(readFileSync(new URL('../../src/database/migrations/'+file,import.meta.url),'utf8'));
  const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
  await db.exec("INSERT INTO organizations VALUES ('org-a'),('org-b');INSERT INTO customers(id,organization_id,company_name,document) VALUES ('"+a+"','org-a','A','A'),('"+b+"','org-b','B','B');INSERT INTO consumer_units(id,organization_id,customer_id,consumer_unit_number,distributor,tariff_group) VALUES ('"+a+"','org-a','"+a+"','A','D','A4'),('"+b+"','org-b','"+b+"','B','D','A4');SET ROLE service_role");
  let entitled=true;const client={getClient:()=>({from:t=>new Query(t)})},licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(new Error('No license'),{getStatus:()=>403});}};
@@ -40,6 +41,13 @@ try{
  await assert.rejects(()=>db.query("UPDATE calculation_monthly_costs SET month='2027-03' WHERE id=$1",[partial.id]),e=>e.code==='P3602');checks++;
  await assert.rejects(()=>db.query("DELETE FROM calculation_monthly_costs WHERE id=$1",[partial.id]),e=>e.code==='42501');checks++;
  await assert.rejects(()=>db.exec("UPDATE calculation_monthly_cost_events SET actor_id='spoof'"),e=>e.code==='42501');checks++;
+ const cip=await db.query("INSERT INTO calculation_monthly_costs(organization_id,customer_id,consumer_unit_id,month,costs,source_reference,origin,unit_context,created_by,updated_by) VALUES ('org-a',$1,$1,'2027-04',$2,'OCR CPFL CIP','OCR_CIP','{}','actor','actor') RETURNING *",[a,JSON.stringify({noCosts:false,items:[{...item,category:'CHARGE',amount:'137.58',taxTreatment:'UNSPECIFIED'}]})]);
+ const cipId=cip.rows[0].id;ok(cip.rows[0].origin==='OCR_CIP'&&cip.rows[0].status==='DRAFT');
+ const events=await db.query('SELECT * FROM calculation_monthly_cost_events WHERE input_id=$1',[cipId]);ok(events.rows.length===1&&events.rows[0].actor_id==='actor'&&events.rows[0].snapshot.origin==='OCR_CIP');
+ await assert.rejects(()=>db.query("UPDATE calculation_monthly_costs SET status='VALIDATED' WHERE id=$1",[cipId]),e=>e.code==='P3601');checks++;
+ await assert.rejects(()=>db.query("UPDATE calculation_monthly_costs SET origin='MANUAL' WHERE id=$1",[cipId]),e=>e.code==='P3602');checks++;
+ await deny(()=>s.create({...body,month:'2027-04'},t),409);
+ ok((await db.query('SELECT count(*)::int n FROM calculation_monthly_cost_events WHERE input_id=$1',[cipId])).rows[0].n===1);
  entitled=false;await deny(()=>s.list({consumerUnitId:a,month:'2026-09'},t),403);await deny(()=>s.create({...body,month:'2028-01'},t),403);entitled=true;
  await db.query('UPDATE customers SET deleted_at=now() WHERE id=$1',[a]);await deny(()=>s.one(r.id,t),404);await deny(()=>s.create({...body,month:'2028-01'},t),404);
  await db.exec('RESET ROLE;SET ROLE anon');await assert.rejects(()=>db.exec('SELECT * FROM calculation_monthly_costs'),e=>e.code==='42501');checks++;

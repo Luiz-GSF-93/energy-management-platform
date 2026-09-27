@@ -1,4 +1,5 @@
 'use client';
+import OcrCipIntegration from './OcrCipIntegration';
 import OcrCdeIntegration from './OcrCdeIntegration';
 import OcrTusdTaxes from './OcrTusdTaxes';
 import OcrTusdIntegration from './OcrTusdIntegration';
@@ -22,6 +23,6 @@ export default function OcrHomologation({id}:{id:string}){
  <button type="button" onClick={()=>dialog.current?.close()}>Fechar homologação</button><h2>Homologação da fatura</h2><p>Conferências salvas e etapas para integrar os dados da fatura.</p><button type="button" disabled={busy} onClick={()=>void load()}>Atualizar homologação</button>{busy&&<p role="status">Consultando conferências atuais…</p>}{error&&<p role="alert">{error}</p>}
  {data&&<><p role="status"><strong>{data.state==='REVIEWS_COMPLETE'?'Conferências concluídas — consulte as integrações abaixo':'Homologação pendente de conferências'}</strong></p><p>{data.message}</p><small>Consulta em {new Date(data.checkedAt).toLocaleString('pt-BR')}. Atualize após registrar uma conferência.</small>
  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,260px),1fr))',gap:16,marginTop:20}}>{data.groups.map(g=><article key={g.key} style={{border:'1px solid #405873',borderRadius:12,padding:16}}><h3>{g.title}</h3><p style={{fontSize:24,color:g.complete?'#6ee7b7':'#fcd34d'}}>{g.confirmed} de {g.total} conferências salvas</p>{!g.total&&<p>Não há parcelas disponíveis neste layout para classificar.</p>}<p>Para conferir: feche este painel e abra “{actions[g.key]}”.</p><ul>{g.rows.map(r=><li key={r.key} style={{marginBottom:16}}><strong>{r.label}</strong><p>{states[r.state]??'Conferência pendente'}</p>{r.review&&<small>Último registro: {r.review.author} · {new Date(r.review.createdAt).toLocaleString('pt-BR')} · Versão {r.review.version}{r.review.decision==='USED'?' · Demanda utilizada':r.review.decision==='UNUSED'?' · Demanda não utilizada':''}</small>}</li>)}</ul></article>)}</div>
- <OcrMonthlyIntegration id={id}/><OcrDemandIntegration id={id}/><OcrMeasurementReadiness id={id}/><OcrTusdIntegration id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrTusdTaxes id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrCdeIntegration id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrCalculationStatus key={parameterVersion} id={id}/></>}
+ <OcrMonthlyIntegration id={id}/><OcrDemandIntegration id={id}/><OcrMeasurementReadiness id={id}/><OcrTusdIntegration id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrTusdTaxes id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrCdeIntegration id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrCipIntegration id={id} onCreated={()=>setParameterVersion(v=>v+1)}/><OcrCalculationStatus key={parameterVersion} id={id}/></>}
  </dialog></section>;
 }
