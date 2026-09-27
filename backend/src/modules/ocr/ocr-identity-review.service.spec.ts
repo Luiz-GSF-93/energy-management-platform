@@ -27,13 +27,14 @@ describe('OCR review persistence boundaries',()=>{
 
 describe('identity review eligibility and source binding',()=>{
  const setupContext=(patch:any={})=>{
- const base={key:'address',label:'Endereço',expected:'Rua Um 10',comparison:'EQUAL',state:'REVIEW',message:'Conferir',candidates:[{text:'RUA UM 10',source:'page1',pages:[1],confidence:null,issues:[]}]};
+ const base={key:'address',label:'Endereço',expected:'Rua Um 10',comparison:'EQUAL',state:'REVIEW',message:'Conferir',candidates:[{text:'RUA UM 10',source:'page1',pages:[1],confidence:null,issues:['MISSING_CONFIDENCE']}]};
  const identity={context:jest.fn(async()=>({source:{doc:{id:'doc',customer_id:'c',consumer_unit_id:'u',reference_month:'2026-08-01',file_hash:'a'.repeat(64)},jobId:'job'},registration:{customer:{company_name:'A'},unit:{address:'Rua Um 10'}},preview:{registrationAvailable:true,duplicate:false,checks:[base],...patch}}))};
  return {identity,service:new OcrIdentityReviewService({} as any,identity as any),base};
  };
  it('permits explicit human review of equal text with missing OCR confidence',async()=>{const s=setupContext();const c=await (s.service as any).context('org','doc');expect(c.fields[0].field.state).toBe('EXTRACTED_REVIEW');expect(c.fields[0].field.check.candidates[0].confidence).toBeNull();expect(c.fields[0].snapshot.registration.unit.address).toBe('Rua Um 10');});
  it.each(['MISMATCH','AMBIGUOUS','MISSING','REGISTRATION_MISSING'])('blocks %s',async state=>{const s=setupContext();s.base.state=state;const c=await(s.service as any).context('org','doc');expect(c.fields[0].field.state).toBe('BLOCKED');});
  it('blocks duplicate documents',async()=>{const s=setupContext({duplicate:true});expect((await(s.service as any).context('org','doc')).fields[0].field.state).toBe('BLOCKED');});
+ it.each(['UNVERIFIED_SOURCE','CONFIDENCE_BELOW_45','MISSING_VALUE'])('blocks unresolved issue %s',async issue=>{const s=setupContext();s.base.candidates[0].issues=[issue];expect((await(s.service as any).context('org','doc')).fields[0].field.state).toBe('BLOCKED');});
  it('blocks missing page evidence',async()=>{const s=setupContext();s.base.candidates[0].pages=[];expect((await(s.service as any).context('org','doc')).fields[0].field.state).toBe('BLOCKED');});
  it('changes digest when current registration changes',async()=>{const s=setupContext();const a=await(s.service as any).context('org','doc');s.identity.context.mockImplementation(async()=>({...await setupContext().identity.context(),registration:{customer:{company_name:'B'},unit:{address:'Rua Um 10'}}}));const b=await(s.service as any).context('org','doc');expect(a.fields[0].sourceHash).not.toBe(b.fields[0].sourceHash);});
  it('rejects operator and foreign tenant before any source query',async()=>{const s=setupContext();for(const t of [{userId:'a',organizationId:'org',role:'operador'},{userId:'a',organizationId:'other',role:'gestor'}])await expect(s.service.create('org','doc',t,input())).rejects.toThrow('Gestor');expect(s.identity.context).not.toHaveBeenCalled();});
