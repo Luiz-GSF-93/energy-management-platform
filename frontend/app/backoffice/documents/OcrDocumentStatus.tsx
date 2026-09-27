@@ -29,7 +29,7 @@ export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:
   </details>}
   {status?.intake?.readoutSummary&&<OcrReadout key={id} id={id} summary={status.intake.readoutSummary}/>}
   {status?.intake?.layout?.preparation&&<OcrFieldReviews key={id} id={id} canReview={canProcess}/>}
-  {status?.intake?.layout&&<OcrLayoutEvidence evidence={status.intake.layout}/>}
+  {status?.intake?.layout&&<OcrLayoutEvidence evidence={status.intake.layout} documentId={id}/>}
   {status?.intake?.electrical&&<OcrElectricalEvidence evidence={status.intake.electrical}/>}
   {status?.intake?.gd&&<OcrGdEvidence evidence={status.intake.gd}/>}
  </div>;
