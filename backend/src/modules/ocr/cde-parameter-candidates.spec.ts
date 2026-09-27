@@ -11,3 +11,9 @@ describe('Exact TUSD draft mapping',()=>{
 });
 
 describe('CDE invoice evidence',()=>{it.each([['PEAK','11378.6400','0.00502609','57.19'],['OFF_PEAK','99743.5600','0.00502629','501.34']])('maps %s exactly',(band,qty,rate,amount)=>{const r=row(band);r.fields.quantity=field(qty);r.fields.grossRate=field(rate);r.fields.amount=field(amount);expect(cdeParameterCandidates([r])[band==='PEAK'?0:1].ready).toBe(true);r.fields.description.transcription.confidence=.299;expect(cdeParameterCandidates([r])[band==='PEAK'?0:1].ready).toBe(false);});});
+
+describe('CDE description confirmation scope',()=>{
+ it('permits only the reviewed description and preserves the original confidence',()=>{const r=row();r.fields.description.transcription.confidence=.299;const before=JSON.stringify(r);expect(cdeParameterCandidates([r],new Set(['PEAK']))[0].ready).toBe(true);expect(JSON.stringify(r)).toBe(before);expect(cdeParameterCandidates([r],new Set(['OFF_PEAK']))[0].ready).toBe(false);});
+ it.each(['quantity','grossRate','amount','icmsAmount','pisAmount','cofinsAmount','unit'])('does not bypass low confidence of %s',key=>{const r=row();r.fields.description.transcription.confidence=.299;r.fields[key].transcription.confidence=.4;expect(cdeParameterCandidates([r],new Set(['PEAK']))[0].ready).toBe(false);});
+ it('does not bypass missing source, duplicate rows or mismatched totals',()=>{for(const mutate of [(r:any)=>r.fields.description.issues.push('UNVERIFIED_SOURCE'),(r:any)=>r.fields.amount.decimal='1.00',(r:any)=>r.issues.push('MERGED_OR_DUPLICATE_CELL')]){const r=row();mutate(r);expect(cdeParameterCandidates([r],new Set(['PEAK']))[0].ready).toBe(false);}expect(cdeParameterCandidates([row(),row()],new Set(['PEAK']))[0].ready).toBe(false);});
+});

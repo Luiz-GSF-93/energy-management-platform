@@ -1,0 +1,42 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import assert from 'node:assert/strict';
+const db = new PGlite();
+let checks = 0;
+const ok = (v) => { assert.ok(v); checks++; };
+const migration = async name => db.exec(await readFile(new URL('../../src/database/migrations/' + name, import.meta.url),'utf8'));
+await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+create table public.organizations(id text primary key);
+create table public.customers(id text primary key, organization_id text, deleted_at timestamptz);
+create table public.consumer_units(id text primary key, organization_id text, customer_id text);
+create table public.documents(id text primary key, organization_id text,customer_id text,consumer_unit_id text,reference_month timestamp,file_verified boolean,document_type text,file_hash text);
+create table public.document_ocr_jobs(id uuid primary key,organization_id text,document_id text,file_hash text,state text);
+create table public.document_ocr_results(job_id uuid,organization_id text,document_id text,file_hash text);
+insert into organizations values ('org'),('other');
+insert into customers values ('customer','org',null);
+insert into consumer_units values ('unit','org','customer');
+insert into documents values ('doc','org','customer','unit','2026-08-01',true,'INVOICE_DISTRIBUTOR',repeat('a',64));
+insert into document_ocr_jobs values ('11111111-1111-4111-8111-111111111111','org','doc',repeat('a',64),'SUCCEEDED');
+insert into document_ocr_results select id,organization_id,document_id,file_hash from document_ocr_jobs;
+grant select on all tables in schema public to service_role;
+grant update on documents to service_role;`);
+await migration('20260927_f1_99_ocr_cde_reviews.sql');
+const hash='a'.repeat(64),job='11111111-1111-4111-8111-111111111111',key='b'.repeat(64);
+const snapshot=()=>({format:'ocr-cde-review-v1',jobId:job,document:{id:'doc',organizationId:'org',customerId:'customer',unitId:'unit',month:'2026-08',fileHash:hash},field:{key,state:'EXTRACTED_DESCRIPTION',description:{text:'CDE Escassez Hídrica Ponta AGO/26'},component:'CDE_WATER_SCARCITY',period:'PEAK'}});
+async function insert(override={}){const row={organization_id:'org',document_id:'doc',job_id:job,file_hash:hash,field_key:key,source_hash:hash,source_snapshot:JSON.stringify(snapshot()),decision:'CONFIRMED',note:'Descrição conferida no PDF',checked_pdf:true,expected_review_id:null,request_id:randomUUID(),created_by:'actor',...override};const names=Object.keys(row);return (await db.query('insert into public.document_ocr_cde_reviews ('+names.join(',')+') values ('+names.map((_,i)=>'$'+(i+1)).join(',')+') returning *',Object.values(row))).rows[0];}
+const fails=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+await db.exec('set role service_role');
+const first=await insert();ok(first.version===1&&first.created_by==='actor'&&first.created_at);
+await fails(()=>insert(),'40001');await fails(()=>insert({request_id:first.request_id}),'23505');
+for(const patch of [{organization_id:'other'},{file_hash:'c'.repeat(64)},{source_snapshot:'{}'}])await fails(()=>insert(patch),'23514');
+for(const patch of [{checked_pdf:false},{note:''},{created_by:''},{decision:'APPROVED'}])await fails(()=>insert({...patch,expected_review_id:first.id}),'23514');
+for(const fieldPatch of [{state:'CONFLICT'},{description:{text:''}},{component:'TUSD_ENERGY'},{period:'UNSPECIFIED'}]){const s=snapshot();Object.assign(s.field,fieldPatch);await fails(()=>insert({source_snapshot:JSON.stringify(s)}),'23514');}
+const second=await insert({expected_review_id:first.id,decision:'NEEDS_CORRECTION'});ok(second.version===2);
+const third=await insert({expected_review_id:second.id});ok(third.version===3);
+await fails(()=>db.exec("update public.document_ocr_cde_reviews set note='alterado'"),'42501');await fails(()=>db.exec('delete from public.document_ocr_cde_reviews'),'42501');
+for(const table of ['document_ocr_jobs','document_ocr_results'])ok(!(await db.query("select has_table_privilege(current_user,$1,'UPDATE') as allowed",['public.'+table])).rows[0].allowed);
+await db.exec('reset role');await fails(()=>db.exec("update public.document_ocr_cde_reviews set note='alterado'"),'23514');await fails(()=>db.exec('delete from public.document_ocr_cde_reviews'),'23514');
+for(const role of ['anon','authenticated']){await db.exec('set role '+role);await fails(()=>insert(),'42501');await fails(()=>db.query('select * from public.document_ocr_cde_reviews'),'42501');await db.exec('reset role');}
+await db.exec("update document_ocr_jobs set state='FAILED'");await db.exec('set role service_role');await fails(()=>insert({expected_review_id:third.id}),'23514');await db.exec('reset role');
+console.log(checks+' CDE database checks passed: tenant isolation, service-role insertion, immutable history, replay, source and version guards');await db.close();
