@@ -1,4 +1,4 @@
-import {cdeTaxHighlights} from './cde-tax-highlights';
+import {cdeTaxHighlights,componentTaxHighlights} from './cde-tax-highlights';
 const f=(decimal:string|null):any=>({decimal,text:decimal??'',confidence:null,pages:[1],issues:['MISSING_CONFIDENCE'],transcription:{state:'VERIFIED_WORDS',confidence:.99}});
 function rows():any[]{return [{source:'p',period:'PEAK',role:'CHARGE',component:'CDE_WATER_SCARCITY',issues:[],fields:{amount:f('57.19'),icmsAmount:f('10.29'),pisAmount:f('0.48'),cofinsAmount:f('2.27')}},{source:'fp',period:'OFF_PEAK',role:'CHARGE',component:'CDE_WATER_SCARCITY',issues:[],fields:{amount:f('501.34'),icmsAmount:f('90.24'),pisAmount:f('4.23'),cofinsAmount:f('19.86')}}];}
 describe('CDE included tax highlights',()=>{
@@ -7,3 +7,5 @@ describe('CDE included tax highlights',()=>{
  it('keeps missing values unknown while preserving explicit zero',()=>{const r=rows();r[0].fields.pisAmount=f(null);expect(cdeTaxHighlights(r).taxes[1].total).toBeNull();expect(cdeTaxHighlights(r).includedTaxTotal).toBeNull();r[0].fields.pisAmount=f('0');expect(cdeTaxHighlights(r).taxes[1].total).toBe('4.23');});
  it.each(['duplicate','confidence','source','decimal'])('does not total invalid %s evidence',kind=>{const r=rows();if(kind==='duplicate')r.push({...r[0],source:'other'});if(kind==='confidence')r[0].fields.icmsAmount.transcription.confidence=.85;if(kind==='source')r[0].fields.icmsAmount.issues.push('UNVERIFIED_SOURCE');if(kind==='decimal')r[0].fields.icmsAmount.decimal='10.299';expect(cdeTaxHighlights(r).taxes[0].total).toBeNull();});
 });
+
+it('selects TUSD independently from CDE and keeps low-confidence TUSD unknown',()=>{const cde=rows(),tusd=rows().map(r=>({...r,source:'tusd-'+r.source,component:'TUSD_ENERGY'}));tusd[0].fields.icmsAmount=f('2011.13');tusd[1].fields.icmsAmount=f('3818.01');expect(componentTaxHighlights([...cde,...tusd],'TUSD_ENERGY').taxes[0].total).toBe('5829.14');tusd[0].fields.icmsAmount.transcription.confidence=.5;expect(componentTaxHighlights([...cde,...tusd],'TUSD_ENERGY').taxes[0].total).toBeNull();expect(cdeTaxHighlights([...cde,...tusd]).taxes[0].total).toBe('100.53');});
