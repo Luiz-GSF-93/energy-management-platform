@@ -5,7 +5,8 @@ import OcrPreparationPreview,{type PreparationPreview} from './OcrPreparationPre
 import OcrMeasurements,{type MeasurementEvidence} from './OcrMeasurements';
 import OcrTranscription,{type Transcription} from './OcrTranscription';
 import {useOriginalInvoice} from './OcrOriginalInvoice';
-import {useRef} from 'react';
+import {useRef,useState} from 'react';
+import OcrReviewedDemand from './OcrReviewedDemand';
 type Field={transcription?:Transcription;text:string;decimal:string|null;confidence:number|null;pages:number[];issues:string[]};
 export type LayoutEvidence={taxReconciliation?:TaxReconciliation;preparation?:PreparationPreview|null;measurements?:MeasurementEvidence|null;name:string;version:string;layoutId:string|null;status:string;canImport:false;reviewMessage:string;issues:string[];financialReconciliation:string;reconciliation?:{state:string;checks:{label:string;state:string;differenceCents:string|null}[]};columns:string[][];coverage:{label:string;mapped:number;expected:number}[];library:{id:string;name:string;version:string|null;status:string;scope:string;pending:readonly string[]}[];fields:{name:string;label:string;value:Field;source:string}[];operations:{source:string;row:number;component:string;period:string;role:string;fields:Record<string,Field>;issues:string[];arithmetic:{state:string;differenceCents:string|null}}[];blocks:{kind:string;label:string;source:string;rows:{index:number;cells:{column:number;columnSpan:number;rowSpan:number;value:Field}[]}[]}[]};
 const box={border:'1px solid #40516b',borderRadius:12,padding:16,margin:'12px 0'};
@@ -13,20 +14,21 @@ const component:Record<string,string>={TE:'Energia TE',TUSD_ENERGY:'TUSD energia
 const role:Record<string,string>={CHARGE:'Operação',CREDIT:'Crédito / desconto',TOTAL:'Total de conferência',INFORMATION:'Informativo',UNKNOWN:'Revisão'};
 function Value({f}:{f?:Field}){if(!f?.text.trim())return <span>Não identificado</span>;return <><span style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{f.text}</span><br/><small style={{color:'#becce0'}}>Confiança: {f.confidence===null?'não informada':(f.confidence*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%'} · {f.pages.length?'p. '+f.pages.join(', '):'página a conferir'}{f.issues.length?' · conferir':''}</small><br/><OcrTranscription evidence={f.transcription}/></>;}
 export default function OcrLayoutEvidence({evidence:e,documentId}:{evidence:LayoutEvidence;documentId?:string}){
+ const [reviewRevision,setReviewRevision]=useState(0);
  const original=useOriginalInvoice(documentId);
  const dialog=useRef<HTMLDialogElement>(null);
  const uncertain=e.operations.flatMap(r=>e.columns.flatMap(([k,label])=>{const f=r.fields[k],c=f?.transcription?.confidence;return typeof c==='number'&&c<=0.85?[{source:r.source,key:k,label,description:r.fields.description?.text||'Linha sem descrição',field:f}]:[];}));
  return <section aria-label="Biblioteca e cobertura do layout" style={box}>
   <strong>{e.name}</strong><p>Versão {e.version} · Em homologação</p>
   <p>{e.operations.length} linhas estruturadas da tabela. Importação automática: não liberada.</p>
-  <button type="button" onClick={()=>dialog.current?.showModal()}>Conferir layout e biblioteca</button>
+  <button type="button" onClick={()=>{setReviewRevision(v=>v+1);dialog.current?.showModal();}}>Conferir layout e biblioteca</button>
   <dialog ref={dialog} aria-label="Conferência do layout da distribuidora" style={{width:'min(1400px,96vw)',maxHeight:'92vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
    <div style={{display:'flex',justifyContent:'space-between',gap:16}}><h2>{e.name}</h2><button type="button" onClick={()=>dialog.current?.close()}>Fechar layout</button></div>
    <p>{e.reviewMessage}</p>{original.open&&<button type="button" onClick={()=>void original.open?.()}>Abrir fatura original para conferir</button>}
    <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>{e.coverage.map(c=><article key={c.label} style={{...box,flex:'1 1 220px'}}><strong>{c.label}</strong><p style={{fontSize:24,margin:'8px 0'}}>{c.mapped} / {c.expected}</p><small>Campos com conteúdo localizado. Ainda requer conferência.</small></article>)}</div>
    <p>Conferência aritmética dos totais: <strong>{e.reconciliation?.state==='MATCH'?'valores conciliados':e.reconciliation?.state==='DIVERGENT'?'divergência identificada':'incompleta'}</strong>. Isso não aprova identidade, tarifas ou confiança.</p><ul>{e.reconciliation?.checks.map(c=><li key={c.label}>{c.label}: {c.state==='MATCH'?'confere':c.state==='DIVERGENT'?'diverge':'não verificável'}</li>)}</ul><p>Valores sem confiança informada não são aprovados automaticamente.</p>
    <details style={box}><summary>Trechos com baixa confiança de transcrição ou revisão ({uncertain.length})</summary><p>Prioridade de conferência das palavras extraídas. Campos sem indicador e demais pendências também exigem validação.</p>{uncertain.map(r=><article key={r.source+r.key} style={box}><strong>{r.description} · {r.label}</strong><p><Value f={r.field}/></p></article>)}</details>
-   {e.preparation&&<OcrPreparationPreview evidence={e.preparation} onOpenOriginal={original.open}/>}
+   {e.preparation&&<OcrPreparationPreview evidence={e.preparation} onOpenOriginal={original.open}/>}{documentId&&e.preparation?.demand&&<OcrReviewedDemand key={documentId} documentId={documentId} revision={reviewRevision}/>}
    <details open><summary>Identificação, período e dados fiscais</summary><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:12}}>{e.fields.map((f,i)=><article style={box} key={f.source+'-'+i}><strong>{f.label}</strong><p><Value f={f.value}/></p><small>Origem: {f.source}</small></article>)}</div>{!e.fields.length&&<p>Nenhum campo estruturado para este layout.</p>}</details>
    {e.taxReconciliation&&<OcrTaxReconciliation evidence={e.taxReconciliation} onOpenOriginal={original.open}/>}
    <OcrOperationTaxes operations={e.operations} onOpenOriginal={original.open}/>
