@@ -1,0 +1,64 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFile} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
+import assert from 'node:assert/strict';
+const db=new PGlite();let checks=0;const ok=v=>{assert.ok(v);checks++;};
+const migration=async n=>db.exec(await readFile(new URL('../../src/database/migrations/'+n,import.meta.url),'utf8'));
+await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+CREATE TABLE organizations(id text primary key);
+CREATE TABLE customers(id text primary key,organization_id text,deleted_at timestamptz,company_name text,document text,status text default 'ACTIVE');
+CREATE TABLE consumer_units(id text primary key,organization_id text,customer_id text,consumer_unit_number text,address text,free_market boolean,status text default 'ACTIVE',distributor text,tariff_group text,tariff_subgroup text,tariff_modality text,state text);
+CREATE TABLE documents(id text primary key,organization_id text,customer_id text,consumer_unit_id text,reference_month timestamp,file_verified boolean,document_type text,file_hash text);
+CREATE TABLE document_ocr_jobs(id uuid primary key,organization_id text,document_id text,file_hash text,state text);
+CREATE TABLE document_ocr_results(job_id uuid,organization_id text,document_id text,file_hash text);
+INSERT INTO organizations VALUES ('org'),('other');
+INSERT INTO customers(id,organization_id,company_name,document) VALUES ('customer','org','Company','123');
+INSERT INTO consumer_units(id,organization_id,customer_id,consumer_unit_number,address,free_market) VALUES ('unit','org','customer','001','Rua Um',true);
+INSERT INTO documents VALUES ('doc','org','customer','unit','2026-08-01',true,'INVOICE_DISTRIBUTOR',repeat('a',64));
+INSERT INTO document_ocr_jobs VALUES ('11111111-1111-4111-8111-111111111111','org','doc',repeat('a',64),'SUCCEEDED');
+INSERT INTO document_ocr_results SELECT id,organization_id,document_id,file_hash FROM document_ocr_jobs;`);
+for(const n of ['20260925_f1_34_monthly_inputs.sql','20260925_f1_48_billed_demand.sql','20260926_f1_71_ocr_field_reviews.sql','20260927_f1_81_ocr_demand_reviews.sql','20260927_f1_86_ocr_review_trigger_permissions.sql','20260927_f1_87_ocr_identity_reviews.sql','20260927_f1_90_ocr_monthly_integration.sql'])await migration(n);
+const refs={identity:{},consumption:{}},hash='a'.repeat(64),job='11111111-1111-4111-8111-111111111111';
+const document={id:'doc',organizationId:'org',customerId:'customer',unitId:'unit',month:'2026-08',fileHash:hash};
+for(const key of ['customer','taxId','unit','address','period','market','consumptionPeakKwh','consumptionOffPeakKwh','consumptionTotalKwh']){
+ const identity=!key.startsWith('consumption'),kind=identity?'identity':'field';
+ const snapshot={format:identity?'ocr-identity-review-v1':'ocr-consumption-review-v1',jobId:job,document,registration:{customer:{company_name:'Company',document:'123'},unit:{consumer_unit_number:'001',address:'Rua Um',free_market:true}},field:{key,state:'EXTRACTED_REVIEW',decimal:identity?'value':key==='consumptionTotalKwh'?'0.3':key==='consumptionPeakKwh'?'0.1':'0.2',unit:identity?'':'kWh',check:{comparison:'EQUAL'}}};
+ const row={organization_id:'org',document_id:'doc',job_id:job,file_hash:hash,field_key:key,source_hash:hash,source_snapshot:JSON.stringify(snapshot),decision:'CONFIRMED',note:'Conferido no PDF',expected_review_id:null,request_id:randomUUID(),created_by:'reviewer',...(identity?{checked_pdf:true}:{})};
+ const keys=Object.keys(row);const saved=(await db.query('INSERT INTO document_ocr_'+kind+'_reviews ('+keys.join(',')+') VALUES ('+keys.map((_,i)=>'$'+(i+1)).join(',')+') RETURNING id',Object.values(row))).rows[0];refs[identity?'identity':'consumption'][key]={id:saved.id,sourceHash:hash};
+}
+const integrate=async(org='org',r=refs)=> (await db.query('SELECT public.integrate_ocr_monthly($1,$2,$3,$4) as result',[org,'doc','actor',JSON.stringify(r)])).rows[0].result;
+const denied=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+const rollback=async fn=>{await db.exec('BEGIN');try{await fn();}finally{await db.exec('ROLLBACK');}};
+await db.exec('SET ROLE service_role');
+await denied(()=>integrate('other'),'P4090');
+await denied(()=>integrate('org',{identity:{},consumption:{}}),'P4090');
+await denied(()=>integrate('org',{...refs,identity:{...refs.identity,address:{id:randomUUID(),sourceHash:hash}}}),'P4090');
+await db.exec('RESET ROLE');
+await rollback(async()=>{await db.exec("UPDATE consumer_units SET address='changed'");await denied(()=>integrate(),'P4090');});
+await rollback(async()=>{await db.exec("UPDATE customers SET status='INACTIVE'");await denied(()=>integrate(),'P4090');});
+await rollback(async()=>{await db.exec("UPDATE consumer_units SET status='INACTIVE'");await denied(()=>integrate(),'P4090');});
+await rollback(async()=>{await db.exec("INSERT INTO documents SELECT 'duplicate',organization_id,customer_id,consumer_unit_id,reference_month,file_verified,document_type,file_hash FROM documents");await denied(()=>integrate(),'P4090');});
+await rollback(async()=>{await db.exec("UPDATE document_ocr_jobs SET state='FAILED'");await denied(()=>integrate(),'P4090');});
+await rollback(async()=>{await db.exec(`INSERT INTO calculation_monthly_inputs(organization_id,customer_id,consumer_unit_id,month,measurements,source_reference,unit_context,created_by,updated_by) VALUES ('org','customer','unit','2026-08','{"consumptionTotal":"9","consumptionPeak":null,"consumptionOffPeak":null,"demandSingle":null,"demandPeak":null,"demandOffPeak":null,"reactiveTotal":null}','manual','{}','actor','actor')`);await denied(()=>integrate(),'P4091');});
+
+for(const [table,section,key] of [['document_ocr_identity_reviews','identity','address'],['document_ocr_field_reviews','consumption','consumptionPeakKwh']])await rollback(async()=>{
+ const original=(await db.query('SELECT * FROM '+table+' WHERE field_key=$1 ORDER BY version DESC LIMIT 1',[key])).rows[0];
+ const row={...original,id:randomUUID(),decision:'NEEDS_CORRECTION',note:'Rever informação',expected_review_id:original.id,request_id:randomUUID()};
+ const keys=Object.keys(row);await db.query('INSERT INTO '+table+' ('+keys.join(',')+') VALUES ('+keys.map((_,i)=>'$'+(i+1)).join(',')+')',Object.values(row).map(v=>v!==null&&typeof v==='object'&&!(v instanceof Date)?JSON.stringify(v):v));
+ await denied(()=>integrate(),'P4090');
+});
+ok((await db.query('SELECT * FROM calculation_monthly_inputs')).rows.length===0);
+ok((await db.query('SELECT * FROM document_ocr_monthly_integrations')).rows.length===0);
+await db.exec('SET ROLE service_role');
+const first=await integrate(),again=await integrate();ok(first.inputId===again.inputId&&!first.alreadyIntegrated&&again.alreadyIntegrated);
+const input=(await db.query('SELECT * FROM calculation_monthly_inputs')).rows[0];ok(input.status==='DRAFT'&&input.origin==='OCR_REVIEWED'&&input.source_ocr_document_id==='doc');ok(input.measurements.consumptionTotal==='0.3'&&input.measurements.demandSingle===null&&input.billed_demand===null);ok(input.created_by==='actor');
+const audit=(await db.query('SELECT * FROM calculation_monthly_input_events')).rows;ok(audit.length===1&&audit[0].snapshot.origin==='OCR_REVIEWED');
+const integration=(await db.query('SELECT * FROM document_ocr_monthly_integrations')).rows;ok(integration.length===1&&integration[0].source_snapshot.reviews.length===9);
+for(const action of ['UPDATE','DELETE','TRUNCATE','INSERT'])ok(!(await db.query("SELECT has_table_privilege(current_user,'public.document_ocr_monthly_integrations',$1) AS allowed",[action])).rows[0].allowed);
+await denied(()=>db.exec('DELETE FROM document_ocr_monthly_integrations'),'42501');
+await db.exec('RESET ROLE');
+await rollback(async()=>{await db.exec("UPDATE consumer_units SET address='changed'");await denied(()=>db.query("UPDATE calculation_monthly_inputs SET status='VALIDATED' WHERE id=$1",[input.id]),'P4090');});
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await denied(()=>integrate(),'42501');await db.exec('RESET ROLE');}
+await db.query("UPDATE calculation_monthly_inputs SET status='VALIDATED' WHERE id=$1",[input.id]);ok((await db.query('SELECT status FROM calculation_monthly_inputs')).rows[0].status==='VALIDATED');
+console.log(checks+' SQL integration checks passed; no production writes.');await db.close();
