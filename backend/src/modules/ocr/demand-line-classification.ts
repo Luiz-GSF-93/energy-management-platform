@@ -22,8 +22,8 @@ export function demandTaxEvidence(row:CpflOperation,rows:CpflOperation[]){
  const eligible=(r:CpflOperation)=>r.component==='DEMAND_BILLED'&&r.role==='CHARGE'&&r.fields.unit?.text.trim().toLowerCase()==='kw'&&!r.issues.some(i=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN'].includes(i));
  const verified=(r:CpflOperation)=>eligible(r)&&values(r).every(f=>f&&f.text.trim()&&typeof f.decimal==='string'&&/^[0-9]+(?:[.][0-9]+)?$/.test(f.decimal)&&f.issues.length===0);
  const zero=(s:string)=>/^0+(?:[.]0+)?$/.test(s);
- if(!verified(row)||!values(row).every(f=>zero(f.decimal!)))return null;
+ if(!verified(row)||!zero(row.fields.icmsAmount.decimal!)||zero(row.fields.pisAmount.decimal!)||zero(row.fields.cofinsAmount.decimal!))return null;
  const taxed=rows.filter(r=>r.source!==row.source&&verified(r)&&values(r).every(f=>!zero(f.decimal!)));
  if(taxed.length!==1)return null;
- return {kind:'UNUSED_TAX_REVIEW',basis:'EXPLICIT_ZERO_TAXES',message:'Candidata a demanda não utilizada: ICMS, PIS e Cofins aparecem explicitamente zerados nesta linha e positivos em outra parcela de demanda. Confirme o enquadramento no PDF; campo não lido não equivale a imposto zero.'};
+ return {kind:'UNUSED_TAX_REVIEW',basis:'ZERO_ICMS_WITH_PIS_COFINS',message:'Candidata a demanda não utilizada: ICMS aparece explicitamente zerado nesta linha, com PIS e Cofins positivos, e há outra parcela de demanda com ICMS positivo. Confirme o enquadramento no PDF; campo não lido não equivale a imposto zero.'};
 }
