@@ -1,0 +1,19 @@
+import type {CpflOperation} from './cpfl-paulista-layout';
+import type {MeterReading,HistoryReading} from './cpfl-measurements';
+const decimal=(v:unknown):v is string=>typeof v==='string'&&/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/.test(v);
+const equal=(a:string,b:string)=>{const scale=1000000n;const n=(v:string)=>{const [w,f='']=v.split('.');return BigInt(w)*scale+BigInt(f.padEnd(6,'0'));};return n(a)===n(b);};
+/** Compare displayed evidence only. Rounding, quantity dimensions and human approval remain explicit. */
+export function measurementReadiness(meters:MeterReading[],history:HistoryReading[],operations:CpflOperation[],month:string,monthly:any,scopeValid:boolean){
+ const demand=['PEAK','OFF_PEAK'].map(period=>{
+  const rows=meters.filter(r=>r.kind==='ACTIVE_DEMAND'&&r.period===period),historic=history.filter(r=>r.metric==='DEMAND'&&r.period===period&&r.reference===month);
+  const m=rows[0],h=historic[0];const meterValid=rows.length===1&&m.unit==='kW'&&decimal(m.fields.reading?.decimal)&&!m.issues.some(i=>['METER_CELL_AMBIGUOUS','METER_FIELDS_MISSING'].includes(i))&&['quantityKind','period','reading','meter'].every(k=>m.fields[k]&&!m.fields[k].issues.includes('UNVERIFIED_SOURCE'));
+  const historyValid=historic.length===1&&h.unit==='kW'&&decimal(h.decimal)&&!h.issues.some(i=>['HISTORY_DUPLICATE_CANDIDATES','HISTORY_VALUE_AMBIGUOUS','HISTORY_REFERENCE_UNVERIFIED','HISTORY_NEGATIVE_VALUE'].includes(i))&&h.evidence.length>0&&h.evidence.every(f=>!f.issues.includes('UNVERIFIED_SOURCE'));
+  const state=!scopeValid?'SCOPE_REVIEW':rows.length>1||historic.length>1?'AMBIGUOUS':!rows.length?'MISSING':!meterValid||historic.length>0&&!historyValid?'SOURCE_REVIEW':historyValid&&!equal(m.fields.reading.decimal!,h.decimal!)?'DIFFERENT_REPRESENTATIONS':'REVIEW_REQUIRED';
+  return {key:period==='PEAK'?'demandPeak':'demandOffPeak',label:period==='PEAK'?'Demanda medida na ponta':'Demanda medida fora ponta',state,meter:meterValid?{decimal:m.fields.reading.decimal,unit:'kW',source:m.source}:null,history:historyValid?{decimal:h.decimal,unit:'kW',source:h.source,month:h.reference}:null,message:state==='DIFFERENT_REPRESENTATIONS'?'Quadro de medição e histórico apresentam valores diferentes. Pode haver arredondamento; confirmar a precisão na fonte antes de registrar.':'Conferir a demanda medida e sua precisão na fonte. Não copiar a parcela faturada, somar postos ou reconstruir a medição pela constante.'};
+ });
+ const reactive=operations.filter(r=>r.component==='REACTIVE_ENERGY'&&r.role==='CHARGE');
+ const reactiveSources=reactive.map(r=>({source:r.source,period:r.period,decimal:r.fields.quantity?.decimal??null,unit:r.fields.unit?.text??null}));
+ const reactiveValid=reactive.length>0&&reactive.every(r=>decimal(r.fields.quantity?.decimal)&&r.fields.unit?.text.trim().toLowerCase()==='kvarh'&&['quantity','unit','description'].every(k=>r.fields[k]&&!r.fields[k].issues.includes('UNVERIFIED_SOURCE'))&&!r.issues.some(i=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN'].includes(i)));
+ const reactiveState=!scopeValid?'SCOPE_REVIEW':!reactive.length?'MISSING':!reactive.every(r=>r.fields.unit?.text.trim().toLowerCase()==='kvarh')?'UNIT_REVIEW':!reactiveValid?'SOURCE_REVIEW':'REVIEW_REQUIRED';
+ return {canImport:false as const,month,demand,reactive:{state:reactiveState,targetUnit:'kVArh',sources:reactiveSources,message:'O campo mensal exige energia reativa excedente em kVArh. Quantidade de cobrança em kWh, leitura acumulada de energia reativa e potência em kVA não são equivalentes. Não converter nem somar automaticamente.'},monthly:monthly?{id:monthly.id,status:monthly.status,version:monthly.version,revision:monthly.revision,measurements:monthly.measurements}:null,message:'Conferência técnica da demanda medida e do reativo. Valores já registrados são mostrados separadamente; nenhum campo é alterado por esta consulta.'};
+}

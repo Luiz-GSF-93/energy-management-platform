@@ -1,0 +1,20 @@
+import {measurementReadiness} from './measurement-readiness';
+const f=(decimal:string|null=null)=>({decimal,text:'campo',issues:[]});
+const meter=(period='PEAK',decimal='203'):any=>({source:'meter-'+period,kind:'ACTIVE_DEMAND',period,unit:'kW',fields:{meter:f(),quantityKind:f(),period:f(),reading:f(decimal)},issues:[]});
+const history=(period='PEAK',decimal='202',reference='2026-08'):any=>({source:'history-'+period,reference,metric:'DEMAND',period,unit:'kW',decimal,evidence:[f()],issues:[]});
+const reactive=(unit='kWh',decimal='0.9716'):any=>({source:'reactive',component:'REACTIVE_ENERGY',role:'CHARGE',period:'PEAK',fields:{quantity:f(decimal),unit:{...f(),text:unit},description:f()},issues:[]});
+const run=(m:any[]=[meter()],h:any[]=[history()],o:any[]=[reactive()],monthly:any=null,scope=true)=>measurementReadiness(m,h,o,'2026-08',monthly,scope);
+describe('Measurement integration readiness',()=>{
+ it('exposes rounded representations without choosing one or importing',()=>{const r=run([meter(),meter('OFF_PEAK','235')],[history(),history('OFF_PEAK','234')]);expect(r.canImport).toBe(false);expect(r.demand.map(d=>d.state)).toEqual(['DIFFERENT_REPRESENTATIONS','DIFFERENT_REPRESENTATIONS']);expect(r.demand[0].meter?.decimal).toBe('203');expect(r.demand[0].history?.decimal).toBe('202');});
+ it('does not count previous months as current evidence',()=>{expect(run([meter()],[history('PEAK','1','2026-07')]).demand[0].history).toBeNull();});
+ it('compares decimals exactly but does not approve matching values',()=>{expect(run([meter('PEAK','203.00')],[history('PEAK','203')]).demand[0].state).toBe('REVIEW_REQUIRED');});
+ it('keeps explicit zero distinct from absent',()=>{const r=run([meter('PEAK','0')],[history('PEAK','0')]);expect(r.demand[0].meter?.decimal).toBe('0');expect(r.demand[1].state).toBe('MISSING');});
+ it('blocks duplicate meters and history candidates',()=>{expect(run([meter(),meter()]).demand[0].state).toBe('AMBIGUOUS');expect(run([meter()],[history(),history()]).demand[0].state).toBe('AMBIGUOUS');});
+ it('does not use billed demand as measured demand',()=>{const r=run([],[],[{...reactive('kW','234.64'),component:'DEMAND_BILLED'}]);expect(r.demand.every(d=>d.state==='MISSING')).toBe(true);expect(r.reactive.state).toBe('MISSING');});
+ it.each(['kWh','kVA','',null])('does not convert reactive unit %s',unit=>{const r=reactive();r.fields.unit.text=unit??'';expect(run([],[],[r]).reactive.state).toBe('UNIT_REVIEW');});
+ it('still requires review for reactive quantity with correct dimension',()=>{expect(run([],[],[reactive('kVArh')]).reactive.state).toBe('REVIEW_REQUIRED');});
+ it('keeps unverified source unavailable',()=>{const m=meter();m.fields.reading.issues=['UNVERIFIED_SOURCE'];const r=run([m]);expect(r.demand[0].state).toBe('SOURCE_REVIEW');expect(r.demand[0].meter).toBeNull();});
+ it('requires a source for historical evidence',()=>{const h=history();h.evidence=[];expect(run([meter()],[h]).demand[0].state).toBe('SOURCE_REVIEW');});
+ it('blocks incompatible layout or reference',()=>{const r=run(undefined,undefined,undefined,null,false);expect(r.demand.every(d=>d.state==='SCOPE_REVIEW')).toBe(true);expect(r.reactive.state).toBe('SCOPE_REVIEW');});
+ it('preserves monthly values separately without replacing them',()=>{const monthly={id:'input',status:'DRAFT',version:1,revision:3,measurements:{demandSingle:'234.64',reactiveTotal:null}};const before=JSON.stringify(monthly),r=run(undefined,undefined,undefined,monthly);expect(r.monthly?.measurements.demandSingle).toBe('234.64');expect(r.demand[0].meter?.decimal).toBe('203');expect(JSON.stringify(monthly)).toBe(before);});
+});

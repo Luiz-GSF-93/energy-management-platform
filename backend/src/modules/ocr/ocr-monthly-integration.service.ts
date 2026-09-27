@@ -1,3 +1,6 @@
+import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
+import {cpflReference} from './cpfl-measurements';
+import {measurementReadiness} from './measurement-readiness';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {LicensesService} from '../licenses/services/licenses.service';
@@ -23,6 +26,12 @@ export class OcrMonthlyIntegrationService {
  const reviewRefs={identity:refs(identity.fields),consumption:refs(consumption.fields)};
  const token=ocrReviewDigest({document,job:source.jobId,fileHash:source.doc.file_hash,reviewRefs});
  return {reviewRefs,preview:{token,canCreate:this.canWrite(t)&&ready&&!integrated.data&&!monthly.data.length,state:integrated.data?'INTEGRATED':monthly.data.length?'EXISTING_RECORD':ready?'READY':'REVIEWS_PENDING',inputId:integrated.data?.input_id??null,integratedAt:integrated.data?.created_at??null,existingStatus:monthly.data[0]?.status??null,month:String(source.doc.reference_month).slice(0,7),values:consumption.fields.map(f=>({label:f.label,decimal:f.decimal,unit:f.unit})),message:integrated.data?'Consumos já integrados. Consulte a versão e o histórico em Dados mensais.':monthly.data.length?'Já existe um registro mensal. A integração preserva esse lançamento e não cria outra versão automaticamente.':ready?'Consumos conferidos disponíveis para criar o primeiro rascunho mensal.':'Conclua as seis conferências de identidade e as três de consumo da evidência atual.'}};
+ }
+ async measurementReadiness(document:string,t:TenantContext){
+  await this.allowed(t);const source=await this.queue.reviewSource(t.organizationId,document),month=String(source.doc.reference_month).slice(0,7),layout=extractCpflPaulistaLayout(source.raw);
+  const r=await this.db.getClient().from('calculation_monthly_inputs').select('id,status,version,revision,measurements').eq('organization_id',t.organizationId).eq('consumer_unit_id',source.doc.consumer_unit_id).eq('month',month).order('version',{ascending:false}).limit(1);this.fail(r.error);if(!Array.isArray(r.data))this.fail({});
+  const refs=[...new Set(layout.fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
+  return measurementReadiness(layout.measurements?.meterReadings??[],layout.measurements?.history??[],layout.operations,month,r.data[0]??null,layout.layoutId==='cpfl-paulista-a'&&refs.length===1&&refs[0]===month);
  }
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
