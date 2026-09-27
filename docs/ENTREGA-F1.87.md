@@ -11,3 +11,5 @@ Migração: 20260927_f1_87_ocr_identity_reviews.sql. Tabela append-only, RLS, ac
 Validação: testes do serviço, comparação e autorização; 18 verificações SQL sob service_role; interface real em JSDOM (justificativa, recibo, histórico, UC literal e mudança cadastral), regressões dos painéis de consumo/demanda. Ajustado teste legado de limites de escrita para fornecer o autor exigido desde F1.84.
 
 Próximos checkpoints: consolidar conferências vigentes com reconciliação de demanda, tarifas, tributos e totais; persistir decisão de homologação; integrar somente os dados liberados a parâmetros, dados/custos mensais e preparação, sem substituir registros existentes. Esta etapa não homologa automaticamente o layout nem libera importação.
+
+Validação em produção: o painel carregou os seis campos da Del Rei. Ausência de confiança ou confiança intermediária permite conferência humana explícita com origem válida; UNVERIFIED_SOURCE e confiança abaixo de 45% permanecem bloqueadas. Ajuste coberto por 55 testes de identidade e build backend.
