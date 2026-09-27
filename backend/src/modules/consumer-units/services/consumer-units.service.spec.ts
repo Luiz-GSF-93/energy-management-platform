@@ -8,6 +8,8 @@ describe('Consumer-unit persistence contract', () => {
   let units: any;
   let service: ConsumerUnitsService;
   let from: jest.Mock;
+  let rpc: jest.Mock;
+  const envelope=(changes:any)=>({changes,reason:"Corrigir cadastro",expectedVersion:0,requestId:"00000000-0000-4000-8000-000000000011"});
   function query(result: any) {
     const q: any = {};
     for (const name of ['select', 'eq', 'is', 'insert', 'update', 'delete']) q[name] = jest.fn(() => q);
@@ -19,7 +21,8 @@ describe('Consumer-unit persistence contract', () => {
     customer = query({ data: { id: customerId }, error: null });
     units = query({ data: { id: 'unit-a' }, error: null });
     from = jest.fn(table => table === 'customers' ? customer : units);
-    service = new ConsumerUnitsService({ getClient: () => ({ from }) } as any);
+    rpc=jest.fn().mockResolvedValue({data:{id:"unit-a"},error:null});
+    service = new ConsumerUnitsService({ getClient: () => ({ from, rpc }) } as any);
   });
 
   it('maps API names to schema and checks the parent organization', async () => {
@@ -56,19 +59,19 @@ describe('Consumer-unit persistence contract', () => {
   });
 
   it('updates mapped fields without changing the customer or organization', async () => {
-    await service.update('unit-a', 'org-a', { installedCapacity: 0, address: null, tariffGroup: 'A3', status: 'INACTIVE' } as any);
-    expect(units.update).toHaveBeenCalledWith({ installed_capacity: 0, address: null, tariff_group: 'A3', status: 'INACTIVE' });
-    expect(units.eq.mock.calls).toEqual([['id', 'unit-a'], ['organization_id', 'org-a']]);
+    await service.update('unit-a', 'org-a', envelope({ installedCapacity: 0, address: null, tariffGroup: 'A3', status: 'INACTIVE' }), 'actor');
+    expect(rpc).toHaveBeenCalledWith('edit_registration',expect.objectContaining({p_id:'unit-a',p_org:'org-a',p_actor:'actor',p_changes:{installed_capacity:0,address:null,tariff_group:'A3',status:'INACTIVE'}}));
+    expect(units.update).not.toHaveBeenCalled();
   });
 
   it.each([{ customerId }, { tariffGroup: null }, { status: 'INVALID' }, { contractedDemand: -10 }])('rejects invalid updates: %p', async invalid => {
-    await expect(service.update('unit-a', 'org-a', invalid as any)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.update('unit-a', 'org-a', envelope(invalid), 'actor')).rejects.toBeInstanceOf(BadRequestException);
     expect(from).not.toHaveBeenCalled();
   });
 
-  it.each(['findOne', 'update', 'delete'] as const)('returns 404 for absent or foreign rows in %s', async method => {
+  it.each(['findOne', 'delete'] as const)('returns 404 for absent or foreign rows in %s', async method => {
     units.maybeSingle.mockResolvedValue({ data: null, error: null });
-    const action = method === 'update' ? service.update('unit-b', 'org-a', { name: 'New' }) : service[method]('unit-b', 'org-a');
+    const action = service[method]('unit-b', 'org-a');
     await expect(action).rejects.toBeInstanceOf(NotFoundException);
     expect(units.eq).toHaveBeenCalledWith('organization_id', 'org-a');
   });
