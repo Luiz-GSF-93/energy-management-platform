@@ -1,0 +1,6 @@
+'use client';
+export type TaxReading={key:string;label:string;source:string;pages:number[];confidence:number|null;method:string;state:string};
+export type TaxDiagnostics={key:string;fields:TaxReading[]}[];
+export default function OcrDemandTaxConfidence({fields}:{fields:TaxReading[]}){
+ return <section aria-label="Confiança da leitura dos tributos da demanda" style={{padding:16,border:'1px solid #405873',borderRadius:12,margin:'12px 0'}}><h4>Confiança da leitura dos tributos</h4><p>Indicador de leitura da evidência atual. Não altera valores, conferências salvas ou aprovação tributária.</p><div style={{display:'flex',gap:20,flexWrap:'wrap'}}>{fields.map(f=><article key={f.key}><strong>{f.label}</strong><p>{f.confidence===null?'Confiança indisponível':(f.confidence*100).toFixed(1).replace('.',',')+'%'}</p><p>{f.method==='FIELD_CONFIDENCE'?'Confiança direta do campo':f.method==='MINIMUM_WORD_CONFIDENCE'?'Menor confiança das palavras verificadas':'Sem evidência de confiança verificável'}</p><p>{f.state==='HIGH_CONFIDENCE'?'Leitura acima de 85%':f.state==='REVIEW_REQUIRED'?'Leitura exige conferência':'Ausência não significa valor zero'}</p><details><summary>Origem — {f.label}</summary><p>{f.source}</p><p>{f.pages.length?'Página(s): '+f.pages.join(', '):'Página não identificada'}</p></details></article>)}</div></section>;
+}
