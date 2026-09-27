@@ -3,6 +3,7 @@ import {SupabaseService} from '../../../services/supabase.service';
 import {LicensesService} from '../../licenses/services/licenses.service';
 import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {ParameterDto,UpdateParameterDto,ParameterRevisionDto,RetireParameterDto} from '../dto/parameters.dto';
+import {auditAuthorNames} from './audit-author-names';
 import {parameterIssues} from './parameter-issues';
 @Injectable()
 export class CalculationParametersService {
@@ -17,7 +18,7 @@ export class CalculationParametersService {
  async list(org:string){await this.allowed(org);const r=await this.table().select('*').eq('organization_id',org);this.fail(r.error);return r.data;}
  async checks(org:string){const rows=await this.list(org);return rows.filter((p:any)=>p.status!=='RETIRED').map((p:any)=>({id:p.id,revision:p.revision,issues:parameterIssues(p,rows)}));}
  async one(id:string,org:string){await this.allowed(org);const r=await this.table().select('*').eq('id',id).eq('organization_id',org).maybeSingle();this.fail(r.error);if(!r.data)throw new NotFoundException('Parâmetro não encontrado nesta organização.');return r.data;}
- async events(id:string,org:string){await this.one(id,org);const r=await this.table('calculation_parameter_events').select('*').eq('parameter_id',id).eq('organization_id',org);this.fail(r.error);return r.data;}
+ async events(id:string,org:string){await this.one(id,org);const r=await this.table('calculation_parameter_events').select('*').eq('parameter_id',id).eq('organization_id',org);this.fail(r.error);return auditAuthorNames(this.db.getClient(),org,r.data??[]);}
  async create(input:ParameterDto,org:string,actor:string){await this.allowed(org);this.actor(actor);const d=await validateWriteDto(ParameterDto,input),u=await this.unit(d.consumerUnitId,org);const r=await this.table().insert([{...this.mapped(d),organization_id:org,customer_id:u.customer_id,consumer_unit_id:u.id,unit_context:this.context(u),created_by:actor,updated_by:actor,status:'DRAFT'}]).select().single();this.fail(r.error);return r.data;}
  async update(id:string,input:UpdateParameterDto,org:string,actor:string){this.actor(actor);const d=await validateWriteDto(UpdateParameterDto,input),old=await this.one(id,org);if(old.status!=='DRAFT'||old.consumer_unit_id!==d.consumerUnitId)throw new ConflictException('Edite somente rascunhos da mesma unidade.');const u=await this.unit(d.consumerUnitId,org);return this.write(id,org,d.revision,{...this.mapped(d),unit_context:this.context(u),updated_by:actor},'DRAFT');}
  private async write(id:string,org:string,revision:number,body:object,status:string){const r=await this.table().update(body).eq('id',id).eq('organization_id',org).eq('revision',revision).eq('status',status).select().maybeSingle();this.fail(r.error);if(!r.data)throw new ConflictException('O registro mudou. Atualize a lista antes de continuar.');return r.data;}
