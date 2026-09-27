@@ -5,7 +5,7 @@ import {tusdParameterCandidates} from './tusd-parameter-candidates';
 jest.mock('./cpfl-paulista-layout',()=>({extractCpflPaulistaLayout:jest.fn()}));
 jest.mock('./tusd-parameter-candidates',()=>({tusdParameterCandidates:jest.fn()}));
 function setup(){
- (extractCpflPaulistaLayout as jest.Mock).mockReturnValue({layoutId:'cpfl-paulista-a',fields:[{name:'reference',value:{text:'AGO/2026'}}],operations:[],reconciliation:{state:'MATCH'}});
+ (extractCpflPaulistaLayout as jest.Mock).mockReturnValue({layoutId:'cpfl-paulista-a',fields:[{name:'reference',value:{text:'AGO/2026'}}],operations:['PEAK','OFF_PEAK'].map(source=>({source,fields:{icmsAmount:{decimal:'10.00'},pisAmount:{decimal:'2.00'},cofinsAmount:{decimal:'3.00'}}})),reconciliation:{state:'MATCH'}});
  (tusdParameterCandidates as jest.Mock).mockReturnValue(['PEAK','OFF_PEAK'].map(band=>({band,ready:true,source:band,rateKwh:'0.21265684',rateMwh:'212.65684',quantity:'99743.5600',amount:'21211.15'})));
  const f=(key:string)=>({key,sourceHash:'a'.repeat(64),state:'EXTRACTED_REVIEW',history:[{id:key,sourceHash:'a'.repeat(64),decision:'CONFIRMED',version:1}]});
  const identity={fields:['customer','taxId','unit','address','period','market'].map(f)},consumption={fields:['consumptionPeakKwh','consumptionOffPeakKwh','consumptionTotalKwh'].map(f)};
@@ -21,4 +21,11 @@ describe('TUSD integration',()=>{
  it('preserves manual records',async()=>{const s=setup();s.data.calculation_parameters=[{id:'manual',status:'DRAFT',start_date:'2026-08-01',end_date:'2026-08-31'}];expect((await s.service.preview('doc',s.t)).state).toBe('EXISTING_RECORD');expect(s.insert).not.toHaveBeenCalled();});
  it('requires current confirmations, active ACL group A and license',async()=>{const s=setup();s.identity.fields[0].history=[];expect((await s.service.preview('doc',s.t)).canCreate).toBe(false);s.license.requireEntitlement.mockRejectedValueOnce(new Error('license'));await expect(s.service.preview('doc',s.t)).rejects.toThrow('license');});
  it('denies unauthorized roles and reads',async()=>{const s=setup();await expect(s.service.create('doc',{...s.t,role:'operador'},{token:'a'.repeat(64)})).rejects.toThrow();await expect(s.service.preview('doc',{...s.t,permissions:[]})).rejects.toThrow();expect(s.insert).not.toHaveBeenCalled();});
+});
+
+describe('Included TUSD taxes',()=>{
+ async function approved(){const s=setup(),p=await s.service.preview('doc',s.t);await s.service.create('doc',s.t,{token:p.token});s.data.calculation_parameters.forEach((r:any)=>{r.status='APPROVED';r.revision=2;});s.insert.mockClear();return s;}
+ it('requires approved bases and never approves tariffs',async()=>{const s=setup();expect((await s.service.taxPreview('doc',s.t)).canCreate).toBe(false);expect(s.insert).not.toHaveBeenCalled();});
+ it('creates three non-additive declarations with exact evidence and pinned revisions',async()=>{const s=await approved(),p=await s.service.taxPreview('doc',s.t);expect(p.canCreate).toBe(true);expect(p.amounts[0].amount).toBe('20.00');await s.service.createTaxes('doc',s.t,{token:p.token});const rows=s.insert.mock.calls[0][0];expect(rows).toHaveLength(3);for(const r of rows){expect(r).toMatchObject({kind:'TAX',treatment:'INCLUDED',amount_text:null,status:'DRAFT',created_by:'actor',measure:'PERCENT'});expect(r.tax_basis.items.map((v:any)=>v.revision)).toEqual([2,2]);}await s.service.createTaxes('doc',s.t,{token:p.token});expect(s.insert).toHaveBeenCalledTimes(1);});
+ it('rejects changed base revisions, modified tariffs and manual tax overlap',async()=>{const s=await approved(),p=await s.service.taxPreview('doc',s.t);s.data.calculation_parameters[0].revision=3;await expect(s.service.createTaxes('doc',s.t,{token:p.token})).rejects.toThrow();s.data.calculation_parameters[0].amount_text='1';expect((await s.service.taxPreview('doc',s.t)).canCreate).toBe(false);s.data.calculation_parameters.push({id:'manual',kind:'TAX',component_code:'ICMS',status:'DRAFT',start_date:'2026-08-01',end_date:'2026-08-31'});expect((await s.service.taxPreview('doc',s.t)).state).toBe('EXISTING_RECORD');expect(s.insert).not.toHaveBeenCalled();});
 });
