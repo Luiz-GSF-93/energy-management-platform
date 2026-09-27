@@ -1,5 +1,6 @@
 'use client';
 import OcrDemandReviews from './OcrDemandReviews';
+import OcrIdentityPreview from './OcrIdentityPreview';
 import OcrFieldReviews from './OcrFieldReviews';
 import OcrLayoutEvidence,{type LayoutEvidence} from './OcrLayoutEvidence';
 import OcrReadout,{type ReadoutSummary} from './OcrReadout';
@@ -28,6 +29,7 @@ export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:
    <p>Conferência registrada em {new Date(status.intake.checkedAt).toLocaleString('pt-BR')}.</p>
    <ul>{status.intake.checks.map(check=><li key={check.field}><strong>{check.label}: {check.state==='MATCH'?'Compatível':check.state==='MISMATCH'?'Divergente':'Conferir'}</strong><p>{check.message}</p>{check.confidence!==null&&<small>Confiança: {(check.confidence*100).toFixed(0)}%{check.pages.length?' · Página(s): '+check.pages.join(', '):''}</small>}</li>)}</ul>
   </details>}
+  {status?.intake&&<OcrIdentityPreview key={id} id={id}/>}
   {status?.intake?.readoutSummary&&<OcrReadout key={id} id={id} summary={status.intake.readoutSummary}/>}
   {status?.intake?.layout?.preparation&&<OcrFieldReviews key={id} id={id} canReview={canProcess}/>}
   {status?.intake?.layout?.preparation?.demand&&<OcrDemandReviews key={id} id={id} canReview={canProcess}/>}
