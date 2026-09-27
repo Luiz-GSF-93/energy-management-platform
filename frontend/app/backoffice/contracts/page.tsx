@@ -1,4 +1,5 @@
 'use client';
+import {ocrNavigationRequest,ocrNavigationContext} from './ocr-navigation';
 import {useEffect,useRef,useState} from 'react';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
@@ -17,6 +18,7 @@ import {Customer,Unit,PERM} from './types';
 import {CorrectionContext} from './preparation-navigation';
 const tabs=[['distributor','Distribuidora e unidades'],['supply','Fornecedor Mercado Livre'],['management','Honorários da gestão'],['services','Intermediação e outros'],['parameters','Parâmetros de cálculo'],['preparation','Preparar apuração'],['monthly','Dados mensais'],['costs','Custos mensais']] as const;
 function Workspace(){const {hasPermission}=useAuth();const [customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[revision,setRevision]=useState(0),[customerId,setCustomer]=useState(''),[tab,setTab]=useState<string>('distributor'),[dirty,setDirty]=useState(false),[search,setSearch]=useState('');
+ const [ocrLoading,setOcrLoading]=useState(false),[ocrError,setOcrError]=useState('');const ocrNavigation=useRef(false);
  const destination=useRef<HTMLDivElement>(null);
  const [correction,setCorrection]=useState<CorrectionContext|null>(null);
  const [entryActive,setEntryActive]=useState(false),[listVersion,setListVersion]=useState(0);
@@ -25,12 +27,18 @@ function Workspace(){const {hasPermission}=useAuth();const [customers,setCustome
  useEffect(()=>{let cancelled=false;if(!canView)return;Promise.all([apiRequest('/api/v1/contracts'),viewCustomers?apiRequest<Customer[]>('/api/v1/customers'):Promise.resolve([]),viewUnits?apiRequest<Unit[]>('/api/v1/consumer-units'):Promise.resolve([])]).then(([,c,u])=>{if(!cancelled){setCustomers(c);setUnits(u);setLoading(false);}}).catch(e=>{if(!cancelled){setError(e.message);setLoading(false);}});return()=>{cancelled=true;};},[canView,viewCustomers,viewUnits,revision]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
  useEffect(()=>{if(correction){destination.current?.focus();destination.current?.scrollIntoView({block:"start"});}},[correction,tab,customerId]);
+ useEffect(()=>{if(loading||error||!canView||ocrNavigation.current)return;let active=true;
+ let request:ReturnType<typeof ocrNavigationRequest>;try{request=ocrNavigationRequest(window.location.search);}catch(e){setOcrError(e instanceof Error?e.message:'Link da fatura inválido.');ocrNavigation.current=true;return;}
+ if(!request){ocrNavigation.current=true;return;}setOcrLoading(true);setOcrError('');
+ apiRequest<{documentId:string;customerId:string;unitId:string;month:string}>('/api/v1/documents/'+encodeURIComponent(request.id)+'/ocr/calculation-context').then(d=>{if(!active)return;const c=ocrNavigationContext(request!,d,customers,units);setCorrection(c);setCustomer(c.customerId);setTab(c.tab!);ocrNavigation.current=true;}).catch(e=>{if(active){ocrNavigation.current=true;setOcrError(e instanceof Error?e.message:'Não foi possível carregar o contexto da fatura.');}}).finally(()=>{if(active)setOcrLoading(false);});return()=>{active=false;};
+ },[loading,error,canView,customers,units]);
  function change(action:()=>void){if(dirty){setPendingChange(()=>action);return;}action();}
  if(!canView)return <p>Acesso não autorizado aos contratos.</p>;
  return <section className="backoffice-page"><h1>Contratos e configuração energética</h1><p>Use Inserir novo para preencher um cadastro por etapas. Nas áreas abaixo, consulte os contratos e a estrutura energética de cada cliente.</p>
  {pendingChange?<div role="alert" className="ds-card"><p>Há campos não salvos. Trocar de área ou cliente descartará esse preenchimento.</p><Button variant="secondary" onClick={()=>setPendingChange(null)}>Permanecer no formulário</Button><Button onClick={()=>{setDirty(false);pendingChange();setPendingChange(null);}}>Descartar e continuar</Button></div>:null}
  {error?<><Alert variant="error">{error}</Alert><Button onClick={()=>{setError('');setLoading(true);setRevision(v=>v+1);}}>Tentar novamente</Button></>:null}
- {loading?<p>Carregando organização, licença e clientes...</p>:!error?<>
+ {ocrError?<Alert variant="error">{ocrError}</Alert>:null}
+ {ocrLoading?<p role="status">Carregando cliente, unidade e competência da fatura…</p>:loading?<p>Carregando organização, licença e clientes...</p>:!error?<>
  <EntryWizard requestStart={change} customers={customers} units={units} filterCustomer={customerId} onDirty={setDirty} onActive={setEntryActive} onRegistered={()=>{setListVersion(v=>v+1);setRevision(v=>v+1);}}/>{!entryActive?<>
  <div className="ds-card" style={{display:'grid',gap:12}}><Input label="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome do cliente"/>
  <label>Cliente em operação<select className="ds-input" value={customerId} onChange={e=>change(()=>{setCorrection(null);setCustomer(e.target.value);})}><option value="">Todos os clientes — visão de consulta</option>{customers.filter(c=>c.id===customerId||c.company_name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(c=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></label>
