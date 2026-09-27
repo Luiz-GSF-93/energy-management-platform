@@ -1,3 +1,5 @@
+import {OcrCipIntegrationService} from './ocr-cip-integration.service';
+import {OcrCipIntegrationController} from './ocr-cip-integration.controller';
 import {CalculationParametersService} from '../contracts/services/parameters.service';
 import {OcrCdeTaxIntegrationService} from './ocr-cde-tax-integration.service';
 import {OcrCdeTaxIntegrationController} from './ocr-cde-tax-integration.controller';
@@ -25,5 +27,5 @@ import {OcrIdentityService} from './ocr-identity.service';
 import {OcrQueueService} from './ocr-queue.service';
 import {OcrWorker} from './ocr.worker';
 import {OcrController} from './ocr.controller';
-@Module({imports:[CommonModule,LicensesModule],providers:[CalculationParametersService,OcrCdeTaxIntegrationService,OcrCdeReviewService,OcrCdeIntegrationService,OcrTusdIntegrationService,CalculationPreparationService,OcrCalculationContextService,{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrDemandIntegrationService,OcrMonthlyIntegrationService,OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService,OcrIdentityReviewService],controllers:[OcrCdeTaxIntegrationController,OcrCdeReviewController,OcrCdeIntegrationController,OcrTusdIntegrationController,OcrCalculationContextController,OcrDemandIntegrationController,OcrController,OcrMonthlyIntegrationController],exports:[OcrQueueService]})
+@Module({imports:[CommonModule,LicensesModule],providers:[OcrCipIntegrationService,CalculationParametersService,OcrCdeTaxIntegrationService,OcrCdeReviewService,OcrCdeIntegrationService,OcrTusdIntegrationService,CalculationPreparationService,OcrCalculationContextService,{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrDemandIntegrationService,OcrMonthlyIntegrationService,OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService,OcrIdentityReviewService],controllers:[OcrCipIntegrationController,OcrCdeTaxIntegrationController,OcrCdeReviewController,OcrCdeIntegrationController,OcrTusdIntegrationController,OcrCalculationContextController,OcrDemandIntegrationController,OcrController,OcrMonthlyIntegrationController],exports:[OcrQueueService]})
 export class OcrModule {}

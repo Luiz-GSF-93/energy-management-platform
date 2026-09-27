@@ -1,0 +1,14 @@
+import {cipCostCandidate} from './cip-cost-candidate';
+import type {CpflOperation} from './cpfl-paulista-layout';
+const field=(text:string,decimal:string|null=null):any=>({text,decimal,pages:[1],spans:[{offset:0,length:text.length}],confidence:null,issues:['MISSING_CONFIDENCE'],transcription:{state:'VERIFIED_WORDS',confidence:.977,wordCount:3}});
+const row=():CpflOperation=>({source:'tables[3].row[12]',row:12,component:'PUBLIC_LIGHTING',role:'CHARGE',period:'ALL',fields:{description:field('Contribuição Custeio IP-CIP AGO/26'),amount:field('137,58','137.58')},issues:[],arithmetic:{state:'NOT_VERIFIABLE',differenceCents:null}});
+describe('CPFL CIP monthly cost candidate',()=>{
+ it('uses a single positive charge and does not infer tax treatment',()=>{const r=row(),before=JSON.stringify(r);expect(cipCostCandidate([r],'2026-08')).toMatchObject({ready:true,amount:'137.58',descriptionConfidence:.977,pages:[1]});expect(JSON.stringify(r)).toBe(before);});
+ it.each(['0.00','-137.58','137.580','1e3','0137.58',null])('blocks invalid amount %p',amount=>{const r=row();r.fields.amount.decimal=amount;expect(cipCostCandidate([r],'2026-08').ready).toBe(false);});
+ it.each(['2026-07','2026-8','bad'])('rejects period %s',month=>expect(cipCostCandidate([row()],month).ready).toBe(false));
+ it.each(['Contribuição Custeio IP-CIP','Contribuição Custeio IP-CIP JUL/26','Contribuição Custeio IP-CIP JUL/26 AGO/26','Desc Energia ACL AGO/26'])('rejects ambiguous description %s',text=>{const r=row();r.fields.description.text=text;expect(cipCostCandidate([r],'2026-08').ready).toBe(false);});
+ it('rejects multiple rows, shared source, credit, total and non-CIP lines',()=>{const r=row();for(const rows of [[],[r,r],[r,{...r,component:'SUBTOTAL'}],[{...r,role:'CREDIT' as const}],[{...r,role:'TOTAL' as const}],[{...r,component:'ACL_ENERGY_DISCOUNT'}]])expect(cipCostCandidate(rows,'2026-08').ready).toBe(false);});
+ it.each([0,.85,.4,NaN,Infinity,1.1])('retains direct low or invalid confidence %p without replacing it',confidence=>{const r=row();r.fields.amount.confidence=confidence;expect(cipCostCandidate([r],'2026-08').ready).toBe(false);});
+ it('requires verifiable field evidence and does not accept missing words',()=>{for(const key of ['description','amount']){for(const patch of [{pages:[]},{spans:[]},{issues:['UNMAPPED_COLUMN']},{transcription:{state:'UNVERIFIED',confidence:.99,wordCount:3}},{transcription:{state:'VERIFIED_WORDS',confidence:.99,wordCount:0}}]){const r=row();Object.assign(r.fields[key],patch);expect(cipCostCandidate([r],'2026-08').ready).toBe(false);}}});
+ it('blocks merged cells and accepts high direct confidence',()=>{const r=row();r.issues=['MERGED_OR_DUPLICATE_CELL'];expect(cipCostCandidate([r],'2026-08').ready).toBe(false);r.issues=[];r.fields.amount.confidence=.995;expect(cipCostCandidate([r],'2026-08').amountConfidence).toBe(.995);});
+});
