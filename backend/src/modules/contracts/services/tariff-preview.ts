@@ -40,7 +40,7 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
   if(!p.unit_context||['distributor','tariff_group','tariff_subgroup','tariff_modality','state','consumption_class','free_market'].some(k=>(p.unit_context[k]??null)!==(unit[k]??null))){reject('Cadastro elétrico diferente do contexto aprovado da tarifa. Cadastre e aprove a vigência corrigida.');continue;}
   if(!['ACL','ACR'].includes(p.scenario)||!Number.isInteger(p.revision)||p.revision<1||typeof p.source!=='string'||!p.source.trim()||p.direction!=='DEBIT'||!['NET','GROSS'].includes(p.treatment)||(p.treatment==='GROSS'&&(!Array.isArray(p.embedded_tax_codes)||!p.embedded_tax_codes.length))){reject('Fonte, revisão, natureza ou tratamento da tarifa exige revisão.');continue;}
   let key='',quantityUnit='kWh',explicitQuantity:string|undefined,quantitySource:string|undefined;
-  if(['TE','TUSD_ENERGY'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure)){
+  if(['TE','TUSD_ENERGY','CDE_WATER_SCARCITY'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure)){
    key=({ALL:'consumptionTotal',PEAK:'consumptionPeak',OFF_PEAK:'consumptionOffPeak'} as Record<string,string>)[p.time_band]||'';
    if(unit.tariff_group==='A'&&p.time_band==='ALL'||unit.tariff_group==='B'&&p.time_band!=='ALL'){reject('Posto tarifário incompatível com a modalidade: grupo A exige ponta/fora ponta e convencional exige todos os postos.');continue;}
   }else if(p.component_code==='REACTIVE'&&p.measure==='BRL_KVARH'&&p.time_band==='ALL'){key='reactiveTotal';quantityUnit='kVArh';}

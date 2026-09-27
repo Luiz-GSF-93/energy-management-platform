@@ -5,6 +5,8 @@ import {OcrDemandIntegrationController} from './ocr-demand-integration.controlle
 import {CalculationPreparationService} from '../contracts/services/preparation.service';
 import {OcrCalculationContextService} from './ocr-calculation-context.service';
 import {OcrCalculationContextController} from './ocr-calculation-context.controller';
+import {OcrCdeIntegrationService} from './ocr-cde-integration.service';
+import {OcrCdeIntegrationController} from './ocr-cde-integration.controller';
 import {OcrTusdIntegrationService} from './ocr-tusd-integration.service';
 import {OcrTusdIntegrationController} from './ocr-tusd-integration.controller';
 import {Module} from '@nestjs/common';
@@ -18,5 +20,5 @@ import {OcrIdentityService} from './ocr-identity.service';
 import {OcrQueueService} from './ocr-queue.service';
 import {OcrWorker} from './ocr.worker';
 import {OcrController} from './ocr.controller';
-@Module({imports:[CommonModule,LicensesModule],providers:[OcrTusdIntegrationService,CalculationPreparationService,OcrCalculationContextService,{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrDemandIntegrationService,OcrMonthlyIntegrationService,OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService,OcrIdentityReviewService],controllers:[OcrTusdIntegrationController,OcrCalculationContextController,OcrDemandIntegrationController,OcrController,OcrMonthlyIntegrationController],exports:[OcrQueueService]})
+@Module({imports:[CommonModule,LicensesModule],providers:[OcrCdeIntegrationService,OcrTusdIntegrationService,CalculationPreparationService,OcrCalculationContextService,{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrDemandIntegrationService,OcrMonthlyIntegrationService,OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService,OcrIdentityReviewService],controllers:[OcrCdeIntegrationController,OcrTusdIntegrationController,OcrCalculationContextController,OcrDemandIntegrationController,OcrController,OcrMonthlyIntegrationController],exports:[OcrQueueService]})
 export class OcrModule {}
