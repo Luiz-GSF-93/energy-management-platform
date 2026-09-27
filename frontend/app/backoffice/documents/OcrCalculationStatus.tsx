@@ -1,0 +1,20 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {apiRequest} from '@/app/lib/api/client';
+import {useAuth} from '@/app/providers';
+import {ocrContractLink} from '../contracts/ocr-navigation';
+type RecordState={status:string;draftCount:number;validatedCount:number;validatedVersion:null|{version:number;revision:number}};
+type Data={documentId:string;unitName:string;month:string;checkedAt:string;message:string;counts:{blockers:number;reviews:number;approvedParameters:number;draftParameters:number};measurements:RecordState;costs:RecordState;findings:{code:string;section:string;severity:string;message:string}[]};
+const states:Record<string,string>={MISSING:'Sem registro',DRAFT_PENDING:'Rascunho aguardando validação',VALIDATED:'Há versão validada',INVALID:'Registro requer correção',NO_COSTS_DECLARED:'Ausência de custos declarada e validada'};
+export default function OcrCalculationStatus({id}:{id:string}){
+ const {hasPermission}=useAuth(),allowed=hasPermission('60f9690a-145b-4dba-b23f-9f945baca296'),request=useRef(0);
+ const [data,setData]=useState<Data|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function load(){const n=++request.current;setData(null);setError('');setBusy(true);try{const d=await apiRequest<Data>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr/calculation-context');if(request.current===n)setData(d);}catch{if(request.current===n)setError('Não foi possível consultar os registros e a preparação desta competência. Nenhuma integração foi realizada.');}finally{if(request.current===n)setBusy(false);}}
+ useEffect(()=>{if(allowed)void load();return()=>{request.current++;};},[id,allowed]);
+ if(!allowed)return <p>A consulta dos registros da apuração exige acesso aos contratos.</p>;
+ return <section aria-label="Registros e preparação da competência" style={{marginTop:24}}><h3>Registros e preparação da competência</h3><button type="button" disabled={busy} onClick={()=>void load()}>Atualizar registros e preparação</button>{busy&&<p role="status">Consultando a mesma competência em Preparar apuração…</p>}{error&&<p role="alert">{error}</p>}{data&&<><p><strong>{data.unitName} · {data.month}</strong></p><p>{data.message}</p><small>Consulta em {new Date(data.checkedAt).toLocaleString('pt-BR')}</small><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,230px),1fr))',gap:12,marginTop:16}}>
+ <article style={{background:'#19273a',padding:16,borderRadius:12}}><h4>Parâmetros de cálculo</h4><p>{data.counts.approvedParameters} aprovado(s) no período · {data.counts.draftParameters} rascunho(s)</p><p>A aprovação de parâmetros individuais não garante cobertura completa nem conciliação da fatura.</p><a href={ocrContractLink(id,'parameters')}>Abrir parâmetros desta unidade</a></article>
+ {([['monthly','Dados mensais',data.measurements],['costs','Custos mensais',data.costs]] as const).map(([tab,title,r])=><article key={tab} style={{background:'#19273a',padding:16,borderRadius:12}}><h4>{title}</h4><p>{states[r.status]??'Conferência necessária'}</p><p>{r.draftCount} rascunho(s) · {r.validatedCount} versão(ões) validada(s)</p>{r.validatedVersion&&<p>Última validada: versão {r.validatedVersion.version}, revisão {r.validatedVersion.revision}</p>}<a href={ocrContractLink(id,tab)}>Abrir {title.toLocaleLowerCase()} desta competência</a></article>)}
+ <article style={{background:'#19273a',padding:16,borderRadius:12}}><h4>Preparar apuração</h4><p>{data.counts.blockers} bloqueio(s) · {data.counts.reviews} ponto(s) de revisão cadastral</p><p>Este diagnóstico não homologa a fatura nem libera publicação financeira.</p><a href={ocrContractLink(id,'preparation')}>Abrir preparação desta competência</a></article></div>
+ <details><summary>Pendências atuais da preparação ({data.findings.length})</summary><ul>{data.findings.map((f,i)=><li key={f.code+'-'+i}><strong>{f.severity==='BLOCKER'?'Bloqueio':'Revisão'} · {f.section}</strong>: {f.message}</li>)}</ul></details></>}</section>;
+}
