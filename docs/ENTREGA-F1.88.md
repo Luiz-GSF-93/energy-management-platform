@@ -12,8 +12,10 @@ A fonte e o percentual do índice são informados e conferidos pelo gestor. Inte
 
 ## Validação
 
-840 testes de contratos, 16 verificações SQL com service_role/anon/authenticated, teste DOM de gravação, recibo, valor do servidor, autor e correção; builds backend/frontend.
+840 testes de contratos, 17 verificações SQL com service_role/anon/authenticated, teste DOM de gravação, recibo, valor do servidor, autor e correção; builds backend/frontend.
 
 ## Pendências acordadas
 
 Emissão e envio automático de nota fiscal/invoice, forma de pagamento e cobrança automática permanecem para implantação futura. Após esta entrega, retomar homologação OCR da fatura Del Rei.
+
+Lint backend indisponível: repositório sem configuração ESLint. Permissões reais conferidas em produção, incluindo revogação explícita de privilégios herdados de UPDATE/DELETE/TRUNCATE para service_role.

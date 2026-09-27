@@ -11,7 +11,7 @@ CREATE TABLE public.commercial_fee_adjustments (
  UNIQUE(organization_id,request_id), UNIQUE(organization_id,kind,contract_id,version)
 );
 ALTER TABLE public.commercial_fee_adjustments ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.commercial_fee_adjustments FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.commercial_fee_adjustments FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT,INSERT ON public.commercial_fee_adjustments TO service_role;
 CREATE FUNCTION public.guard_commercial_fee_adjustment() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE c jsonb; old public.commercial_fee_adjustments; minimum_date date; decimals integer;

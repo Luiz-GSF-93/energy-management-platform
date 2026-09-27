@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 const db=new PGlite();let checks=0;const ok=v=>{assert.ok(v);checks++;};const fails=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
 await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 create table organizations(id text primary key);create table customers(id text primary key,organization_id text,status text,deleted_at timestamptz);
 create table management_contracts(id text,organization_id text,customer_id text,start_date date,end_date date,fixed_fee_monthly numeric,savings_percentage numeric);
 create table service_agreements(id text,organization_id text,customer_id text,start_date date,end_date date,agreed_value numeric,billing_basis text);
@@ -21,6 +22,7 @@ await fails(()=>insert({previous_id:second.id,rate_percent:-101}),'23514');await
 const pending=await insert({previous_id:second.id,rate_percent:null});ok(pending.next_value===null);
 const rate=await insert({kind:'services',contract_id:'service'});ok(Number(rate.next_value)===129.095061);
 await fails(()=>db.exec("update commercial_fee_adjustments set reason='change'"),'42501');await fails(()=>db.exec('delete from commercial_fee_adjustments'),'42501');
+await fails(()=>db.exec('truncate commercial_fee_adjustments'),'42501');
 await db.exec('reset role');await fails(()=>db.exec("update commercial_fee_adjustments set reason='change'"),'23514');
 for(const role of ['anon','authenticated']){await db.exec('set role '+role);await fails(()=>db.exec('select * from commercial_fee_adjustments'),'42501');await fails(()=>insert(),'42501');await db.exec('reset role');}
 console.log(checks+' fee adjustment database checks passed');await db.close();
