@@ -1,0 +1,26 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFile} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
+import assert from 'node:assert/strict';
+const db=new PGlite();let checks=0;const ok=v=>{assert.ok(v);checks++;};const fails=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+create table organizations(id text primary key);create table customers(id text primary key,organization_id text,status text,deleted_at timestamptz);
+create table management_contracts(id text,organization_id text,customer_id text,start_date date,end_date date,fixed_fee_monthly numeric,savings_percentage numeric);
+create table service_agreements(id text,organization_id text,customer_id text,start_date date,end_date date,agreed_value numeric,billing_basis text);
+insert into organizations values('org'),('other');insert into customers values('customer','org','ACTIVE',null);
+insert into management_contracts values('contract','org','customer','2090-01-01','2099-12-31',100,20);
+insert into service_agreements values('service','org','customer','2090-01-01','2099-12-31',123.456789,'PER_MWH');
+`);
+await db.exec(await readFile(new URL('../../src/database/migrations/20260927_f1_88_fee_adjustments.sql',import.meta.url),'utf8'));
+const insert=async(override={})=>{const d={organization_id:'org',customer_id:'customer',kind:'management',contract_id:'contract',effective_date:'2091-01-01',index_name:'IPCA',rate_percent:4.567,index_reference:'IBGE periodo teste',notice_days:30,reason:'Reajuste anual teste',previous_id:null,request_id:randomUUID(),created_by:'actor',...override};const keys=Object.keys(d);return (await db.query('insert into commercial_fee_adjustments('+keys.join(',')+') values('+keys.map((_,i)=>'$'+(i+1)).join(',')+') returning *',Object.values(d))).rows[0];};
+await db.exec('set role service_role');
+const first=await insert();ok(first.version===1&&Number(first.base_value)===100&&Number(first.next_value)===104.57);
+await fails(()=>insert(),'40001');await fails(()=>insert({organization_id:'other'}),'23514');await fails(()=>insert({previous_id:first.id,effective_date:'2091-02-01'}),'23514');
+const second=await insert({previous_id:first.id,rate_percent:5});ok(second.version===2&&Number(second.next_value)===105&&Number(second.base_value)===100);
+await fails(()=>insert({previous_id:second.id,rate_percent:-101}),'23514');await fails(()=>insert({previous_id:second.id,notice_days:0}),'23514');
+const pending=await insert({previous_id:second.id,rate_percent:null});ok(pending.next_value===null);
+const rate=await insert({kind:'services',contract_id:'service'});ok(Number(rate.next_value)===129.095061);
+await fails(()=>db.exec("update commercial_fee_adjustments set reason='change'"),'42501');await fails(()=>db.exec('delete from commercial_fee_adjustments'),'42501');
+await db.exec('reset role');await fails(()=>db.exec("update commercial_fee_adjustments set reason='change'"),'23514');
+for(const role of ['anon','authenticated']){await db.exec('set role '+role);await fails(()=>db.exec('select * from commercial_fee_adjustments'),'42501');await fails(()=>insert(),'42501');await db.exec('reset role');}
+console.log(checks+' fee adjustment database checks passed');await db.close();

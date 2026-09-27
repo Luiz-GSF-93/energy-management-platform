@@ -1,3 +1,4 @@
+import {adjustedContracts} from './fee-adjustment';
 import {ocrPreparationCandidates} from './preparation-ocr';
 import {customerFinancialPreview,CustomerUnitInput} from './customer-financial-preview';
 import {operationalComposition} from './operational-composition';
@@ -30,10 +31,11 @@ export class CalculationPreparationService {
   const getUnits=()=>this.all(()=>this.table('consumer_units').select('id,name,organization_id,customer_id').eq('organization_id',org).eq('customer_id',customerId));
   const units=await getUnits();if(units.length>100)throw new BadRequestException('Esta prévia síncrona suporta até 100 unidades por cliente. Nenhum consolidado parcial foi emitido.');
   const [contracts,rules]=await Promise.all([this.all(()=>this.table('management_contracts').select('*').eq('organization_id',org).eq('customer_id',customerId)),this.all(()=>this.table('management_fee_allocations').select('*').eq('organization_id',org).eq('customer_id',customerId).eq('month',d.month))]);
-  const inputs:CustomerUnitInput[]=[];
+  const adjustments=await this.all(()=>this.table('commercial_fee_adjustments').select('*').eq('organization_id',org).eq('customer_id',customerId));
+ const inputs:CustomerUnitInput[]=[];
   for(let offset=0;offset<units.length;offset+=4){const batch=await Promise.all(units.slice(offset,offset+4).map(async u=>{const r=await this.inspect({consumerUnitId:u.id,month:d.month},org);return {unitId:u.id,month:r.month,composition:r.operationalComposition,checkedAt:r.checkedAt};}));inputs.push(...batch);}
   const current=await getUnits(),ids=(rows:any[])=>rows.map(u=>u.id).sort().join(',');if(ids(current)!==ids(units))throw new ConflictException('O cadastro de unidades mudou durante a consulta. Atualize a prévia.');
-  return {...customerFinancialPreview(org,customerId,d.month,units,inputs,contracts,rules),checkedAt:new Date().toISOString()};
+  return {...customerFinancialPreview(org,customerId,d.month,units,inputs,adjustedContracts(contracts,adjustments,d.month),rules),checkedAt:new Date().toISOString()};
  }
  async inspect(input:PreparationQueryDto,org:string,capture?:(sources:Record<string,unknown>)=>void){await this.licenses.requireEntitlement(org,'free_market_management');const d=await validateWriteDto(PreparationQueryDto,input);const unitResult=await this.table('consumer_units').select('*').eq('id',d.consumerUnitId).eq('organization_id',org).maybeSingle();this.fail(unitResult.error);const u=unitResult.data;if(!u)throw new NotFoundException('Unidade não encontrada nesta organização.');const customer=await this.table('customers').select('id').eq('id',u.customer_id).eq('organization_id',org).is('deleted_at',null).maybeSingle();this.fail(customer.error);if(!customer.data)throw new NotFoundException('Cliente indisponível nesta organização.');
  const [parameters,contracts,management,services,monthly,monthlyCosts,feeRules,billingRules]=await Promise.all([
@@ -45,25 +47,28 @@ export class CalculationPreparationService {
  this.all(()=>this.table('calculation_monthly_costs').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('month',d.month)),
  this.all(()=>this.table('management_fee_allocations').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('month',d.month)),
  this.all(()=>this.table('supplier_billing_rules').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id))]);
+ const adjustments=await this.all(()=>this.table('commercial_fee_adjustments').select('*').eq('organization_id',org).eq('customer_id',u.customer_id));
+ const effectiveManagement=adjustedContracts(management,adjustments,d.month);
  const period=monthPeriod(d.month),ids=contracts.filter(c=>['ACTIVE','APPROVED'].includes(c.status)&&c.contract_type==='ENERGY_PURCHASE'&&String(c.start_date).slice(0,10)<=period.end&&(!c.end_date||String(c.end_date).slice(0,10)>=period.start)).map(c=>c.id),prices:any[]=[];
  for(let i=0;i<ids.length;i+=100){const batch=ids.slice(i,i+100);prices.push(...await this.all(()=>this.table('contract_price_history').select('*').in('contract_id',batch)));}
  // ACL supplier TE is contractual energy. Legacy manually entered ACL TE must not be counted twice.
  const tariffParameters=parameters.filter(p=>!(u.free_market===true&&p.scenario==='ACL'&&p.kind==='TARIFF'&&p.component_code==='TE'));
  const ocrDocuments=await ocrPreparationCandidates(this.db.getClient(),u,d.month);
  const supplier=contractSupplierCost(u,d.month,contracts,prices,billingRules,monthly,monthlyCosts);
- const prepared=prepareMonth(u,d.month,parameters,contracts,prices,management,services,monthly,monthlyCosts);
+ const prepared=prepareMonth(u,d.month,parameters,contracts,prices,effectiveManagement,services,monthly,monthlyCosts);
  if(supplier.pricePerMwh!==null)prepared.findings=prepared.findings.filter(f=>!['PRICE_GAP','PRICE_OVERLAP','PRICE_SOURCES','PRICE_SPLIT','INDEX_PENDING','MONTHLY_VOLUME'].some(code=>f.code===code+':'+supplier.contract?.id));
  for(const requirement of supplier.requirements)prepared.findings.push({code:'SUPPLIER_AUTO:'+ (supplier.contract?.id||'')+':'+requirement.code,section:requirement.tab==='monthly'?'Medições':requirement.tab==='costs'?'Custos mensais':requirement.tab==='distributor'?'Unidade':'Fornecedor',severity:'BLOCKER',message:requirement.message});
  if(ocrDocuments.some(doc=>doc.gd?.detected)&&!prepared.findings.some(f=>f.code==='OCR_GD_PENDING'))prepared.findings.push({code:'OCR_GD_PENDING',section:'GD / OCR',severity:'BLOCKER',message:'A fatura possui indícios de GD. Confira créditos, compensação, rateio e vigência antes de calcular; os candidatos OCR ainda não são lançamentos aprovados.'});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
  prepared.counts.reviews=prepared.findings.filter(f=>f.severity==='REVIEW').length;
+ for(const c of effectiveManagement.filter(c=>c.fee_adjustment_pending&&c.status==='ACTIVE'&&String(c.start_date).slice(0,10)<=period.end&&String(c.end_date).slice(0,10)>=period.start))prepared.findings.push({code:'MANAGEMENT_INDEX_PENDING:'+c.id,section:'Honorários',severity:'BLOCKER',message:'Índice anual dos honorários pendente. Confirme o reajuste antes de apurar.'});
  const tariffPreview=previewTariffs(u,d.month,period,tariffParameters,monthly);
  const costs=monthlyCostLedger(u,d.month,monthlyCosts);
  const operational=operationalTaxBases(u,d.month,parameters,supplier,costs);
  const taxes=taxMemory(u,d.month,parameters,tariffPreview,operational);
  for(const pending of operational.pending)prepared.findings.push({code:'PARAMETER_ISSUE:'+pending.parameterId,section:'Bases operacionais',severity:'BLOCKER',message:pending.label+': '+pending.reason});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
- if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments})));
- return {...prepared,ocrDocuments,operationalComposition:operationalComposition(u,d.month,tariffParameters,tariffPreview,taxes,operational,supplier,costs,prepared.findings),operationalTaxBases:operational,contractSupplierCost:supplier,managementFeeMemory:managementFeeMemory(u,d.month,management,feeRules),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
+ if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments,adjustments})));
+ return {...prepared,ocrDocuments,operationalComposition:operationalComposition(u,d.month,tariffParameters,tariffPreview,taxes,operational,supplier,costs,prepared.findings),operationalTaxBases:operational,contractSupplierCost:supplier,managementFeeMemory:managementFeeMemory(u,d.month,effectiveManagement,feeRules),supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
  }
 }
