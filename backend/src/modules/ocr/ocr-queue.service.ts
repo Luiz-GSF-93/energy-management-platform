@@ -1,3 +1,4 @@
+import {reconcileDemand} from './demand-reconciliation';
 import {loadDemandRegistration} from './demand-registration';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {invoiceReadout,ocrReadoutSummary,ReadoutQuery} from './invoice-readout';
@@ -54,7 +55,7 @@ export class OcrQueueService {
   const verified=await this.verified(org,document,job);if(!verified)return null;
   const {raw,assessment,doc}=verified;
   const layout=extractCpflPaulistaLayout(raw);
-  if(layout.preparation)Object.assign(layout.preparation.demand,{registration:await loadDemandRegistration(this.db.getClient(),doc)});
+  if(layout.preparation){const registration=await loadDemandRegistration(this.db.getClient(),doc);Object.assign(layout.preparation.demand,{registration,reconciliation:reconcileDemand(layout.preparation.demand,'history' in registration?registration.history:null)});}
   return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,layout,electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
  }
  private async verified(org:string,document:string,job:string){

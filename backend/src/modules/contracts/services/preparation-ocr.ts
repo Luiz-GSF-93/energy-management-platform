@@ -1,3 +1,4 @@
+import {reconcileDemand} from '../../ocr/demand-reconciliation';
 import {loadDemandHistory} from '../../ocr/demand-history';
 import {demandRegistration} from '../../ocr/demand-registration';
 import {assessmentMatchesDocument} from '../../ocr/invoice-assessment';
@@ -15,7 +16,7 @@ export async function ocrPreparationCandidates(db:any,unit:any,month:string):Pro
   const r=matches.length===1?matches[0]:null;const a=r?.evidence?.assessment;
   const valid=doc.file_verified===true&&r?.file_hash===doc.file_hash&&assessmentMatchesDocument(a,doc)&&['REVIEW_REQUIRED','REJECT_AUTOMATION'].includes(a?.intake?.decision);
   const layout=valid?extractCpflPaulistaLayout(r.raw_result):null;
-  if(layout?.preparation)Object.assign(layout.preparation.demand,{registration:{...demandRegistration(unit,doc),history:await loadDemandHistory(db,doc)}});
+  if(layout?.preparation){const history=await loadDemandHistory(db,doc);Object.assign(layout.preparation.demand,{registration:{...demandRegistration(unit,doc),history},reconciliation:reconcileDemand(layout.preparation.demand,history)});}
   return {documentId:doc.id,filename:doc.original_filename,canImport:false,state:valid?a.intake.decision:'QUARANTINED',preparation:layout?.preparation??null,measurements:layout?.measurements??null,gd:valid?extractGdEvidence(r.raw_result):null};
  }));
 }
