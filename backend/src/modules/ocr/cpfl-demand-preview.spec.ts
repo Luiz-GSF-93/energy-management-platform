@@ -15,3 +15,8 @@ describe('CPFL demand distinction',()=>{
  it('ignores credits and other components',()=>{const b=billed();b.role='CREDIT';const c=billed();c.component='TUSD_ENERGY';expect(preview([b,c],[]).billed).toHaveLength(0);});
  it('does not mix active energy or unclassified meter periods',()=>{const m=meter();m.kind='ACTIVE_ENERGY';expect(preview([],[m,meter('UNSPECIFIED')]).measured.every(x=>x.decimal===null)).toBe(true);});
 });
+
+describe('Demand labels remain source evidence',()=>{
+ it('links explicit usage to the source row without approving import',()=>{const r=billed();r.fields.description=f('Uso Sist. Distr. Demanda não utilizada');const result=preview([r],[]);expect(result.billed[0]).toMatchObject({source:r.source,decimal:'234.6400',classification:{kind:'UNUSED_EXPLICIT'}});expect(result.unused.decimal).toBeNull();expect(result.canImport).toBe(false);});
+ it('does not label an invalid quantity',()=>{const r=billed('invalid');r.fields.description=f('Demanda utilizada');expect(preview([r],[]).billed[0].classification.kind).toBe('UNCLASSIFIED');});
+});
