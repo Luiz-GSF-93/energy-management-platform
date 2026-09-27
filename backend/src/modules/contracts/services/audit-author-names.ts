@@ -1,5 +1,5 @@
 type AuditRecord = Record<string, any>;
-const fields = ['created_by', 'updated_by', 'validated_by'] as const;
+const fields = ['created_by', 'updated_by', 'validated_by', 'actor_id'] as const;
 const name = (value: unknown): string | null => typeof value === 'string' && value.trim() && !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value.trim()) ? value.trim().slice(0, 200) : null;
 /** Enrich only actors referenced by records already authorized for this tenant.
  * Names are current display labels; original IDs and immutable snapshots remain intact.

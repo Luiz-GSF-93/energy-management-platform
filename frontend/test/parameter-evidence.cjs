@@ -1,0 +1,10 @@
+/* Isolated DOM and mocked API; no production writes. */
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','Event','MouseEvent','FormData'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+let api=async()=>{throw Error('API not set');};const original=Module._load;Module._load=function(name,parent,main){if(name==='@/app/providers')return {useAuth:()=>({hasPermission:()=>true})};if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};return original.call(this,name,parent,main);};
+const {renderToStaticMarkup}=require('react-dom/server'),Evidence=require('../app/backoffice/contracts/ParameterEvidence.tsx').default;
+const notes='Rascunho OCR. Tarifa original 0.21265684 R$/kWh. Prévia '+'a'.repeat(64)+'. Conferências '+JSON.stringify({identity:[{id:'identity-ref'}],consumption:[{id:'consumption-ref'}]});
+const html=renderToStaticMarkup(React.createElement(Evidence,{notes}));assert.ok(html.includes('Tarifa original 0.21265684'));assert.ok(html.includes('1 conferências de identidade'));assert.ok(html.includes('Rastreabilidade técnica'));assert.ok(html.includes('identity-ref'));assert.ok(!html.includes('<details open'));
+for(const text of ['Observação manual','Rascunho OCR. Conferências inválidas'])assert.ok(renderToStaticMarkup(React.createElement(Evidence,{notes:text})).includes(text));
+console.log('Parameter evidence UI: concise summary, preserved references and manual notes passed');dom.window.close();
