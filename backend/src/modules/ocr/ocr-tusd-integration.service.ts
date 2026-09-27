@@ -34,6 +34,7 @@ export class OcrTusdIntegrationService {
   const state=existing.length===2?'CREATED':existing.length||overlap.length?'EXISTING_RECORD':ready?'READY':'REVIEW_REQUIRED';
   return {sourceReady:ready,source,unit,period,reviews,ids,preview:{token,month,candidates,state,canCreate:state==='READY'&&this.canWrite(t),existing:existing.map((p:any)=>({id:p.id,status:p.status,revision:p.revision})),message:state==='CREATED'?'Rascunhos TUSD já criados. Consulte as revisões e o estado atual em Parâmetros de cálculo.':state==='EXISTING_RECORD'?'Já existe parâmetro TUSD para este período. Nenhum registro será substituído ou duplicado.':ready?'TUSD ponta e fora ponta disponíveis para criar rascunhos ACL com tributos incluídos.':'Confira identidade, consumos, competência, totais e evidências TUSD antes de criar os rascunhos.'}};
  }
+ async taxIntegrationSource(document:string,t:TenantContext){const c=await this.context(document,t);return {...c,taxIds:['ICMS','PIS','COFINS'].map(code=>parameterId(t.organizationId,document,'TAX-'+code))};}
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
   if(!this.canWrite(t))throw new ForbiddenException('A criação exige Gestor ou Administrador com permissão de cadastro de contratos.');
