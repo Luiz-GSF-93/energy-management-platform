@@ -16,3 +16,9 @@ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
 const cde=row('cde','CHARGE','10.29');cde.component='CDE_WATER_SCARCITY';cde.fields.description.text='CDE Escassez Hídrica Ponta';
 const html=renderToStaticMarkup(React.createElement(C,{operations:[row('a'),cde,missing,row('credit','CREDIT','-1')],onOpenOriginal:()=>{}}));
 for(const t of ['ICMS','PIS','Cofins','CDE Escassez Hídrica Ponta','Soma parcial','Créditos e descontos','Conferir ICMS no PDF','não são acrescentados novamente'])assert.ok(html.includes(t),t);assert.ok(!html.includes('<img>'));console.log('Tax cards: exact sums, missing values, credits, duplicate sources and display passed');
+
+const acl=row('acl');acl.component='ACL_DISTRIBUTOR_INFORMATION';acl.fields={description:{text:'Energia ACL Ponta',confidence:null,pages:[1],issues:[]}};
+const supplier=sum([row('distributor'),acl]);assert.equal(supplier[0].referenceCount,1);assert.equal(supplier[0].totals[0].expected,1);assert.equal(supplier[0].totals[0].partial,false);
+const supplierHtml=renderToStaticMarkup(React.createElement(C,{operations:[acl]}));assert.ok(supplierHtml.includes('conferir NF do fornecedor'));assert.ok(!supplierHtml.includes('Não identificado — não equivale a zero'));
+const explicit=row('acl-tax');explicit.component='ACL_DISTRIBUTOR_INFORMATION';assert.equal(sum([explicit])[0].referenceCount,0);
+console.log('Supplier ACL tax ownership checks passed');

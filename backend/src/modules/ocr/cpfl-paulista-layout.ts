@@ -1,3 +1,4 @@
+import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
 import {cpflPreparationPreview} from './cpfl-preparation-preview';
 import {extractCpflMeasurements,cpflReference} from './cpfl-measurements';
 import {reconcileCpflOperations} from './cpfl-reconciliation';
@@ -8,7 +9,7 @@ const text=(v:any):string=>typeof v==='string'?v:'';
 const norm=(v:any)=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
 type Field=ElectricalField;
 type NamedField={name:string;label:string;value:Field;source:string};
-type Block={kind:string;label:string;source:string;rows:{index:number;cells:{column:number;columnSpan:number;rowSpan:number;value:Field}[]}[]};
+export type Block={kind:string;label:string;source:string;rows:{index:number;cells:{column:number;columnSpan:number;rowSpan:number;value:Field}[]}[]};
 export type CpflOperation={source:string;row:number;component:string;period:string;role:'CHARGE'|'CREDIT'|'TOTAL'|'INFORMATION'|'UNKNOWN';fields:Record<string,Field>;issues:string[];arithmetic:{state:string;differenceCents:string|null}};
 const headers:Record<string,string>={
  'DESCRICAO DA OPERACAO':'description','UNID MED':'unit','QUANT FATURADA':'quantity','TARIFA ANEEL':'aneelRate','TARIFA COM TRIBUTOS R':'grossRate','TARIFA COM TRIBUTOS':'grossRate','VALOR TOTAL DA OPERACAO R':'amount','VALOR TOTAL DA OPERACAO':'amount','BASE CALC ICMS':'icmsBase','ALIQ ICMS':'icmsRate','ICMS':'icmsAmount'
@@ -63,7 +64,7 @@ export function extractCpflPaulistaLayout(raw:any){
  const classifications=pairs.filter(p=>norm(p?.key?.content)==='CLASSIFICACAO').map(p=>norm(p?.value?.content));
  const groupA=classifications.some(v=>/\bA[1-4]\b|\bAS\b/.test(v));
  let measurements:ReturnType<typeof extractCpflMeasurements>|null=null;
- const result=()=>({preparation:issuerMatched&&groupA&&docs.length===1?cpflPreparationPreview(operations,measurements?.meterReadings??[]):null,measurements,version:'cpfl-paulista-a@1.2.0',layoutId:issuerMatched&&groupA?'cpfl-paulista-a':null,name:issuerMatched&&groupA?'CPFL Paulista · Grupo A':'Layout ainda não identificado',status:'IN_HOMOLOGATION',canImport:false,library:invoiceLayoutLibrary,columns:cpflColumns,fields,operations,blocks,issues:[...new Set(issues)],coverage:[
+ const result=()=>({taxReconciliation:reconcileCpflTaxes(operations,blocks),preparation:issuerMatched&&groupA&&docs.length===1?cpflPreparationPreview(operations,measurements?.meterReadings??[]):null,measurements,version:'cpfl-paulista-a@1.2.0',layoutId:issuerMatched&&groupA?'cpfl-paulista-a':null,name:issuerMatched&&groupA?'CPFL Paulista · Grupo A':'Layout ainda não identificado',status:'IN_HOMOLOGATION',canImport:false,library:invoiceLayoutLibrary,columns:cpflColumns,fields,operations,blocks,issues:[...new Set(issues)],coverage:[
   {label:'Identificação e período',mapped:['customer','customerTaxId','serviceAddress','unit','reference','dueDate','currentReading','previousReading'].filter(k=>fields.some(f=>f.name===k&&f.value.text.trim())).length,expected:8},
   {label:'Dados fiscais',mapped:['invoiceNumber','series','issueDate'].filter(k=>fields.some(f=>f.name===k&&f.value.text.trim())).length,expected:3},
   {label:'Colunas da tabela de operações',mapped:cpflColumns.filter(([k])=>operations.some(r=>r.fields[k]?.text.trim())).length,expected:11}

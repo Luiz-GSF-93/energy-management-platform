@@ -1,0 +1,25 @@
+import {reconcileCpflTaxes as check} from './cpfl-tax-reconciliation';
+const f=(text:string,decimal:string|null=null):any=>({text,decimal,confidence:null,pages:[1],spans:[{offset:0,length:text.length}],issues:['MISSING_CONFIDENCE']});
+const row=(source='a',v='1.00'):any=>({source,role:'CHARGE',component:'TUSD_ENERGY',issues:[],fields:{icmsAmount:f(v,v),pisAmount:f(v,v),cofinsAmount:f(v,v)}});
+const block=(value='1,00'):any=>({kind:'TAX_SUMMARY',source:'tables[4]',rows:[['Tributo','Base de Cálc. (R$)','Alíquota (%)','Valor (R$)'],['ICMS','999,00','18,00',value],['PIS/PASEP','999,00','1,03',value],['COFINS','999,00','4,83',value]].map((r,index)=>({index,cells:r.map((text,column)=>({column,columnSpan:1,rowSpan:1,value:f(text)}))}))});
+describe('Printed CPFL tax summary reconciliation',()=>{
+ it('reads the amount column, not tax base or rate',()=>expect(check([row()],[block()]).checks.every(c=>c.state==='MATCH_EXTRACTED'&&c.declared==='1.00')).toBe(true));
+ it('uses exact cents',()=>expect(check([row('a','0.10'),row('b','0.20')],[block('0,30')]).checks[0].difference).toBe('0.00'));
+ it('can match observed amounts while preserving missing fields',()=>{const r=row('b');delete r.fields.icmsAmount;const c=check([row(),r],[block()]).checks[0];expect(c).toMatchObject({state:'MATCH_EXTRACTED',count:1,expected:2,partial:true});expect(check([row(),r],[block()]).canImport).toBe(false);});
+ it('reports differences without claiming incorrect billing',()=>expect(check([row()],[block('1,01')]).checks[0]).toMatchObject({state:'DIFFERENCE_EXTRACTED',difference:'-0.01'}));
+ it('does not use summary as replacement for missing operation amounts',()=>expect(check([],[block()]).checks[0]).toMatchObject({state:'MISSING',extracted:null,declared:'1.00'}));
+ it('keeps missing summaries incomplete',()=>expect(check([row()],[]).checks[0].state).toBe('MISSING'));
+ it('rejects repeated summary tables',()=>expect(check([row()],[block(),block()]).checks[0].state).toBe('AMBIGUOUS'));
+ it('rejects duplicated tax rows even when equal',()=>{const b=block();b.rows.push({...b.rows[1],index:4});expect(check([row()],[b]).checks[0].state).toBe('AMBIGUOUS');});
+ it('rejects duplicate amount headers',()=>{const b=block();b.rows[0].cells.push({...b.rows[0].cells[3],column:4});expect(check([row()],[b]).checks[0].state).toBe('AMBIGUOUS');});
+ it.each(['rowSpan','columnSpan'])('rejects merged %s',key=>{const b=block();b.rows[1].cells[3][key]=2;expect(check([row()],[b]).checks[0].state).toBe('AMBIGUOUS');});
+ it('rejects unverified summary source',()=>{const b=block();b.rows[1].cells[3].value.issues=['UNVERIFIED_SOURCE'];expect(check([row()],[b]).checks[0].state).toBe('AMBIGUOUS');});
+ it('excludes duplicate operation sources',()=>expect(check([row(),row()],[block('2,00')]).checks[0].state).toBe('MISSING'));
+ it('separates credits, totals, unknown and informative rows',()=>{const extras=['CREDIT','TOTAL','UNKNOWN','INFORMATION'].map((role,i)=>({...row('extra'+i,'9.00'),role}));expect(check([row(),...extras],[block()]).checks[0]).toMatchObject({expected:1,extracted:'1.00'});});
+ it('excludes empty supplier ACL reference fields from distributor requirements',()=>{const r=row('acl');r.component='ACL_DISTRIBUTOR_INFORMATION';r.fields={};const result=check([row(),r],[block()]);expect(result.supplierReferenceCount).toBe(1);expect(result.checks[0]).toMatchObject({expected:1,partial:false,state:'MATCH_EXTRACTED'});});
+ it('does not hide explicit tax amounts on an ACL line',()=>{const r=row('acl');r.component='ACL_DISTRIBUTOR_INFORMATION';expect(check([r],[block()]).supplierReferenceCount).toBe(0);});
+ it('keeps empty CDE fields pending',()=>{const r=row();r.component='CDE_WATER_SCARCITY';r.fields={};expect(check([r],[block()]).checks[0]).toMatchObject({expected:1,partial:true,state:'MISSING'});});
+ it('preserves explicit zero',()=>expect(check([row('a','0')],[block('0,00')]).checks[0]).toMatchObject({state:'MATCH_EXTRACTED',extracted:'0.00'}));
+ it('rejects fractional cents without rounding',()=>expect(check([row('a','1.001')],[block('1,00')]).checks[0].state).toBe('MISSING'));
+ it('preserves input',()=>{const rows=[row()],blocks=[block()],before=JSON.stringify({rows,blocks});check(rows,blocks);expect(JSON.stringify({rows,blocks})).toBe(before);});
+});
