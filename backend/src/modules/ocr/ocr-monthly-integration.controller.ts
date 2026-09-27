@@ -5,6 +5,8 @@ import {OcrMonthlyIntegrationService} from './ocr-monthly-integration.service';
 @Controller('documents')
 export class OcrMonthlyIntegrationController {
  constructor(private service:OcrMonthlyIntegrationService){}
+ @Get(':id/ocr/measurement-readiness') @RequirePermission([P.DOCUMENTS_VIEW])
+ measurementReadiness(@Param('id') id:string,@Req() req:any){return this.service.measurementReadiness(id,req.tenantContext);}
  @Get(':id/ocr/monthly-integration') @RequirePermission([P.DOCUMENTS_VIEW])
  preview(@Param('id') id:string,@Req() req:any){return this.service.preview(id,req.tenantContext);}
  @Post(':id/ocr/monthly-integration') @RequirePermission([P.ORGANIZATION_CONTRACTS_CREATE])
