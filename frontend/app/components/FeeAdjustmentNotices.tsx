@@ -1,0 +1,6 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {apiRequest} from '@/app/lib/api/client';
+import {Alert} from './ui';
+type Notice={id:string;kind:string;date:string;index:string;rate:number|null;current:number;next:number|null;reference:string};
+export default function FeeAdjustmentNotices(){const [rows,setRows]=useState<Notice[]>([]),[error,setError]=useState(false);useEffect(()=>{let live=true;apiRequest<{notices:Notice[]}>('/api/v1/fee-adjustments/notices').then(r=>{if(live)setRows(r.notices);}).catch(()=>{if(live)setError(true);});return()=>{live=false;};},[]);const money=(v:number)=>Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});return <>{error?<p>Não foi possível consultar os avisos de reajuste.</p>:null}{rows.map(r=><Alert key={r.id}><strong>Reajuste contratual previsto para {r.date.split('-').reverse().join('/')}</strong><p>{r.kind==='management'?'Honorário fixo por unidade':'Serviço contratado'} · Índice: {r.index}. {r.next===null?'O percentual do período ainda aguarda confirmação; o próximo valor será informado após a conferência.':'Percentual: '+r.rate+'%. Valor anterior: '+money(r.current)+'. Novo valor: '+money(r.next)+'.'}</p><p>{r.reference}{r.kind==='management'?'. No plano híbrido, a parcela variável depende da economia apurada.':''}</p></Alert>)}</>;}

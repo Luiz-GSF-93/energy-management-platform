@@ -17,6 +17,8 @@ import {CalculationParametersService} from './services/parameters.service';
 import {CalculationParametersController} from './controllers/parameters.controller';
 import {ContractConfigurationsService} from './services/configurations.service';
 import {ContractConfigurationsController} from './controllers/configurations.controller';
+import {FeeAdjustmentsController} from './controllers/fee-adjustments.controller';
+import {FeeAdjustmentsService} from './services/fee-adjustments.service';
 import { Module } from '@nestjs/common';
 import { ContractsService } from './services/contracts.service';
 import { ContractsController } from './controllers/contracts.controller';
@@ -25,8 +27,8 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule,ConsumerUnitsModule],
-  controllers: [ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
-  providers: [ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
+  controllers: [FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
 export class ContractsModule {}

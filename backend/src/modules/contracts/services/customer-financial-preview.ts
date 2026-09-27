@@ -35,6 +35,7 @@ export function customerFinancialPreview(org:string,customerId:string,month:stri
   const matches=contracts.filter(c=>c.organization_id===org&&c.customer_id===customerId&&c.status==='ACTIVE'&&(!day(c.start_date)||!day(c.end_date)||c.start_date<=period.end&&c.end_date>=period.start));
   if(matches.length!==1)throw Error('É necessário um único contrato de honorários ativo para o cliente na competência.');
   const c=matches[0];if(!c.id||!day(c.start_date)||!day(c.end_date)||c.start_date>period.start||c.end_date<period.end||!['FIXED','HYBRID'].includes(c.remuneration_model))throw Error('O contrato de honorários deve cobrir o mês inteiro e usar modelo fixo ou híbrido.');
+  if(c.fee_adjustment_pending)throw Error('Índice anual dos honorários pendente.');
   const fixed=feeCents(c.fixed_fee_monthly),percent=rate(c.savings_percentage);
   const relevant=rules.filter(a=>a.organization_id===org&&a.customer_id===customerId&&a.contract_id===c.id&&a.month===month);
   if(relevant.some(a=>!Number.isInteger(a.version)||a.version<1))throw Error('Histórico da regra mensal contém versão inválida.');
