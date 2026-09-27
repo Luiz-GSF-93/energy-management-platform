@@ -127,6 +127,8 @@ try{
  const autoTax=await service.create({...tax,scenario:'ACL',startDate:'2028-01-01',endDate:'2028-12-31',taxBasis:base(autoApproved)},'org-a','actor-a');const autoTaxApproved=await service.approve(autoTax.id,{revision:1},'org-a','approver');ok(autoTaxApproved.tax_basis.items[0].parameterId===autoDraft.id);
  const nextAuto=await service.create({...automaticBody,startDate:'2029-01-01',endDate:'2029-12-31'},'org-a','actor-a');await service.approve(nextAuto.id,{revision:1},'org-a','approver');ok(true);
  await deny(()=>service.create({...automaticBody,monetarySource:null},'org-a','actor-a'),400);
+ const tusdDraft=await service.create({...body,componentCode:'TUSD_ENERGY',scenario:'ACL',timeBand:'PEAK',measure:'BRL_MWH',amount:'981.92227',treatment:'GROSS',includedTaxes:'ICMS, PIS, COFINS',embeddedTaxCodes:['ICMS','PIS','COFINS'],startDate:'2030-08-01',endDate:'2030-08-31'},'org-a','actor-a');ok(tusdDraft.amount_text==='981.92227'&&tusdDraft.status==='DRAFT');
+ ok((await service.events(tusdDraft.id,'org-a')).some(e=>e.snapshot.amount_text==='981.92227'&&e.snapshot.created_by==='actor-a'));
  const rights=await db.query("SELECT bool_and(NOT has_table_privilege(r,t,'SELECT') AND NOT has_table_privilege(r,t,'INSERT') AND NOT has_table_privilege(r,t,'UPDATE')) AS restricted FROM unnest(ARRAY['anon','authenticated']) r CROSS JOIN unnest(ARRAY['calculation_parameters','calculation_parameter_events']) t");ok(rights.rows[0].restricted);
  const rls=await db.query("SELECT bool_and(relrowsecurity) AS enabled FROM pg_class WHERE relname IN ('calculation_parameters','calculation_parameter_events')");ok(rls.rows[0].enabled);
  console.log(JSON.stringify({status:'passed',checks},null,2));
