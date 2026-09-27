@@ -24,7 +24,7 @@ export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:
   {error&&<p role="alert">{error}</p>}
   <button type="button" disabled={busy} onClick={()=>void load()}>{busy?'Aguarde…':status?'Atualizar leitura':'Consultar leitura OCR'}</button>
   {canProcess&&status?.enabled&&!status.job&&<button type="button" disabled={busy} onClick={()=>void start()}>Iniciar leitura</button>}
-  {status?.job?.state==='SUCCEEDED'&&<p>A extração ainda não altera medições, tarifas ou resultados financeiros.</p>}
+  {status?.job?.state==='SUCCEEDED'&&<p>A leitura exige conferência. Consulte Acompanhar homologação para verificar a integração dos consumos e as demais pendências.</p>}
   {status?.intake&&<details><summary>Conferência da fatura — importação bloqueada</summary>
    <p>Comparação preservada com o cadastro da data da conferência. Não representa aprovação da fatura.</p>
    <p>Conferência registrada em {new Date(status.intake.checkedAt).toLocaleString('pt-BR')}.</p>
