@@ -4,8 +4,9 @@ import {LicensesModule} from '../licenses/licenses.module';
 import {AzureInvoiceConnector,azureConfig} from './azure-invoice.connector';
 import {OcrDemandReviewService} from './ocr-demand-review.service';
 import {OcrReviewService} from './ocr-review.service';
+import {OcrIdentityService} from './ocr-identity.service';
 import {OcrQueueService} from './ocr-queue.service';
 import {OcrWorker} from './ocr.worker';
 import {OcrController} from './ocr.controller';
-@Module({imports:[CommonModule,LicensesModule],providers:[{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService],controllers:[OcrController],exports:[OcrQueueService]})
+@Module({imports:[CommonModule,LicensesModule],providers:[{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService],controllers:[OcrController],exports:[OcrQueueService]})
 export class OcrModule {}

@@ -4,10 +4,14 @@ import {RequirePermission} from '../../common/decorators/require-permission.deco
 import {PERMISSIONS} from '../../common/constants/permissions';
 import {OcrDemandReviewService} from './ocr-demand-review.service';
 import {OcrReviewService} from './ocr-review.service';
+import {OcrIdentityService} from './ocr-identity.service';
 import {OcrQueueService} from './ocr-queue.service';
 @Controller('documents')
 export class OcrController {
- constructor(private readonly queue:OcrQueueService,private readonly reviews:OcrReviewService,private readonly demandReviews:OcrDemandReviewService){}
+ constructor(private readonly queue:OcrQueueService,private readonly reviews:OcrReviewService,private readonly demandReviews:OcrDemandReviewService,private readonly identity:OcrIdentityService){}
+ @Get(':id/ocr/identity-preview')
+ @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
+ identityPreview(@Param('id') id:string,@OrganizationId() org:string){return this.identity.preview(org,id);}
  @Get(':id/ocr/demand-reviews')
  @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
  async demandReviewList(@Param('id') id:string,@OrganizationId() org:string,@Req() req:any){return {...await this.demandReviews.list(org,id),canReview:this.demandReviews.canReview(org,req.tenantContext)};}

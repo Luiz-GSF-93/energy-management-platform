@@ -1,0 +1,20 @@
+import type {IntakeContext} from './invoice-intake';
+import type {ElectricalField} from './electrical-evidence';
+import {cpflReference} from './cpfl-measurements';
+type Candidate={name:string;label:string;source:string;value:ElectricalField};
+const norm=(v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim():'';
+const id=(v:string)=>norm(v).replace(/ /g,'');
+const month=(v:string)=>{const n=v.trim();if(/^20\d{2}-(0[1-9]|1[0-2])$/.test(n))return n;const m=/^(0?[1-9]|1[0-2])\/(20\d{2})$/.exec(n);return m?m[2]+'-'+m[1].padStart(2,'0'):cpflReference(n)??'';};
+const market=(v:string)=>{const n=norm(v),acl=/\b(?:ACL|LIVRE)\b/.test(n),acr=/\b(?:ACR|CATIVO|REGULADA)\b/.test(n);return acl===acr?'':acl?'ACL':'ACR';};
+/** Read-only comparison. A text match is not field approval or layout homologation. */
+export function identityPreview(layout:{layoutId:string|null;fields:Candidate[]},context:IntakeContext){
+ const defs:[string,string,string,unknown,(v:string)=>string][]=[['customer','Razão social','customer',context.customer?.company_name,norm],['taxId','CNPJ do cliente','customerTaxId',context.customer?.document,v=>/^[A-Z0-9]{12}[0-9]{2}$/.test(id(v))?id(v):''],['unit','Unidade consumidora','unit',context.unit?.consumer_unit_number,id],['address','Endereço da instalação','serviceAddress',context.unit?.address,norm],['period','Competência da fatura','reference',context.referenceMonth,month],['market','Ambiente ACL/ACR','classification',context.unit?.free_market===true?'ACL':context.unit?.free_market===false?'ACR':undefined,market]];
+ const supported=layout.layoutId==='cpfl-paulista-a';
+ const checks=defs.map(([key,label,name,expected,format])=>{const candidates=(supported?layout.fields:[]).filter(f=>f.name===name&&f.value.text.trim());const target=typeof expected==='string'?format(expected):'';const values=candidates.map(f=>format(f.value.text));const unique=[...new Set(values.filter(Boolean))];
+ let state='MISSING',comparison='UNKNOWN';
+ if(!supported)state='UNSUPPORTED';else if(!target)state='REGISTRATION_MISSING';else if(candidates.length&&(!values.every(Boolean)||unique.length!==1))state='AMBIGUOUS';else if(unique.length===1){comparison=unique[0]===target?'EQUAL':'DIFFERENT';const reliable=candidates.every(f=>f.value.confidence!==null&&f.value.confidence>0.85&&f.value.pages.length>0&&f.value.spans.length>0&&f.value.issues.length===0);state=reliable?(comparison==='EQUAL'?'MATCH':'MISMATCH'):'REVIEW';}
+ const messages:Record<string,string>={UNSUPPORTED:'Layout sem comparação de identidade homologada.',REGISTRATION_MISSING:'Complete ou confira este campo no cadastro vinculado.',MISSING:'Campo não localizado no bloco esperado da fatura. Confira o PDF.',AMBIGUOUS:'Há valores conflitantes ou formato não reconhecido. Confira a origem.',MATCH:'Valor compatível com o cadastro atual; demais validações continuam obrigatórias.',MISMATCH:'Valor divergente do cadastro atual. Confira se o documento pertence à unidade antes de corrigir qualquer cadastro.',REVIEW:comparison==='EQUAL'?'Texto compatível, mas confiança ou origem exige conferência.':'Texto diferente do cadastro; origem ou confiança exige conferência antes de concluir divergência.'};
+ return {key,label,expected:typeof expected==='string'?expected:null,state,comparison,message:messages[state],candidates:candidates.map(f=>({text:f.value.text,source:f.source,pages:f.value.pages,confidence:f.value.confidence,issues:f.value.issues}))};
+ });
+ return {canImport:false as const,checks,matched:checks.filter(c=>c.state==='MATCH').length,total:checks.length,registrationAvailable:!!context.customer&&!!context.unit,duplicate:context.otherDocumentInPeriod,message:'Comparação somente leitura com o cadastro atual. Não altera o diagnóstico histórico, não valida identidade e não libera importação ou apuração.'};
+}
