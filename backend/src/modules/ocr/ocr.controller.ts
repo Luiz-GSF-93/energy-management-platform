@@ -1,3 +1,4 @@
+import {homologationProgress} from './homologation-progress';
 import {Controller,Get,Post,Param,Query,Body,Req} from '@nestjs/common';
 import {OrganizationId,UserId} from '../../common/decorators/tenant.decorator';
 import {RequirePermission} from '../../common/decorators/require-permission.decorator';
@@ -10,6 +11,12 @@ import {OcrQueueService} from './ocr-queue.service';
 @Controller('documents')
 export class OcrController {
  constructor(private readonly queue:OcrQueueService,private readonly reviews:OcrReviewService,private readonly demandReviews:OcrDemandReviewService,private readonly identity:OcrIdentityService,private readonly identityReviews:OcrIdentityReviewService){}
+ @Get(':id/ocr/homologation')
+ @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
+ async homologation(@Param('id') id:string,@OrganizationId() org:string){
+  const [identity,consumption,demand]=await Promise.all([this.identityReviews.list(org,id),this.reviews.list(org,id),this.demandReviews.list(org,id)]);
+  return homologationProgress(identity.fields,consumption.fields,demand.fields);
+ }
  @Get(':id/ocr/identity-reviews')
  @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
  async identityReviewList(@Param('id') id:string,@OrganizationId() org:string,@Req() req:any){return {...await this.identityReviews.list(org,id),canReview:this.identityReviews.canReview(org,req.tenantContext)};}
