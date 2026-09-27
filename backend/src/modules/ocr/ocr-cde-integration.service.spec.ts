@@ -1,6 +1,7 @@
 import {OcrCdeIntegrationService} from './ocr-cde-integration.service';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
+import {cdeReviewCandidates} from './ocr-cde-review.service';
 import {cdeParameterCandidates} from './cde-parameter-candidates';
 jest.mock('./cpfl-paulista-layout',()=>({extractCpflPaulistaLayout:jest.fn()}));
 jest.mock('./cde-parameter-candidates',()=>({cdeParameterCandidates:jest.fn()}));
@@ -12,8 +13,9 @@ function setup(){
  const data:any={consumer_units:{id:'unit',status:'ACTIVE',free_market:true,tariff_group:'A'},calculation_parameters:[]},calls:any[]=[],insert=jest.fn((rows:any[])=>{data.calculation_parameters.push(...rows);return {select:async()=>({data:rows.map(r=>({id:r.id})),error:null})};});
  const from=(table:string)=>{const q:any={insert};for(const method of ['select','eq','range'])q[method]=(...args:any[])=>{calls.push([table,method,...args]);return q;};q.maybeSingle=async()=>({data:data[table],error:null});q.then=(resolve:any)=>resolve({data:data[table],error:null});return q;};
  const source={doc:{id:'doc',consumer_unit_id:'unit',customer_id:'customer',reference_month:'2026-08-01',file_hash:'a'.repeat(64)},jobId:'job',raw:{}},license={requireEntitlement:jest.fn(async()=>{})};
- const service=new OcrCdeIntegrationService({getClient:()=>({from})} as any,license as any,{reviewSource:async()=>source} as any,{list:async()=>identity} as any,{list:async()=>consumption} as any);
- const t:any={organizationId:'org',userId:'actor',role:'gestor',permissions:[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_CREATE]};return {service,t,source,data,insert,calls,identity,license};
+ const cdeReviews:any={fields:[]};
+ const service=new OcrCdeIntegrationService({getClient:()=>({from})} as any,license as any,{reviewSource:async()=>source} as any,{list:async()=>identity} as any,{list:async()=>consumption} as any,{list:async()=>cdeReviews} as any);
+ const t:any={organizationId:'org',userId:'actor',role:'gestor',permissions:[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_CREATE]};return {service,t,source,data,insert,calls,identity,license,cdeReviews};
 }
 describe('TUSD integration',()=>{
  it('creates one atomic draft batch with real author and invoice provenance',async()=>{const s=setup(),p=await s.service.preview('doc',s.t);expect(p.canCreate).toBe(true);await s.service.create('doc',s.t,{token:p.token});expect(s.insert).toHaveBeenCalledTimes(1);const rows=s.insert.mock.calls[0][0];expect(rows).toHaveLength(2);expect(rows[0]).toMatchObject({organization_id:'org',customer_id:'customer',consumer_unit_id:'unit',status:'DRAFT',measure:'BRL_MWH',amount_text:'212.65684',created_by:'actor',updated_by:'actor',treatment:'GROSS',embedded_tax_codes:['ICMS','PIS','COFINS'],start_date:'2026-08-01',end_date:'2026-08-31'});expect(rows[0].source).toContain(s.source.doc.file_hash);expect(rows[0].notes.length).toBeLessThan(4097);expect(s.calls).toContainEqual(['consumer_units','eq','customer_id','customer']);expect(s.calls).toContainEqual(['calculation_parameters','eq','organization_id','org']);await s.service.create('doc',s.t,{token:p.token});expect(s.insert).toHaveBeenCalledTimes(1);});
@@ -24,3 +26,14 @@ describe('TUSD integration',()=>{
 });
 
 describe('CDE quantity gate',()=>{it('blocks invoice quantity different from confirmed consumption',async()=>{const s=setup();(cdeParameterCandidates as jest.Mock).mockReturnValue(['PEAK','OFF_PEAK'].map(band=>({band,ready:true,source:band,rateMwh:'5.02609',quantity:'1',amount:'1.00'})));expect((await s.service.preview('doc',s.t)).canCreate).toBe(false);expect(s.insert).not.toHaveBeenCalled();});});
+
+describe('audited CDE description integration',()=>{
+ function reviewed(decision='CONFIRMED'){
+  const s=setup(),f={text:'CDE Escassez Hídrica Ponta AGO/26',decimal:null,pages:[1],spans:[{offset:0,length:31}],confidence:null,issues:['MISSING_CONFIDENCE'],transcription:{state:'VERIFIED_WORDS',confidence:.299,wordCount:5,method:'MINIMUM_WORD_CONFIDENCE'}};
+  (extractCpflPaulistaLayout as jest.Mock).mockReturnValue({version:'v1',layoutId:'cpfl-paulista-a',fields:[{name:'reference',value:{text:'AGO/2026'}}],operations:[{source:'PEAK',row:1,role:'CHARGE',component:'CDE_WATER_SCARCITY',period:'PEAK',fields:{description:f},issues:[]}],reconciliation:{state:'MATCH'}});
+  const c=cdeReviewCandidates('org',s.source)[0];s.cdeReviews.fields=[{...c.field,sourceHash:c.sourceHash,history:[{id:'review',sourceHash:c.sourceHash,decision}]}];return s;
+ }
+ it('uses only a current confirmation and binds it to the creation token',async()=>{const s=reviewed(),p=await s.service.preview('doc',s.t);expect(cdeParameterCandidates).toHaveBeenLastCalledWith(expect.any(Array),new Set(['PEAK']));s.cdeReviews.fields[0].history[0].decision='NEEDS_CORRECTION';await expect(s.service.create('doc',s.t,{token:p.token})).rejects.toThrow('prévia mudou');expect(s.insert).not.toHaveBeenCalled();});
+ it('rejects a requested correction even with otherwise ready numeric candidates',async()=>{const s=reviewed('NEEDS_CORRECTION');expect((await s.service.preview('doc',s.t)).canCreate).toBe(false);expect(s.insert).not.toHaveBeenCalled();});
+ it('never uses a confirmation from an older file or source snapshot',async()=>{const s=reviewed();s.source.doc.file_hash='b'.repeat(64);await s.service.preview('doc',s.t);expect(cdeParameterCandidates).toHaveBeenLastCalledWith(expect.any(Array),new Set());});
+});
