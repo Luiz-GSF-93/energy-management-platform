@@ -1,0 +1,73 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import assert from 'node:assert/strict';
+const db = new PGlite();
+let checks = 0;
+const ok = (v) => { assert.ok(v); checks++; };
+const migration = async name => db.exec(await readFile(new URL('../../src/database/migrations/' + name, import.meta.url),'utf8'));
+await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+create table public.organizations(id text primary key);
+create table public.customers(id text primary key, organization_id text, deleted_at timestamptz,company_name text,document text);
+create table public.consumer_units(id text primary key, organization_id text, customer_id text,consumer_unit_number text,address text,free_market boolean);
+create table public.documents(id text primary key, organization_id text,customer_id text,consumer_unit_id text,reference_month timestamp,file_verified boolean,document_type text,file_hash text);
+create table public.document_ocr_jobs(id uuid primary key,organization_id text,document_id text,file_hash text,state text);
+create table public.document_ocr_results(job_id uuid,organization_id text,document_id text,file_hash text);
+insert into organizations values ('org'),('other');
+insert into customers values ('customer','org',null,'Company','123');
+insert into consumer_units values ('unit','org','customer','001','Rua Um',true);
+insert into documents values ('doc','org','customer','unit','2026-08-01',true,'INVOICE_DISTRIBUTOR',repeat('a',64));
+insert into document_ocr_jobs values ('11111111-1111-4111-8111-111111111111','org','doc',repeat('a',64),'SUCCEEDED');
+insert into document_ocr_results select id,organization_id,document_id,file_hash from document_ocr_jobs;
+grant select on all tables in schema public to service_role;
+grant update on documents to service_role;`);
+await migration('20260926_f1_71_ocr_field_reviews.sql');
+await migration('20260927_f1_81_ocr_demand_reviews.sql');
+const hash='a'.repeat(64), job='11111111-1111-4111-8111-111111111111';
+const insert = async (kind, override={}) => {
+ const key = 'address';
+ const snapshot={format:'ocr-identity-review-v1',jobId:job,registration:{customer:{company_name:'Company',document:'123'},unit:{consumer_unit_number:'001',address:'Rua Um',free_market:true}},document:{id:'doc',organizationId:'org',customerId:'customer',unitId:'unit',month:'2026-08',fileHash:hash},field:{key,state:'EXTRACTED_REVIEW',decimal:'Rua Um',check:{comparison:'EQUAL'}}};
+ const row={organization_id:'org',document_id:'doc',job_id:job,file_hash:hash,field_key:key,source_hash:hash,source_snapshot:JSON.stringify(snapshot),decision:'CONFIRMED',note:'Conferido no documento',expected_review_id:null,request_id:randomUUID(),created_by:'actor',checked_pdf:true,...override};
+ const names=Object.keys(row);
+ return (await db.query('insert into public.document_ocr_'+kind+'_reviews ('+names.join(',')+') values ('+names.map((_,i)=>'$'+(i+1)).join(',')+') returning *',Object.values(row))).rows[0];
+};
+const fails=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+
+await migration('20260927_f1_86_ocr_review_trigger_permissions.sql');
+await migration('20260927_f1_87_ocr_identity_reviews.sql');
+await db.exec('set role service_role');
+for(const kind of ['identity']) {
+ const first=await insert(kind);ok(first.version===1 && first.created_by==='actor' && first.created_at);
+ ok((await db.query('select * from public.document_ocr_'+kind+'_reviews')).rows.length===1);
+ await fails(()=>insert(kind),'40001');
+ await fails(()=>insert(kind,{request_id:first.request_id}),'23505');
+ await fails(()=>insert(kind,{organization_id:'other'}),'23514');
+ await fails(()=>insert(kind,{file_hash:'c'.repeat(64)}),'23514');
+ await fails(()=>insert(kind,{source_snapshot:'{}'}),'23514');
+ const second=await insert(kind,{expected_review_id:first.id});ok(second.version===2);
+ await fails(()=>db.exec('update public.document_ocr_'+kind+"_reviews set note='changed'"),'42501');
+ await fails(()=>db.exec('delete from public.document_ocr_'+kind+'_reviews'),'42501');
+}
+for(const table of ['document_ocr_jobs','document_ocr_results']) ok(!(await db.query("select has_table_privilege(current_user,$1,'UPDATE') as allowed",['public.'+table])).rows[0].allowed);
+await db.exec('reset role');
+for(const kind of ['identity']) await fails(()=>db.exec('update public.document_ocr_'+kind+"_reviews set note='changed'"),'23514');
+for(const role of ['anon','authenticated']) {
+ await db.exec('set role '+role);
+ for(const kind of ['identity']) await fails(()=>insert(kind),'42501');
+ await db.exec('reset role');
+}
+await db.exec("update consumer_units set address='Rua Dois'");
+await db.exec('set role service_role');
+await fails(()=>insert('identity'),'23514');
+await db.exec('reset role');
+await db.exec("update consumer_units set address='Rua Um'");
+await db.exec("insert into documents select 'duplicate',organization_id,customer_id,consumer_unit_id,reference_month,file_verified,document_type,file_hash from documents where id='doc'");
+await db.exec('set role service_role');
+await fails(()=>insert('identity'),'23514');
+await db.exec('reset role');
+await db.exec("update document_ocr_jobs set state='FAILED'");
+await db.exec('set role service_role');
+for(const kind of ['identity']) await fails(()=>insert(kind),'23514');
+await db.exec('reset role');
+console.log(checks+' database checks passed; identity review persistence and registration guards verified.');
+await db.close();

@@ -23,14 +23,14 @@ describe('Service write boundaries', () => {
   describe.each(services)('%s', (_name, service) => {
     it.each(['organization_id', 'id', 'created_at', 'validated_by', 'permissions'])(
       'rejects protected or unknown field %s before touching persistence', async field => {
-        await expect(service.update('record-a', 'org-a', { [field]: 'injected' } as any))
+        await expect(service.update('record-a', 'org-a', { [field]: 'injected' } as any, 'actor-test'))
           .rejects.toBeInstanceOf(BadRequestException);
         expect(getClient).not.toHaveBeenCalled();
       },
     );
     it.each([{}, null, [], 'invalid'])(
       'rejects empty or non-object updates (%p)', async body => {
-        await expect(service.update('record-a', 'org-a', body as any))
+        await expect(service.update('record-a', 'org-a', body as any, 'actor-test'))
           .rejects.toBeInstanceOf(BadRequestException);
         expect(getClient).not.toHaveBeenCalled();
       },
