@@ -1,3 +1,4 @@
+import {editEnvelope,saveRegistration,registrationHistory} from '../../../common/registration-edit';
 import { Injectable, NotFoundException, ConflictException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateConsumerUnitDto, UpdateConsumerUnitDto } from '../dto/create-consumer-unit.dto';
@@ -94,24 +95,11 @@ export class ConsumerUnitsService {
     return data;
   }
 
-  async update(
-    id: string,
-    organizationId: string,
-    updateConsumerUnitDto: UpdateConsumerUnitDto,
-  ) {
-    updateConsumerUnitDto = await validateWriteDto(UpdateConsumerUnitDto, updateConsumerUnitDto);
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('consumer_units')
-      .update(this.toRow(updateConsumerUnitDto))
-      .eq('id', id)
-      .eq('organization_id', organizationId)
-      .select()
-      .maybeSingle();
-
-    if (error) this.fail(error);
-    if (!data) throw new NotFoundException('Consumer unit not found');
-    return data;
+  async history(id:string,organizationId:string){return registrationHistory(this.supabaseService.getClient(),organizationId,'consumer_units',id);}
+  async update(id:string,organizationId:string,input:any,actor:string){
+    const body=editEnvelope(input,actor);
+    const dto=await validateWriteDto(UpdateConsumerUnitDto,body.changes);
+    return saveRegistration(this.supabaseService.getClient(),organizationId,'consumer_units',id,actor,body,this.toRow(dto));
   }
 
   async delete(id: string, organizationId: string) {

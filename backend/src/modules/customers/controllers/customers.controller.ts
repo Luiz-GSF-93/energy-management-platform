@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { CustomersService } from '../services/customers.service';
 import { CreateCustomerDto, UpdateCustomerDto } from '../dto/create-customer.dto';
-import { OrganizationId } from '../../../common/decorators/tenant.decorator';
+import { OrganizationId, UserId } from '../../../common/decorators/tenant.decorator';
 import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions';
 
@@ -45,14 +45,21 @@ export class CustomersController {
     return this.customersService.findOne(id, organizationId);
   }
 
+  @Get(':id/edits')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_VIEW])
+  history(@Param('id') id:string,@OrganizationId() org:string){return this.customersService.history(id,org);}
+  @Get(':id/exclusive-users')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_UPDATE])
+  exclusiveUsers(@Param('id') id:string,@OrganizationId() org:string){return this.customersService.exclusiveUsers(id,org);}
   @Put(':id')
   @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_UPDATE])
   async update(
     @Param('id') id: string,
-    @Body() updateCustomerDto: UpdateCustomerDto,
+    @Body() updateCustomerDto: any,
     @OrganizationId() organizationId: string,
+    @UserId() actor: string,
   ) {
-    return this.customersService.update(id, organizationId, updateCustomerDto);
+    return this.customersService.update(id, organizationId, updateCustomerDto, actor);
   }
 
   @Delete(':id')

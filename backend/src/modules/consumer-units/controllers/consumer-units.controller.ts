@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConsumerUnitsService } from '../services/consumer-units.service';
 import { CreateConsumerUnitDto, UpdateConsumerUnitDto } from '../dto/create-consumer-unit.dto';
-import { OrganizationId } from '../../../common/decorators/tenant.decorator';
+import { OrganizationId, UserId } from '../../../common/decorators/tenant.decorator';
 import { RequirePermission } from '../../../common/decorators/require-permission.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions';
 
@@ -44,17 +44,21 @@ export class ConsumerUnitsController {
     return this.consumerUnitsService.findOne(id, organizationId);
   }
 
+  @Get(':id/edits')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONSUMER_UNITS_VIEW])
+  history(@Param('id') id:string,@OrganizationId() org:string){return this.consumerUnitsService.history(id,org);}
   @Put(':id')
   @RequirePermission([PERMISSIONS.ORGANIZATION_CONSUMER_UNITS_UPDATE])
   async update(
     @Param('id') id: string,
-    @Body() updateConsumerUnitDto: UpdateConsumerUnitDto,
+    @Body() updateConsumerUnitDto: any,
     @OrganizationId() organizationId: string,
+    @UserId() actor: string,
   ) {
     return this.consumerUnitsService.update(
       id,
       organizationId,
-      updateConsumerUnitDto,
+      updateConsumerUnitDto, actor,
     );
   }
 

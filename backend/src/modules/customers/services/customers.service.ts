@@ -1,3 +1,4 @@
+import {editEnvelope,saveRegistration,registrationHistory} from '../../../common/registration-edit';
 import { Injectable, BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import {normalizeTaxId,validTaxId} from '../../../common/validation/tax-id';
 import { SupabaseService } from '../../../services/supabase.service';
@@ -61,23 +62,27 @@ export class CustomersService {
     return data;
   }
 
-  async update(
-    id: string,
-    organizationId: string,
-    updateCustomerDto: UpdateCustomerDto,
-  ) {
-    updateCustomerDto = await validateWriteDto(UpdateCustomerDto, updateCustomerDto);
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('customers')
-      .update(updateCustomerDto)
-      .eq('id', id)
-      .eq('organization_id', organizationId)
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
-    return data;
+  async history(id:string,organizationId:string){return registrationHistory(this.supabaseService.getClient(),organizationId,'customers',id);}
+  async exclusiveUsers(id:string,organizationId:string){
+    await this.findOne(id,organizationId);
+    const {data,error}=await this.supabaseService.getClient().from('organization_members').select('user_id').eq('organization_id',organizationId).eq('exclusive_customer_id',id);
+    if(error)throw new ServiceUnavailableException('Vínculos indisponíveis.');return (data||[]).map((x:{user_id:string})=>String(x.user_id)).sort();
+  }
+  async update(id:string,organizationId:string,input:any,actor:string){
+    const body=editEnvelope(input,actor),changes={...body.changes};
+    const allowed=["company_name","trade_name","document","contact_name","contact_email","contact_phone","economic_group","status","exclusive_user_ids"];
+    if(Object.keys(changes).some(k=>!allowed.includes(k)))throw new BadRequestException('Campo não editável.');
+    for(const [key,value] of Object.entries(changes)){
+      if(key==='exclusive_user_ids')continue;
+      if(value!==null&&(typeof value!=='string'||value.length>(key==='contact_phone'?20:255)))throw new BadRequestException('Campo inválido: '+key);
+      if(typeof value==='string')changes[key]=value.trim();
+    }
+    if('company_name' in changes&&!changes.company_name)throw new BadRequestException('Razão social obrigatória.');
+    if('document' in changes){if(typeof changes.document!=='string'||!validTaxId(changes.document))throw new BadRequestException('CPF ou CNPJ inválido.');changes.document=normalizeTaxId(changes.document);}
+    if('contact_email' in changes&&changes.contact_email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(changes.contact_email))throw new BadRequestException('E-mail inválido.');
+    if('status' in changes&&!['ACTIVE','INACTIVE'].includes(changes.status))throw new BadRequestException('Selecione ativo ou inativo.');
+    if('exclusive_user_ids' in changes){if(!Array.isArray(changes.exclusive_user_ids)||changes.exclusive_user_ids.length>500||changes.exclusive_user_ids.some((x:any)=>typeof x!=='string'||! /^[0-9a-f-]{36}$/i.test(x)))throw new BadRequestException('Usuários inválidos.');changes.exclusive_user_ids=[...new Set(changes.exclusive_user_ids)].sort();}
+    return saveRegistration(this.supabaseService.getClient(),organizationId,'customers',id,actor,body,changes);
   }
 
   async delete(id: string, organizationId: string) {
