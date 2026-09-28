@@ -32,6 +32,7 @@ export function contractSupplierCost(unit:any,month:string,contracts:any[],price
  if(day(a.start_date)>period.start||day(a.end_date)<period.end||!Number.isInteger(a.version)||a.version<1||applicable.filter(v=>v.version===a.version).length!==1||!a.source?.trim()){need('PARTIAL_RULE','A condição mais recente não cobre todo o mês ou é inconsistente. Não há divisão automática por dias.','supply');return r;}
  r.rule={id:a.id,version:a.version,source:a.source,indexSource:a.index_source};r.taxTreatment=a.tax_treatment;
  const spot=a.volume_basis==='SPOT';
+ if(a.tax_treatment==='RESERVED')r.taxReservation={reason:a.reason,createdBy:a.created_by,createdAt:a.created_at,ruleId:a.id,version:a.version};
  if(spot){r.formulaVersion='spot-supplier-1.0';r.warnings=['Compra pontual da competência: volume comprado × preço final conciliado com uma única nota validada. Não aplica take-or-pay, mínimo ou tolerância.','O consumo OCR é preservado. Diferenças de volume ou valor impedem a consolidação até a conciliação documental.','A nota compõe o custo uma vez; não lançar a mesma compra novamente como exposição ou compra extra.'];if(day(a.start_date)!==period.start||day(a.end_date)!==period.end||a.min_percent!=null||a.max_tolerance_percent!=null||a.price_mode!=='FINAL'){need('SPOT_RULE','Compra pontual exige a competência completa, preço final e ausência de limites contratuais.','supply');return r;}}
  let volume:bigint,price:bigint,min:bigint,max:bigint;
  try{
@@ -53,7 +54,8 @@ export function contractSupplierCost(unit:any,month:string,contracts:any[],price
   if(a.price_mode==='FINAL'){if(p.status!=='FINAL'||a.index_percent!=null)throw Error('Confirme o preço final vigente ou registre o índice do preço-base.');price=base*1000000n;}
   else if(a.price_mode==='BASE_PLUS_INDEX'){if(p.status!=='BASE'||!a.index_source?.trim())throw Error('O reajuste exige preço-base e fonte. Preço final não recebe índice novamente.');const index=signed(a.index_percent);if(index<=-100000000n||index>9999000000n)throw Error('Índice acumulado inválido.');price=round(base*(100000000n+index),100n);}
   else throw Error('Confirme a forma de aplicação do preço.');
-  if(!['NET','GROSS'].includes(a.tax_treatment))throw Error('Informe o tratamento tributário do preço contratual.');
+  if(a.tax_treatment==='RESERVED'&&(!spot||(a.reason?.trim().length??0)<20||!a.created_by||!a.created_at))throw Error('Ressalva tributária exige compra pontual, justificativa e autoria.');
+  if(!['NET','GROSS','RESERVED'].includes(a.tax_treatment))throw Error('Informe o tratamento tributário do preço contratual.');
   r.contractedMwh=fixed(volume);r.minMwh=spot?null:fixed(min);r.maxMwh=spot?null:fixed(max);r.pricePerMwh=fixed(price);r.priceSource=p.source;
  }catch(e){need('CONDITIONS',e instanceof Error?e.message:'Revise as condições contratuais.','supply');return r;}
  const measured=prepareMeasurements(unit,month,inputs);r.measurements=measured.validatedVersion;

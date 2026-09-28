@@ -29,7 +29,9 @@ export class SpotReconciliationService {
  const view=await this.list({contractId:d.contractId,month:d.month},t),r=view.supplier;
  const context=d.status==='PENDING'?view.documentaryContext:r?.contract?.id===d.contractId?r.reconciliationContext:null;
  if(!context||context.hash!==d.sourceHash)throw new ConflictException('As fontes mudaram ou ainda faltam condições, medição ou nota validada. Atualize a consulta.');
- if(d.status==='APPROVED_NO_COST'&&r.requirements.some((x:any)=>x.code!=='SPOT_VOLUME_DIFFERENCE'))throw new BadRequestException('Resolva as demais pendências antes de aprovar a conciliação.');
+ if(d.status!=='PENDING'&&r.requirements.some((x:any)=>x.code!=='SPOT_VOLUME_DIFFERENCE'&&(d.status!=='APPROVED_TAX_RESERVATION'||x.code!=='SPOT_TAX_RESERVATION')))throw new BadRequestException('Resolva as demais pendências antes de aprovar a conciliação.');
+ if(d.status==='APPROVED_TAX_RESERVATION'&&r.taxTreatment!=='RESERVED')throw new BadRequestException('Confirme tributação não confirmada nas condições e na nota antes de concluir com ressalva.');
+ if(d.status==='APPROVED_NO_COST'&&r.taxTreatment==='RESERVED')throw new BadRequestException('Use a conclusão com ressalva tributária para preservar a incerteza.');
  const doc=view.documents.find((x:any)=>x.id===d.documentId);if(!doc||!doc.file_hash)throw new BadRequestException('Selecione um documento verificado da mesma unidade e competência.');
  const saved=await this.db.getClient().from('supplier_spot_reconciliations').insert([{organization_id:t.organizationId,customer_id:view.contract.customer_id,consumer_unit_id:view.contract.consumer_unit_id,contract_id:d.contractId,month:d.month,status:d.status,document_id:doc.id,document_sha256:doc.file_hash,source_hash:d.sourceHash,source_snapshot:context.payload,reason:d.reason.trim(),previous_id:d.previousId||null,created_by:t.userId}]).select().single();this.fail(saved.error);return (await auditAuthorNames(this.db.getClient(),t.organizationId,[saved.data]))[0];
  }

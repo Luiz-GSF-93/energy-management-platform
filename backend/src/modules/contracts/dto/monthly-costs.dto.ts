@@ -8,7 +8,8 @@ export class MonthlyCostItemDto {
  @IsIn(['COST','CREDIT']) effect!:string;
  @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,2})?$/) amount!:string;
  @IsString() @Matches(/\S/) @MaxLength(1000) source!:string;
- @IsIn(['INCLUDED','EXCLUDED','NOT_APPLICABLE','UNSPECIFIED']) taxTreatment!:string;
+ @IsIn(['INCLUDED','EXCLUDED','NOT_APPLICABLE','UNSPECIFIED','RESERVED']) taxTreatment!:string;
+ @IsOptional() @IsString() @MaxLength(1000) taxReservationReason?:string;
 }
 export class MonthlyCostsPayloadDto {
  @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>MonthlyCostItemDto) items!:MonthlyCostItemDto[];

@@ -13,6 +13,7 @@ try{
  const fixture=JSON.parse(readFileSync(new URL('./contracts-fixture.json',import.meta.url),'utf8').replace(/^\uFEFF/,''));
  for(const t of ['customers','consumer_units']){const cols=fixture.columns.filter(c=>c.table===t).map(c=>q(c.name)+' '+c.type+(c.not_null?' NOT NULL':'')+(c.default?' DEFAULT '+c.default:''));await db.exec('CREATE TABLE '+q(t)+' ('+cols.join(',')+',PRIMARY KEY(id));GRANT ALL ON '+q(t)+' TO service_role');}
  const migration=readFileSync(new URL('../../src/database/migrations/20260925_f1_36_monthly_costs.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);const supplierMigration=readFileSync(new URL('../../src/database/migrations/20260925_f1_51_supplier_monthly_costs.sql',import.meta.url),'utf8');await db.exec(supplierMigration);await db.exec(supplierMigration);ok(true);
+ const taxMigration=readFileSync(new URL('../../src/database/migrations/20260928_f1_124a_cost_tax_reservation.sql',import.meta.url),'utf8');await db.exec(taxMigration);await db.exec(taxMigration);
  const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
  await db.exec("INSERT INTO organizations VALUES ('org-a'),('org-b');INSERT INTO customers(id,organization_id,company_name,document) VALUES ('"+a+"','org-a','A','A'),('"+b+"','org-b','B','B');INSERT INTO consumer_units(id,organization_id,customer_id,consumer_unit_number,distributor,tariff_group) VALUES ('"+a+"','org-a','"+a+"','A','D','A4'),('"+b+"','org-b','"+b+"','B','D','A4');SET ROLE service_role");
  let entitled=true;const client={getClient:()=>({from:t=>new Query(t)})},licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(new Error('No license'),{getStatus:()=>403});}};
@@ -53,6 +54,10 @@ try{
  await assert.rejects(()=>db.query("UPDATE calculation_monthly_costs SET costs=$2 WHERE id=$1",[partial.id,JSON.stringify({noCosts:false,items:[{...supplierItem,scenario:'ACR'}]})]),e=>e.code==='P3601');checks++;
  await deny(()=>s.one(sr.id,other),404);
 
+ const reservedItem={...supplierItem,taxTreatment:'RESERVED',taxReservationReason:'Invoice does not identify whether these taxes were charged'};
+ for(const patch of [{taxReservationReason:''},{category:'CCEE'},{effect:'CREDIT'},{taxTreatment:'INCLUDED'},{taxReservationReason:'short'}])await deny(()=>s.create({...body,month:'2028-06',costs:{noCosts:false,items:[{...reservedItem,...patch}]}},t),400);
+ const rr=await s.create({...body,month:'2028-06',costs:{noCosts:false,items:[reservedItem]}},t);const rv=await s.validate(rr.id,{revision:1},t);ok(rv.costs.items[0].taxTreatment==='RESERVED'&&rv.costs.items[0].amount==='100.00');ok((await s.events(rr.id,t)).length===2);
+ await assert.rejects(()=>db.query('UPDATE calculation_monthly_costs SET costs=$2 WHERE id=$1',[partial.id,JSON.stringify({noCosts:false,items:[{...reservedItem,taxReservationReason:'short'}]})]),e=>e.code==='P3601');checks++;
  await db.query('UPDATE customers SET deleted_at=now() WHERE id=$1',[a]);await deny(()=>s.one(r.id,t),404);await deny(()=>s.create({...body,month:'2028-01'},t),404);
  await db.exec('RESET ROLE;SET ROLE anon');await assert.rejects(()=>db.exec('SELECT * FROM calculation_monthly_costs'),e=>e.code==='42501');checks++;
  await db.exec('RESET ROLE;SET ROLE authenticated');await assert.rejects(()=>db.exec('SELECT * FROM calculation_monthly_cost_events'),e=>e.code==='42501');checks++;

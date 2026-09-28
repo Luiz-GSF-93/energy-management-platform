@@ -1,6 +1,8 @@
 import {MonthlyCostsPayloadDto} from '../dto/monthly-costs.dto';
 export function normalizeCosts(c:MonthlyCostsPayloadDto){return {noCosts:c.noCosts,items:c.items.map(i=>({...i,label:i.label.trim(),source:i.source.trim()}))};}
 export function costIssues(c:MonthlyCostsPayloadDto,validating=false){const issues:string[]=[];
+ if(c.items.some(i=>i.taxTreatment==='RESERVED'&&(i.category!=='SUPPLIER_INVOICE'||i.scenario!=='ACL'||i.effect!=='COST'||(i.taxReservationReason?.trim().length??0)<20)))issues.push('Ressalva tributária exige fatura do fornecedor ACL, custo e justificativa de pelo menos 20 caracteres.');
+ if(c.items.some(i=>i.taxTreatment!=='RESERVED'&&i.taxReservationReason!==undefined))issues.push('A justificativa tributária específica deve acompanhar somente o tratamento com ressalva.');
  if(c.items.some(i=>['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(i.category)&&i.scenario!=='ACL'))issues.push('Fatura do fornecedor e compra extra pertencem ao cenário ACL.');
  if(new Set(c.items.map(i=>i.id)).size!==c.items.length)issues.push('Cada lançamento deve possuir identificador único.');
  if(c.noCosts&&c.items.length)issues.push('Remova os lançamentos ou desmarque a declaração de ausência de custos.');

@@ -1,8 +1,8 @@
 import {prepareCosts} from './preparation-costs';
 
-type Treatment='INCLUDED'|'EXCLUDED'|'NOT_APPLICABLE';
+type Treatment='INCLUDED'|'EXCLUDED'|'NOT_APPLICABLE'|'RESERVED';
 type Scenario='ACL'|'ACR';
-export type CostLedgerLine={id:string;label:string;category:string;effect:string;amount:string;signedAmount:string;source:string};
+export type CostLedgerLine={id:string;label:string;category:string;effect:string;amount:string;signedAmount:string;source:string;taxReservationReason?:string};
 export type CostLedgerGroup={scenario:Scenario;taxTreatment:Treatment;count:number;costs:string;credits:string;balance:string;lines:CostLedgerLine[]};
 export type CostLedger={mode:'MONTHLY_COST_LEDGER';formulaVersion:'monthly-costs-1.0';status:'BLOCKED'|'AVAILABLE'|'NO_COSTS_DECLARED';version:{id:string;version:number;revision:number;validatedAt:string;source:string}|null;groups:CostLedgerGroup[];blockers:string[];warnings:string[]};
 function cents(value:string){const [whole,fraction='']=value.split('.');return BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'));}
@@ -24,11 +24,11 @@ export function monthlyCostLedger(unit:any,month:string,rows:any[],scope:'ADDITI
  if(v.costs.noCosts){if(scope==='SUPPLIER'){result.blockers.push('A declaração de ausência de custos adicionais não substitui a fatura do fornecedor.');return result;}result.status='NO_COSTS_DECLARED';return result;}
  result.status='AVAILABLE';
  for(const scenario of ['ACR','ACL'] as Scenario[]){
-  for(const taxTreatment of ['INCLUDED','EXCLUDED','NOT_APPLICABLE'] as Treatment[]){
+  for(const taxTreatment of ['INCLUDED','EXCLUDED','NOT_APPLICABLE','RESERVED'] as Treatment[]){
    const items=v.costs.items.filter(i=>i.scenario===scenario&&i.taxTreatment===taxTreatment&&(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(i.category)===(scope==='SUPPLIER'))).sort((a,b)=>a.id.localeCompare(b.id));
    if(!items.length)continue;
    let costs=0n,credits=0n;
-   const lines=items.map(i=>{const value=cents(i.amount);if(i.effect==='CREDIT')credits+=value;else costs+=value;return {id:i.id,label:i.label,category:i.category,effect:i.effect,amount:money(value),signedAmount:money(i.effect==='CREDIT'?-value:value),source:i.source};});
+   const lines=items.map(i=>{const value=cents(i.amount);if(i.effect==='CREDIT')credits+=value;else costs+=value;return {id:i.id,label:i.label,category:i.category,effect:i.effect,amount:money(value),signedAmount:money(i.effect==='CREDIT'?-value:value),source:i.source,...(i.taxReservationReason?{taxReservationReason:i.taxReservationReason}:{})};});
    result.groups.push({scenario,taxTreatment,count:items.length,costs:money(costs),credits:money(credits),balance:money(costs-credits),lines});
   }
  }
