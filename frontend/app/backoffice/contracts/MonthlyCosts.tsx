@@ -7,7 +7,7 @@ import {useAuth} from '@/app/providers';
 import {Unit,PERM} from './types';
 import {CorrectionContext} from './preparation-navigation';
 const categories={SUPPLIER_INVOICE:'Fatura do fornecedor',SUPPLIER_EXTRA_ENERGY:'Compra extra de energia',CCEE:'CCEE',EXPOSURE:'Exposição / curto prazo',CHARGE:'Encargos',OTHER:'Outros ajustes',DISTRIBUTOR_ADJUSTMENT:'Ajuste da distribuidora'};
-const taxes={RESERVED:'Tributação não confirmada — sem acréscimo, com ressalva',UNSPECIFIED:'Pendente de classificação',INCLUDED:'Tributos incluídos no valor',EXCLUDED:'Tributos não incluídos',NOT_APPLICABLE:'Não se aplica'};
+const taxes={RESERVED:'Tributos não confirmados com ressalva — ICMS adicional exige confirmação',UNSPECIFIED:'Pendente de classificação',INCLUDED:'Tributos incluídos no valor',EXCLUDED:'Tributos não incluídos',NOT_APPLICABLE:'Não se aplica'};
 type CostItem={id:string;label:string;category:string;scenario:string;effect:string;amount:string;source:string;taxTreatment:string;taxReservationReason?:string;supplierIcms?:{parameterId:string;revision:number;rate:string;reason:string}};
 type Costs={noCosts:boolean;items:CostItem[]};
 type Row=AuditAuthorFields & {id:string;consumer_unit_id:string;month:string;version:number;revision:number;previous_id:string|null;origin?:'MANUAL'|'OCR_CIP';status:'DRAFT'|'VALIDATED';costs:Costs;source_reference:string;notes:string;correction_reason:string;created_by:string;updated_by:string;validated_by:string|null;validated_at:string|null;updated_at:string};
