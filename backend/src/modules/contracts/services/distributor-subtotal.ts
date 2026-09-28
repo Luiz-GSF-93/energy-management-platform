@@ -1,10 +1,11 @@
+import {requiredEnergyTaxes} from './required-energy-taxes';
 import type {OperationalTaxBases} from './operational-tax-bases';
 import {TariffPreview} from './tariff-preview';
 import {TaxMemory} from './tax-memory';
 import {monthPeriod} from './preparation';
 export type DistributorEntry={id:string;revision:number;kind:'TARIFF'|'COST'|'TAX';label:string;amount:string;source:string;treatment?:string;embeddedTaxCodes?:string[]};
 export type DistributorScenario={scenario:'ACR'|'ACL';status:'AVAILABLE'|'BLOCKED';tariffs:string|null;taxes:string|null;subtotal:string|null;embeddedTaxCodes?:string[];entries:DistributorEntry[];blockers:string[]};
-export type DistributorSubtotal={formulaVersion:'distributor-subtotal-1.1';rounding:'SUM_ROUNDED_LINES';scenarios:DistributorScenario[];warnings:string[]};
+export type DistributorSubtotal={formulaVersion:'distributor-subtotal-1.2';rounding:'SUM_ROUNDED_LINES';scenarios:DistributorScenario[];warnings:string[]};
 const cents=(v:string)=>{if(typeof v!=='string'||v.length>80||!/^(0|[1-9][0-9]*)[.][0-9]{2}$/.test(v))throw Error('Valor monetário inválido');return BigInt(v.replace('.',''));};
 const money=(v:bigint)=>{const s=v.toString().padStart(3,'0');return s.slice(0,-2)+'.'+s.slice(-2);};
 const date=(v:unknown):v is string=>typeof v==='string'&&/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
@@ -16,7 +17,7 @@ export function distributorSubtotal(unit:any,month:string,parameters:any[],tarif
 export function reviewedComponentSubtotal(unit:any,month:string,parameters:any[],tariffs:TariffPreview,taxes:TaxMemory,operational?:OperationalTaxBases):DistributorSubtotal{
  const baseMemory:TariffPreview=operational?{...tariffs,lines:[...tariffs.lines,...operational.lines],pending:[...tariffs.pending,...operational.pending]}:tariffs;
  const period=monthPeriod(month),scoped=parameters.filter(p=>p.organization_id===unit.organization_id&&p.customer_id===unit.customer_id&&p.consumer_unit_id===unit.id&&(['TARIFF','TAX'].includes(p.kind)||!!operational&&p.kind==='COST'&&!!p.monetary_source)&&['APPROVED','DRAFT'].includes(p.status)&&(!date(p.start_date)||!date(p.end_date)||p.start_date<=period.end&&p.end_date>=period.start));
- const result:DistributorSubtotal={formulaVersion:'distributor-subtotal-1.1',rounding:'SUM_ROUNDED_LINES',scenarios:[],warnings:[
+ const result:DistributorSubtotal={formulaVersion:'distributor-subtotal-1.2',rounding:'SUM_ROUNDED_LINES',scenarios:[],warnings:[
   'Subtotal das rubricas da distribuidora conferidas nesta consulta; não representa a fatura completa ou o custo total do cenário.',
   'Subtotal = soma das tarifas aprovadas (líquidas ou com tributos inclusos) + tributos calculados a acrescentar. Cada rubrica conserva seu arredondamento em centavos; as bases e referências dos tributos não são somadas novamente.',
   'Tarifas brutas só entram com os códigos embutidos conciliados com declarações aprovadas de tributo já incluído. Cada tributo classifica todas as tarifas na base ou nas exclusões, ou possui isenção/não aplicação aprovada. Os valores dos impostos embutidos não são extraídos nem somados outra vez.',
@@ -34,7 +35,7 @@ export function reviewedComponentSubtotal(unit:any,month:string,parameters:any[]
   if(approved.some(p=>!date(p.start_date)||!date(p.end_date)||p.start_date>period.start||p.end_date<period.end||!Number.isInteger(p.revision)||p.revision<1))block('As fontes precisam de revisão válida e cobertura integral do mês.');
   for(const p of baseMemory.pending.filter(p=>p.scenario===scenario))block('Tarifa '+p.label+': '+p.reason);
   for(const p of taxes.pending.filter(p=>p.scenario===scenario))block('Tributo '+p.label+': '+p.reason);
-  for(const code of ['ICMS','PIS','COFINS','IOF'])if(xp.filter(p=>p.component_code===code).length!==1)block('Informe uma configuração aprovada de '+code+', inclusive isenção ou não aplicação justificada.');
+  for(const code of requiredEnergyTaxes(own))if(xp.filter(p=>p.component_code===code).length!==1)block('Informe uma configuração aprovada de '+code+', inclusive isenção ou não aplicação justificada.');
   if(lines.some(l=>!tp.some(p=>p.id===l.parameterId&&p.revision===l.revision))||taxLines.some(l=>!xp.some(p=>p.id===l.id&&p.revision===l.revision))||declarations.some(l=>!xp.some(p=>p.id===l.id)))block('A memória contém fontes sem correspondência no cadastro desta unidade.');
   if(new Set(approved.map(p=>p.id)).size!==approved.length)block('Fontes duplicadas no cadastro. Revise antes de consolidar.');
   let tariffSum=0n,taxSum=0n;

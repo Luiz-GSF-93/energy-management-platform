@@ -16,10 +16,12 @@ function addTax(f:ReturnType<typeof fixture>,amount='18.00'){
 }
 describe('distributor component consolidation',()=>{
  it('sums explicit reviewed entries without inventing the other scenario',()=>{const f=fixture(),r=run(f);expect(r.scenarios[0].subtotal).toBe('100.01');expect(r.scenarios[0].taxes).toBe('0.00');expect(r.scenarios[1].subtotal).toBeNull();expect(r.scenarios[0].entries[0]).toMatchObject({id:'energy',revision:1,source:'Fatura'});});
+ it('does not require IOF when no operation or embedded IOF exists',()=>{const f=fixture();f.parameters=f.parameters.filter(p=>p.id!=='IOF');f.tax.declarations=f.tax.declarations.filter((d:any)=>d.id!=='IOF');expect(first(f).status).toBe('AVAILABLE');expect(first(f).subtotal).toBe('100.01');expect(first(f).entries.some(e=>e.id==='IOF')).toBe(false);(f.parameters[0] as any).embedded_tax_codes=['IOF'];expect(first(f).blockers.some(m=>m.includes('IOF'))).toBe(true);});
+ it('continues validating configured IOF rather than silently ignoring it',()=>{const f=fixture();f.tax.declarations=f.tax.declarations.filter((d:any)=>d.id!=='IOF');blocked(f);});
  it('adds each tax once, never its base or referenced taxes',()=>{const f=fixture();addTax(f);expect(first(f)).toMatchObject({subtotal:'118.01',tariffs:'100.01',taxes:'18.00'});});
  it('sums cent amounts exactly at arbitrary precision',()=>{const f=fixture();f.tariff.lines[0].amount='99999999999999999999.99';addTax(f,'0.02');expect(first(f).subtotal).toBe('100000000000000000000.01');});
  it('keeps a legitimate zero and the rounding contract explicit',()=>{const f=fixture();f.tariff.lines[0].amount='0.00';expect(first(f).subtotal).toBe('0.00');expect(run(f).rounding).toBe('SUM_ROUNDED_LINES');});
- it.each(['ICMS','PIS','COFINS','IOF'])('requires an explicit treatment of %s',code=>{const f=fixture();f.parameters=f.parameters.filter(p=>p.id!==code);f.tax.declarations=f.tax.declarations.filter((d:any)=>d.id!==code);blocked(f);});
+ it.each(['ICMS','PIS','COFINS'])('requires an explicit treatment of %s',code=>{const f=fixture();f.parameters=f.parameters.filter(p=>p.id!==code);f.tax.declarations=f.tax.declarations.filter((d:any)=>d.id!==code);blocked(f);});
  it.each(['1.001','NaN','-1.00','1e3','','01.00'])('rejects invalid money %s',amount=>{const f=fixture();f.tariff.lines[0].amount=amount;blocked(f);});
  it('blocks pending tariff even if a stale value exists',()=>{const f=fixture();f.tariff.pending.push({parameterId:'energy',scenario:'ACR',label:'Energia',reason:'Corrigir demanda'});blocked(f);});
  it('blocks pending tax even if a stale value exists',()=>{const f=fixture();addTax(f);f.tax.pending.push({id:'ICMS',scenario:'ACR',label:'ICMS',reason:'Revisar interação'});blocked(f);});
