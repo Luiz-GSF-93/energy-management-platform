@@ -1,5 +1,5 @@
-import type {Preview} from './CustomerFinancialPreview';
 'use client';
+import type {Preview} from './CustomerFinancialPreview';
 import OperationalComposition,{CompositionData} from './OperationalComposition';
 import ContractSupplierCost from './ContractSupplierCost';
 import ManagementFeeMemory,{ManagementFeeData} from './ManagementFeeMemory';
