@@ -1,3 +1,5 @@
+import {SpotReconciliationController} from './controllers/spot-reconciliation.controller';
+import {SpotReconciliationService} from './services/spot-reconciliation.service';
 import {ReviewSnapshotsController} from './controllers/review-snapshots.controller';
 import {ReviewSnapshotsService} from './services/review-snapshots.service';
 import {SupplierBillingController} from './controllers/supplier-billing.controller';
@@ -27,8 +29,8 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule,ConsumerUnitsModule],
-  controllers: [FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
-  providers: [FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
+  controllers: [SpotReconciliationController,FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [SpotReconciliationService,FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
 export class ContractsModule {}

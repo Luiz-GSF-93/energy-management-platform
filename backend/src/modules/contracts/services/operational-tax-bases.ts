@@ -28,6 +28,7 @@ export function operationalTaxBases(unit:any,month:string,parameters:any[],suppl
     const regular=cents(supplier.regularAmount),minimum=cents(supplier.minimumAmount);if(minimum>regular)throw Error('Mínimo não consumido superior ao faturamento regular.');
     amount=p.monetary_source==='SUPPLIER_ENERGY'?regular-minimum:p.monetary_source==='SUPPLIER_MINIMUM'?minimum:cents(supplier.extraAmount);
     refs.push({id:supplier.rule.id,revision:supplier.rule.version,kind:'SUPPLIER_BILLING_RULE',source:supplier.rule.source},{id:supplier.contract.id,revision:supplier.rule.version,kind:'CONTRACT',source:'Contrato '+supplier.contract.number},{id:supplier.measurements.id,revision:supplier.measurements.revision,kind:'MEASUREMENTS',source:supplier.measurements.source});
+    if(supplier.reconciliation?.status==='APPROVED_NO_COST'&&supplier.reconciliation.current)refs.push({id:supplier.reconciliation.id,revision:supplier.reconciliation.version,kind:'SPOT_RECONCILIATION',source:supplier.reconciliation.reason});
     if(supplier.formulaVersion==='spot-supplier-1.0'){
      const version=supplier.costVersion,items=supplier.invoiceSources;
      if(!version||!Array.isArray(items)||items.length!==1||items[0].category!=='SUPPLIER_INVOICE'||items[0].effect!=='COST'||cents(items[0].amount)!==regular)throw Error('Compra pontual sem conciliação da nota validada.');

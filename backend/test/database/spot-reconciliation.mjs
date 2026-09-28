@@ -1,0 +1,33 @@
+// Uses isolated PostgreSQL-compatible PGlite, never production.
+import {PGlite} from '@electric-sql/pglite';import {readFileSync} from 'node:fs';import {createRequire} from 'node:module';import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url);require('reflect-metadata');const {SpotReconciliationService}=require('../../dist/modules/contracts/services/spot-reconciliation.service.js');const {PERMISSIONS:P}=require('../../dist/common/constants/permissions.js');
+const db=new PGlite();let checks=0;const ok=x=>{assert.ok(x);checks++;};const q=n=>'"'+n.replaceAll('"','""')+'"';
+class Query{
+ constructor(table){this.table=table;this.filters=[];this.params=[];this.op='select';}
+ select(){return this;}order(k,o={ascending:true}){this.orderSql=' ORDER BY '+q(k)+(o.ascending?' ASC':' DESC');return this;}range(a,b){this.rangeSql=' LIMIT '+(b-a+1)+' OFFSET '+a;return this;}eq(k,v){this.params.push(v);this.filters.push(q(k)+'=$'+this.params.length);return this;}is(k,v){assert.equal(v,null);this.filters.push(q(k)+' IS NULL');return this;}
+ insert(rows){this.op='insert';this.values=rows[0];return this;} update(values){this.op='update';this.values=values;return this;}single(){return this.execute(true);}maybeSingle(){return this.execute(true);}then(resolve,reject){return this.execute(false).then(resolve,reject);}
+ async execute(single){const p=[...this.params];const bind=v=>{p.push(v!==null&&typeof v==='object'?JSON.stringify(v):v);return '$'+p.length;};const where=this.filters.length?' WHERE '+this.filters.join(' AND '):'';const sql=this.op==='insert'?'INSERT INTO '+q(this.table)+' ('+Object.keys(this.values).map(q).join(',')+') VALUES ('+Object.values(this.values).map(bind).join(',')+') RETURNING *':this.op==='update'?'UPDATE '+q(this.table)+' SET '+Object.entries(this.values).map(([k,v])=>q(k)+'='+bind(v)).join(',')+where+' RETURNING *':'SELECT * FROM '+q(this.table)+where+(this.orderSql||'')+(this.rangeSql||'');try{const r=await db.query(sql,p);const data=JSON.parse(JSON.stringify(r.rows));return {data:single?data[0]||null:data,error:null};}catch(error){return {data:null,error};}}
+}
+try{
+ await db.exec('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;GRANT USAGE ON SCHEMA public TO anon,authenticated,service_role;ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role');
+ await db.exec('CREATE TABLE customers(id text primary key,organization_id text,deleted_at timestamptz);CREATE TABLE consumer_units(id text primary key,organization_id text,customer_id text);CREATE TABLE energy_contracts(id text primary key,organization_id text,customer_id text,consumer_unit_id text,contract_type text,status text,start_date date,end_date date);CREATE TABLE documents(id text primary key,organization_id text,customer_id text,consumer_unit_id text,energy_contract_id text,reference_month date,original_filename text,file_verified boolean,file_hash text)');
+ const migration=readFileSync(new URL('../../src/database/migrations/20260928_f1_122_spot_reconciliation.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002',hash='a'.repeat(64);
+ await db.query("INSERT INTO customers VALUES ($1,'org-a',null),($2,'org-b',null)",[a,b]);await db.query("INSERT INTO consumer_units VALUES ($1,'org-a',$1),($2,'org-b',$2)",[a,b]);await db.query("INSERT INTO energy_contracts VALUES ($1,'org-a',$1,$1,'ENERGY_PURCHASE','ACTIVE','2026-08-01','2026-08-31'),($2,'org-b',$2,$2,'ENERGY_PURCHASE','ACTIVE','2026-08-01','2026-08-31')",[a,b]);
+ await db.query("INSERT INTO documents VALUES ($1,'org-a',$1,$1,null,'2026-08-01','proof.pdf',true,$3),($2,'org-b',$2,$2,null,'2026-08-01','private.pdf',true,$3)",[a,b,hash]);await db.exec('SET ROLE service_role');
+ const payload={organizationId:'org-a',customerId:a,unitId:a,month:'2026-08',contract:{id:a}},supplier={contract:{id:a},reconciliationContext:{hash,payload},requirements:[{code:'SPOT_VOLUME_DIFFERENCE'}]};
+ let entitled=true;const licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(Error('license'),{getStatus:()=>403});}},preparation={inspect:async()=>({contractSupplierCost:supplier})};
+ const s=new SpotReconciliationService({getClient:()=>({from:t=>new Query(t)})},licenses,preparation),t={organizationId:'org-a',userId:'actor',role:'gestor',permissions:[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_UPDATE]},body={contractId:a,month:'2026-08',documentId:a,sourceHash:hash,status:'PENDING',reason:'Documentary explanation for this difference',confirmed:true};
+ const deny=async(fn,status)=>{await assert.rejects(fn,e=>e.getStatus?.()===status);checks++;};
+ const r=await s.create(body,t);ok(r.version===1&&r.created_by==='actor');ok((await s.list({contractId:a,month:'2026-08'},t)).documents.length===1);
+ await deny(()=>s.create(body,t),409);await deny(()=>s.create({...body,documentId:b,previousId:r.id},t),400);await deny(()=>s.create({...body,sourceHash:'b'.repeat(64)},t),409);
+ for(const patch of [{organizationId:'org-b'},{created_by:'forged'},{reason:'short'},{confirmed:false},{month:'2026-13'},{status:'APPROVED'}])await deny(()=>s.create({...body,...patch},t),400);
+ await deny(()=>s.list({contractId:b,month:'2026-08'},t),404);await deny(()=>s.create(body,{...t,role:'operador'}),403);await deny(()=>s.list({contractId:a,month:'2026-08'},{...t,permissions:[P.ORGANIZATION_CONTRACTS_VIEW]}),403);
+ const r2=await s.create({...body,status:'APPROVED_NO_COST',previousId:r.id},t);ok(r2.version===2);ok((await s.list({contractId:a,month:'2026-08'},t)).rows.length===2);
+ supplier.requirements.push({code:'CYCLE_OPEN'});await deny(()=>s.create({...body,status:'APPROVED_NO_COST',previousId:r2.id},t),400);supplier.requirements.pop();
+ entitled=false;await deny(()=>s.list({contractId:a,month:'2026-08'},t),403);entitled=true;
+ for(const sql of ['DELETE FROM supplier_spot_reconciliations',"UPDATE supplier_spot_reconciliations SET reason='overwrite'"]){await assert.rejects(()=>db.exec(sql),e=>e.code==='42501');checks++;}
+ await db.exec('RESET ROLE');await assert.rejects(()=>db.exec('DELETE FROM supplier_spot_reconciliations'),e=>e.code==='P1222');checks++;
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>db.exec('SELECT * FROM supplier_spot_reconciliations'),e=>e.code==='42501');checks++;await db.exec('RESET ROLE');}
+ console.log('Spot reconciliation: '+checks+' database/service checks passed.');
+}finally{await db.close();}
