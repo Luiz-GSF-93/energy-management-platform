@@ -138,3 +138,8 @@ Após homologação de faturas: validar e implementar conectores CCEE para EER, 
 ## F1.128 — Integração da conciliação monetária
 
 Implementação e critérios em [F1.128](checkpoints/f1.128-invoice-adjustments-implementation.md): ajustes OCR em versão auditada, total CPFL conciliado incluindo CIP uma única vez, ICMS do fornecedor confirmado por dentro com referência ACL e consolidação dos créditos. Migração aplicada; verificar publicação e resultados da amostra antes de encerrar a homologação. Integração API CCEE permanece no cronograma posterior.
+
+
+## F1.128 — Encerramento técnico da amostra em produção
+
+[Resultado e evidências](checkpoints/f1.128-cpfl-sample-closeout.md): custos v4, conciliação v10 e revisão interna v7, com zero bloqueios e três pontos de revisão. Total CPFL R$ 40.583,96; ICMS Axia R$ 3.700,36; ACL após honorários R$ 65.794,17. Homologação técnica da amostra concluída, ressalvas documentais preservadas. API CCEE é a integração técnica adiada nesta fase; próxima amostra Neoenergia A4 ou Cemig. O diagnóstico anterior registra o estado histórico antes da correção.
