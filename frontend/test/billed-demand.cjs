@@ -19,13 +19,13 @@ const toggle=async(s)=>{const el=Array.from(document.querySelectorAll('label')).
 (async()=>{try{
  await act(async()=>root.render(React.createElement(Inputs,{customerId:'c',units,initialContext:ctx,onDirty:()=>{}})));
  await act(async()=>button('Novo rascunho mensal').click());ok(!label('Demanda faturável ACL · Única (kW)'),'billing opt in, no default quantity');
- await toggle('ACL');await input('Demanda faturável ACL · Única (kW)','12,5');await input('Fonte e regra da demanda faturável ACL','Fatura p2');
+ await toggle('ACL');await input('Demanda faturável ACL · Única (kW)','12,5');await input('Fonte e regra da demanda faturável ACL','Fatura p2');await input('Demanda faturável ACL · Parcela utilizada (verde) (kW)','10');await input('Demanda faturável ACL · Parcela não utilizada (verde) (kW)','2.5');
  await toggle('ACR');await input('Demanda faturável ACR · Única (kW)','15');await input('Fonte e regra da demanda faturável ACR','Regra ACR');
  ok(label('Demanda faturável ACL · Única (kW)').querySelector('input').value==='12.5','exact decimal normalization');
  await input('Consumo total (kWh)','100');await input('Fonte e evidência das medições','Relatório');
  let payload;handler=async(url,options)=>{payload=options.body;throw Error('Falha simulada');};
  await act(async()=>document.querySelectorAll('form')[1].dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- ok(payload.consumerUnitId==='u'&&payload.month==='2026-10','same unit and competence');ok(payload.billedDemand.ACL.single==='12.5'&&payload.billedDemand.ACR.single==='15','distinct billing scenarios saved');ok(payload.billedDemand.ACL.source==='Fatura p2','source included');ok(label('Demanda faturável ACR · Única (kW)').querySelector('input').value==='15','failed save preserves input');
+ ok(payload.consumerUnitId==='u'&&payload.month==='2026-10','same unit and competence');ok(payload.billedDemand.ACL.single==='12.5'&&payload.billedDemand.ACR.single==='15','distinct billing scenarios saved');ok(payload.billedDemand.ACL.source==='Fatura p2','source included');ok(payload.billedDemand.ACL.used==='10'&&payload.billedDemand.ACL.unused==='2.5','split quantities preserved');ok(label('Demanda faturável ACR · Única (kW)').querySelector('input').value==='15','failed save preserves input');
  await toggle('ACR');await act(async()=>document.querySelectorAll('form')[1].dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));ok(!payload.billedDemand.ACR&&payload.billedDemand.ACL.single==='12.5','removal is explicit and isolated');
  await act(async()=>root.render(React.createElement('div')));
  const row={id:'m',consumer_unit_id:'u',month:'2026-10',version:1,revision:2,status:'VALIDATED',measurements:{consumptionTotal:'100'},billed_demand:{ACL:{single:'12.5',peak:null,offPeak:null,source:'Fatura original'}},source_reference:'Fonte',notes:'',updated_at:'2026-10-01',validated_at:'2026-10-01',validated_by:'a'};

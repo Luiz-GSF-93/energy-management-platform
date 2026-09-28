@@ -28,7 +28,7 @@ export class ParameterDto {
  @IsIn(['ACL','ACR']) scenario!:string;
  @IsIn(['ALL','PEAK','OFF_PEAK']) timeBand!:string;
  @IsIn(['BRL_KWH','BRL_MWH','BRL_KW','BRL_KVARH','BRL_MONTH','PERCENT']) measure!:string;
- @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) amount?:string|null;
+ @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,9})?$/) amount?:string|null;
  @IsIn(['NET','GROSS','INSIDE','OUTSIDE','INCLUDED','EXEMPT','NOT_APPLICABLE']) treatment!:string;
  @IsString() @MaxLength(500) includedTaxes!:string;
  @IsString() @MaxLength(4096) baseRule!:string;

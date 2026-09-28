@@ -10,6 +10,8 @@ export class MonthlyMeasurementsDto {
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) reactiveTotal?:string|null;
 }
 export class BilledDemandScenarioDto {
+ @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) used?:string|null;
+ @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) unused?:string|null;
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) single?:string|null;
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) peak?:string|null;
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) offPeak?:string|null;
