@@ -5,11 +5,11 @@ import {apiRequest} from '@/app/lib/api/client';
 import {comparisonMoney} from './comparison-view';
 import type {CorrectionContext} from './preparation-navigation';
 export type Preview={status:'BLOCKED'|'AVAILABLE';formulaVersion:string;month:string;customerId:string;unitCount:number;acr:string|null;aclBeforeFees:string|null;savingsBeforeFees:string|null;fixedFee:string|null;variableFee:string|null;totalFees:string|null;aclAfterFees:string|null;savingsAfterFees:string|null;savingsPercent:string|null;contract:null|{id:string;number:string;model:string;percentage:string};allocation:null|{id:string;version:number;source:string};units:{id:string;name:string;acr:string|null;aclBeforeFees:string|null;fixedFee:string|null;variableFee:string|null;totalFees:string|null;aclAfterFees:string|null;savingsAfterFees:string|null;allocationPercent:string|null;checkedAt:string|null;references:{id:string;revision:number;group:string;scenario:string;source:string}[];blockers:string[]}[];blockers:string[];warnings:string[];checkedAt:string};
-type Props={customerId:string;month:string;onCorrect?:(c:CorrectionContext)=>void;onResult?:(data:Preview|null)=>void;automatic?:boolean};
+type Props={customerId:string;month:string;onCorrect?:(c:CorrectionContext)=>void;onResult?:(data:Preview|null)=>void;automatic?:boolean;initialData?:Preview|null};
 export default function CustomerFinancialPreview(props:Props){return <ScopedCustomerPreview key={props.customerId+':'+props.month} {...props}/>;}
-function ScopedCustomerPreview({customerId,month,onCorrect,onResult,automatic}:Props){
- const [data,setData]=useState<Preview|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');const request=useRef(0);
- useEffect(()=>{if(automatic)void inspect();return ()=>{request.current++;};},[]);
+function ScopedCustomerPreview({customerId,month,onCorrect,onResult,automatic,initialData}:Props){
+ const [data,setData]=useState<Preview|null>(initialData?.customerId===customerId&&initialData?.month===month?initialData:null),[busy,setBusy]=useState(false),[error,setError]=useState('');const request=useRef(0);
+ useEffect(()=>{if(automatic&&!initialData)void inspect();return ()=>{request.current++;};},[]);
  async function inspect(){const id=++request.current;setBusy(true);setError('');setData(null);onResult?.(null);try{const r=await apiRequest<Preview>('/api/v1/calculation-preparation/customer?customerId='+encodeURIComponent(customerId)+'&month='+encodeURIComponent(month));if(id===request.current){if(r.customerId!==customerId||r.month!==month)throw Error('A resposta não corresponde ao cliente e à competência selecionados.');setData(r);onResult?.(r);}}catch(e){if(id===request.current)setError(e instanceof Error?e.message:'Não foi possível consolidar o cliente.');}finally{if(id===request.current)setBusy(false);}}
  const ready=data?.status==='AVAILABLE'&&!data.blockers.length;
  const value=(v:string|null)=>comparisonMoney(v??undefined);

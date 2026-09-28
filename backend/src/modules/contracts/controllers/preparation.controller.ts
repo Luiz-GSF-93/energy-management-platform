@@ -8,6 +8,7 @@ import {CalculationPreparationService} from '../services/preparation.service';
 @Controller('calculation-preparation')
 export class CalculationPreparationController {
  constructor(private service:CalculationPreparationService){}
+ @Get('combined') @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) inspectCombined(@Query() d:PreparationQueryDto,@Tenant() t:TenantContext){return this.service.inspectCombined(d,t.organizationId);}
  @Get('customer') @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) inspectCustomer(@Query() d:CustomerPreparationQueryDto,@Tenant() t:TenantContext){return this.service.inspectCustomer(d,t.organizationId);}
  @Get() @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) inspect(@Query() d:PreparationQueryDto,@Tenant() t:TenantContext){return this.service.inspect(d,t.organizationId);}
 }
