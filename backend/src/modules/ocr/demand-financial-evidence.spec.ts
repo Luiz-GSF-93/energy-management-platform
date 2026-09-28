@@ -1,0 +1,18 @@
+import {demandFinancialEvidence as evidence} from './demand-financial-evidence';
+function row(){const field=(decimal:string|null,text=decimal??'')=>({text,decimal,confidence:0.99,pages:[1],spans:[{offset:0,length:1}],issues:[]});return {source:'tables[3].row[3]',component:'DEMAND_BILLED',role:'CHARGE',issues:[],fields:{unit:field(null,'kW'),quantity:field('234.6400'),grossRate:field('15.123456789'),amount:field('3548.57')}} as any;}
+describe('demand financial evidence without writes or inference',()=>{
+ it('reconciles a nine-decimal tariff exactly with HALF_UP',()=>{const r=row(),before=JSON.stringify(r),out=evidence([r])[0];expect(out).toMatchObject({state:'MATCH',calculated:'3548.57',amount:'3548.57',differenceCents:'0',canImport:false,confidence:0.99});expect(JSON.stringify(r)).toBe(before);});
+ it('preserves independent rates for used and unused billed lines',()=>{const a=row(),b=row();b.source='tables[3].row[4]';b.fields.quantity.decimal='265.3600';b.fields.grossRate.decimal='12.000000001';b.fields.amount.decimal='3184.32';const out=evidence([a,b]);expect(out.map(x=>x.calculated)).toEqual(['3548.57','3184.32']);expect(out[0].rate).not.toBe(out[1].rate);});
+ it('uses half-up rather than floating point for half cents',()=>{const r=row();r.fields.quantity.decimal='1';r.fields.grossRate.decimal='0.005';r.fields.amount.decimal='0.01';expect(evidence([r])[0].state).toBe('MATCH');});
+ it('reports one-cent divergence instead of treating it as equal',()=>{const r=row();r.fields.amount.decimal='3548.56';expect(evidence([r])[0]).toMatchObject({state:'DIVERGENT',differenceCents:'1'});});
+ it('reports negative differences without altering invoice values',()=>{const r=row();r.fields.amount.decimal='3548.58';expect(evidence([r])[0]).toMatchObject({state:'DIVERGENT',differenceCents:'-1',amount:'3548.58'});});
+ it('never interprets absent ICMS as zero or blocks independent arithmetic',()=>{const out=evidence([row()])[0];expect(out.state).toBe('MATCH');expect(out).not.toHaveProperty('icms');expect(out).not.toHaveProperty('measuredDemand');});
+ it.each(['unit','quantity','grossRate','amount'])('requires source evidence for %s',key=>{const r=row();r.fields[key].spans=[];expect(evidence([r])[0]).toMatchObject({state:'UNAVAILABLE',calculated:null,confidence:null});});
+ it.each(['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN'])('blocks ambiguous row %s',issue=>{const r=row();r.issues.push(issue);expect(evidence([r])[0].state).toBe('UNAVAILABLE');});
+ it('rejects duplicate sources',()=>expect(evidence([row(),row()]).every(r=>r.state==='UNAVAILABLE')).toBe(true));
+ it('requires confidence above the configured 85% boundary',()=>{const r=row();r.fields.quantity.confidence=0.85;expect(evidence([r])[0]).toMatchObject({state:'REVIEW_REQUIRED',calculated:'3548.57',confidence:0.85});});
+ it('uses verified words only when field confidence is absent',()=>{const r=row();r.fields.grossRate.confidence=null;r.fields.grossRate.issues=['MISSING_CONFIDENCE'];r.fields.grossRate.transcription={state:'VERIFIED_WORDS',wordCount:1,confidence:0.96};expect(evidence([r])[0]).toMatchObject({state:'MATCH',confidence:0.96});r.fields.grossRate.confidence=0.4;expect(evidence([r])[0].state).toBe('REVIEW_REQUIRED');});
+ it.each(['-1','NaN','1e3','1.1234567890','9999999999999'])('rejects unsupported rate %s',rate=>{const r=row();r.fields.grossRate.decimal=rate;expect(evidence([r])[0].calculated).toBeNull();});
+ it('does not use kWh as kW',()=>{const r=row();r.fields.unit.text='kWh';expect(evidence([r])[0].state).toBe('UNAVAILABLE');});
+ it('omits informational lines and non-demand components',()=>{const a=row(),b=row();a.role='INFORMATION';b.component='TUSD_ENERGY';expect(evidence([a,b])).toEqual([]);});
+});
