@@ -40,3 +40,8 @@ describe('explicit operational monetary bases',()=>{
  it('rejects duplicate monthly item',()=>{const f=fixture();f.parameters=[parameter('MONTHLY_CCEE')];f.costs.groups[0].lines.push({...f.costs.groups[0].lines[0]});blocked(f);});
  it('does not mutate inputs',()=>{const f=fixture(),before=JSON.stringify(f);expect(run(f)).toEqual(run(f));expect(JSON.stringify(f)).toBe(before);});
 });
+
+describe('spot documentary references',()=>{
+ it('carries the validated cost version and invoice item without adding the invoice again',()=>{const f=fixture();Object.assign(f.supplier,{formulaVersion:'spot-supplier-1.0',regularAmount:'16857.18',minimumAmount:'0.00',costVersion:f.costs.version,invoiceSources:[{id:'nf',category:'SUPPLIER_INVOICE',effect:'COST',amount:'16857.18',source:'Nota conferida'}]});const r=run(f);expect(r.lines).toHaveLength(1);expect(r.lines[0].amount).toBe('16857.18');expect(r.lines[0].references.map(x=>x.id)).toEqual(['rule','contract','measure','costs','nf']);});
+ it('rejects a ready spot result without documentary provenance',()=>{const f=fixture();Object.assign(f.supplier,{formulaVersion:'spot-supplier-1.0',minimumAmount:'0.00'});blocked(f);});
+});

@@ -1,3 +1,4 @@
+import {spotSupplierCost} from './spot-supplier-cost';
 import {monthPeriod} from './preparation';
 import {prepareMeasurements} from './preparation-measurements';
 import {monthlyCostLedger} from './monthly-cost-ledger';
@@ -30,16 +31,18 @@ export function contractSupplierCost(unit:any,month:string,contracts:any[],price
  if(!a){need('BILLING_RULE','Confirme as condições de faturamento: volume mensal, mínimo, máximo, preço e tributos.','supply');return r;}
  if(day(a.start_date)>period.start||day(a.end_date)<period.end||!Number.isInteger(a.version)||a.version<1||applicable.filter(v=>v.version===a.version).length!==1||!a.source?.trim()){need('PARTIAL_RULE','A condição mais recente não cobre todo o mês ou é inconsistente. Não há divisão automática por dias.','supply');return r;}
  r.rule={id:a.id,version:a.version,source:a.source,indexSource:a.index_source};r.taxTreatment=a.tax_treatment;
+ const spot=a.volume_basis==='SPOT';
+ if(spot){r.formulaVersion='spot-supplier-1.0';r.warnings=['Compra pontual da competência: volume comprado × preço final conciliado com uma única nota validada. Não aplica take-or-pay, mínimo ou tolerância.','O consumo OCR é preservado. Diferenças de volume ou valor impedem a consolidação até a conciliação documental.','A nota compõe o custo uma vez; não lançar a mesma compra novamente como exposição ou compra extra.'];if(day(a.start_date)!==period.start||day(a.end_date)!==period.end||a.min_percent!=null||a.max_tolerance_percent!=null||a.price_mode!=='FINAL'){need('SPOT_RULE','Compra pontual exige a competência completa, preço final e ausência de limites contratuais.','supply');return r;}}
  let volume:bigint,price:bigint,min:bigint,max:bigint;
  try{
-  if(a.volume_basis==='MONTHLY')volume=dec(c.contracted_volume_mwh,6)*1000000n;
+  if(a.volume_basis==='MONTHLY'||spot)volume=dec(c.contracted_volume_mwh,6)*1000000n;
   else if(a.volume_basis==='SEASONAL'){
    const schedules=Array.isArray(c.seasonal_volumes)?c.seasonal_volumes.filter((s:any)=>s.year===Number(month.slice(0,4))):[];
    if(!['MONTHLY','BOTH'].includes(c.seasonality_mode)||schedules.length!==1)throw Error('Cadastre a distribuição sazonal explícita do ano.');
    const s=schedules[0],ps=s.monthlyPercentages?.map((v:any)=>dec(v,4));if(!ps||ps.length!==12||ps.some((v:bigint)=>v>1000000n)||ps.reduce((v:bigint,n:bigint)=>v+n,0n)!==1000000n)throw Error('Os percentuais sazonais devem somar exatamente 100%.');
    volume=dec(s.annualVolumeMwh,6)*ps[Number(month.slice(5))-1];
   }else throw Error('Confirme se o volume contratado é mensal ou sazonal.');
-  const limits=supplierVolumeLimits(volume,a.min_percent,a.max_tolerance_percent);min=limits.min;max=limits.max;
+  const limits=spot?{min:0n,max:0n}:supplierVolumeLimits(volume,a.min_percent,a.max_tolerance_percent);min=limits.min;max=limits.max;
   const history=prices.filter(p=>p.contract_id===c.id&&day(p.start_date)<=period.end&&day(p.end_date)>=period.start);
   const table=Array.isArray(c.annual_prices)?c.annual_prices.filter((p:any)=>day(p.startDate)<=period.end&&day(p.endDate)>=period.start):[];
   if(history.length&&table.length)throw Error('Concilie a tabela de preços e o histórico: há duas fontes na competência.');
@@ -51,11 +54,12 @@ export function contractSupplierCost(unit:any,month:string,contracts:any[],price
   else if(a.price_mode==='BASE_PLUS_INDEX'){if(p.status!=='BASE'||!a.index_source?.trim())throw Error('O reajuste exige preço-base e fonte. Preço final não recebe índice novamente.');const index=signed(a.index_percent);if(index<=-100000000n||index>9999000000n)throw Error('Índice acumulado inválido.');price=round(base*(100000000n+index),100n);}
   else throw Error('Confirme a forma de aplicação do preço.');
   if(!['NET','GROSS'].includes(a.tax_treatment))throw Error('Informe o tratamento tributário do preço contratual.');
-  r.contractedMwh=fixed(volume);r.minMwh=fixed(min);r.maxMwh=fixed(max);r.pricePerMwh=fixed(price);r.priceSource=p.source;
+  r.contractedMwh=fixed(volume);r.minMwh=spot?null:fixed(min);r.maxMwh=spot?null:fixed(max);r.pricePerMwh=fixed(price);r.priceSource=p.source;
  }catch(e){need('CONDITIONS',e instanceof Error?e.message:'Revise as condições contratuais.','supply');return r;}
  const measured=prepareMeasurements(unit,month,inputs);r.measurements=measured.validatedVersion;
  if(measured.status!=='VALIDATED'||measured.findings.some(f=>f.severity==='BLOCKER')){for(const f of measured.findings.filter(f=>f.severity==='BLOCKER'))need(f.code,f.message,'monthly');if(!r.requirements.length)need('MONTHLY_VOLUME','Registre e valide o volume do mês em Dados mensais.','monthly');return r;}
  if(supplierToday(now)<=period.end)need('CYCLE_OPEN','O ciclo ainda não terminou. A conferência é preliminar; aguarde o encerramento do mês.','monthly');
+ if(spot)return spotSupplierCost(r,unit,month,volume,price,costRows);
  try{
   const m=measured.validatedVersion!.measurements,consumed=dec(m.consumptionTotal,6)*1000n,peak=dec(m.consumptionPeak,6)*1000n,off=dec(m.consumptionOffPeak,6)*1000n;
   if(peak+off!==consumed)throw Error('Ponta e fora ponta devem totalizar o consumo medido.');
