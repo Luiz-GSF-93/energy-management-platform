@@ -15,6 +15,10 @@ function checkedScenario(c:OperationalComposition,scenario:'ACL'|'ACR'){
 }
 /** Explicitly preliminary: all currently registered customer units, no invoice, snapshot or publication. */
 export function customerFinancialPreview(org:string,customerId:string,month:string,units:any[],inputs:CustomerUnitInput[],contracts:any[],rules:any[]):CustomerFinancialPreview{
+ // SQL timestamp without time zone is used by the legacy contract table.
+ // Accept only date-only or midnight encodings; never shift the contractual day.
+ const contractDay=(v:any)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T00:00:00(?:\.0{1,6})?(?:Z|[+]00:00)?$/.test(v)?v.slice(0,10):v;
+ contracts=contracts.map(c=>({...c,start_date:contractDay(c.start_date),end_date:contractDay(c.end_date)}));
  const period=monthPeriod(month);const out:CustomerFinancialPreview={formulaVersion:'customer-financial-preview-1.0',status:'BLOCKED',month,customerId,unitCount:units.length,acr:null,aclBeforeFees:null,savingsBeforeFees:null,fixedFee:null,variableFee:null,totalFees:null,aclAfterFees:null,savingsAfterFees:null,savingsPercent:null,contract:null,allocation:null,units:[],blockers:[],warnings:[
  'Prévia das rubricas revisadas de todas as unidades atualmente cadastradas neste cliente. Não exclui automaticamente unidades sem dados; qualquer pendência bloqueia o consolidado.',
  'Economia antes dos honorários = ACR − ACL operacional. No híbrido, percentual × máximo(economia consolidada, zero), antes de descontar qualquer fixo. O fixo é integral por unidade; somente o variável é rateado.',

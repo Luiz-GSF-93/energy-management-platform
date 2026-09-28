@@ -19,8 +19,8 @@ export default function OcrLayoutEvidence({evidence:e,documentId}:{evidence:Layo
  const dialog=useRef<HTMLDialogElement>(null);
  const uncertain=e.operations.flatMap(r=>e.columns.flatMap(([k,label])=>{const f=r.fields[k],c=f?.transcription?.confidence;return typeof c==='number'&&c<=0.85?[{source:r.source,key:k,label,description:r.fields.description?.text||'Linha sem descrição',field:f}]:[];}));
  return <section aria-label="Biblioteca e cobertura do layout" style={box}>
-  <strong>{e.name}</strong><p>Versão {e.version} · Em homologação</p>
-  <p>{e.operations.length} linhas estruturadas da tabela. Importação automática: não liberada.</p>
+  <strong>{e.name}</strong><p>Versão {e.version} · Extração original preservada</p>
+  <p>{e.operations.length} linhas estruturadas da tabela. Consulte as conferências e integrações atuais para verificar a aprovação desta fatura.</p>
   <button type="button" onClick={()=>{setReviewRevision(v=>v+1);dialog.current?.showModal();}}>Conferir layout e biblioteca</button>
   <dialog ref={dialog} aria-label="Conferência do layout da distribuidora" style={{width:'min(1400px,96vw)',maxHeight:'92vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
    <div style={{display:'flex',justifyContent:'space-between',gap:16}}><h2>{e.name}</h2><button type="button" onClick={()=>dialog.current?.close()}>Fechar layout</button></div>
@@ -38,7 +38,7 @@ export default function OcrLayoutEvidence({evidence:e,documentId}:{evidence:Layo
    {e.measurements&&<OcrMeasurements evidence={e.measurements}/>}
    <h3>Medições e informações complementares</h3><p>Históricos podem ter valores arredondados e não preenchem as medições do mês. Cabeçalho de micro/mini geração sem valores não comprova participação em GD.</p>
    {e.blocks.map(b=><details key={b.source} style={box}><summary>{b.label} · {b.rows.length} linhas</summary><div style={{overflowX:'auto'}}><table><caption>Bloco da fatura · {b.source}</caption><tbody>{b.rows.map(r=><tr key={r.index}>{r.cells.map((c,i)=><td key={i} colSpan={c.columnSpan} rowSpan={c.rowSpan} style={{padding:12,minWidth:140,verticalAlign:'top',borderBottom:'1px solid #40516b'}}><Value f={c.value}/></td>)}</tr>)}</tbody></table></div></details>)}
-   <details style={box}><summary>Biblioteca de layouts e próximos testes</summary>{e.library.map(l=><article key={l.id} style={box}><h3>{l.name}</h3><p>{l.status==='PLANNED'?'Planejado':'Em homologação'}{l.version?' · Versão '+l.version:''}</p><p>{l.scope}</p><ul>{l.pending.map(p=><li key={p}>{p}</li>)}</ul></article>)}</details>
+   <details style={box}><summary>Biblioteca de layouts e próximos testes</summary>{e.library.map(l=><article key={l.id} style={box}><h3>{l.name}</h3><p>{l.status==='PLANNED'?'Planejado':l.status==='SAMPLE_VALIDATED'?'Fluxo validado em amostra — novas faturas sujeitas à conferência':'Em homologação'}{l.version?' · Versão '+l.version:''}</p><p>{l.scope}</p><ul>{l.pending.map(p=><li key={p}>{p}</li>)}</ul></article>)}</details>
   </dialog>
  {original.viewer}</section>;
 }
