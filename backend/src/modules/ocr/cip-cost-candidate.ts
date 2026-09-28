@@ -20,5 +20,5 @@ export function cipCostCandidate(rows:CpflOperation[],month:string){
  if(refs.length!==1||((refs[0][2].length===2?'20':'')+refs[0][2]+'-'+String(months.indexOf(refs[0][1])+1).padStart(2,'0'))!==month)return blocked('A competência da linha CIP precisa coincidir com a fatura.');
  if(result.descriptionConfidence===null||result.amountConfidence===null||result.descriptionConfidence<=.85||result.amountConfidence<=.85)return blocked('Descrição e valor da CIP precisam de confiança acima de 85% e evidência verificável.');
  if(!/^(0|[1-9][0-9]{0,11})[.]\d{2}$/.test(result.amount??'')||BigInt(result.amount!.replace('.',''))<=0n)return blocked('Valor positivo da CIP em centavos não identificado.');
- return {...result,ready:true,reason:'CIP disponível para rascunho ACL. Tratamento tributário e completude dos custos permanecem pendentes.'};
+ return {...result,ready:true,reason:'CIP disponível pelo valor final cobrado na fatura, sem acréscimo de tributos. Confira a completude dos custos antes de validar.'};
 }
