@@ -1,3 +1,4 @@
+import {elektroMeasurementAudit} from './elektro-measurement-audit';
 import {reconcileDemand} from './demand-reconciliation';
 import {loadDemandRegistration} from './demand-registration';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
@@ -56,7 +57,7 @@ export class OcrQueueService {
   const {raw,assessment,doc}=verified;
   const layout=extractCpflPaulistaLayout(raw);
   if(layout.preparation){const registration=await loadDemandRegistration(this.db.getClient(),doc);Object.assign(layout.preparation.demand,{registration,reconciliation:reconcileDemand(layout.preparation.demand,'history' in registration?registration.history:null)});}
-  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,layout,electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
+  return {...assessment.intake,canImport:false,checkedAt:assessment.checkedAt,elektroAudit:elektroMeasurementAudit(raw,assessment.registration?.customer?.document),layout,electrical:extractElectricalEvidence(raw),gd:extractGdEvidence(raw),readoutSummary:ocrReadoutSummary(raw,assessment.intake.checks)};
  }
  private async verified(org:string,document:string,job:string){
   const db=this.db.getClient();

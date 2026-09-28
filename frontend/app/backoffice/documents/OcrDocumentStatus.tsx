@@ -1,4 +1,5 @@
 'use client';
+import OcrElektroAudit,{type ElektroAudit} from './OcrElektroAudit';
 import OcrHomologation from './OcrHomologation';
 import OcrDemandReviews from './OcrDemandReviews';
 import OcrIdentityPreview from './OcrIdentityPreview';
@@ -10,7 +11,7 @@ import {useEffect,useRef,useState} from 'react';
 import OcrElectricalEvidence, {type ElectricalEvidence} from './OcrElectricalEvidence';
 import {apiRequest} from '@/app/lib/api/client';
 type Job={id:string;state:string;errorCode:string|null};
-type Intake={layout?:LayoutEvidence;readoutSummary?:ReadoutSummary;gd?:GdEvidence;electrical?:ElectricalEvidence;decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
+type Intake={elektroAudit?:ElektroAudit|null;layout?:LayoutEvidence;readoutSummary?:ReadoutSummary;gd?:GdEvidence;electrical?:ElectricalEvidence;decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
 type Status={enabled:boolean;job:Job|null;intake?:Intake|null};
 const labels:Record<string,string>={QUEUED:'Na fila',SUBMITTING:'Enviando para leitura',POLLING:'Leitura em andamento',SUCCEEDED:'Extração recebida — aguarda conferência',FAILED:'Leitura interrompida',SUBMISSION_UNKNOWN:'Envio indeterminado — requer verificação administrativa'};
 export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:boolean}){
@@ -36,6 +37,7 @@ export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:
   {status?.intake?.layout?.preparation&&<OcrFieldReviews key={id} id={id} canReview={canProcess}/>}
   {status?.intake?.layout?.preparation?.demand&&<OcrDemandReviews key={id} id={id} canReview={canProcess}/>}
   {status?.intake?.layout&&<OcrLayoutEvidence evidence={status.intake.layout} documentId={id}/>}
+  {status?.intake?.elektroAudit&&<OcrElektroAudit evidence={status.intake.elektroAudit}/>}
   {status?.intake?.electrical&&<OcrElectricalEvidence evidence={status.intake.electrical}/>}
   {status?.intake?.gd&&<OcrGdEvidence evidence={status.intake.gd}/>}
  </div>;
