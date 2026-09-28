@@ -4,7 +4,7 @@ import {apiRequest} from '@/app/lib/api/client';
 type Preview={token:string;state:string;canCreate:boolean;message:string;targetVersion:number;inputId:string|null;parameterIds:string[]};
 export default function OcrSplitDemandIntegration({documentId,onIntegrated}:{documentId:string;onIntegrated?:()=>Promise<void>}){
  const [data,setData]=useState<Preview|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
- const url='/documents/'+encodeURIComponent(documentId)+'/ocr/split-demand-integration';
+ const url='/api/v1/documents/'+encodeURIComponent(documentId)+'/ocr/split-demand-integration';
  const refresh=async()=>{setBusy(true);setError('');try{setData(await apiRequest<Preview>(url));}catch{setError('Não foi possível consultar a integração das parcelas. Atualize a situação.');}finally{setBusy(false);}};
  useEffect(()=>{let active=true;setData(null);setError('');setMessage('');apiRequest<Preview>(url).then(v=>{if(active)setData(v);}).catch(()=>{if(active)setError('Não foi possível consultar a integração das parcelas. Atualize a situação.');});return()=>{active=false;};},[url]);
  const integrate=async()=>{if(!data?.canCreate||busy)return;setBusy(true);setError('');try{await apiRequest(url,{method:'POST',body:{token:data.token}});setMessage('Integração salva: parcelas mensais e duas tarifas em rascunho. Histórico e versão anterior preservados.');setData(await apiRequest<Preview>(url));await onIntegrated?.();}catch{setError('A integração não foi confirmada. Atualize a situação antes de tentar novamente; o sistema evita duplicidade.');}finally{setBusy(false);}};
