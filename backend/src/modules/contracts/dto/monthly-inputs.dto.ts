@@ -1,6 +1,8 @@
 import {IsUUID,IsString,IsInt,Min,MaxLength,Matches,IsOptional,ValidateNested,IsObject} from 'class-validator';
 import {Type} from 'class-transformer';
 export class MonthlyMeasurementsDto {
+ @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) reactiveBilledPeakKwh?:string|null;
+ @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) reactiveBilledOffPeakKwh?:string|null;
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) consumptionTotal?:string|null;
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) consumptionPeak?:string|null;
  @IsOptional() @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/) consumptionOffPeak?:string|null;

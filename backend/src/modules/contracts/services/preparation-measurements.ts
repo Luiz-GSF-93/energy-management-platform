@@ -1,4 +1,4 @@
-import {measurementIssues,measurementKeys} from './monthly-inputs';
+import {measurementIssues,measurementKeys,optionalMeasurementKeys} from './monthly-inputs';
 import type {Finding} from './preparation';
 export function prepareMeasurements(unit:any,month:string,rows:any[]){
  const findings:Finding[]=[];
@@ -12,7 +12,7 @@ export function prepareMeasurements(unit:any,month:string,rows:any[]){
  if(scoped.some(r=>!['DRAFT','VALIDATED'].includes(r.status)||!Number.isInteger(r.version)||r.version<1)||new Set(versions).size!==versions.length||drafts.length>1||drafts.some(r=>latest&&r.version<=latest.version))add('MEASUREMENTS_HISTORY','O histórico das medições apresenta inconsistência. Solicite revisão administrativa.');
  if(!latest){if(scoped.length&&!drafts.length)add('MEASUREMENTS_UNVALIDATED','Não há versão validada das medições.');return {...summary,findings};}
  const m=latest.measurements;
- if(!m||typeof m!=='object'||Array.isArray(m)||measurementKeys.some(k=>!(k in m)||(m[k]!==null&&(typeof m[k]!=='string'||!/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/.test(m[k]))))||Object.keys(m).some(k=>!measurementKeys.includes(k as any))){add('MEASUREMENTS_INVALID','A versão validada contém medições inválidas. Registre uma versão corrigida.');return {...summary,status:'INVALID',validatedVersion:null,findings};}
+ if(!m||typeof m!=='object'||Array.isArray(m)||measurementKeys.some(k=>!(k in m)||(m[k]!==null&&(typeof m[k]!=='string'||!/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/.test(m[k]))))||Object.keys(m).some(k=>![...measurementKeys,...optionalMeasurementKeys].includes(k as any))||optionalMeasurementKeys.some(k=>m[k]!=null&&(typeof m[k]!=='string'||!/^(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?$/.test(m[k])))){add('MEASUREMENTS_INVALID','A versão validada contém medições inválidas. Registre uma versão corrigida.');return {...summary,status:'INVALID',validatedVersion:null,findings};}
  for(const message of measurementIssues(m,true))add('MEASUREMENTS_INCONSISTENT',message);
  if(!latest.validated_at||!latest.validated_by||!latest.source_reference?.trim())add('MEASUREMENTS_EVIDENCE','A versão não possui validação ou fonte identificada. Solicite revisão.');
  const contextKeys=['distributor','tariff_group','tariff_subgroup','tariff_modality','state','free_market'];

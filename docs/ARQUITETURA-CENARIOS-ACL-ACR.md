@@ -121,3 +121,8 @@ O diagnóstico reconhece o contrato de honorários cadastrado e diferencia a con
 ## F1.117 — Parcelas de demanda ACR
 
 Demanda única do grupo A Verde admite parcelas utilizadas/não utilizadas também no ACR, com soma exata, fonte e tarifas independentes por cenário. Reaproveitar quantidades ACL exige escolha explícita de mesmas condições de demanda, versão validada atual e contexto compatível; registra versão/revisão de origem sem sobrescrever ACR existente. Históricos e aprovações continuam imutáveis. Não somar demanda total com suas parcelas nem duplicar impostos embutidos.
+
+
+## F1.118 — Reativos faturados por posto
+
+Quantidades de reativo faturado em kWh preservadas separadamente de energia ativa e reativo em kVArh. Integração OCR atômica com duas tarifas ACL em rascunho e histórico imutável; ACR aplica a tarifa aprovada sobre as mesmas quantidades. Bandeira tarifária recebe código explícito TARIFF_FLAG; rótulos livres não determinam fórmulas. Ver ENTREGA-F1.118.md para critérios, testes e pendências de homologação.

@@ -1,0 +1,27 @@
+import {OcrReactiveIntegrationService} from './ocr-reactive-integration.service';
+import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
+import {reactiveParameterCandidates} from './reactive-parameter-candidates';
+jest.mock('./cpfl-paulista-layout',()=>({extractCpflPaulistaLayout:jest.fn()}));
+jest.mock('./reactive-parameter-candidates',()=>({reactiveParameterCandidates:jest.fn()}));
+function setup(){
+ const f=(key:string)=>({key,sourceHash:'a'.repeat(64),state:'EXTRACTED_REVIEW',history:[{id:key,sourceHash:'a'.repeat(64),decision:'CONFIRMED',version:1}]});
+ const identity={fields:['customer','taxId','unit','address','period','market'].map(f)},consumption={fields:['consumptionPeakKwh','consumptionOffPeakKwh','consumptionTotalKwh'].map(f)};
+ const memory:any={state:'RECONCILED',rows:['USED','UNUSED'].map((classification,i)=>({source:'row'+i,classification,quantity:i?'265.3600':'234.6400',rate:i?'8.78135364':'10.70900103',amount:i?'2330.22':'2512.76',review:{id:'review'+i,sourceHash:'a'.repeat(64)}}))};
+ (reactiveParameterCandidates as jest.Mock).mockImplementation(()=>memory.rows.map((r:any,i:number)=>({...r,band:i?'OFF_PEAK':'PEAK',ready:r.classification===(i?'UNUSED':'USED'),rateMwh:'360.23055',rateKwh:'0.36023055'})));
+ (extractCpflPaulistaLayout as jest.Mock).mockReturnValue({layoutId:'cpfl-paulista-a',fields:[{name:'reference',value:{text:'AGO/2026'}}],reconciliation:{state:'MATCH'},operations:['row0','row1'].map((source,i)=>({source,fields:{icmsAmount:{decimal:i?null:'452.30'},pisAmount:{decimal:'24.00'},cofinsAmount:{decimal:'112.55'}}}))});
+ const data:any={calculation_monthly_inputs:[{id:'input',customer_id:'customer',measurements:{},origin:'OCR_REVIEWED',source_ocr_document_id:'doc',revision:3,version:1,status:'VALIDATED',unit_context:{tariff_group:'A',tariff_modality:'GREEN',free_market:true},billed_demand:{ACL:{single:'500'}}}],calculation_parameters:[],document_ocr_reactive_integrations:null};
+ const calls:any[]=[],from=(table:string)=>{const q:any={};for(const k of ['select','eq','in','range','order','limit'])q[k]=(...a:any[])=>{calls.push([table,k,...a]);return q;};q.maybeSingle=async()=>({data:data[table],error:null});q.then=(resolve:any)=>resolve({data:data[table],error:null});return q;};
+ const rpc=jest.fn(async()=>({data:{inputId:'next',parameterIds:['a','b']},error:null})),allowed=jest.fn(async()=>({}));
+ const t:any={organizationId:'org',userId:'actor',role:'gestor'};
+ const source={doc:{id:'doc',organization_id:'org',consumer_unit_id:'unit',customer_id:'customer',reference_month:'2026-08-01',file_hash:'a'.repeat(64)},jobId:'job',raw:{}};
+ const s=new OcrReactiveIntegrationService({getClient:()=>({from,rpc})} as any,{preview:allowed,canWrite:(ctx:any)=>ctx.role==='gestor'} as any,{reviewSource:async()=>source} as any,{list:async()=>identity} as any,{list:async()=>consumption} as any);
+ return {s,t,data,calls,rpc,allowed,identity,memory,source};
+}
+describe('atomic split demand import',()=>{
+ it('sends exact reviewed values in a single RPC with actor and pinned revision',async()=>{const x=setup(),p=await x.s.preview('doc',x.t);expect(p.canCreate).toBe(true);expect(p.targetVersion).toBe(2);await x.s.create('doc',x.t,{token:p.token});expect(x.rpc).toHaveBeenCalledTimes(1);const args:any=x.rpc.mock.calls[0];expect(args[0]).toBe('integrate_ocr_reactive');expect(args[1]).toMatchObject({p_org:'org',p_document:'doc',p_actor:'actor',p_input:'input',p_revision:3});expect(args[1].p_rows[0]).toMatchObject({quantity:'234.6400',rate:'10.70900103',amount:'2512.76'});expect(args[1].p_rows[0].band).toBe('PEAK');expect(x.calls).toContainEqual(['calculation_parameters','eq','organization_id','org']);});
+ it('rejects client amounts and changed source',async()=>{const x=setup(),p=await x.s.preview('doc',x.t);await expect(x.s.create('doc',x.t,{token:p.token,rate:'1'})).rejects.toThrow();x.source.doc.file_hash='b'.repeat(64);await expect(x.s.create('doc',x.t,{token:p.token})).rejects.toThrow();expect(x.rpc).not.toHaveBeenCalled();});
+ it('does not overwrite existing tariff or split quantities',async()=>{const x=setup();x.data.calculation_parameters=[{status:'DRAFT',start_date:'2026-08-01',end_date:'2026-08-31'}];expect((await x.s.preview('doc',x.t)).state).toBe('RECORD_PRESERVED');x.data.calculation_parameters=[];x.data.calculation_monthly_inputs[0].measurements.reactiveBilledPeakKwh='1';expect((await x.s.preview('doc',x.t)).canCreate).toBe(false);});
+ it('requires current reviews and both classifications',async()=>{const x=setup();x.identity.fields[0].history=[];expect((await x.s.preview('doc',x.t)).canCreate).toBe(false);const y=setup();y.memory.rows[1].classification='USED';expect((await y.s.preview('doc',y.t)).canCreate).toBe(false);});
+ it('uses saved integration idempotently without a second mutation',async()=>{const x=setup();x.data.document_ocr_reactive_integrations={input_id:'saved',parameter_ids:['a','b'],source_snapshot:{targetVersion:2}};expect(await x.s.create('doc',x.t,{token:'a'.repeat(64)})).toMatchObject({alreadyIntegrated:true,inputId:'saved'});expect(x.rpc).not.toHaveBeenCalled();});
+ it('preserves permissions and entitlement checks',async()=>{const x=setup();await expect(x.s.create('doc',{...x.t,role:'operador'},{token:'a'.repeat(64)})).rejects.toThrow();x.allowed.mockRejectedValueOnce(new Error('license'));await expect(x.s.preview('doc',x.t)).rejects.toThrow('license');expect(x.rpc).not.toHaveBeenCalled();});
+});

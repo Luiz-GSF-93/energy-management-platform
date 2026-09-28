@@ -7,7 +7,7 @@ import {useAuth} from '@/app/providers';
 import {Unit,PERM} from './types';
 import {acrDemandFromValidated} from './acr-demand-reference';
 import {CorrectionContext} from './preparation-navigation';
-const fields={"consumptionTotal":"Consumo total (kWh)","consumptionPeak":"Consumo na ponta (kWh)","consumptionOffPeak":"Consumo fora ponta (kWh)","demandSingle":"Demanda medida única (kW)","demandPeak":"Demanda medida na ponta (kW)","demandOffPeak":"Demanda medida fora ponta (kW)","reactiveTotal":"Energia reativa excedente (kVArh)"};
+const fields={"consumptionTotal":"Consumo total (kWh)","consumptionPeak":"Consumo na ponta (kWh)","consumptionOffPeak":"Consumo fora ponta (kWh)","demandSingle":"Demanda medida única (kW)","demandPeak":"Demanda medida na ponta (kW)","demandOffPeak":"Demanda medida fora ponta (kW)","reactiveTotal":"Energia reativa excedente (kVArh)","reactiveBilledPeakKwh":"Reativo faturado na ponta (kWh da fatura)","reactiveBilledOffPeakKwh":"Reativo faturado fora ponta (kWh da fatura)"};
 type BilledDemand=Partial<Record<'ACL'|'ACR',{single:string|null;peak:string|null;offPeak:string|null;used?:string|null;unused?:string|null;source:string}>>;
 type Measurements=Record<keyof typeof fields,string|null>;
 type Row=AuditAuthorFields & {unit_context?:Record<string,unknown>;origin?:string;source_ocr_document_id?:string|null;billed_demand?:BilledDemand|null;id:string;consumer_unit_id:string;month:string;version:number;revision:number;previous_id:string|null;status:'DRAFT'|'VALIDATED';measurements:Measurements;source_reference:string;notes:string;correction_reason:string;created_by:string;updated_by:string;validated_by:string|null;validated_at:string|null;updated_at:string};
