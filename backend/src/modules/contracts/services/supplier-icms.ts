@@ -6,6 +6,7 @@ export function supplierIcmsReference(unit:any,month:string,parameters:any[]){
  const period=monthPeriod(month),rows=parameters.filter(p=>p.organization_id===unit.organization_id&&p.customer_id===unit.customer_id&&p.consumer_unit_id===unit.id&&p.scenario==='ACL'&&p.kind==='TAX'&&p.component_code==='ICMS'&&['DRAFT','APPROVED'].includes(p.status)&&p.start_date<=period.end&&p.end_date>=period.start);
  const p=rows[0];
  if(rows.length!==1||p.status!=='APPROVED'||p.start_date>period.start||p.end_date<period.end||!['INCLUDED','INSIDE','OUTSIDE'].includes(p.treatment)||p.measure!=='PERCENT'||p.direction!=='DEBIT'||!p.source?.trim()||!Number.isInteger(p.revision)||p.revision<1||!p.unit_context||['distributor','tariff_group','tariff_subgroup','tariff_modality','state','consumption_class','free_market'].some(k=>(p.unit_context[k]??null)!==(unit[k]??null)))throw Error('Confirme um único ICMS ACL aprovado, com alíquota e vigência cobrindo a competência.');
+ if(!p.amount_text)throw Error('O ICMS ACL aprovado não informa alíquota. Registre a alíquota confirmada por revisão auditada antes de acrescentar o imposto do fornecedor.');
  const rate=rateUnits(p.amount_text);if(rate<=0n||rate>=100000000n)throw Error('ICMS por dentro exige alíquota maior que zero e menor que 100%.');
  return {parameterId:p.id,revision:p.revision,rate:p.amount_text,source:p.source};
 }
