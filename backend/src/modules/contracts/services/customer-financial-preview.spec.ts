@@ -38,3 +38,8 @@ describe('customer preliminary consolidation and fees',()=>{
 });
 
 it('preserves documentary tax reservations in consolidated preview',()=>{const f=fixture();f.inputs[0].composition.qualifications=['Tributos não confirmados: revisão necessária.'];expect(run(f).warnings).toContain('Tributos não confirmados: revisão necessária.');expect(run(f).status).toBe('AVAILABLE');});
+
+describe('legacy SQL contract date compatibility',()=>{
+ it.each(['T00:00:00','T00:00:00.000','T00:00:00Z','T00:00:00+00:00'])('accepts midnight %s without rewriting sources',suffix=>{const f=fixture();f.contracts[0].start_date='2023-05-17'+suffix;f.contracts[0].end_date='2026-12-31'+suffix;const before=JSON.stringify(f);expect(run(f)).toMatchObject({status:'AVAILABLE',totalFees:'4000.00'});expect(JSON.stringify(f)).toBe(before);});
+ it.each(['2026-08-02T00:00:00','2026-02-30T00:00:00','2026-08-01T12:30:00','2026-08-01T00:00:00-03:00'])('keeps invalid or partial date blocked: %s',date=>{const f=fixture();f.contracts[0].start_date=date;blocked(f);});
+});
