@@ -92,3 +92,17 @@ describe('exact split ACL demand',()=>{
  it('rounds nine decimal rates half up',()=>expect(tariffProduct('1','0.005000000').rounded).toBe('0.01'));
  it('keeps quantities limited to six decimals',()=>expect(()=>tariffProduct('1.0000001','1')).toThrow());
 });
+
+describe('ACR split reference demand',()=>{
+ const used={...p,id:'acr-used',scenario:'ACR',component_code:'TUSD_DEMAND_USED',time_band:'ALL',measure:'BRL_KW',amount_text:'20',treatment:'GROSS',embedded_tax_codes:['ICMS','PIS','COFINS']};
+ const unused={...used,id:'acr-unused',component_code:'TUSD_DEMAND_UNUSED',amount_text:'16',embedded_tax_codes:['PIS','COFINS']};
+ const d={single:'500',used:'234.6400',unused:'265.3600',source:'ACR mesmas condições de demanda, tarifas de referência próprias'};
+ const monthly={...m,billed_demand:{ACR:d,ACL:{...d,source:'Fatura ACL'}}};
+ it('uses independent ACR rates and preserves per-line tax treatment',()=>{const r=run([used,unused,{...used,id:'acl-used',scenario:'ACL',amount_text:'10.70900103'},{...unused,id:'acl-unused',scenario:'ACL',amount_text:'8.78135364'}],[monthly]);expect(r.pending).toEqual([]);expect(r.lines.filter(l=>l.scenario==='ACR').map(l=>l.amount).sort()).toEqual(['4245.76','4692.80']);expect(r.lines.filter(l=>l.scenario==='ACL').map(l=>l.amount).sort()).toEqual(['2330.22','2512.76']);expect(r.lines.find(l=>l.parameterId==='acr-unused')).toMatchObject({measurementKey:'billedDemand.ACR.unused',quantity:'265.3600',embeddedTaxCodes:['PIS','COFINS'],quantitySource:d.source});});
+ it('does not infer ACR quantities from ACL alone',()=>pending(run([used,unused],[{...m,billed_demand:{ACL:d}}])));
+ it('does not copy ACL tariff when ACR counterpart is missing',()=>pending(run([used,{...unused,scenario:'ACL'}],[monthly])));
+ it('does not double count total with ACR split',()=>pending(run([used,unused,{...used,id:'aggregate',component_code:'TUSD_DEMAND'}],[monthly])));
+ it('blocks both ACR parcels if one rate is invalid',()=>pending(run([used,{...unused,amount_text:'invalid'}],[monthly])));
+ it('blocks unvalidated source revisions',()=>pending(run([used,unused],[{...monthly,status:'DRAFT'}])));
+ it('keeps exact zero unused as zero',()=>{const r=run([used,unused],[{...monthly,billed_demand:{ACR:{...d,single:'234.6400',unused:'0'}}}]);expect(r.pending).toEqual([]);expect(r.lines.find(l=>l.parameterId==='acr-unused')?.amount).toBe('0.00');});
+});

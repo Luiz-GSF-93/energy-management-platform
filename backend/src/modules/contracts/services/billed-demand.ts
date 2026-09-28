@@ -14,7 +14,7 @@ export function billedDemandIssues(input:any,context:any,validating=false):strin
   if(d.single!=null&&(d.peak!=null||d.offPeak!=null))errors.push(s+': use demanda faturável única ou por posto.');
   if(d.used!=null||d.unused!=null){
    const scaled=(v:string)=>{const [w,f='']=v.split('.');return BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));};
-   if(s!=='ACL'||context?.tariff_group!=='A'||context?.tariff_modality!=='GREEN'||d.single==null||d.used==null||d.unused==null||d.peak!=null||d.offPeak!=null)errors.push(s+': parcelas utilizada e não utilizada exigem demanda única ACL do grupo A Verde.');
+   if(context?.tariff_group!=='A'||context?.tariff_modality!=='GREEN'||d.single==null||d.used==null||d.unused==null||d.peak!=null||d.offPeak!=null)errors.push(s+': parcelas utilizada e não utilizada exigem demanda única do grupo A Verde.');
    else if(scaled(d.used)+scaled(d.unused)!==scaled(d.single))errors.push(s+': a soma das parcelas deve coincidir com a demanda faturável única.');
   }
   if(validating){
