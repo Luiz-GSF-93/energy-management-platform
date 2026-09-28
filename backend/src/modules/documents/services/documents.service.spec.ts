@@ -28,6 +28,15 @@ describe('Document persistence boundary', () => {
     await expect(service.create({ ...body, ...invalid } as any, 'org-a', id)).rejects.toMatchObject({ status: 400 });
     expect(from).not.toHaveBeenCalled();
   });
+  it('links supplier invoice to the scoped purchase contract',async()=>{
+    queries.energy_contracts.maybeSingle.mockResolvedValue({data:{id,contract_type:'ENERGY_PURCHASE',start_date:'2026-09-01',end_date:'2026-09-30'},error:null});
+    await service.create({...body,documentType:'INVOICE_SUPPLIER',energyContractId:id},'org-a',id);
+    expect(queries.documents.insert).toHaveBeenCalledWith([expect.objectContaining({energy_contract_id:id,document_type:'INVOICE_SUPPLIER'})]);
+  });
+  it.each([{contract_type:'ENERGY_SALE',start_date:'2026-09-01',end_date:'2026-09-30'},{contract_type:'ENERGY_PURCHASE',start_date:'2026-10-01',end_date:'2026-10-31'},{contract_type:'ENERGY_PURCHASE',start_date:'2026-08-01',end_date:'2026-08-31'}])('rejects supplier note outside purchase scope %p',async contract=>{
+    queries.energy_contracts.maybeSingle.mockResolvedValue({data:{id,...contract},error:null});
+    await expect(service.create({...body,documentType:'INVOICE_SUPPLIER',energyContractId:id},'org-a',id)).rejects.toMatchObject({status:400});expect(queries.documents.insert).not.toHaveBeenCalled();
+  });
   it('requires an authenticated uploader', async () => {
     await expect(service.create(body, 'org-a')).rejects.toMatchObject({ status: 401 });
     expect(from).not.toHaveBeenCalled();

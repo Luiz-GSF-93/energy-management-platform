@@ -62,9 +62,13 @@ export class DocumentsService {
     this.check(customer.error);
     if (!customer.data) throw new NotFoundException('Customer not found');
     if (dto.energyContractId) {
-      const contract = await this.table('energy_contracts').select('id').eq('id', dto.energyContractId).eq('organization_id', organizationId).eq('customer_id', dto.customerId).eq('consumer_unit_id', dto.consumerUnitId).maybeSingle();
+      const contract = await this.table('energy_contracts').select('id,contract_type,start_date,end_date').eq('id', dto.energyContractId).eq('organization_id', organizationId).eq('customer_id', dto.customerId).eq('consumer_unit_id', dto.consumerUnitId).maybeSingle();
       this.check(contract.error);
       if (!contract.data) throw new NotFoundException('Contract not found for this consumer unit');
+      if(dto.documentType==='INVOICE_SUPPLIER'){
+        const month=dto.referenceMonth.slice(0,7),start=String(contract.data.start_date??'').slice(0,7),end=String(contract.data.end_date??'').slice(0,7);
+        if(contract.data.contract_type!=='ENERGY_PURCHASE'||!/^\d{4}-\d{2}$/.test(start)||!/^\d{4}-\d{2}$/.test(end)||month<start||month>end)throw new BadRequestException('A nota do fornecedor precisa pertencer à vigência de um contrato de compra da mesma unidade.');
+      }
     }
     // Metadata registration only: supplied hash/MIME/path are not verified file
     // contents. A future upload worker must verify bytes before processing.
