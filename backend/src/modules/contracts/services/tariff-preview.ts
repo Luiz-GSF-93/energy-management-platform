@@ -22,11 +22,11 @@ export function tariffProduct(quantity:string,rate:string,perMwh=false){
 }
 type Period={start:string;end:string};
 export type TariffLine={parameterId:string;revision:number;label:string;scenario:string;component:string;timeBand:string;measure:string;rate:string;quantity:string;quantityUnit:string;measurementKey:string;exactAmount:string;amount:string;treatment:string;embeddedTaxCodes:string[];source:string;startDate:string;endDate:string;formula:string;quantitySource?:string};
-export type TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW';formulaVersion:'tariffs-1.3';rounding:'HALF_UP_PER_LINE';measurement:{id:string;version:number;revision:number;source:string}|null;lines:TariffLine[];pending:{parameterId:string;label:string;scenario:string;reason:string}[];warnings:string[]};
+export type TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW';formulaVersion:'tariffs-1.4';rounding:'HALF_UP_PER_LINE';measurement:{id:string;version:number;revision:number;source:string}|null;lines:TariffLine[];pending:{parameterId:string;label:string;scenario:string;reason:string}[];warnings:string[]};
 const validDay=(v:unknown):v is string=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
 export function previewTariffs(unit:any,month:string,period:Period,parameters:any[],monthly:any[]):TariffPreview {
  const checked=prepareMeasurements(unit,month,monthly),v=checked.validatedVersion;
- const result:TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW',formulaVersion:'tariffs-1.3',rounding:'HALF_UP_PER_LINE',measurement:v?{id:v.id,version:v.version,revision:v.revision,source:v.source}:null,lines:[],pending:[],warnings:[
+ const result:TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW',formulaVersion:'tariffs-1.4',rounding:'HALF_UP_PER_LINE',measurement:v?{id:v.id,version:v.version,revision:v.revision,source:v.source}:null,lines:[],pending:[],warnings:[
   'Prévia por rubrica: não representa custo total, economia, cobrança ou resultado validado.',
   'Tributos não são acrescidos nem desmembrados. Cada linha conserva o tratamento cadastrado.',
   'Demanda faturável usa quantidade explícita validada por cenário; parcelas utilizada/não utilizada exigem quantidades explícitas e tarifas próprias. Não calcula ultrapassagem. Fornecedor, custos adicionais, rateios e honorários não estão totalizados.',
@@ -42,7 +42,7 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
  let partialConsumptionPreview=false;
  for(const p of candidates){
   const reject=(reason:string)=>result.pending.push({parameterId:String(p.id),label:String(p.label||'Tarifa'),scenario:String(p.scenario||''),reason});
-  const usesConsumption=['TE','TUSD_ENERGY','CDE_WATER_SCARCITY'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure);
+  const usesConsumption=['TE','TUSD_ENERGY','CDE_WATER_SCARCITY','TARIFF_FLAG'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure);
   const demandCodes=['TUSD_DEMAND','TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED'];
   const usesBilling=demandCodes.includes(p.component_code)&&p.measure==='BRL_KW';
   const split=p.component_code==='TUSD_DEMAND_USED'||p.component_code==='TUSD_DEMAND_UNUSED';
@@ -56,10 +56,13 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
   if(!p.unit_context||['distributor','tariff_group','tariff_subgroup','tariff_modality','state','consumption_class','free_market'].some(k=>(p.unit_context[k]??null)!==(unit[k]??null))){reject('Cadastro elétrico diferente do contexto aprovado da tarifa. Cadastre e aprove a vigência corrigida.');continue;}
   if(!['ACL','ACR'].includes(p.scenario)||!Number.isInteger(p.revision)||p.revision<1||typeof p.source!=='string'||!p.source.trim()||p.direction!=='DEBIT'||!['NET','GROSS'].includes(p.treatment)||(p.treatment==='GROSS'&&(!Array.isArray(p.embedded_tax_codes)||!p.embedded_tax_codes.length))){reject('Fonte, revisão, natureza ou tratamento da tarifa exige revisão.');continue;}
   let key='',quantityUnit='kWh',explicitQuantity:string|undefined,quantitySource:string|undefined;
-  if(['TE','TUSD_ENERGY','CDE_WATER_SCARCITY'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure)){
+  if(['TE','TUSD_ENERGY','CDE_WATER_SCARCITY','TARIFF_FLAG'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure)){
    key=({ALL:'consumptionTotal',PEAK:'consumptionPeak',OFF_PEAK:'consumptionOffPeak'} as Record<string,string>)[p.time_band]||'';
    if(unit.tariff_group==='A'&&p.time_band==='ALL'||unit.tariff_group==='B'&&p.time_band!=='ALL'){reject('Posto tarifário incompatível com a modalidade: grupo A exige ponta/fora ponta e convencional exige todos os postos.');continue;}
   }else if(p.component_code==='REACTIVE'&&p.measure==='BRL_KVARH'&&p.time_band==='ALL'){key='reactiveTotal';quantityUnit='kVArh';}
+  else if(p.component_code==='REACTIVE'&&['BRL_KWH','BRL_MWH'].includes(p.measure)&&['PEAK','OFF_PEAK'].includes(p.time_band)&&unit.tariff_group==='A'){
+   key=p.time_band==='PEAK'?'reactiveBilledPeakKwh':'reactiveBilledOffPeakKwh';quantitySource='Reativo faturado da versão mensal validada; mesma quantidade física nos cenários ACL e ACR, sem conversão para kVArh.';
+  }
   else if(usesBilling){
    const d=v!.billedDemand?.[p.scenario];
    if(!d){reject('Informe a demanda faturável explícita deste cenário em Dados mensais; demanda medida não é demanda faturável.');continue;}
