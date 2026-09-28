@@ -1,7 +1,7 @@
 'use client';
 import {Alert,Card} from '@/app/components/ui';
 export type MonthlyCostLedgerData={formulaVersion:string;status:'BLOCKED'|'AVAILABLE'|'NO_COSTS_DECLARED';version:{id:string;version:number;revision:number;validatedAt:string;source:string}|null;groups:{scenario:string;taxTreatment:string;count:number;costs:string;credits:string;balance:string;lines:{id:string;label:string;category:string;effect:string;amount:string;signedAmount:string;source:string}[]}[];blockers:string[];warnings:string[]};
-const treatments:Record<string,string>={INCLUDED:'Tributos incluídos',EXCLUDED:'Tributos ainda não incluídos',NOT_APPLICABLE:'Tributos não aplicáveis'};
+const treatments:Record<string,string>={RESERVED:'Tributação não confirmada — sem acréscimo, com ressalva',INCLUDED:'Tributos incluídos',EXCLUDED:'Tributos ainda não incluídos',NOT_APPLICABLE:'Tributos não aplicáveis'};
 const categories:Record<string,string>={CCEE:'CCEE',EXPOSURE:'Exposição / curto prazo',CHARGE:'Encargos',OTHER:'Outros ajustes'};
 const money=(value:string)=>value.startsWith('-')?'− R$ '+value.slice(1).replace('.',','):'R$ '+value.replace('.',',');
 export default function MonthlyCostLedger({data}:{data?:MonthlyCostLedgerData}){

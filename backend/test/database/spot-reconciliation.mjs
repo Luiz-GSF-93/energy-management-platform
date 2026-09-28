@@ -11,7 +11,7 @@ class Query{
 try{
  await db.exec('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;GRANT USAGE ON SCHEMA public TO anon,authenticated,service_role;ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role');
  await db.exec('CREATE TABLE customers(id text primary key,organization_id text,deleted_at timestamptz);CREATE TABLE consumer_units(id text primary key,organization_id text,customer_id text);CREATE TABLE energy_contracts(id text primary key,organization_id text,customer_id text,consumer_unit_id text,contract_type text,status text,start_date date,end_date date);CREATE TABLE documents(id text primary key,organization_id text,customer_id text,consumer_unit_id text,energy_contract_id text,reference_month date,original_filename text,file_verified boolean,file_hash text)');
- const migration=readFileSync(new URL('../../src/database/migrations/20260928_f1_122_spot_reconciliation.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ const migration=readFileSync(new URL('../../src/database/migrations/20260928_f1_122_spot_reconciliation.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);const m124=readFileSync(new URL('../../src/database/migrations/20260928_f1_124c_reconciliation_tax_reservation.sql',import.meta.url),'utf8');await db.exec(m124);await db.exec(m124);
  const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002',hash='a'.repeat(64);
  await db.query("INSERT INTO customers VALUES ($1,'org-a',null),($2,'org-b',null)",[a,b]);await db.query("INSERT INTO consumer_units VALUES ($1,'org-a',$1),($2,'org-b',$2)",[a,b]);await db.query("INSERT INTO energy_contracts VALUES ($1,'org-a',$1,$1,'ENERGY_PURCHASE','ACTIVE','2026-08-01','2026-08-31'),($2,'org-b',$2,$2,'ENERGY_PURCHASE','ACTIVE','2026-08-01','2026-08-31')",[a,b]);
  await db.query("INSERT INTO documents VALUES ($1,'org-a',$1,$1,null,'2026-08-01','proof.pdf',true,$3),($2,'org-b',$2,$2,null,'2026-08-01','private.pdf',true,$3)",[a,b,hash]);await db.exec('SET ROLE service_role');
@@ -36,6 +36,11 @@ try{
  await deny(()=>s.create({...pendingBody,previousId:r3.id,documentId:b},t),400);
  supplier.consumedMwh='111.1222';await deny(()=>s.create({...pendingBody,previousId:r3.id},t),409);
  delete supplier.consumedMwh;supplier.reconciliationContext=originalContext;
+ await deny(()=>s.create({...body,status:'APPROVED_TAX_RESERVATION',previousId:r3.id},t),400);
+ supplier.taxTreatment='RESERVED';payload.taxTreatment='RESERVED';payload.taxReservation={reason:'Tributos não confirmados nos documentos disponíveis.'};supplier.requirements.push({code:'SPOT_TAX_RESERVATION'});
+ await deny(()=>s.create({...body,status:'APPROVED_NO_COST',previousId:r3.id},t),400);
+ const reserved=await s.create({...body,status:'APPROVED_TAX_RESERVATION',previousId:r3.id},t);ok(reserved.version===4&&reserved.created_by==='actor'&&reserved.status==='APPROVED_TAX_RESERVATION');
+ supplier.requirements.push({code:'INVOICE_DIFFERENCE'});await deny(()=>s.create({...body,status:'APPROVED_TAX_RESERVATION',previousId:reserved.id},t),400);supplier.requirements.pop();
  entitled=false;await deny(()=>s.list({contractId:a,month:'2026-08'},t),403);entitled=true;
  for(const sql of ['DELETE FROM supplier_spot_reconciliations',"UPDATE supplier_spot_reconciliations SET reason='overwrite'"]){await assert.rejects(()=>db.exec(sql),e=>e.code==='42501');checks++;}
  await db.exec('RESET ROLE');await assert.rejects(()=>db.exec('DELETE FROM supplier_spot_reconciliations'),e=>e.code==='P1222');checks++;

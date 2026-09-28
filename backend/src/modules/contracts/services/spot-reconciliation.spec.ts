@@ -14,3 +14,14 @@ describe('audited spot reconciliation',()=>{
  it('does not bypass unrelated blockers',()=>{const r=base();r.requirements.push({code:'CYCLE_OPEN'});expect(applySpotReconciliation(r,u,[approved()],[doc]).totalAmount).toBeNull();});
  it('never accepts monetary mismatch',()=>expect(applySpotReconciliation({...base(),invoiceDifference:'1.00'},u,[approved()],[doc]).status).toBe('BLOCKED'));
 });
+
+describe('tax reservation reconciliation',()=>{
+ const reserved=()=>({...base(),taxTreatment:'RESERVED',taxReservation:{reason:'Tax incidence could not be confirmed from the invoice',createdBy:'actor',createdAt:'2026-09-28'},requirements:[{code:'SPOT_VOLUME_DIFFERENCE'},{code:'SPOT_TAX_RESERVATION'}]});
+ const approval=(r:any)=>({...approved(),status:'APPROVED_TAX_RESERVATION',source_hash:applySpotReconciliation(r,u,[],[]).reconciliationContext.hash});
+ it('preserves documentary cents without declaring taxes included or zero',()=>{const r=reserved();const result=applySpotReconciliation(r,u,[approval(r)],[doc]);expect(result.status).toBe('READY');expect(result.taxTreatment).toBe('RESERVED');expect(result.totalAmount).toBe('16857.18');expect(result.bands.reduce((s:bigint,b:any)=>s+BigInt(b.amount.replace('.','')),0n)).toBe(1685718n);expect(result.warnings.join(' ')).toContain('nenhum imposto adicional');});
+ it('cannot close uncertainty under the ordinary approval status',()=>{const r=reserved();expect(applySpotReconciliation(r,u,[{...approval(r),status:'APPROVED_NO_COST'}],[doc]).status).toBe('BLOCKED');});
+ it('requires approval even when measured and purchased volume match',()=>{const r={...reserved(),volumeDifferenceMwh:'0.000000000000',requirements:[{code:'SPOT_TAX_RESERVATION'}]};expect(applySpotReconciliation(r,u,[],[]).status).toBe('BLOCKED');expect(applySpotReconciliation(r,u,[approval(r)],[doc]).status).toBe('READY');});
+ it('does not waive unrelated blockers',()=>{const r=reserved();r.requirements.push({code:'CYCLE_OPEN'});expect(applySpotReconciliation(r,u,[approval(r)],[doc]).status).toBe('BLOCKED');});
+ it('invalidates approval when the tax justification changes',()=>{const r=reserved(),a=approval(r);r.taxReservation.reason='Another source and a revised reason';expect(applySpotReconciliation(r,u,[a],[doc]).status).toBe('BLOCKED');});
+ it('does not allow tax reservation to approve known treatment',()=>{const r=base();expect(applySpotReconciliation(r,u,[{...approved(),status:'APPROVED_TAX_RESERVATION'}],[doc]).status).toBe('BLOCKED');});
+});

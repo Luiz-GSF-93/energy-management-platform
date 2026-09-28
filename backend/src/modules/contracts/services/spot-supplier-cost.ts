@@ -19,8 +19,9 @@ export function spotSupplierCost(r:any,unit:any,month:string,volume:bigint,price
   if(ledger.status!=='AVAILABLE'||!ledger.version||ledger.blockers.length){need('SPOT_INVOICE','Registre e valide a nota da compra pontual em Custos mensais, categoria Fatura do fornecedor.');return r;}
   const rows=ledger.groups.filter(g=>g.scenario==='ACL').flatMap(g=>g.lines.map(l=>({...l,taxTreatment:g.taxTreatment})));
   if(rows.length!==1||rows[0].category!=='SUPPLIER_INVOICE'||rows[0].effect!=='COST'||!rows[0].source?.trim()){need('SPOT_INVOICE_SCOPE','Esta modalidade exige uma única nota da compra pontual, sem compras extras ou créditos concorrentes. Concilie os documentos.');return r;}
-  const invoice=rows[0],expectedTreatment=r.taxTreatment==='GROSS'?'INCLUDED':'EXCLUDED';
+  const invoice=rows[0],expectedTreatment=r.taxTreatment==='RESERVED'?'RESERVED':r.taxTreatment==='GROSS'?'INCLUDED':'EXCLUDED';
   if(invoice.taxTreatment!==expectedTreatment){need('SPOT_TAX','O tratamento tributário da nota difere do preço confirmado. Não presuma isenção ou impostos embutidos.');return r;}
+  if(r.taxTreatment==='RESERVED'){need('SPOT_TAX_RESERVATION','Conclua a conciliação com ressalva tributária e justificativa auditada.','supply');r.taxReservation={...r.taxReservation,invoiceReason:invoice.taxReservationReason};r.warnings.push('Tributação não confirmada: usa somente o valor da nota, sem imposto adicional. Não representa isenção, imposto zero ou tributo embutido. Justificativa: '+invoice.taxReservationReason);}
   const actual=cents(invoice.amount);r.invoiceAmount=fixed(actual,2);r.invoiceDifference=fixed(actual-expected,2);r.invoiceSources=[invoice];
   if(actual!==expected){need('INVOICE_DIFFERENCE','O valor da nota difere do volume comprado × preço final. Revise as fontes e eventuais ajustes.');return r;}
   // Allocate only reconciled energy; never relabel purchased volume as measured consumption.

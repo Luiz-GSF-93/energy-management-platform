@@ -9,7 +9,7 @@ export class SupplierBillingDto extends SupplierBillingQueryDto {
  @IsIn(['FINAL','BASE_PLUS_INDEX']) priceMode!:string;
  @IsOptional() @Matches(/^-?(0|[1-9][0-9]{0,3})([.][0-9]{1,6})?$/) indexPercent?:string;
  @IsOptional() @IsString() @MaxLength(2000) indexSource?:string;
- @IsIn(['NET','GROSS']) taxTreatment!:string;
+ @IsIn(['NET','GROSS','RESERVED']) taxTreatment!:string;
  @IsString() @Matches(/\S/) @MaxLength(2000) source!:string;
  @IsOptional() @IsUUID() previousId?:string;
  @IsString() @MaxLength(2000) reason!:string;
