@@ -109,3 +109,10 @@ Consulta explícita reúne todas as unidades cadastradas do cliente na mesma com
 ## F1.59 — Histórico imutável de revisões por unidade
 
 Revisão interna preserva fontes e diagnóstico do motor existente, inclusive bloqueios, em calculation_review_snapshots. Estado exclusivamente DRAFT, sem aprovação/publicação nem alteração do legado monthly_energy_settlements. Origem é capturada durante um intervalo de consultas, não em transação única; não equivale ao fechamento financeiro consolidado do cliente. Ver ENTREGA-F1.59.md.
+
+
+## F1.116 — Exigência condicional de IOF e confirmação dos honorários
+
+A preparação e o subtotal passam a exigir IOF somente quando existir configuração explícita de IOF ou código de IOF embutido nas rubricas do cenário e período. Não exigir IOF genericamente não cria isenção ou alíquota zero. Todas as validações das operações configuradas permanecem aplicáveis.
+
+O diagnóstico reconhece o contrato de honorários cadastrado e diferencia a confirmação mensal ausente. Após confirmação válida, remove o aviso genérico de rateio; o variável híbrido continua aguardando a economia consolidada. Versões de regra: preparation-1.3 e distributor-subtotal-1.2.
