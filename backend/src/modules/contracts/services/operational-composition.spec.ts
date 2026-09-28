@@ -54,4 +54,18 @@ describe('documental composition without duplicate parameter registration',()=>{
  it('does not infer tax exemption for NET or NOT_APPLICABLE additional costs',()=>{for(const treatment of ['EXCLUDED','NOT_APPLICABLE']){const f=finalFixture();f.costs.groups[0].taxTreatment=treatment;blocked(f);}});
  it('keeps regular supplier tax configuration mandatory',()=>{const f=finalFixture();f.supplier.taxTreatment='GROSS';blocked(f);});
  it('retains audited document references',()=>{const f=finalFixture();const s=acl(f);expect(s.entries.find(e=>e.group==='SUPPLIER')).toMatchObject({id:'document:supplier:invoice',revision:3,source:expect.stringContaining('Conciliação v8')});});
+
+ it('adds confirmed supplier ICMS without changing or duplicating the note',()=>{const f=finalFixture(),p=f.parameters.find(p=>p.id==='ACLICMS');p.amount_text='18';const i=f.supplier.invoiceSources[0];Object.assign(f.supplier,{regularAmount:'16857.18',totalAmount:'16857.18',invoiceAmount:'16857.18'});i.amount='16857.18';i.supplierIcms={parameterId:p.id,revision:1,rate:'18',reason:'Gestor confirmou ICMS não embutido na nota do fornecedor.'};const r=acl(f);expect(r).toMatchObject({status:'AVAILABLE',supplier:'16857.18',taxes:'3718.36',subtotal:'20775.54'});expect(r.entries.filter(e=>e.label.includes('ICMS fornecedor'))).toHaveLength(1);expect(f.supplier.regularAmount).toBe('16857.18');i.supplierIcms.revision=2;blocked(f);});
+ it('reconciles signed distributor adjustments and moves CIP without duplicating it',()=>{
+  const f=finalFixture(),g=f.costs.groups[0],doc='doc',hash='hash',cipSource='OCR CPFL · CIP · documento '+doc+' · SHA-256 '+hash+' · cip';
+  Object.assign(g.lines[0],{category:'CHARGE',source:cipSource});
+  const items=[{source:'subsidy',label:'Subvenção',component:'TARIFF_SUBSIDY',effect:'COST',amount:'20.00'},{source:'refund',label:'Devolução',component:'REFUND',effect:'CREDIT',amount:'10.00'}];
+  for(const i of items)g.lines.push({id:i.source,label:i.label,category:'DISTRIBUTOR_ADJUSTMENT',effect:i.effect,amount:i.amount,signedAmount:(i.effect==='CREDIT'?'-':'')+i.amount,source:'OCR CPFL · ajuste · documento '+doc+' · SHA-256 '+hash+' · '+i.source});
+  Object.assign(g,{costs:'120.00',credits:'10.00',balance:'110.00',count:3});
+  const evidence:any=[{documentId:doc,fileHash:hash,financial:{state:'RECONCILED',total:'210.00',tariffs:'100.00',cip:'100.00',cipSource:'cip',items,issues:[]}}];
+  const calculate=()=>{const bases=operationalTaxBases(unit,month,f.parameters,f.supplier,f.costs),taxes=taxMemory(unit,month,f.parameters,f.tariffs,bases);return operationalComposition(unit,month,f.parameters,f.tariffs,taxes,bases,f.supplier,f.costs,[],evidence).scenarios.find(s=>s.scenario==='ACL')!;};
+  expect(calculate()).toMatchObject({status:'AVAILABLE',distributor:'210.00',additional:'0.00',taxes:'10.00',subtotal:'1420.00',invoiceReconciliation:{total:'210.00'}});
+  evidence[0].financial.total='211.00';expect(calculate()).toMatchObject({status:'BLOCKED',subtotal:null});
+  evidence[0].financial.total='210.00';evidence[0].fileHash='changed';expect(calculate().status).toBe('BLOCKED');
+ });
 });

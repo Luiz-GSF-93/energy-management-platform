@@ -24,7 +24,7 @@ export function prepareCosts(unit:any,month:string,rows:any[]){
  if(!latest.validated_at||!latest.validated_by||typeof latest.source_reference!=='string'||!latest.source_reference.trim())add('COSTS_EVIDENCE','A versão não possui validação ou fonte identificada. Solicite revisão.');
  if(!latest.unit_context||['distributor','tariff_group','tariff_subgroup','tariff_modality','state','free_market'].some(k=>(latest.unit_context[k]??null)!==(unit[k]??null)))add('COSTS_CONTEXT','O cadastro elétrico mudou desde o registro dos custos. Confira-o e valide uma nova versão.');
  if(costs.items.length)add('COSTS_RECONCILIATION','Concilie os lançamentos com os contratos, tarifas e faturas para evitar duplicidade; confira o rateio atribuído à unidade.','REVIEW');
- if(costs.items.some(i=>i.taxTreatment==='RESERVED'))add('COSTS_TAX_RESERVED','Tributação do fornecedor não confirmada: valor documental preservado sem acréscimo tributário. Consulte a justificativa e revise quando houver comprovação; não significa isenção ou imposto zero.','REVIEW');
+ if(costs.items.some(i=>i.taxTreatment==='RESERVED'))add('COSTS_TAX_RESERVED','Tributos do fornecedor com ressalva: o valor documental é preservado. Somente o ICMS explicitamente confirmado pode ser acrescido em linha própria. Consulte a justificativa e revise quando houver comprovação; não significa isenção ou imposto zero.','REVIEW');
  if(costs.items.some(i=>i.taxTreatment==='EXCLUDED'))add('COSTS_TAX_EXCLUDED','Há valores sem tributos incluídos. As bases e os tributos correspondentes ainda precisam ser tratados no motor; este diagnóstico não calcula gross-up.','REVIEW');
  if(!drafts.length&&costs.noCosts&&!findings.some(f=>f.severity==='BLOCKER'))summary.status='NO_COSTS_DECLARED';
  return {...summary,findings};

@@ -42,4 +42,13 @@ it('preserves documentary tax reservations in consolidated preview',()=>{const f
 describe('legacy SQL contract date compatibility',()=>{
  it.each(['T00:00:00','T00:00:00.000','T00:00:00Z','T00:00:00+00:00'])('accepts midnight %s without rewriting sources',suffix=>{const f=fixture();f.contracts[0].start_date='2023-05-17'+suffix;f.contracts[0].end_date='2026-12-31'+suffix;const before=JSON.stringify(f);expect(run(f)).toMatchObject({status:'AVAILABLE',totalFees:'4000.00'});expect(JSON.stringify(f)).toBe(before);});
  it.each(['2026-08-02T00:00:00','2026-02-30T00:00:00','2026-08-01T12:30:00','2026-08-01T00:00:00-03:00'])('keeps invalid or partial date blocked: %s',date=>{const f=fixture();f.contracts[0].start_date=date;blocked(f);});
+
+ it('recalculates the reconciled CPFL/Axia sample and management fees, preserving signed credits',()=>{
+  const f=fixture();f.units=f.units.slice(0,1);f.inputs=f.inputs.slice(0,1);f.rules[0].allocations=[{consumerUnitId:'a',percentage:'100'}];f.contracts[0].fixed_fee_monthly='1302.05';f.contracts[0].savings_percentage='9.8';const c=f.inputs[0].composition;c.formulaVersion='operational-composition-1.1';
+  const entry=(id:string,group:'DISTRIBUTOR'|'SUPPLIER'|'ADDITIONAL'|'TAX',amount:string)=>({id,group,amount,revision:1,label:id,source:'Documento conferido '+id});
+  Object.assign(c.scenarios[0],{distributor:'95193.90',supplier:'0.00',additional:'137.58',taxes:'0.00',subtotal:'95331.48',entries:[entry('acr','DISTRIBUTOR','95193.90'),entry('cip-acr','ADDITIONAL','137.58')]});
+  Object.assign(c.scenarios[1],{distributor:'40583.96',supplier:'16857.18',additional:'0.00',taxes:'3700.36',subtotal:'61141.50',invoiceReconciliation:{documentId:'invoice',fileHash:'hash',total:'40583.96',status:'RECONCILED'},entries:[entry('tariffs','DISTRIBUTOR','37831.60'),entry('subsidy-tax','DISTRIBUTOR','11261.11'),entry('subsidy','DISTRIBUTOR','2329.22'),entry('subsidy-credit','DISTRIBUTOR','-10885.72'),entry('refund','DISTRIBUTOR','-89.83'),entry('cip','DISTRIBUTOR','137.58'),entry('axia','SUPPLIER','16857.18'),entry('icms-axia','TAX','3700.36')]});
+  expect(run(f)).toMatchObject({status:'AVAILABLE',acr:'95331.48',aclBeforeFees:'61141.50',savingsBeforeFees:'34189.98',fixedFee:'1302.05',variableFee:'3350.62',totalFees:'4652.67',aclAfterFees:'65794.17',savingsAfterFees:'29537.31',savingsPercent:'30.98'});
+  delete c.scenarios[1].invoiceReconciliation;blocked(f);
+ });
 });
