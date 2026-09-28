@@ -65,7 +65,7 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
    if(!d){reject('Informe a demanda faturável explícita deste cenário em Dados mensais; demanda medida não é demanda faturável.');continue;}
    if(billedDemandIssues({[p.scenario]:d},unit,true).length){reject('Demanda faturável incompleta ou incompatível com a modalidade. Corrija e valide os dados mensais.');continue;}
    if(unit.tariff_group!=='A'||unit.tariff_modality==='GREEN'&&p.time_band!=='ALL'||unit.tariff_modality==='BLUE'&&!['PEAK','OFF_PEAK'].includes(p.time_band)){reject('Posto da demanda faturável incompatível: verde exige única; azul exige ponta/fora ponta.');continue;}
-   if(split&&(p.scenario!=='ACL'||unit.tariff_modality!=='GREEN'||d.used==null||d.unused==null)){reject('Informe e valide as parcelas utilizadas e não utilizadas da demanda única ACL.');continue;}
+   if(split&&(unit.tariff_modality!=='GREEN'||d.used==null||d.unused==null)){reject('Informe e valide as parcelas utilizadas e não utilizadas da demanda única deste cenário.');continue;}
    const field=split?(p.component_code==='TUSD_DEMAND_USED'?'used':'unused'):({ALL:'single',PEAK:'peak',OFF_PEAK:'offPeak'} as Record<string,string>)[p.time_band];
    key='billedDemand.'+p.scenario+'.'+field;explicitQuantity=d[field];quantitySource=d.source;quantityUnit='kW';
   }

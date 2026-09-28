@@ -116,3 +116,8 @@ Revisão interna preserva fontes e diagnóstico do motor existente, inclusive bl
 A preparação e o subtotal passam a exigir IOF somente quando existir configuração explícita de IOF ou código de IOF embutido nas rubricas do cenário e período. Não exigir IOF genericamente não cria isenção ou alíquota zero. Todas as validações das operações configuradas permanecem aplicáveis.
 
 O diagnóstico reconhece o contrato de honorários cadastrado e diferencia a confirmação mensal ausente. Após confirmação válida, remove o aviso genérico de rateio; o variável híbrido continua aguardando a economia consolidada. Versões de regra: preparation-1.3 e distributor-subtotal-1.2.
+
+
+## F1.117 — Parcelas de demanda ACR
+
+Demanda única do grupo A Verde admite parcelas utilizadas/não utilizadas também no ACR, com soma exata, fonte e tarifas independentes por cenário. Reaproveitar quantidades ACL exige escolha explícita de mesmas condições de demanda, versão validada atual e contexto compatível; registra versão/revisão de origem sem sobrescrever ACR existente. Históricos e aprovações continuam imutáveis. Não somar demanda total com suas parcelas nem duplicar impostos embutidos.
