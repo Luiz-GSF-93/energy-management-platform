@@ -46,6 +46,7 @@ export class OcrCdeTaxIntegrationService {
   const token=ocrReviewDigest({document,source:[a.preview.token,b.preview.token],rows,amounts,evidenceReady});
   return {a,b,rows,bases,baseItems,provenance,preview:{token,month:a.preview.month,evidenceReady,bases:basesView,amounts,declarations,message:'Ampliação das declarações existentes: TUSD + CDE, sem nova incidência. Cada tributo possui sua própria revisão auditada. Demais componentes da fatura não estão abrangidos.'}};
  }
+ async taxIntegrationSource(document:string,t:TenantContext){return this.context(document,t);}
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async update(document:string,t:TenantContext,body:any){
   if(!this.canUpdate(t))throw new ForbiddenException('A edição exige Gestor ou Administrador com permissão de alteração de contratos.');
