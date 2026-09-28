@@ -1,3 +1,4 @@
+import {applySpotReconciliation} from './spot-reconciliation';
 import {adjustedContracts} from './fee-adjustment';
 import {ocrPreparationCandidates} from './preparation-ocr';
 import {customerFinancialPreview,CustomerUnitInput} from './customer-financial-preview';
@@ -55,6 +56,9 @@ export class CalculationPreparationService {
  const tariffParameters=parameters.filter(p=>!(u.free_market===true&&p.scenario==='ACL'&&p.kind==='TARIFF'&&p.component_code==='TE'));
  const ocrDocuments=await ocrPreparationCandidates(this.db.getClient(),u,d.month);
  const supplier=contractSupplierCost(u,d.month,contracts,prices,billingRules,monthly,monthlyCosts);
+ const reconciliationRows=supplier.formulaVersion==='spot-supplier-1.0'?await this.all(()=>this.table('supplier_spot_reconciliations').select('*').eq('organization_id',org).eq('consumer_unit_id',u.id).eq('month',d.month)):[];
+ const reconciliationDocuments=reconciliationRows.length?await this.all(()=>this.table('documents').select('id,organization_id,customer_id,consumer_unit_id,energy_contract_id,reference_month,file_verified,file_hash').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('reference_month',d.month+'-01')):[];
+ applySpotReconciliation(supplier,u,reconciliationRows,reconciliationDocuments);
  const feeMemory=managementFeeMemory(u,d.month,effectiveManagement,feeRules);
  const prepared=prepareMonth(u,d.month,parameters,contracts,prices,effectiveManagement,services,monthly,monthlyCosts);
  prepared.findings=prepared.findings.flatMap(f=>f.code!=='MANAGEMENT_ALLOCATION'?[f]:['FIXED_AVAILABLE','VARIABLE_PENDING'].includes(feeMemory.status)?[]:[{...f,message:(feeMemory.contract?'Contrato '+feeMemory.contract.number+' cadastrado. ':'')+feeMemory.blockers.join(' ')}]);
@@ -70,7 +74,7 @@ export class CalculationPreparationService {
  const taxes=taxMemory(u,d.month,parameters,tariffPreview,operational);
  for(const pending of operational.pending)prepared.findings.push({code:'PARAMETER_ISSUE:'+pending.parameterId,section:'Bases operacionais',severity:'BLOCKER',message:pending.label+': '+pending.reason});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
- if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments,adjustments})));
+ if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments,adjustments,reconciliationRows,reconciliationDocuments})));
  return {...prepared,ocrDocuments,operationalComposition:operationalComposition(u,d.month,tariffParameters,tariffPreview,taxes,operational,supplier,costs,prepared.findings),operationalTaxBases:operational,contractSupplierCost:supplier,managementFeeMemory:feeMemory,supplyReference:supplyReference(u,d.month,contracts,prices),costLedger:costs,additionalCostSubtotal:additionalCostSubtotal(costs),supplierCostMemory:supplierCostMemory(monthlyCostLedger(u,d.month,monthlyCosts,'SUPPLIER')),tariffPreview,taxMemory:taxes,distributorSubtotal:distributorSubtotal(u,d.month,tariffParameters,tariffPreview,taxes),checkedAt:new Date().toISOString()};
  }
 }

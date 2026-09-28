@@ -1,4 +1,5 @@
 'use client';
+import SpotReconciliation from './SpotReconciliation';
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import SupplierInvoices,{invoicePermissions,checkInvoice,uploadSupplierInvoice} from './SupplierInvoices';
 import SupplierBillingRules from './SupplierBillingRules';
@@ -29,6 +30,7 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true,initia
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[lookupError,setLookupError]=useState(''),[message,setMessage]=useState(''),[revision,setRevision]=useState(0);
  const [busy,setBusy]=useState(false),[editing,setEditing]=useState<Contract|null>(null),[activating,setActivating]=useState<string|null>(null);
  const customer=customerId,filter=customerId;const [query,setQuery]=useState(''),[priceId,setPriceId]=useState<string|null>(null),[billingId,setBillingId]=useState<string|null>(initialContext?.recordId||null);
+ const [reconciliationId,setReconciliationId]=useState<string|null>(null);
  const [invoicesId,setInvoicesId]=useState<string|null>(null),[invoiceRefresh,setInvoiceRefresh]=useState(0);
  const pending=useRef(false);const [formVersion,setFormVersion]=useState(0),[hasSchedule,setHasSchedule]=useState(false);
  useEffect(()=>{let cancelled=false;if(!view)return;
@@ -103,6 +105,7 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true,initia
  {c.status==='DRAFT'&&update&&['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)?<><Button variant="secondary" disabled={busy} onClick={()=>{setEditing(c);setHasSchedule(!!c.annual_prices?.length);setFormVersion(v=>v+1);setActivating(null);setError('');setMessage('');window.scrollTo({top:0,behavior:'smooth'});}}>Editar rascunho</Button>
  {activating===c.id?<div><p>Ativar o contrato {c.contract_number}? Após a ativação, os dados não poderão ser sobrescritos nesta tela. Confira a vigência, o volume e o preço antes de confirmar.</p><Button disabled={busy} onClick={()=>void activate(c)}>Confirmar ativação</Button><Button variant="secondary" disabled={busy} onClick={()=>setActivating(null)}>Cancelar</Button></div>:<Button disabled={busy||!!editing} onClick={()=>setActivating(c.id)}>Ativar contrato</Button>}</>:<p>Contrato preservado para consulta.</p>}
  {c.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(c.status)?<><Button variant='secondary' onClick={()=>setBillingId(billingId===c.id?null:c.id)}>Faturamento contratual / compra pontual</Button>{billingId===c.id?<SupplierBillingRules contract={c} onDirty={onDirty}/>:null}</>:null}
+ {c.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(c.status)&&hasPermission(invoicePermissions.view)?<><Button variant='secondary' onClick={()=>setReconciliationId(reconciliationId===c.id?null:c.id)}>Conciliar compra pontual</Button>{reconciliationId===c.id?<SpotReconciliation key={c.id} contract={c} onDirty={onDirty}/>:null}</>:null}
  {c.contract_type==='ENERGY_PURCHASE'&&hasPermission(invoicePermissions.view)?<><Button variant='secondary' disabled={busy} onClick={()=>setInvoicesId(invoicesId===c.id?null:c.id)}>Notas fiscais / enviar arquivo</Button>{invoicesId===c.id?<SupplierInvoices key={c.id+':'+invoiceRefresh} contract={c} onDirty={onDirty}/>:null}</>:null}
  {['ENERGY_PURCHASE','ENERGY_SALE'].includes(c.contract_type)&&['ACTIVE','APPROVED'].includes(c.status)?<><Button variant="secondary" onClick={()=>setPriceId(priceId===c.id?null:c.id)}>Histórico de preços</Button>{priceId===c.id?<PriceHistory id={c.id} start={c.start_date} end={c.end_date} canWrite={update} onDirty={onDirty}/>:null}</>:null}</article>)}</Card>{legacy.length?<Card title="Outros contratos cadastrados anteriormente">{legacy.map(c=><article key={c.id}><h3>{c.contract_number}</h3><p>{types[c.contract_type]||c.contract_type} · {statuses[c.status]||c.status}</p><p>{date(c.start_date)} a {date(c.end_date)}</p><p>{c.notes}</p><p>Registro preservado para consulta.</p></article>)}</Card>:null}</section>;
 }
