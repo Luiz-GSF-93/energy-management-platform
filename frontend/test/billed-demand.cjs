@@ -11,7 +11,7 @@ const original=Module._load;Module._load=function(name,parent,main){if(name==='@
 
 const Inputs=require('../app/backoffice/contracts/MonthlyInputs.tsx').default;
 const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,m)=>{assert.ok(v,m);checks++;};
-const units=[{id:'u',customer_id:'c',name:'Unidade',consumer_unit_number:'001',tariff_group:'A',tariff_modality:'GREEN',free_market:true}],ctx={customerId:'c',unitId:'u',month:'2026-10'};
+const units=[{id:'u',customer_id:'c',name:'Unidade',consumer_unit_number:'001',tariff_group:'A',tariff_modality:'GREEN',free_market:true,consumption_class:'INDUSTRIAL'}],ctx={customerId:'c',unitId:'u',month:'2026-10'};
 const button=t=>Array.from(document.querySelectorAll('button')).find(x=>x.textContent===t);
 const label=t=>Array.from(document.querySelectorAll('label')).find(x=>x.textContent.startsWith(t));
 const input=async(t,value)=>{const el=label(t).querySelector('input,textarea');await act(async()=>{const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement:HTMLInputElement;Object.getOwnPropertyDescriptor(proto.prototype,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));});};
