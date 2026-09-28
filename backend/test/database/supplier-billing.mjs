@@ -11,7 +11,7 @@ class Query{
 try{
  await db.exec('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;GRANT USAGE ON SCHEMA public TO anon,authenticated,service_role;ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role');
  await db.exec('CREATE TABLE customers(id text primary key,organization_id text,deleted_at timestamptz);CREATE TABLE consumer_units(id text primary key,organization_id text,customer_id text,free_market boolean,name text);CREATE TABLE energy_contracts(id text primary key,organization_id text,customer_id text,consumer_unit_id text,contract_type text,status text,start_date date,end_date date);GRANT ALL ON customers,consumer_units,energy_contracts TO service_role');
- const migration=readFileSync(new URL('../../src/database/migrations/20260926_f1_54_supplier_billing.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ const migration=readFileSync(new URL('../../src/database/migrations/20260926_f1_54_supplier_billing.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);const spotMigration=readFileSync(new URL('../../src/database/migrations/20260928_f1_120_spot_supplier.sql',import.meta.url),'utf8');await db.exec(spotMigration);await db.exec(spotMigration);
  const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
  await db.query("INSERT INTO customers VALUES ($1,'org-a',null),($2,'org-b',null)",[a,b]);await db.query("INSERT INTO consumer_units VALUES ($1,'org-a',$1,true,'Unit A'),($2,'org-b',$2,true,'Unit B')",[a,b]);await db.query("INSERT INTO energy_contracts VALUES ($1,'org-a',$1,$1,'ENERGY_PURCHASE','ACTIVE','2026-01-01','2028-12-31'),($2,'org-b',$2,$2,'ENERGY_PURCHASE','ACTIVE','2026-01-01','2028-12-31')",[a,b]);await db.exec('SET ROLE service_role');
  let entitled=true;const client={getClient:()=>({from:t=>new Query(t)})},licenses={requireEntitlement:async()=>{if(!entitled)throw Object.assign(new Error('No license'),{getStatus:()=>403});}};
@@ -23,6 +23,10 @@ try{
  const r2=await s.create({...body,previousId:r.id,reason:'Correct tolerance',maxTolerancePercent:'20'},t);ok(r2.version===2);ok(Number((await s.list({contractId:a},t)).rows[1].max_tolerance_percent)===30);await deny(()=>s.create({...body,previousId:r.id,reason:'Stale'},t),409);await deny(()=>s.create({...body,previousId:r2.id},t),409);
  await assert.rejects(()=>db.exec("UPDATE supplier_billing_rules SET source='overwrite'"),e=>e.code==='42501');checks++;await assert.rejects(()=>db.exec('DELETE FROM supplier_billing_rules'),e=>e.code==='42501');checks++;
  const p=await s.create({...body,contractId:b},{...other,role:'consulta',accessMode:'platform_operation'});ok(p.version===1);
+ const spot={...body,startDate:'2026-08-01',endDate:'2026-08-31',volumeBasis:'SPOT',minPercent:undefined,maxTolerancePercent:undefined,previousId:r2.id,reason:'Documented spot purchase'};
+ for(const patch of [{minPercent:'0'},{maxTolerancePercent:'0'},{endDate:'2026-09-30'},{startDate:'2026-08-02'},{priceMode:'BASE_PLUS_INDEX',indexPercent:'1',indexSource:'Index'}])await deny(()=>s.create({...spot,...patch},t),400);
+ const spotRow=await s.create(spot,t);ok(spotRow.version===3&&spotRow.min_percent===null&&spotRow.max_tolerance_percent===null);
+ await deny(()=>s.create({...spot,volumeBasis:'MONTHLY',previousId:spotRow.id},t),400);
  entitled=false;await deny(()=>s.list({contractId:a},t),403);entitled=true;
  await db.query('UPDATE energy_contracts SET status=$1 WHERE id=$2',['DRAFT',a]);await deny(()=>s.create({...body,previousId:r2.id,reason:'Wrong status'},t),400);
  await db.query('UPDATE customers SET deleted_at=now() WHERE id=$1',[a]);await deny(()=>s.list({contractId:a},t),404);

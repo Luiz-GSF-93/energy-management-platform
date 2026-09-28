@@ -28,6 +28,11 @@ export function operationalTaxBases(unit:any,month:string,parameters:any[],suppl
     const regular=cents(supplier.regularAmount),minimum=cents(supplier.minimumAmount);if(minimum>regular)throw Error('Mínimo não consumido superior ao faturamento regular.');
     amount=p.monetary_source==='SUPPLIER_ENERGY'?regular-minimum:p.monetary_source==='SUPPLIER_MINIMUM'?minimum:cents(supplier.extraAmount);
     refs.push({id:supplier.rule.id,revision:supplier.rule.version,kind:'SUPPLIER_BILLING_RULE',source:supplier.rule.source},{id:supplier.contract.id,revision:supplier.rule.version,kind:'CONTRACT',source:'Contrato '+supplier.contract.number},{id:supplier.measurements.id,revision:supplier.measurements.revision,kind:'MEASUREMENTS',source:supplier.measurements.source});
+    if(supplier.formulaVersion==='spot-supplier-1.0'){
+     const version=supplier.costVersion,items=supplier.invoiceSources;
+     if(!version||!Array.isArray(items)||items.length!==1||items[0].category!=='SUPPLIER_INVOICE'||items[0].effect!=='COST'||cents(items[0].amount)!==regular)throw Error('Compra pontual sem conciliação da nota validada.');
+     refs.push({id:version.id,revision:version.revision,kind:'MONTHLY_COSTS',source:version.source},{id:items[0].id,revision:version.revision,kind:'MONTHLY_COST_ITEM',source:items[0].source});
+    }
     if(p.monetary_source==='SUPPLIER_EXTRA'){
      const items=supplier.extraSources;if(!Array.isArray(items)||new Set(items.map(i=>i.id)).size!==items.length||items.some(i=>i.effect!=='COST'||!i.id||!i.source?.trim()||i.taxTreatment!==(p.treatment==='NET'?'EXCLUDED':'INCLUDED')))throw Error('Compra extra exige fontes válidas, sem créditos nem tratamentos divergentes para esta base.');
      if(items.reduce((sum,i)=>sum+cents(i.amount),0n)!==amount)throw Error('A compra extra não concilia com os lançamentos de origem.');

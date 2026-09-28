@@ -31,3 +31,17 @@ describe('contract supplier cost',()=>{
  it('remains preliminary while the cycle is open in Brazil',()=>expect(codes(run({now:new Date('2026-09-01T01:00:00Z')}))).toContain('CYCLE_OPEN'));
  it('last closed month observes Brazilian midnight and year rollover',()=>{expect(supplierToday(new Date('2026-09-01T01:00:00Z'))).toBe('2026-08-31');expect(lastClosedSupplierMonth(new Date('2026-09-01T01:00:00Z'))).toBe('2026-07');expect(lastClosedSupplierMonth(new Date('2026-09-01T04:00:00Z'))).toBe('2026-08');expect(lastClosedSupplierMonth(new Date('2026-01-01T04:00:00Z'))).toBe('2025-12');});
 });
+
+describe('documented spot supplier',()=>{
+ const spot={...rule,start_date:'2026-08-01',end_date:'2026-08-31',volume_basis:'SPOT',min_percent:null,max_tolerance_percent:null};
+ const purchase={...contract,contracted_volume_mwh:'111.034',current_price:'151.819983'};
+ const invoke=(patch:any={})=>run({contracts:[purchase],rules:[spot],inputs:[measurement('111034','11378.64','99655.36')],costs:[costs([cost('SUPPLIER_INVOICE','16857.18')])],...patch});
+ it('bills documented quantity once, without take-or-pay',()=>{const r=invoke();expect(r.status).toBe('READY');expect(r.totalAmount).toBe('16857.18');expect(r.minMwh).toBeNull();expect(r.minimumUnusedMwh).toBeNull();expect(r.invoiceDifference).toBe('0.00');expect(r.invoiceSources).toHaveLength(1);expect(r.bands.reduce((n:bigint,b:any)=>n+BigInt(b.amount.replace('.','')),0n)).toBe(1685718n);});
+ it('preserves the real OCR volume and reports 88.2 kWh without inventing a trade',()=>{const r=invoke({inputs:[measurement('111122.2','11378.64','99743.56')]});expect(codes(r)).toContain('SPOT_VOLUME_DIFFERENCE');expect(r.volumeDifferenceMwh).toBe('0.088200000000');expect(r.consumedMwh).toBe('111.122200000000');expect(r.regularAmount).toBe('16857.18');expect(r.totalAmount).toBeNull();expect(r.extraMwh).toBeNull();expect(r.bands).toEqual([]);});
+ it.each([{min_percent:'0'},{max_tolerance_percent:'0'},{start_date:'2026-01-01'},{price_mode:'BASE_PLUS_INDEX'}])('rejects incompatible spot rules %j',patch=>expect(codes(invoke({rules:[{...spot,...patch}]}))).toContain('SPOT_RULE'));
+ it('requires validated invoice and never infers one from contract',()=>expect(codes(invoke({costs:[]}))).toContain('SPOT_INVOICE'));
+ it('requires exact documentary value',()=>expect(codes(invoke({costs:[costs([cost('SUPPLIER_INVOICE','16858.00')])]}))).toContain('INVOICE_DIFFERENCE'));
+ it('rejects duplicate or extra invoices',()=>expect(codes(invoke({costs:[costs([cost('SUPPLIER_INVOICE','16857.18'),{...cost(),id:'00000000-0000-4000-8000-000000000002'}])]}))).toContain('SPOT_INVOICE_SCOPE'));
+ it('does not infer missing tax treatment',()=>expect(codes(invoke({costs:[costs([cost('SUPPLIER_INVOICE','16857.18','EXCLUDED')])]}))).toContain('SPOT_TAX'));
+ it.each(['organization_id','customer_id','consumer_unit_id'])('isolates invoice by %s',key=>expect(invoke({costs:[{...costs([cost('SUPPLIER_INVOICE','16857.18')]),[key]:'foreign'}]}).totalAmount).toBeNull());
+});

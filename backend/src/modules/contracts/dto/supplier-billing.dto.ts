@@ -1,11 +1,11 @@
-import {IsUUID,Matches,IsIn,IsString,MaxLength,IsOptional} from 'class-validator';
+import {IsUUID,Matches,IsIn,IsString,MaxLength,IsOptional,ValidateIf} from 'class-validator';
 export class SupplierBillingQueryDto {@IsUUID() contractId!:string;}
 export class SupplierBillingDto extends SupplierBillingQueryDto {
  @Matches(/^\d{4}-\d{2}-\d{2}$/) startDate!:string;
  @Matches(/^\d{4}-\d{2}-\d{2}$/) endDate!:string;
- @IsIn(['MONTHLY','SEASONAL']) volumeBasis!:string;
- @Matches(/^(0|[1-9][0-9]{0,3})([.][0-9]{1,4})?$/) minPercent!:string;
- @Matches(/^(0|[1-9][0-9]{0,3})([.][0-9]{1,4})?$/) maxTolerancePercent!:string;
+ @IsIn(['MONTHLY','SEASONAL','SPOT']) volumeBasis!:string;
+ @ValidateIf(o=>o.volumeBasis!=='SPOT'||o.minPercent!=null) @Matches(/^(0|[1-9][0-9]{0,3})([.][0-9]{1,4})?$/) minPercent!:string;
+ @ValidateIf(o=>o.volumeBasis!=='SPOT'||o.maxTolerancePercent!=null) @Matches(/^(0|[1-9][0-9]{0,3})([.][0-9]{1,4})?$/) maxTolerancePercent!:string;
  @IsIn(['FINAL','BASE_PLUS_INDEX']) priceMode!:string;
  @IsOptional() @Matches(/^-?(0|[1-9][0-9]{0,3})([.][0-9]{1,6})?$/) indexPercent?:string;
  @IsOptional() @IsString() @MaxLength(2000) indexSource?:string;
