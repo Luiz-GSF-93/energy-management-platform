@@ -17,11 +17,11 @@ export function tariffProduct(quantity:string,rate:string,perMwh=false){
 }
 type Period={start:string;end:string};
 export type TariffLine={parameterId:string;revision:number;label:string;scenario:string;component:string;timeBand:string;measure:string;rate:string;quantity:string;quantityUnit:string;measurementKey:string;exactAmount:string;amount:string;treatment:string;embeddedTaxCodes:string[];source:string;startDate:string;endDate:string;formula:string;quantitySource?:string};
-export type TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW';formulaVersion:'tariffs-1.1';rounding:'HALF_UP_PER_LINE';measurement:{id:string;version:number;revision:number;source:string}|null;lines:TariffLine[];pending:{parameterId:string;label:string;scenario:string;reason:string}[];warnings:string[]};
+export type TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW';formulaVersion:'tariffs-1.2';rounding:'HALF_UP_PER_LINE';measurement:{id:string;version:number;revision:number;source:string}|null;lines:TariffLine[];pending:{parameterId:string;label:string;scenario:string;reason:string}[];warnings:string[]};
 const validDay=(v:unknown):v is string=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;
 export function previewTariffs(unit:any,month:string,period:Period,parameters:any[],monthly:any[]):TariffPreview {
  const checked=prepareMeasurements(unit,month,monthly),v=checked.validatedVersion;
- const result:TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW',formulaVersion:'tariffs-1.1',rounding:'HALF_UP_PER_LINE',measurement:v?{id:v.id,version:v.version,revision:v.revision,source:v.source}:null,lines:[],pending:[],warnings:[
+ const result:TariffPreview={mode:'TARIFF_COMPONENT_PREVIEW',formulaVersion:'tariffs-1.2',rounding:'HALF_UP_PER_LINE',measurement:v?{id:v.id,version:v.version,revision:v.revision,source:v.source}:null,lines:[],pending:[],warnings:[
   'Prévia por rubrica: não representa custo total, economia, cobrança ou resultado validado.',
   'Tributos não são acrescidos nem desmembrados. Cada linha conserva o tratamento cadastrado.',
   'Demanda faturável usa quantidade explícita validada por cenário; não calcula ultrapassagem ou demanda não utilizada. Fornecedor, custos adicionais, rateios e honorários não estão totalizados.',
@@ -30,10 +30,16 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
  const scoped=parameters.filter(p=>p.organization_id===unit.organization_id&&p.consumer_unit_id===unit.id&&p.customer_id===unit.customer_id&&p.kind==='TARIFF'&&p.status==='APPROVED');
  const candidates=scoped.filter(p=>!validDay(p.start_date)||!validDay(p.end_date)||p.start_date<=period.end&&p.end_date>=period.start).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
  if(!candidates.length)result.warnings.push('Nenhuma tarifa aprovada encontrada para esta unidade e competência.');
- const measurementsReady=checked.status==='VALIDATED'&&checked.findings.length===0&&v!==null;
+ const measurementVersionReady=checked.status==='VALIDATED'&&v!==null;
+ // Missing measured demand is independent of kWh-based component previews. All other
+ // source/history/context/consumption checks remain mandatory, and prepareMonth keeps
+ // MEASUREMENTS_DEMAND as a financial-closing blocker.
+ let partialConsumptionPreview=false;
  for(const p of candidates){
   const reject=(reason:string)=>result.pending.push({parameterId:String(p.id),label:String(p.label||'Tarifa'),scenario:String(p.scenario||''),reason});
-  if(!measurementsReady){reject('Medições pendentes ou inconsistentes. Corrija e valide em Dados mensais.');continue;}
+  const usesConsumption=['TE','TUSD_ENERGY','CDE_WATER_SCARCITY'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure);
+  const relevantFindings=checked.findings.filter(f=>!(usesConsumption&&f.code==='MEASUREMENTS_DEMAND'));
+  if(!measurementVersionReady||relevantFindings.length){reject('Medições pendentes ou inconsistentes. Corrija e valide em Dados mensais.');continue;}
   if(unit.free_market!==true||!((unit.tariff_group==='A'&&['BLUE','GREEN'].includes(unit.tariff_modality))||(unit.tariff_group==='B'&&unit.tariff_modality==='CONVENTIONAL'))){reject('Enquadramento ou modalidade ainda não suportado por esta prévia.');continue;}
   if(!validDay(p.start_date)||!validDay(p.end_date)||p.start_date>period.start||p.end_date<period.end){reject('A tarifa não cobre o mês inteiro. É necessária medição segmentada, sem rateio automático por dias.');continue;}
   if(candidates.some(q=>q!==p&&q.scenario===p.scenario&&q.component_code===p.component_code&&(q.time_band===p.time_band||q.time_band==='ALL'||p.time_band==='ALL'))){reject('Há tarifas concorrentes ou combinação de todos os postos com ponta/fora ponta. Revise para evitar dupla contagem.');continue;}
@@ -56,7 +62,9 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
   const quantity=explicitQuantity??v!.measurements[key];
   if(!key||typeof quantity!=='string'||!DECIMAL.test(quantity)||typeof p.amount_text!=='string'||!DECIMAL.test(p.amount_text)){reject('Quantidade ou tarifa decimal não informada/ inválida. Ausência não equivale a zero.');continue;}
   const product=tariffProduct(quantity,p.amount_text,p.measure==='BRL_MWH');
+  if(usesConsumption&&checked.findings.some(f=>f.code==='MEASUREMENTS_DEMAND'))partialConsumptionPreview=true;
   result.lines.push({parameterId:p.id,revision:p.revision,label:p.label,scenario:p.scenario,component:p.component_code,timeBand:p.time_band,measure:p.measure,rate:p.amount_text,quantity,quantityUnit,measurementKey:key,exactAmount:product.exact,amount:product.rounded,treatment:p.treatment,embeddedTaxCodes:Array.isArray(p.embedded_tax_codes)?p.embedded_tax_codes:[],source:p.source,startDate:p.start_date,endDate:p.end_date,...(quantitySource?{quantitySource}:{}),formula:p.measure==='BRL_KW'?'demanda faturável informada × tarifa':p.measure==='BRL_MWH'?'kWh × R$/MWh ÷ 1000':'quantidade × tarifa'});
  }
+ if(partialConsumptionPreview)result.warnings.push('Prévia parcial: TE, TUSD energia e CDE usam os consumos validados. A demanda medida continua pendente e impede o fechamento completo; seus valores não foram inferidos.');
  return result;
 }
