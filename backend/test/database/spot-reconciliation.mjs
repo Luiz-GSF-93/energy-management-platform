@@ -25,6 +25,17 @@ try{
  await deny(()=>s.list({contractId:b,month:'2026-08'},t),404);await deny(()=>s.create(body,{...t,role:'operador'}),403);await deny(()=>s.list({contractId:a,month:'2026-08'},{...t,permissions:[P.ORGANIZATION_CONTRACTS_VIEW]}),403);
  const r2=await s.create({...body,status:'APPROVED_NO_COST',previousId:r.id},t);ok(r2.version===2);ok((await s.list({contractId:a,month:'2026-08'},t)).rows.length===2);
  supplier.requirements.push({code:'CYCLE_OPEN'});await deny(()=>s.create({...body,status:'APPROVED_NO_COST',previousId:r2.id},t),400);supplier.requirements.pop();
+ // Incomplete financial sources permit only documentary PENDING revisions.
+ const originalContext=supplier.reconciliationContext;delete supplier.reconciliationContext;
+ const pendingView=await s.list({contractId:a,month:'2026-08'},t);
+ ok(pendingView.documentaryContext.payload.contract.id===a);
+ const pendingBody={...body,sourceHash:pendingView.documentaryContext.hash,previousId:r2.id};
+ await deny(()=>s.create({...pendingBody,status:'APPROVED_NO_COST'},t),409);
+ const r3=await s.create(pendingBody,t);ok(r3.version===3&&r3.status==='PENDING');
+ ok(r3.source_snapshot.contract.id===a&&r3.document_id===a);
+ await deny(()=>s.create({...pendingBody,previousId:r3.id,documentId:b},t),400);
+ supplier.consumedMwh='111.1222';await deny(()=>s.create({...pendingBody,previousId:r3.id},t),409);
+ delete supplier.consumedMwh;supplier.reconciliationContext=originalContext;
  entitled=false;await deny(()=>s.list({contractId:a,month:'2026-08'},t),403);entitled=true;
  for(const sql of ['DELETE FROM supplier_spot_reconciliations',"UPDATE supplier_spot_reconciliations SET reason='overwrite'"]){await assert.rejects(()=>db.exec(sql),e=>e.code==='42501');checks++;}
  await db.exec('RESET ROLE');await assert.rejects(()=>db.exec('DELETE FROM supplier_spot_reconciliations'),e=>e.code==='P1222');checks++;

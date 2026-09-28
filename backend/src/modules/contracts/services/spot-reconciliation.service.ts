@@ -7,6 +7,7 @@ import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {CalculationPreparationService} from './preparation.service';
 import {SpotReconciliationDto,SpotReconciliationQueryDto} from '../dto/spot-reconciliation.dto';
 import {auditAuthorNames} from './audit-author-names';
+import {spotReconciliationContext} from './spot-reconciliation';
 @Injectable()
 export class SpotReconciliationService {
  constructor(private db:SupabaseService,private licenses:LicensesService,private preparation:CalculationPreparationService){}
@@ -18,14 +19,18 @@ export class SpotReconciliationService {
  const result=await this.preparation.inspect({consumerUnitId:c.data.consumer_unit_id,month:d.month},t.organizationId);
  const history=await db.from('supplier_spot_reconciliations').select('*').eq('organization_id',t.organizationId).eq('contract_id',d.contractId).eq('month',d.month).order('version',{ascending:false}).range(0,999);this.fail(history.error);if(!Array.isArray(history.data)||history.data.length>=1000)throw new InternalServerErrorException('Histórico indisponível ou extenso.');
  const docs=await db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,energy_contract_id,reference_month,original_filename,file_verified,file_hash').eq('organization_id',t.organizationId).eq('customer_id',c.data.customer_id).eq('consumer_unit_id',c.data.consumer_unit_id).eq('reference_month',d.month+'-01').eq('file_verified',true).order('id').range(0,999);this.fail(docs.error);if(!Array.isArray(docs.data)||docs.data.length>=1000)throw new InternalServerErrorException('Documentos indisponíveis ou consulta extensa.');
- return {contract:c.data,supplier:result.contractSupplierCost,rows:await auditAuthorNames(db,t.organizationId,history.data),documents:docs.data.filter((x:any)=>!x.energy_contract_id||x.energy_contract_id===d.contractId),canConfigure:this.can(t)};
+ const supplier=result.contractSupplierCost;
+ // Pending evidence records available sources without approving financial completeness.
+ const documentaryContext=supplier?.contract?.id===c.data.id&&supplier.reconciliationContext?supplier.reconciliationContext:spotReconciliationContext({...((supplier?.contract?.id===c.data.id)?supplier:{}),contract:c.data,month:d.month},{id:c.data.consumer_unit_id,organization_id:t.organizationId,customer_id:c.data.customer_id});
+ return {contract:c.data,supplier,documentaryContext,rows:await auditAuthorNames(db,t.organizationId,history.data),documents:docs.data.filter((x:any)=>!x.energy_contract_id||x.energy_contract_id===d.contractId),canConfigure:this.can(t)};
  }
  async create(input:SpotReconciliationDto,t:TenantContext){
  if(!this.can(t)||!t.permissions?.includes(P.ORGANIZATION_CONTRACTS_UPDATE))throw new ForbiddenException('Conciliação exige Gestor ou Administrador.');const d=await validateWriteDto(SpotReconciliationDto,input);if(d.reason.trim().length<20)throw new BadRequestException('Descreva a causa e a conclusão documental.');
  const view=await this.list({contractId:d.contractId,month:d.month},t),r=view.supplier;
- if(!r||r.contract?.id!==d.contractId||!r.reconciliationContext||r.reconciliationContext.hash!==d.sourceHash)throw new ConflictException('As fontes mudaram ou ainda faltam condições, medição ou nota validada. Atualize a consulta.');
+ const context=d.status==='PENDING'?view.documentaryContext:r?.contract?.id===d.contractId?r.reconciliationContext:null;
+ if(!context||context.hash!==d.sourceHash)throw new ConflictException('As fontes mudaram ou ainda faltam condições, medição ou nota validada. Atualize a consulta.');
  if(d.status==='APPROVED_NO_COST'&&r.requirements.some((x:any)=>x.code!=='SPOT_VOLUME_DIFFERENCE'))throw new BadRequestException('Resolva as demais pendências antes de aprovar a conciliação.');
  const doc=view.documents.find((x:any)=>x.id===d.documentId);if(!doc||!doc.file_hash)throw new BadRequestException('Selecione um documento verificado da mesma unidade e competência.');
- const saved=await this.db.getClient().from('supplier_spot_reconciliations').insert([{organization_id:t.organizationId,customer_id:view.contract.customer_id,consumer_unit_id:view.contract.consumer_unit_id,contract_id:d.contractId,month:d.month,status:d.status,document_id:doc.id,document_sha256:doc.file_hash,source_hash:d.sourceHash,source_snapshot:r.reconciliationContext.payload,reason:d.reason.trim(),previous_id:d.previousId||null,created_by:t.userId}]).select().single();this.fail(saved.error);return (await auditAuthorNames(this.db.getClient(),t.organizationId,[saved.data]))[0];
+ const saved=await this.db.getClient().from('supplier_spot_reconciliations').insert([{organization_id:t.organizationId,customer_id:view.contract.customer_id,consumer_unit_id:view.contract.consumer_unit_id,contract_id:d.contractId,month:d.month,status:d.status,document_id:doc.id,document_sha256:doc.file_hash,source_hash:d.sourceHash,source_snapshot:context.payload,reason:d.reason.trim(),previous_id:d.previousId||null,created_by:t.userId}]).select().single();this.fail(saved.error);return (await auditAuthorNames(this.db.getClient(),t.organizationId,[saved.data]))[0];
  }
 }
