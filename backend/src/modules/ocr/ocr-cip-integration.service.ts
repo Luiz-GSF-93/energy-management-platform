@@ -1,3 +1,4 @@
+import {cpflInvoiceAdjustments} from './cpfl-invoice-adjustments';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {auditAuthorNames} from '../contracts/services/audit-author-names';
 import {createHash} from 'node:crypto';
@@ -25,7 +26,7 @@ export class OcrCipIntegrationService{
   const ready=c.sourceReady&&customer.data.status==='ACTIVE'&&!customer.data.deleted_at&&candidate.ready;
   const state=created?'CREATED':current?'EXISTING_RECORD':ready?'READY':'REVIEW_REQUIRED';
   const token=ocrReviewDigest({source:c.preview.token,document,month,candidate,customer:customer.data,current});
-  return {c,id,itemId,reference,current,ready,preview:{token,month,state,candidate,canCreate:state==='READY'&&this.canWrite(t),existing:current?{id:current.id,status:current.status,version:current.version,revision:current.revision}:null,message:state==='CREATED'?'CIP registrada nos custos mensais. Consulte a versão atual e o histórico.':state==='EXISTING_RECORD'?'Já existem custos nesta unidade e competência. O lançamento existente será preservado; nenhuma duplicação ou substituição automática.':ready?'CIP pronta para criar o primeiro rascunho de custos mensais.':'Confira identidade, consumo, competência, situação do cliente e evidências da fatura antes de integrar a CIP.'}};
+  return {c,id,itemId,reference,current,ready,preview:{token,month,state,invoiceAdjustments:cpflInvoiceAdjustments(extractCpflPaulistaLayout(c.source.raw).operations),candidate,canCreate:state==='READY'&&this.canWrite(t),existing:current?{id:current.id,status:current.status,version:current.version,revision:current.revision}:null,message:state==='CREATED'?'CIP registrada nos custos mensais. Consulte a versão atual e o histórico.':state==='EXISTING_RECORD'?'Já existem custos nesta unidade e competência. O lançamento existente será preservado; nenhuma duplicação ou substituição automática.':ready?'CIP pronta para criar o primeiro rascunho de custos mensais.':'Confira identidade, consumo, competência, situação do cliente e evidências da fatura antes de integrar a CIP.'}};
  }
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
@@ -62,5 +63,29 @@ export class OcrCipIntegrationService{
   const r=await this.db.getClient().from('calculation_monthly_costs').update({costs,correction_reason:correction,updated_by:t.userId}).eq('organization_id',t.organizationId).eq('id',old.id).eq('revision',body.revision).eq('status','DRAFT').select('*').maybeSingle();
   this.fail(r.error);if(!r.data)throw new ConflictException('Os custos mudaram durante a revisão. Atualize a consulta.');
   return {row:(await auditAuthorNames(this.db.getClient(),t.organizationId,[r.data]))[0],adjusted:true};
+ }
+
+ async integrateAdjustments(document:string,t:TenantContext,body:any){
+  if(!this.canWrite(t)||!t.permissions?.includes(P.ORGANIZATION_CONTRACTS_UPDATE))throw new ForbiddenException('A revisão exige permissão para cadastrar e editar custos.');
+  if(!body||Array.isArray(body)||Object.keys(body).sort().join(',')!=='inputId,reason,revision,token'||typeof body.reason!=='string'||body.reason.trim().length<20||body.reason.length>1000||typeof body.token!=='string'||typeof body.inputId!=='string'||!Number.isInteger(body.revision))throw new BadRequestException('Informe a versão atual e a justificativa da revisão.');
+  const x=await this.context(document,t),old=x.current,candidate=x.preview.invoiceAdjustments;
+  if(!x.ready||candidate.state!=='RECONCILED'||!old||old.id!==body.inputId||old.revision!==body.revision||body.token!==x.preview.token||!['DRAFT','VALIDATED'].includes(old.status))throw new ConflictException('Custos ou evidências mudaram. Atualize a consulta e confira o total da fatura.');
+  const expectedContext=Object.fromEntries(['distributor','tariff_group','tariff_subgroup','tariff_modality','state','free_market'].map(k=>[k,x.c.unit[k]??null]));
+  if(Object.entries(expectedContext).some(([k,v])=>old.unit_context?.[k]!==v)||old.costs?.noCosts!==false||!Array.isArray(old.costs.items))throw new ConflictException('Revise o contexto da unidade e a composição dos custos.');
+  const items=old.costs.items.map((i:any)=>({...i}));
+  const cip=items.filter((i:any)=>i.id===x.itemId);
+  if(cip.length!==1||cip[0].amount!==candidate.cip||cip[0].category!=='CHARGE'||cip[0].effect!=='COST'||cip[0].scenario!=='ACL'||cip[0].taxTreatment!=='INCLUDED'||cip[0].source!==x.reference+' · '+candidate.cipSource)throw new ConflictException('A CIP atual precisa corresponder à operação documentada, sem duplicação.');
+  const proposed=candidate.items.map(i=>({id:identifier(t.organizationId,document,'adjustment:'+i.source),label:i.label,category:'DISTRIBUTOR_ADJUSTMENT',scenario:'ACL',effect:i.effect,amount:i.amount,source:'OCR CPFL · ajuste · documento '+document+' · SHA-256 '+x.c.source.doc.file_hash+' · '+i.source,taxTreatment:'INCLUDED'}));
+  if(items.some((i:any)=>i.category==='DISTRIBUTOR_ADJUSTMENT'&&!proposed.some(p=>p.id===i.id)))throw new ConflictException('Há ajustes da distribuidora de outra origem. Concilie antes de integrar.');
+  let added=0;
+  for(const p of proposed){const existing=items.filter((i:any)=>i.id===p.id);if(existing.length>1||existing.length===1&&Object.entries(p).some(([k,v])=>existing[0][k]!==v))throw new ConflictException('Um ajuste existente difere da operação OCR. Preserve a divergência e revise a fonte.');if(!existing.length){items.push(p);added++;}}
+  if(!added)return {inputId:old.id,alreadyCreated:true};
+  const changes={costs:{noCosts:false,items},correction_reason:body.reason.trim(),updated_by:t.userId};
+  const client=this.db.getClient();let result;
+  if(old.status==='DRAFT')result=await client.from('calculation_monthly_costs').update(changes).eq('organization_id',t.organizationId).eq('id',old.id).eq('revision',old.revision).eq('status','DRAFT').select('id');
+  else result=await client.from('calculation_monthly_costs').insert({...changes,organization_id:t.organizationId,customer_id:old.customer_id,consumer_unit_id:old.consumer_unit_id,month:old.month,previous_id:old.id,status:'DRAFT',origin:'MANUAL',source_reference:old.source_reference,notes:'Revisão dos ajustes da fatura CPFL, total '+candidate.total+'. Valores anteriores preservados na versão '+old.version+'. Job OCR '+x.c.source.jobId+'.',unit_context:expectedContext,created_by:t.userId}).select('id');
+  if(['23505','P3602'].includes(result.error?.code))throw new ConflictException('Outra revisão foi criada. Atualize; nenhum custo validado foi substituído.');
+  this.fail(result.error);if(result.data?.length!==1)throw new ConflictException('Os custos mudaram. Atualize o histórico.');
+  return {inputId:result.data[0].id,alreadyCreated:false};
  }
 }

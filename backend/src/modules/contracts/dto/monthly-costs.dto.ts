@@ -1,9 +1,16 @@
 import {IsUUID,IsString,IsInt,Min,MaxLength,Matches,IsOptional,ValidateNested,IsObject,IsArray,ArrayMaxSize,IsBoolean,IsIn} from 'class-validator';
 import {Type} from 'class-transformer';
+export class SupplierIcmsDto {
+ @IsUUID() parameterId!:string;
+ @IsInt() @Min(1) revision!:number;
+ @IsString() @Matches(/^(0|[1-9][0-9]?)([.][0-9]{1,6})?$/) rate!:string;
+ @IsString() @Matches(/\S/) @MaxLength(1000) reason!:string;
+}
 export class MonthlyCostItemDto {
+ @IsOptional() @IsObject() @ValidateNested() @Type(()=>SupplierIcmsDto) supplierIcms?:SupplierIcmsDto;
  @IsUUID() id!:string;
  @IsString() @Matches(/\S/) @MaxLength(200) label!:string;
- @IsIn(['CCEE','EXPOSURE','CHARGE','OTHER','SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY']) category!:string;
+ @IsIn(['CCEE','EXPOSURE','CHARGE','OTHER','SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY','DISTRIBUTOR_ADJUSTMENT']) category!:string;
  @IsIn(['ACL','ACR']) scenario!:string;
  @IsIn(['COST','CREDIT']) effect!:string;
  @IsString() @Matches(/^(0|[1-9][0-9]{0,11})([.][0-9]{1,2})?$/) amount!:string;

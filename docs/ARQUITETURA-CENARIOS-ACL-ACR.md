@@ -126,3 +126,15 @@ Demanda única do grupo A Verde admite parcelas utilizadas/não utilizadas tamb�
 ## F1.118 — Reativos faturados por posto
 
 Quantidades de reativo faturado em kWh preservadas separadamente de energia ativa e reativo em kVArh. Integração OCR atômica com duas tarifas ACL em rascunho e histórico imutável; ACR aplica a tarifa aprovada sobre as mesmas quantidades. Bandeira tarifária recebe código explícito TARIFF_FLAG; rótulos livres não determinam fórmulas. Ver ENTREGA-F1.118.md para critérios, testes e pendências de homologação.
+
+
+## Conciliação monetária CPFL, ICMS Axia e cronograma CCEE — 28/09/2026
+
+Diagnóstico e critérios de implementação em [F1.128](checkpoints/f1.128-invoice-reconciliation-diagnosis.md). Homologação monetária reaberta: faltam integrar ajustes líquidos CPFL de R$ 2.614,78, preservando a CIP já lançada, e registrar a confirmação de ICMS de 18% por dentro sobre a Axia com nova versão auditada. Não declarar os totais corrigidos antes da implementação e verificação.
+
+Após homologação de faturas: validar e implementar conectores CCEE para EER, contribuição associativa, ERCAP, garantia financeira, penalidades, liquidação MCP e cotas nucleares, sujeitos à cobertura e permissões das APIs oficiais. Exigir origem, competência, versionamento, rateio, idempotência, segregação organizacional e conciliação. Garantias não se tornam automaticamente despesas.
+
+
+## F1.128 — Integração da conciliação monetária
+
+Implementação e critérios em [F1.128](checkpoints/f1.128-invoice-adjustments-implementation.md): ajustes OCR em versão auditada, total CPFL conciliado incluindo CIP uma única vez, ICMS do fornecedor confirmado por dentro com referência ACL e consolidação dos créditos. Migração aplicada; verificar publicação e resultados da amostra antes de encerrar a homologação. Integração API CCEE permanece no cronograma posterior.
