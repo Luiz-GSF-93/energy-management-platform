@@ -1,10 +1,11 @@
+import {reservedSupplierEntry,finalMonthlyEntries} from './document-composition';
 import {monthPeriod} from './preparation';
 import {reviewedComponentSubtotal} from './distributor-subtotal';
 import type {TariffPreview} from './tariff-preview';
 import type {TaxMemory} from './tax-memory';
 import type {OperationalTaxBases} from './operational-tax-bases';
 import type {CostLedger} from './monthly-cost-ledger';
-export type OperationalComposition={formulaVersion:'operational-composition-1.0';rounding:'SUM_ROUNDED_LINES';scenarios:{scenario:'ACR'|'ACL';status:'AVAILABLE'|'BLOCKED';distributor:string|null;supplier:string|null;additional:string|null;taxes:string|null;subtotal:string|null;entries:{id:string;revision:number;label:string;group:'DISTRIBUTOR'|'SUPPLIER'|'ADDITIONAL'|'TAX';amount:string;source:string}[];blockers:string[]}[];warnings:string[]};
+export type OperationalComposition={formulaVersion:'operational-composition-1.0';rounding:'SUM_ROUNDED_LINES';scenarios:{scenario:'ACR'|'ACL';status:'AVAILABLE'|'BLOCKED';distributor:string|null;supplier:string|null;additional:string|null;taxes:string|null;subtotal:string|null;entries:{id:string;revision:number;label:string;group:'DISTRIBUTOR'|'SUPPLIER'|'ADDITIONAL'|'TAX';amount:string;source:string}[];blockers:string[]}[];warnings:string[];qualifications?:string[]};
 const labels:Record<string,string>={SUPPLIER_ENERGY:'energia contratual consumida',SUPPLIER_MINIMUM:'mínimo não consumido',SUPPLIER_EXTRA:'compra extra validada',MONTHLY_CCEE:'CCEE',MONTHLY_EXPOSURE:'exposição',MONTHLY_CHARGE:'encargos',MONTHLY_OTHER:'outros custos'};
 const cents=(v:unknown)=>{if(typeof v!=='string'||v.length>80||!/^(0|[1-9][0-9]*)[.][0-9]{2}$/.test(v))throw Error('Valor monetário inválido.');return BigInt(v.replace('.',''));};
 const money=(v:bigint)=>{if(v<0n)throw Error('Composição negativa não suportada.');const s=v.toString().padStart(3,'0');return s.slice(0,-2)+'.'+s.slice(-2);};
@@ -14,7 +15,7 @@ export function operationalComposition(unit:any,month:string,parameters:any[],ta
  const period=monthPeriod(month),touches=(p:any)=>!p.start_date||!p.end_date||p.start_date<=period.end&&p.end_date>=period.start;
  const scoped=parameters.filter(p=>p.organization_id===unit.organization_id&&p.customer_id===unit.customer_id&&p.consumer_unit_id===unit.id&&['APPROVED','DRAFT'].includes(p.status)&&touches(p));
  const combined=reviewedComponentSubtotal(unit,month,parameters,tariffs,taxes,operational);
- const result:OperationalComposition={formulaVersion:'operational-composition-1.0',rounding:'SUM_ROUNDED_LINES',scenarios:[],warnings:[
+ const result:OperationalComposition={formulaVersion:'operational-composition-1.0',rounding:'SUM_ROUNDED_LINES',scenarios:[],qualifications:[],warnings:[
   'Composição das rubricas revisadas: tarifas da distribuidora + energia contratual, mínimo e compra extra + custos mensais + tributos a acrescentar. Não é fechamento financeiro nem economia publicada.',
   'Bases tributárias referenciam as mesmas despesas e não são somadas outra vez. Tributos já incluídos, bases de cálculo, impostos referenciados e NF regular do fornecedor não geram nova cobrança.',
   'Honorários fixos e variáveis ainda não integram este subtotal. Créditos, custos manuais sem origem conciliada, tratamentos mistos e vigências parciais exigem revisão antes de consolidar.',
@@ -35,7 +36,9 @@ export function operationalComposition(unit:any,month:string,parameters:any[],ta
     if(supplier?.status!=='READY'||supplier.month!==month||supplier.requirements?.length||!supplier.contract?.id||!supplier.rule?.id||!Number.isInteger(supplier.rule.version)||supplier.rule.version<1||!supplier.rule.source?.trim()||!validRevision(supplier.measurements)||supplier.measurements.id!==tariffs.measurement?.id||supplier.measurements.revision!==tariffs.measurement?.revision)throw Error('Fornecedor e medições precisam estar concluídos e usar a mesma revisão da competência.');
     const regular=cents(supplier.regularAmount),minimum=cents(supplier.minimumAmount),extra=cents(supplier.extraAmount);
     if(minimum>regular||cents(supplier.totalAmount)!==regular+extra)throw Error('Os componentes do fornecedor não conciliam com seu total.');
-    expected.set('SUPPLIER_ENERGY',{amount:regular-minimum});
+    if(supplier.taxTreatment==='RESERVED'&&!own.some(p=>p.monetary_source?.startsWith('SUPPLIER_'))){
+     const entry=reservedSupplierEntry(supplier);out.entries.push(entry);result.qualifications!.push('Fornecedor com ressalva tributária: '+supplier.reconciliation.reason);
+    }else expected.set('SUPPLIER_ENERGY',{amount:regular-minimum});
     if(minimum>0n||auto.some(p=>p.monetary_source==='SUPPLIER_MINIMUM'))expected.set('SUPPLIER_MINIMUM',{amount:minimum});
     if(extra>0n||auto.some(p=>p.monetary_source==='SUPPLIER_EXTRA'))expected.set('SUPPLIER_EXTRA',{amount:extra});
    }
@@ -53,7 +56,8 @@ export function operationalComposition(unit:any,month:string,parameters:any[],ta
      for(const l of g.lines){
       if(!['CCEE','EXPOSURE','CHARGE','OTHER'].includes(l.category)||l.effect!=='COST'||!l.id||!l.source?.trim()||l.signedAmount!==l.amount)throw Error('Créditos ou rubricas não conciliadas exigem tratamento específico; nenhum saldo parcial foi emitido.');
       const n=cents(l.amount),key='MONTHLY_'+l.category,previous=expected.get(key);sum+=n;
-      expected.set(key,{amount:(previous?.amount??0n)+n,itemIds:[...(previous?.itemIds??[]),l.id]});
+      if(g.taxTreatment==='INCLUDED'&&!own.some(p=>p.monetary_source===key)){out.entries.push(...finalMonthlyEntries({...g,lines:[l]},costs.version));}
+      else expected.set(key,{amount:(previous?.amount??0n)+n,itemIds:[...(previous?.itemIds??[]),l.id]});
      }
      if(cents(g.costs)!==sum||g.credits!=='0.00'||cents(g.balance)!==sum)throw Error('Saldo dos custos diverge dos lançamentos validados.');
     }

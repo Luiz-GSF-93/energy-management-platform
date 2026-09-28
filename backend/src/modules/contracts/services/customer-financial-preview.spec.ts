@@ -36,3 +36,5 @@ describe('customer preliminary consolidation and fees',()=>{
  it('blocks duplicated latest version',()=>{const f=fixture();f.rules.push({...f.rules[0],id:'rule2'});blocked(f);});
  it('stable allocation and ordering regardless of database row order',()=>{const f=fixture(),r=run(f);f.units.reverse();f.inputs.reverse();f.rules[0].allocations.reverse();expect(run(f)).toEqual(r);});
 });
+
+it('preserves documentary tax reservations in consolidated preview',()=>{const f=fixture();f.inputs[0].composition.qualifications=['Tributos não confirmados: revisão necessária.'];expect(run(f).warnings).toContain('Tributos não confirmados: revisão necessária.');expect(run(f).status).toBe('AVAILABLE');});
