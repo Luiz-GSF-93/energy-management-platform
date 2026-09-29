@@ -22,3 +22,5 @@ const supplier=sum([row('distributor'),acl]);assert.equal(supplier[0].referenceC
 const supplierHtml=renderToStaticMarkup(React.createElement(C,{operations:[acl]}));assert.ok(supplierHtml.includes('conferir NF do fornecedor'));assert.ok(!supplierHtml.includes('Não identificado — não equivale a zero'));
 const explicit=row('acl-tax');explicit.component='ACL_DISTRIBUTOR_INFORMATION';assert.equal(sum([explicit])[0].referenceCount,0);
 console.log('Supplier ACL tax ownership checks passed');
+
+const combined=row('elektro');delete combined.fields.pisAmount;delete combined.fields.cofinsAmount;combined.fields.pisCofinsAmount=f('3.41');const ct=sum([combined])[0];assert.deepEqual(ct.totals.map(t=>t.key),['icmsAmount','pisCofinsAmount']);assert.equal(ct.totals[1].value,'3,41');const combinedHtml=renderToStaticMarkup(React.createElement(C,{operations:[combined]}));assert.ok(combinedHtml.includes('PIS/Cofins conjunto'));assert.ok(combinedHtml.includes('sem estimar valores individuais'));assert.ok(!combinedHtml.includes('<strong>PIS</strong>'));console.log('Elektro combined tax presentation passed');
