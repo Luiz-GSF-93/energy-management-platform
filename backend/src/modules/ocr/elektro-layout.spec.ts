@@ -1,4 +1,6 @@
-import {identityPreview} from './identity-preview';
+import {invoiceFinancialAdjustments} from './invoice-financial-adjustments';
+import {combinedTaxLayout} from './reviewed-layout-support';
+import {tusdParameterCandidates} from './tusd-parameter-candidates';
 import {extractElektroLayout} from './elektro-layout';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 function fixture(){const raw:any={content:'',documents:[{fields:{}}],pages:[{pageNumber:1,lines:[]},{pageNumber:2,lines:[]}],tables:[],keyValuePairs:[]};
@@ -13,10 +15,15 @@ function fixture(){const raw:any={content:'',documents:[{fields:{}}],pages:[{pag
  it('dispatches the layout and reconciles charges and credits without the repeated demonstration',()=>{const {raw}=fixture(),r=extractCpflPaulistaLayout(raw);expect(r.layoutId).toBe('neoenergia-elektro-verde');expect(r.operations).toHaveLength(3);expect(r.reconciliation.state).toBe('MATCH');expect(r.preparation?.values.map(v=>v.decimal)).toEqual(['10','20','30']);expect(r.operations[2].role).toBe('CREDIT');expect(r.canImport).toBe(false);});
  it('keeps combined PIS/Cofins and reconciles their fiscal summary without splitting lines',()=>{const {raw}=fixture(),r=extractElektroLayout(raw)!;expect(r.operations[0].fields.pisCofinsAmount.decimal).toBe('1.00');expect(r.operations[0].fields.pisAmount).toBeUndefined();expect(r.taxReconciliation.checks.map(c=>c.state)).toEqual(['MATCH_EXTRACTED','MATCH_EXTRACTED']);});
  it('preserves the masked key, never IE as customer CNPJ',()=>{const {raw}=fixture(),r=extractElektroLayout(raw)!;expect(r.fields.find(f=>f.name==='customerTaxId')?.value.text).toBe('CNPJ - ******** 000191');});
- it('reports suffix agreement as partial, never full identity equality',()=>{const {raw}=fixture();const r=identityPreview(extractElektroLayout(raw)!,{customer:{company_name:'CLIENTE DE TESTE',document:'00000000000191'} as any,unit:{consumer_unit_number:'123'} as any,referenceMonth:'2026-08',otherDocumentInPeriod:false});expect(r.checks.find(c=>c.key==='taxId')).toMatchObject({comparison:'PARTIAL',state:'REVIEW'});});
  it('does not accept unsupported issuers',()=>{const {raw}=fixture();raw.pages[0].lines[0].content='Outra distribuidora';expect(extractElektroLayout(raw)).toBeNull();});
  it('blocks conflicting financial tables and does not deduplicate same-name monetary lines',()=>{const {raw,table,matrix}=fixture();raw.tables.push(table(matrix));const r=extractElektroLayout(raw)!;expect(r.operations).toHaveLength(6);expect(r.reconciliation.state).toBe('NOT_VERIFIABLE');expect(r.preparation).toBeNull();});
  it('does not reconcile an unverified amount',()=>{const {raw}=fixture();raw.tables[0].cells.find((c:any)=>c.rowIndex===1&&c.columnIndex===4).spans=[];expect(extractElektroLayout(raw)!.reconciliation.state).toBe('NOT_VERIFIABLE');});
  it('does not silently choose conflicting totals',()=>{const {raw,pair}=fixture();pair('TOTAL A PAGAR','R$ 27,00');expect(extractElektroLayout(raw)!.reconciliation.state).toBe('NOT_VERIFIABLE');});
  it('keeps measured demand missing instead of converting billed demand to measured',()=>{const {raw}=fixture();expect(extractElektroLayout(raw)!.preparation?.demand.measured.every(v=>v.decimal===null)).toBe(true);});
  });
+
+describe('Elektro integration evidence',()=>{
+ it('integrates gross TUSD with combined taxes',()=>{const l=extractElektroLayout(fixture().raw)!;expect(combinedTaxLayout(l)).toBe(true);expect(tusdParameterCandidates(l.operations,true).every(c=>c.ready)).toBe(true);expect(tusdParameterCandidates(l.operations).every(c=>c.ready)).toBe(false);});
+ it('reconciles adjustments without creating absent CIP',()=>{const l=extractElektroLayout(fixture().raw)!;const a=invoiceFinancialAdjustments(l);expect(a.state).toBe('RECONCILED');expect(a.cip).toBeNull();expect(a.items).toHaveLength(1);expect(a.items[0]).toMatchObject({effect:'CREDIT',amount:'2.00'});expect(a.total).toBe('28.00');});
+ it('blocks costs when total does not reconcile',()=>{const l=extractElektroLayout(fixture().raw)!;l.reconciliation.state='NOT_VERIFIABLE';expect(invoiceFinancialAdjustments(l).state).toBe('REVIEW_REQUIRED');});
+});

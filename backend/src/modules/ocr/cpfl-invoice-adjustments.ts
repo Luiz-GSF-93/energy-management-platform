@@ -3,7 +3,7 @@ export type InvoiceAdjustments={state:'RECONCILED'|'REVIEW_REQUIRED';total:strin
 const cents=(v:unknown)=>{if(typeof v!=='string'||! /^-?(0|[1-9][0-9]*)([.][0-9]{1,2})?$/.test(v)||v.length>30)throw Error('Valor monetário ausente ou inválido.');const negative=v.startsWith('-'),[a,b='']=(negative?v.slice(1):v).split('.');return (BigInt(a)*100n+BigInt(b.padEnd(2,'0')))*(negative?-1n:1n);};
 const money=(n:bigint)=>{const s=(n<0n?-n:n).toString().padStart(3,'0');return (n<0n?'-':'')+s.slice(0,-2)+'.'+s.slice(-2);};
 /** Reconciles invoice operations; subtotals and informative duplicates never become expenses. */
-export function cpflInvoiceAdjustments(operations:CpflOperation[]):InvoiceAdjustments{
+export function cpflInvoiceAdjustments(operations:CpflOperation[],requireCip=true):InvoiceAdjustments{
  const r:InvoiceAdjustments={state:'REVIEW_REQUIRED',total:null,tariffs:null,cip:null,cipSource:null,items:[],issues:[]};
  try{
   const totals=operations.filter(o=>o.component==='TOTAL_A_PAGAR'&&o.role==='TOTAL');
@@ -22,9 +22,9 @@ export function cpflInvoiceAdjustments(operations:CpflOperation[]):InvoiceAdjust
    else throw Error('Componente monetário sem integração: '+o.component);
   }
   if(acl!==0n)throw Error('Energia ACL e descontos não se anulam.');
-  if(lights.length!==1)throw Error('CIP ausente ou ambígua.');
+  if(requireCip&&lights.length!==1||lights.length>1)throw Error('CIP ausente ou ambígua.');
   if(sum!==total)throw Error('As operações não conciliam com o total a pagar.');
-  Object.assign(r,{state:'RECONCILED',total:money(total),tariffs:money(tariffs),cip:money(amount(lights[0])),cipSource:lights[0].source});
+  Object.assign(r,{state:'RECONCILED',total:money(total),tariffs:money(tariffs),cip:lights.length?money(amount(lights[0])):null,cipSource:lights[0]?.source??null});
  }catch(e){r.items=[];r.issues.push(e instanceof Error?e.message:'Conciliação indisponível.');}
  return r;
 }

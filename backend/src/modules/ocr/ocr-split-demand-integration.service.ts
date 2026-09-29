@@ -1,3 +1,4 @@
+import {reviewedLayoutSupported,combinedTaxLayout,operationTaxCodes} from './reviewed-layout-support';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -21,10 +22,10 @@ export class OcrSplitDemandIntegrationService {
   [monthly,parameters,saved].forEach(r=>this.fail(r.error));if(!Array.isArray(monthly.data)||!Array.isArray(parameters.data)||parameters.data.length>=1000)this.fail(true);
   const current=monthly.data[0],refs=(fields:any[])=>Object.fromEntries(fields.map(f=>[f.key,{id:f.history[0]?.id??null,sourceHash:f.sourceHash}])),reviewRefs={identity:refs(identity.fields),consumption:refs(consumption.fields)};
   const groups=homologationProgress(identity.fields,consumption.fields,[]).groups;
-  const candidates=(memory?.rows??[]).map(row=>{const operation=layout.operations.find(o=>o.source===row.source);const taxCodes=['ICMS','PIS','COFINS'].filter((code,i)=>{const value=operation?.fields[['icmsAmount','pisAmount','cofinsAmount'][i]]?.decimal;return typeof value==='string'&&/^\d+[.]\d{2}$/.test(value)&&Number(value)>0;});return {...row,taxCodes};});
+  const candidates=(memory?.rows??[]).map(row=>{const operation=layout.operations.find(o=>o.source===row.source);const taxCodes=operationTaxCodes(operation,combinedTaxLayout(layout));return {...row,taxCodes};});
   const demandRefs=Object.fromEntries(candidates.filter(r=>r.review).map(r=>[demandReviewDigest(r.source),{id:r.review!.id,sourceHash:r.review!.sourceHash}]));
   const reference=[...new Set(layout.fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
-  const ready=groups[0].complete&&groups[1].complete&&memory?.state==='RECONCILED'&&layout.layoutId==='cpfl-paulista-a'&&layout.reconciliation.state==='MATCH'&&reference.length===1&&reference[0]===month&&candidates.length===2&&['USED','UNUSED'].every(k=>candidates.filter(r=>r.classification===k).length===1)&&candidates.every(r=>r.taxCodes.includes('PIS')&&r.taxCodes.includes('COFINS'));
+  const ready=groups[0].complete&&groups[1].complete&&memory?.state==='RECONCILED'&&reviewedLayoutSupported(layout.layoutId)&&layout.reconciliation.state==='MATCH'&&reference.length===1&&reference[0]===month&&candidates.length===2&&['USED','UNUSED'].every(k=>candidates.filter(r=>r.classification===k).length===1)&&candidates.every(r=>r.taxCodes.includes('PIS')&&r.taxCodes.includes('COFINS'));
   const scope=current?.origin==='OCR_REVIEWED'&&current?.source_ocr_document_id===document&&current?.unit_context?.tariff_group==='A'&&current?.unit_context?.tariff_modality==='GREEN'&&current?.unit_context?.free_market===true;
   const overlaps=parameters.data.filter((p:any)=>p.status!=='RETIRED'&&p.start_date<=month+'-31'&&p.end_date>=month+'-01');
   const state=saved.data?'INTEGRATED':!current?'MONTHLY_REQUIRED':!scope?'UNSUPPORTED':overlaps.length||current.billed_demand?.ACL?.used!=null||current.billed_demand?.ACL?.unused!=null?'RECORD_PRESERVED':ready?'READY':'REVIEW_REQUIRED';
