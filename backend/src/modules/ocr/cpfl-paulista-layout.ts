@@ -1,3 +1,4 @@
+import {extractElektroLayout} from './elektro-layout';
 import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
 import {cpflPreparationPreview} from './cpfl-preparation-preview';
 import {extractCpflMeasurements,cpflReference} from './cpfl-measurements';
@@ -54,7 +55,7 @@ const aliases:Record<string,[string,string]>={
 };
 const generic:Record<string,[string,string]>={CustomerName:['customer','Razão social'],CustomerTaxId:['customerTaxId','CNPJ do cliente'],ServiceAddress:['serviceAddress','Endereço da unidade'],InvoiceId:['documentReference','Referência reconhecida — pode ser boleto'],InvoiceDate:['issueDate','Data de emissão'],DueDate:['dueDate','Vencimento']};
 /** Derived read-only projection of preserved OCR. Never overwrites the historical assessment. */
-export function extractCpflPaulistaLayout(raw:any){
+function extractCpflOnly(raw:any){
  const fields:NamedField[]=[],operations:CpflOperation[]=[],blocks:Block[]=[],issues:string[]=[];
  const docs=list(raw?.documents),tables=list(raw?.tables),pairs=list(raw?.keyValuePairs);
  const issuer=norm(docs[0]?.fields?.VendorName?.content);
@@ -143,3 +144,6 @@ export function extractCpflPaulistaLayout(raw:any){
  issues.push('IDENTITY_AND_PROFILE_REQUIRE_REVIEW','TOTALS_REQUIRE_RECONCILIATION','HOMOLOGATION_PENDING');
  return result();
 }
+
+/** Compatibility entry point for all existing review services. */
+export function extractCpflPaulistaLayout(raw:any){return extractElektroLayout(raw)??extractCpflOnly(raw); }
