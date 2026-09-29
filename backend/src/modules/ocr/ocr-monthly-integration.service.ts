@@ -1,3 +1,4 @@
+import {reviewedLayoutSupported} from './reviewed-layout-support';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {cpflReference} from './cpfl-measurements';
 import {measurementReadiness} from './measurement-readiness';
@@ -31,7 +32,7 @@ export class OcrMonthlyIntegrationService {
   await this.allowed(t);const source=await this.queue.reviewSource(t.organizationId,document),month=String(source.doc.reference_month).slice(0,7),layout=extractCpflPaulistaLayout(source.raw);
   const r=await this.db.getClient().from('calculation_monthly_inputs').select('id,status,version,revision,measurements').eq('organization_id',t.organizationId).eq('consumer_unit_id',source.doc.consumer_unit_id).eq('month',month).order('version',{ascending:false}).limit(1);this.fail(r.error);if(!Array.isArray(r.data))this.fail({});
   const refs=[...new Set(layout.fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
-  return measurementReadiness(layout.measurements?.meterReadings??[],layout.measurements?.history??[],layout.operations,month,r.data[0]??null,layout.layoutId==='cpfl-paulista-a'&&refs.length===1&&refs[0]===month);
+  return measurementReadiness(layout.measurements?.meterReadings??[],layout.measurements?.history??[],layout.operations,month,r.data[0]??null,reviewedLayoutSupported(layout.layoutId)&&refs.length===1&&refs[0]===month);
  }
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){

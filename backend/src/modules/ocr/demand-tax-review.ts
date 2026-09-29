@@ -1,7 +1,7 @@
 import type {CpflOperation} from './cpfl-paulista-layout';
 /** Display-only evidence. Missing amounts never become zero or a tax exemption. */
 export function demandTaxReview(row:CpflOperation){
- return [['icmsAmount','ICMS'],['pisAmount','PIS'],['cofinsAmount','Cofins']].map(([key,label])=>{
+ return (row.fields.pisCofinsAmount?[['icmsAmount','ICMS'],['pisCofinsAmount','PIS/Cofins conjunto']]:[['icmsAmount','ICMS'],['pisAmount','PIS'],['cofinsAmount','Cofins']]).map(([key,label])=>{
   const f=row.fields[key];
   const missing=!f?.text?.trim();
   const numeric=typeof f?.decimal==='string'&&/^[0-9]+(?:[.][0-9]+)?$/.test(f.decimal);
