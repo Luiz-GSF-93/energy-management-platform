@@ -9,7 +9,6 @@ export function measurementIssues(m:MonthlyMeasurementsDto,validating=false){
  if(validating&&total==null&&(peak==null||off==null))issues.push('Informe consumo total ou os consumos de ponta e fora ponta para validar.');
  if(validating&&((peak==null)!==(off==null)))issues.push('Complete os dois postos de consumo ou deixe ambos não informados.');
  if(m.demandSingle!=null&&(m.demandPeak!=null||m.demandOffPeak!=null))issues.push('Informe demanda única ou demanda por posto, evitando duas interpretações da medição.');
- if(validating&&((m.reactiveBilledPeakKwh!=null)!==(m.reactiveBilledOffPeakKwh!=null)))issues.push('Complete os dois postos de reativo faturado em kWh.');
  if(m.reactiveTotal!=null&&(m.reactiveBilledPeakKwh!=null||m.reactiveBilledOffPeakKwh!=null))issues.push('Não combine reativo total em kVArh com reativo faturado em kWh; preserve a unidade da fonte.');
  return issues;
 }

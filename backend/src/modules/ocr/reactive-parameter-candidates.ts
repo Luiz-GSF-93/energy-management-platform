@@ -1,8 +1,11 @@
 import type {CpflOperation} from './cpfl-paulista-layout';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import {kwhRateToMwh} from './tusd-parameter-candidates';
-export function reactiveParameterCandidates(rows:CpflOperation[]){
- return (['PEAK','OFF_PEAK'] as const).map(band=>{
+export function reactiveParameterCandidates(rows:CpflOperation[], layoutId:string|null=null){
+ const bands=['PEAK','OFF_PEAK'] as const;
+ const reactive=rows.filter(r=>r.role==='CHARGE'&&r.component==='REACTIVE_ENERGY');
+ const actualOnly=layoutId==='neoenergia-elektro-verde'&&reactive.length>0&&reactive.every(r=>r.period==='PEAK'||r.period==='OFF_PEAK');
+ return bands.filter(band=>!actualOnly||reactive.some(r=>r.period===band)).map(band=>{
   const found=rows.filter(r=>r.role==='CHARGE'&&r.component==='REACTIVE_ENERGY'&&r.period===band),r=found[0];
   const blocked=(reason:string)=>({band,ready:false as const,reason,source:r?.source??null,rateKwh:null,rateMwh:null,quantity:null,amount:null});
   if(found.length!==1)return blocked('É necessária uma única linha de reativo deste posto.');
