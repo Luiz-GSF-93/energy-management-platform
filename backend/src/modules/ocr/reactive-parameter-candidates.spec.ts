@@ -8,3 +8,9 @@ describe('reactive OCR candidates',()=>{
  it('accepts verified words at high confidence when cell confidence is unavailable',()=>{const r=rows();r[0].fields.quantity.confidence=null;r[0].fields.quantity.transcription={state:'VERIFIED_WORDS',confidence:0.9};expect(reactiveParameterCandidates(r)[0].ready).toBe(true);});
  it.each(['duplicate','missing','unit','arithmetic','merged'])('blocks %s evidence',issue=>{const r=rows();if(issue==='duplicate')r.push(r[0]);if(issue==='missing')r.shift();if(issue==='unit')r[0].fields.unit.text='kVArh';if(issue==='arithmetic')r[0].fields.amount.decimal='1.00';if(issue==='merged')r[0].issues=['MERGED_OR_DUPLICATE_CELL'];expect(reactiveParameterCandidates(r)[0].ready).toBe(false);});
 });
+
+describe('Elektro independently documented reactive bands',()=>{
+ it('keeps only off peak and preserves the default CPFL requirement',()=>{const r=rows().slice(1);expect(reactiveParameterCandidates(r,'neoenergia-elektro-verde')).toHaveLength(1);expect(reactiveParameterCandidates(r,'neoenergia-elektro-verde')[0]).toMatchObject({band:'OFF_PEAK',ready:true});expect(reactiveParameterCandidates(r)[0].ready).toBe(false);});
+ it('does not accept absent or ambiguous bands',()=>{expect(reactiveParameterCandidates([],'neoenergia-elektro-verde').every(r=>r.ready)).toBe(false);const r=rows().slice(1);r[0].period='UNKNOWN';expect(reactiveParameterCandidates(r,'neoenergia-elektro-verde').every(r=>r.ready)).toBe(false);});
+ it('does not discard duplicate or low confidence rows',()=>{const r=rows().slice(1);expect(reactiveParameterCandidates([...r,...r],'neoenergia-elektro-verde')[0].ready).toBe(false);r[0].fields.amount.confidence=0.1;expect(reactiveParameterCandidates(r,'neoenergia-elektro-verde')[0].ready).toBe(false);});
+});
