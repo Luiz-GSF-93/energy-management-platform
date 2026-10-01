@@ -1,0 +1,17 @@
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');const path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../app/backoffice/contracts/tariff-library-match.ts'),'utf8');const mod={exports:{}};new Function('exports','require',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText)(mod.exports,require);const {matchTariffLibrary:match}=mod.exports;
+const unit={distributor:'CPFL Paulista',tariff_group:'A',tariff_subgroup:'A4',tariff_modality:'GREEN',consumption_class:'Comercial',free_market:true};
+const row={id:'v1',root_id:'r1',version:1,profile:{distributor:'CPFL Paulista',group:'A',subgroup:'A4',modality:'GREEN',consumptionClass:'GENERAL',category:'Geral',startDate:'2026-01-01',endDate:'2026-12-31'}};
+const change=p=>({...row,profile:{...row.profile,...p}});
+test('unique match preserves source version and limits application to month',()=>{const r=match([row],unit,'2026-08');assert.equal(r.candidate,row);assert.equal(r.start,'2026-08-01');assert.equal(r.end,'2026-08-31');});
+test('leap year month end',()=>assert.equal(match([change({startDate:'2024-01-01',endDate:'2024-12-31'})],unit,'2024-02').end,'2024-02-29'));
+test('missing market or classification blocks guessing',()=>{for(const field of ['free_market','consumption_class','tariff_subgroup','tariff_modality'])assert.match(match([row],{...unit,[field]:null},'2026-08').message,/Complete/);});
+test('wrong distributor, modality, subgroup or class never matches',()=>{for(const p of [{distributor:'CPFL Piratininga'},{modality:'BLUE'},{subgroup:'A3'},{consumptionClass:'Industrial'}])assert.equal(match([change(p)],unit,'2026-08').candidate,undefined);});
+test('partial validity does not extend over month',()=>assert.match(match([change({startDate:'2026-08-27'})],unit,'2026-08').message,/vigências/));
+test('superseded revision cannot be silently reused',()=>assert.equal(match([row,{...change({startDate:'2026-09-01'}),version:2,id:'v2'}],unit,'2026-08').candidate,undefined));
+test('ambiguous roots require category or revision',()=>assert.match(match([row,{...row,root_id:'r2',id:'other'}],unit,'2026-08').message,/2 tabelas/));
+test('category disambiguates',()=>assert.equal(match([row,{...change({category:'Especial'}),root_id:'r2',id:'other'}],unit,'2026-08','Geral').candidate.id,'v1'));
+test('historical match keeps original validity for backend confirmation',()=>assert.equal(match([row],unit,'2026-01').candidate,row));
+test('Elektro alias matches only supported distributor',()=>assert.ok(match([change({distributor:'Neoenergia Elektro'})],{...unit,distributor:'Elektro'},'2026-08').candidate));
+test('ACR units can prepare ACL comparison without inventing supplier price',()=>assert.ok(match([row],{...unit,free_market:false},'2026-08').candidate));
+test('invalid month and absent unit are explained',()=>{assert.match(match([row],unit,'2026-13').message,/válida/);assert.match(match([row],undefined,'2026-08').message,/Selecione/);});
