@@ -2,6 +2,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
 for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLTextAreaElement','HTMLFormElement','FormData','Event','MouseEvent'])global[k]=dom.window[k];
+// jsdom does not implement native dialog methods; real browser behavior is checked separately.
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
 global.IS_REACT_ACT_ENVIRONMENT=true;
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
@@ -11,7 +14,7 @@ const apiRequest=async(url,options)=>{if(!options)return clone(rows);requests++;
 const ui={Button:({children,variant,...p})=>React.createElement('button',{type:'button','data-variant':variant,...p},children),Card:({title,children})=>React.createElement('section',null,React.createElement('h2',null,title),children),Alert:({children})=>React.createElement('div',{role:'alert'},children),Input:({label,...p})=>React.createElement('label',null,label,React.createElement('input',p))};
 const original=Module._load;Module._load=function(name,parent,main){if(name==='@/app/components/ui')return ui;if(name==='@/app/providers')return {useAuth:()=>({hasPermission:()=>true})};if(name==='@/app/lib/api/client')return {apiRequest};return original.call(this,name,parent,main);};
 const Wizard=require('../app/backoffice/contracts/EntryWizard.tsx').default;
-const a='00000000-0000-4000-8000-000000000001';const props={customers:[{id:a,company_name:'Cliente de teste'}],units:[{id:a,customer_id:a,name:'Unidade de teste',consumer_unit_number:'1'}],filterCustomer:'',onDirty:()=>{},onActive:()=>{},onRegistered:()=>{},requestStart:fn=>fn()};
+const a='00000000-0000-4000-8000-000000000001';const props={customers:[{id:a,company_name:'Cliente de teste'}],units:[{id:a,customer_id:a,name:'Unidade de teste',consumer_unit_number:'1'}],filterCustomer:a,onDirty:()=>{},onActive:()=>{},onRegistered:()=>{},requestStart:fn=>fn()};
 const root=createRoot(document.getElementById('root'));let checks=0;const ok=v=>{assert.ok(v);checks++;};const visible=e=>!e.closest('[hidden]');
 const click=async(text)=>{const button=Array.from(document.querySelectorAll('button')).find(b=>b.textContent===text&&visible(b));assert.ok(button,'Button '+text);await act(async()=>button.click());};
 const field=(label,hidden=false)=>{const l=Array.from(document.querySelectorAll('label')).find(e=>e.firstChild?.textContent===label&&(hidden||visible(e)));assert.ok(l,'Field '+label);return l.querySelector('input,select,textarea');};
