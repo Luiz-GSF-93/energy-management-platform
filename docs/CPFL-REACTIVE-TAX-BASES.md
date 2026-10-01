@@ -1,0 +1,3 @@
+CPFL tax expansion includes only current approved reactive parameters linked by the OCR integration, exact source/hash/job, scope, band, rate and explicit tax evidence. Preserves the four TUSD/CDE bases, adds both demand parcels and at most two reactive bands. No tariff value or tax charge is changed. Unused demand ICMS remains explicitly excluded from this embedded-tax basis.
+
+Validation: 86 tests across demand, CDE, reactive and successor suites passed; backend build passed; isolated SQL replacement regressions passed, including eight-base CPFL expansion. Production guards remain active; the isolated SQL fixture does not simulate all of them.
