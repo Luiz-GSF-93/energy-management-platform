@@ -1,3 +1,4 @@
+import {classSuccessorId} from './class-parameter-successor';
 import {reviewedLayoutSupported,combinedTaxLayout} from './reviewed-layout-support';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
@@ -26,7 +27,7 @@ export class OcrTusdIntegrationService {
   const [identity,consumption,unitResult,parameterResult]=await Promise.all([this.identity.list(t.organizationId,document),this.consumption.list(t.organizationId,document),client.from('consumer_units').select('*').eq('organization_id',t.organizationId).eq('id',source.doc.consumer_unit_id).eq('customer_id',source.doc.customer_id).maybeSingle(),client.from('calculation_parameters').select('*').eq('organization_id',t.organizationId).eq('consumer_unit_id',source.doc.consumer_unit_id).eq('kind','TARIFF').eq('component_code','TUSD_ENERGY').eq('scenario','ACL').range(0,999)]);
   this.fail(unitResult.error);this.fail(parameterResult.error);if(!unitResult.data||!Array.isArray(parameterResult.data)||parameterResult.data.length>=1000)this.fail(true);
   const unit=unitResult.data,layout=extractCpflPaulistaLayout(source.raw),candidates=tusdParameterCandidates(layout.operations,combinedTaxLayout(layout)),refs=[...new Set(layout.fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
-  const ids=candidates.map(c=>parameterId(t.organizationId,document,c.band)),existing=parameterResult.data.filter((p:any)=>ids.includes(p.id));
+  const ids=candidates.map(c=>classSuccessorId(parameterId(t.organizationId,document,c.band),parameterResult.data)),existing=parameterResult.data.filter((p:any)=>ids.includes(p.id));
   const overlap=parameterResult.data.filter((p:any)=>!ids.includes(p.id)&&p.status!=='RETIRED'&&p.start_date<=period.end&&p.end_date>=period.start);
   const groups=homologationProgress(identity.fields,consumption.fields,[]).groups;
   const ready=unit.status==='ACTIVE'&&unit.free_market===true&&unit.tariff_group==='A'&&reviewedLayoutSupported(layout.layoutId)&&refs.length===1&&refs[0]===month&&layout.reconciliation.state==='MATCH'&&groups[0].complete&&groups[1].complete&&candidates.every(c=>c.ready);

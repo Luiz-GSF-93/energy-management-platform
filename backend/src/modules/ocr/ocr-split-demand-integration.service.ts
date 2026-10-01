@@ -1,3 +1,4 @@
+import {classSuccessorId} from './class-parameter-successor';
 import {reviewedLayoutSupported,combinedTaxLayout,operationTaxCodes} from './reviewed-layout-support';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
@@ -31,7 +32,7 @@ export class OcrSplitDemandIntegrationService {
   const state=saved.data?'INTEGRATED':!current?'MONTHLY_REQUIRED':!scope?'UNSUPPORTED':overlaps.length||current.billed_demand?.ACL?.used!=null||current.billed_demand?.ACL?.unused!=null?'RECORD_PRESERVED':ready?'READY':'REVIEW_REQUIRED';
   const token=ocrReviewDigest({document,job:source.jobId,fileHash:source.doc.file_hash,reviewRefs,demandRefs,candidates,current,overlaps});
   const messages:Record<string,string>={INTEGRATED:'Parcelas e tarifas integradas. Consulte a situação atual da versão mensal e dos dois parâmetros; a integração não aprova o fechamento.',MONTHLY_REQUIRED:'Integre primeiro os consumos da fatura.',UNSUPPORTED:'Integração disponível para demanda única ACL do Grupo A Verde.',RECORD_PRESERVED:'Já existem parcelas ou tarifas de demanda no período. Nenhum registro será substituído.',REVIEW_REQUIRED:'Conclua as conferências atuais e a conciliação das duas parcelas antes de integrar.',READY:current?.status==='VALIDATED'?'Será criada uma nova versão mensal e duas tarifas em rascunho. A versão validada será preservada.':'As parcelas serão acrescentadas ao rascunho mensal e duas tarifas serão criadas em rascunho.'};
-  return {source,current,reviewRefs,demandRefs,candidates,ready,preview:{token,state,canCreate:state==='READY'&&this.monthly.canWrite(t),message:messages[state],inputId:saved.data?.input_id??null,parameterIds:saved.data?.parameter_ids??[],month,candidates:candidates.map(r=>({classification:r.classification,quantity:r.quantity,rate:r.rate,amount:r.amount})),targetVersion:saved.data?.source_snapshot?.targetVersion??(current?.version+(current?.status==='VALIDATED'?1:0))}};
+  return {source,current,reviewRefs,demandRefs,candidates,ready,preview:{token,state,canCreate:state==='READY'&&this.monthly.canWrite(t),message:messages[state],inputId:saved.data?.input_id??null,parameterIds:(saved.data?.parameter_ids??[]).map((id:string)=>classSuccessorId(id,parameters.data)),month,candidates:candidates.map(r=>({classification:r.classification,quantity:r.quantity,rate:r.rate,amount:r.amount})),targetVersion:saved.data?.source_snapshot?.targetVersion??(current?.version+(current?.status==='VALIDATED'?1:0))}};
  }
  async taxIntegrationSource(document:string,t:TenantContext){return this.context(document,t);}
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}

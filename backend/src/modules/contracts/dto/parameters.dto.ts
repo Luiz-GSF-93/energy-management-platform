@@ -41,3 +41,12 @@ export class ParameterDto {
 export class UpdateParameterDto extends ParameterDto { @IsInt() @Min(1) revision!:number; }
 export class ParameterRevisionDto { @IsInt() @Min(1) revision!:number; }
 export class RetireParameterDto extends ParameterRevisionDto { @IsString() @Matches(/\S/) @MaxLength(2000) reason!:string; }
+
+export class ClassReviewReferenceDto { @IsUUID() id!:string; @IsInt() @Min(1) revision!:number; }
+export class ParameterClassReviewDto {
+ @IsUUID() consumerUnitId!:string;
+ @Matches(/^\d{4}-(0[1-9]|1[0-2])$/) month!:string;
+ @IsString() @Matches(/\S/) @MaxLength(100) consumptionClass!:string;
+ @IsString() @Matches(/\S/) @MaxLength(1000) reason!:string;
+ @IsArray() @ArrayMaxSize(100) @ValidateNested({each:true}) @Type(()=>ClassReviewReferenceDto) parameters!:ClassReviewReferenceDto[];
+}
