@@ -6,7 +6,7 @@ function setup(){
  const data:any={document_ocr_monthly_integrations:null,calculation_monthly_inputs:[]};const calls:any[]=[];
  const from=(table:string)=>{const q:any={};for(const method of ['select','eq','order','limit'])q[method]=jest.fn((...args:any[])=>{calls.push([table,method,...args]);return q;});q.maybeSingle=async()=>({data:data[table],error:null});q.then=(resolve:any)=>resolve({data:data[table],error:null});return q;};
  const rpc:any=jest.fn(async()=>({data:{inputId:'monthly',status:'DRAFT',alreadyIntegrated:false},error:null}));
- const license={requireEntitlement:jest.fn(async()=>{})};const source={doc:{id:'doc',consumer_unit_id:'unit',reference_month:'2026-08-01',file_hash:'a'.repeat(64)},jobId:'job'};
+ const license={requireEntitlement:jest.fn(async()=>{})};const source={doc:{id:'doc',customer_id:'customer',consumer_unit_id:'unit',reference_month:'2026-08-01',file_hash:'a'.repeat(64)},jobId:'job'};
  const queue={reviewSource:jest.fn(async()=>source)};const service=new OcrMonthlyIntegrationService({getClient:()=>({from,rpc})} as any,license as any,queue as any,{list:async()=>identity} as any,{list:async()=>consumption} as any);
  const t:any={organizationId:'org',userId:'actor',role:'gestor',permissions:[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_CREATE]};return {service,t,data,calls,rpc,identity,consumption,license,queue};
 }
@@ -23,3 +23,11 @@ describe('OCR monthly integration',()=>{
 });
 
 describe('Measurement readiness access',()=>{it('reuses entitlements and organization/unit/month scope without writes',async()=>{const s=setup();const r=await s.service.measurementReadiness('doc',s.t);expect(r.canImport).toBe(false);expect(r.monthly).toBeNull();expect(s.calls).toContainEqual(['calculation_monthly_inputs','eq','organization_id','org']);expect(s.calls).toContainEqual(['calculation_monthly_inputs','eq','consumer_unit_id','unit']);expect(s.calls).toContainEqual(['calculation_monthly_inputs','eq','month','2026-08']);expect(s.rpc).not.toHaveBeenCalled();});it('denies missing contract permissions',async()=>{const s=setup();await expect(s.service.measurementReadiness('doc',{...s.t,permissions:[P.DOCUMENTS_VIEW]})).rejects.toThrow();expect(s.queue.reviewSource).not.toHaveBeenCalled();});});
+
+describe('Existing draft linking',()=>{
+ const draft=()=>({id:'existing',status:'DRAFT',revision:3,version:1,customer_id:'customer',consumer_unit_id:'unit',month:'2026-08',origin:'MANUAL',measurements:{consumptionPeak:'1.0000',consumptionOffPeak:null,consumptionTotal:null,demandPeak:'116',demandOffPeak:'137'},notes:'Higher demand with audit'});
+ it('links only compatible draft with revision, never sends replacement measurements',async()=>{const s=setup();s.data.calculation_monthly_inputs=[draft()];const p=await s.service.preview('doc',s.t);expect(p.state).toBe('READY_MERGE');expect(p.canCreate).toBe(true);await s.service.create('doc',s.t,{token:p.token});expect(s.rpc).toHaveBeenCalledWith('integrate_ocr_existing_monthly',expect.objectContaining({p_input:'existing',p_revision:3,p_actor:'actor',p_org:'org'}));expect(s.rpc.mock.calls[0][1]).not.toHaveProperty('measurements');});
+ it.each([{status:'VALIDATED'},{customer_id:'other'},{consumer_unit_id:'other'},{month:'2026-09'},{source_ocr_document_id:'other'},{measurements:{consumptionPeak:'2'}}])('preserves incompatible draft %j',async change=>{const s=setup();s.data.calculation_monthly_inputs=[{...draft(),...change}];expect((await s.service.preview('doc',s.t)).canCreate).toBe(false);});
+ it('rejects stale monthly revision',async()=>{const s=setup();s.data.calculation_monthly_inputs=[draft()];const p=await s.service.preview('doc',s.t);s.data.calculation_monthly_inputs[0].revision++;await expect(s.service.create('doc',s.t,{token:p.token})).rejects.toThrow('prévia mudou');expect(s.rpc).not.toHaveBeenCalled();});
+ it('does not link unconfirmed fields',async()=>{const s=setup();s.data.calculation_monthly_inputs=[draft()];s.consumption.fields[0].history[0].decision='NEEDS_CORRECTION';expect((await s.service.preview('doc',s.t)).canCreate).toBe(false);});
+});
