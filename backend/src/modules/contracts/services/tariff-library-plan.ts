@@ -22,7 +22,8 @@ export function libraryPlan(record:any,d:LibraryApplyDto,unit:any,today:string){
  const norm=(s:any)=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
  const sameDistributor=norm(unit.distributor)===norm(p.distributor)||(norm(p.distributor)==='NEOENERGIAELEKTRO'&&['ELEKTRO','NEOENERGIAELEKTRO'].includes(norm(unit.distributor)));
  if(!sameDistributor||norm(unit.tariff_group)!==norm(p.group)||norm(unit.tariff_subgroup)!==norm(p.subgroup)||unit.tariff_modality!==p.modality)fail('Distribuidora ou enquadramento diverge da unidade. Revise o cadastro ou selecione outra tabela.');
- if(p.consumptionClass!=='GENERAL'&&norm(p.consumptionClass)!==norm(unit.consumption_class))fail('A classe da tabela diverge da unidade.');
+ const classKey=(value:unknown)=>{const key=norm(value);return key==='COMERCIAL'?'COMMERCIAL':key;};
+ if(p.consumptionClass!=='GENERAL'&&classKey(p.consumptionClass)!==classKey(unit.consumption_class))fail('A classe da tabela diverge da unidade.');
  if(unit.free_market===true&&d.scenario!=='ACR'||unit.free_market===false&&d.scenario!=='ACL'||typeof unit.free_market!=='boolean')fail('Selecione o cenário comparativo oposto ao mercado cadastrado da unidade.');
  const selected=p.items.filter(i=>d.selected.includes(itemKey(i)));
  if(selected.length!==d.selected.length)fail('Seleção de componentes desatualizada.');
