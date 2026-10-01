@@ -62,8 +62,10 @@ function extractCpflOnly(raw:any){
  const firstPageLines=list(list(raw?.pages).find(p=>p.pageNumber===1)?.lines).map(l=>norm(l.content));
  const issuerNames=['CPFL PAULISTA','COMPANHIA PAULISTA DE FORCA E LUZ'];
  const issuerMatched=issuerNames.some(n=>issuer===n||firstPageLines.some(l=>l===n||l.startsWith(n+' ')));
+ const classificationLines=list(list(raw?.pages).find(p=>p.pageNumber===1)?.lines).filter(l=>/^CLASSIFICACAO /.test(norm(l.content)));
  const classifications=pairs.filter(p=>norm(p?.key?.content)==='CLASSIFICACAO').map(p=>norm(p?.value?.content));
- const groupA=classifications.some(v=>/\bA[1-4]\b|\bAS\b/.test(v));
+ const classificationEvidence=[...classifications,...classificationLines.map(l=>norm(l.content).replace(/^CLASSIFICACAO /,''))];
+ const groupA=classificationEvidence.some(v=>/\bA[1-4]\b|\bAS\b/.test(v));
  let measurements:ReturnType<typeof extractCpflMeasurements>|null=null;
  const result=()=>({taxReconciliation:reconcileCpflTaxes(operations,blocks),preparation:issuerMatched&&groupA&&docs.length===1?cpflPreparationPreview(operations,measurements?.meterReadings??[]):null,measurements,version:'cpfl-paulista-a@1.2.0',layoutId:issuerMatched&&groupA?'cpfl-paulista-a':null,name:issuerMatched&&groupA?'CPFL Paulista · Grupo A':'Layout ainda não identificado',status:'IN_HOMOLOGATION',canImport:false,library:invoiceLayoutLibrary,columns:cpflColumns,fields,operations,blocks,issues:[...new Set(issues)],coverage:[
   {label:'Identificação e período',mapped:['customer','customerTaxId','serviceAddress','unit','reference','dueDate','currentReading','previousReading'].filter(k=>fields.some(f=>f.name===k&&f.value.text.trim())).length,expected:8},
@@ -91,6 +93,26 @@ function extractCpflOnly(raw:any){
   const address=within.filter(l=>/^(R |RUA |AV |AVENIDA |ALAMEDA |ESTRADA |RODOVIA |VL |VILA |BAIRRO |[0-9]{5}[- ][0-9]{3})/.test(norm(l.content)));
   if(address.some(l=>/^[0-9]{5}[- ][0-9]{3}/.test(norm(l.content)))&&address.length>=2)add('serviceAddress','Endereço no bloco da UC',{content:address.map(l=>l.content).join('\n'),spans:address.flatMap(l=>list(l.spans)),boundingRegions:[{pageNumber:1}]},'pages[0].customerBlock.address');
  }
+
+ const pageLines=list(list(raw.pages).find(p=>p.pageNumber===1)?.lines);
+ const fiscalLines=pageLines.filter(l=>/^NOTA FISCAL N /.test(norm(l.content)));
+ const ucLabels=pageLines.filter(l=>norm(l.content)==='NUMERO DA UC');
+ const part=(line:any,value:string,position?:number)=>{
+  const spans=list(line.spans),at=position??text(line.content).indexOf(value);
+  if(spans.length!==1||at<0||text(raw.content).slice(spans[0].offset,spans[0].offset+spans[0].length)!==line.content)return null;
+  return {content:value,spans:[{offset:spans[0].offset+at,length:value.length}],boundingRegions:[{pageNumber:1}]};
+ };
+ if(fiscalLines.length===1&&ucLabels.length===1&&offset(ucLabels[0])<offset(fiscalLines[0])){
+  const fiscal=fiscalLines[0],match=text(fiscal.content).match(/NOTA\s+FISCAL\s+N[º°o]?\s*(\d+)\s*[-–]\s*S[ÉE]RIE\s+(\d+)/i);
+  if(match){for(const [name,label,value] of [['invoiceNumber','Número da nota fiscal',match[1]],['series','Série',match[2]]]){const input=part(fiscal,value,name==='series'?text(fiscal.content).indexOf(match[0])+match[0].lastIndexOf(value):undefined);if(input)add(name,label,input,'pages[0].customerBlock.'+name);}}
+  const within=pageLines.filter(l=>offset(l)>offset(ucLabels[0])&&offset(l)<offset(fiscal));
+  const taxLines=within.filter(l=>/\bCNPJ\s*:/i.test(text(l.content)));
+  if(taxLines.length===1){const match=text(taxLines[0].content).match(/CNPJ\s*:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/i);if(match){const input=part(taxLines[0],match[1]);if(input)add('customerTaxId','CNPJ do cliente — bloco da UC',input,'pages[0].customerBlock.customerTaxId');}}
+  const start=within.findIndex(l=>/^(R |RUA |AV |AVENIDA |RDV |RODOVIA |ESTRADA )/.test(norm(l.content)));
+  const end=within.findIndex((l,i)=>i>=start&&/^\d{5}-?\d{3}$/.test(text(l.content).trim()));
+  if(start>=0&&end>=start&&end-start<=3&&!fields.some(f=>f.name==='serviceAddress')){const address=within.slice(start,end+1).filter(l=>! /^(PROXIMA LEITURA|LEITURA ATUAL|LEITURA ANTERIOR|N DE DIAS)\b/.test(norm(l.content)));add('serviceAddress','Endereço no bloco da UC',{content:address.map(l=>l.content).join('\n'),spans:address.flatMap(l=>list(l.spans)),boundingRegions:[{pageNumber:1}]},'pages[0].customerBlock.address');}
+ }
+ if(!classifications.length)classificationLines.forEach((line,i)=>add('classification','Classificação tarifária — texto da fatura',{...line,boundingRegions:[{pageNumber:1}]},'pages[0].classification['+i+']'));
  for(const [k,[name,label]] of Object.entries(generic)){if(docs[0].fields?.[k])add(name,label,docs[0].fields[k],'documents[0].'+k);}
  pairs.slice(0,500).forEach((p,i)=>{const alias=aliases[norm(p?.key?.content)];if(alias)add(...alias,{...p.value,confidence:p.confidence},'keyValuePairs['+i+']');});
  if(pairs.length>500||tables.length>50)issues.push('LAYOUT_LIMIT_REACHED');

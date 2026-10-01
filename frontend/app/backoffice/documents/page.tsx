@@ -53,7 +53,13 @@ function DocumentsContent() {
     try {
       const saved=await apiRequest<Document>('/api/v1/documents/upload',{method:'POST',body:data});
       if (currentOrg.current!==org) return;
-      setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.');
+      let ocrNotice='';
+      if(saved.document_type==='INVOICE_DISTRIBUTOR'&&saved.file_verified&&hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')){
+        try{await apiRequest('/api/v1/documents/'+encodeURIComponent(saved.id)+'/ocr',{method:'POST'});ocrNotice=' Leitura OCR iniciada automaticamente. O andamento será atualizado nesta tela.';}
+        catch{ocrNotice=' O arquivo foi salvo, mas não foi possível iniciar o OCR automaticamente. Consulte a leitura para verificar a disponibilidade.';}
+      }
+      if(currentOrg.current!==org)return;
+      setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(ocrNotice||(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.'));
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.'); }
     finally { setBusy(false); }
   }
@@ -86,7 +92,7 @@ function DocumentsContent() {
     {loading ? <p role="status">Carregando documentos…</p> : <>
       {canUpload && <form key={organizationId} onSubmit={send} style={{display:'grid',gap:16,maxWidth:680,padding:24,border:'1px solid #dbe3ec',borderRadius:12,background:'var(--color-surface)',color:'var(--color-text)'}}>
         <h2>Enviar documento</h2>
-        <p>Selecione o cliente, a unidade e o mês de referência da fatura. Enviar arquivo apenas armazena o documento; não aprova o conteúdo nem preenche a apuração.</p>
+        <p>Selecione o cliente, a unidade e o mês de referência da fatura. Após o envio, a leitura OCR da fatura da distribuidora é iniciada automaticamente quando habilitada e permitida. A integração depende das validações do conteúdo e do cadastro.</p>
         <label>Cliente<select name="customerId" required value={customer} disabled={busy} onChange={e=>setCustomer(e.target.value)} style={{display:'block',width:'100%',padding:10}}><option value="">Selecione</option>{customers.map(c=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></label>
         <label>Unidade consumidora<select key={customer} name="consumerUnitId" required disabled={busy || !customer} defaultValue="" style={{display:'block',width:'100%',padding:10}}><option value="">Selecione</option>{units.filter(u=>u.customer_id===customer).map(u=><option key={u.id} value={u.id}>{u.name || u.consumer_unit_number} — {u.consumer_unit_number}</option>)}</select></label>
         <label>Competência<input name="referenceMonth" type="month" required disabled={busy} style={{display:'block',padding:10}} /></label>
