@@ -1,0 +1,28 @@
+import 'reflect-metadata';
+import {validateWriteDto} from '../../../common/validation/validate-write-dto';
+import {MonthlyCostDto} from '../dto/monthly-costs.dto';
+import {costIssues} from './monthly-costs';
+import {spotSupplierCost} from './spot-supplier-cost';
+import {reservedSupplierEntry} from './document-composition';
+import {supplierIcmsAmount} from './supplier-icms';
+const id='10000000-0000-4000-8000-000000000001';
+const evidence={kind:'WITHOUT_INVOICE' as const,reason:'Cliente não enviou a NF e confirmou valor e quantidade apresentados no portal do fornecedor.',reference:'Confirmação do cliente: 203,254 MWh, R$ 46.748,42 no portal da Comerc.',paymentTerms:'À vista, boleto'};
+const item={id,label:'Compra Comerc sem NF',category:'SUPPLIER_INVOICE',scenario:'ACL',effect:'COST',amount:'46748.42',source:evidence.reference,taxTreatment:'RESERVED',taxReservationReason:'Demais tributos não foram comprovados; somente ICMS confirmado separadamente.',supplierEvidence:evidence};
+const unit={id:'u',organization_id:'o',customer_id:'c',free_market:true};
+const costs=()=>[{id:'cost',organization_id:'o',customer_id:'c',consumer_unit_id:'u',month:'2026-08',version:2,revision:3,status:'VALIDATED',validated_at:'2026-10-01',validated_by:'actor',unit_context:{free_market:true},source_reference:'Cadastro e confirmação do cliente',costs:{noCosts:false,items:[structuredClone(item)]}}];
+const base=()=>({formulaVersion:'spot-supplier-1.0',status:'BLOCKED',month:'2026-08',contract:{id:'contract'},rule:{id:'rule',version:1,source:'Condições confirmadas'},measurements:{measurements:{consumptionTotal:'203254',consumptionPeak:'21476',consumptionOffPeak:'181778'}},taxTreatment:'RESERVED',taxReservation:{createdBy:'actor',createdAt:'2026-10-01',reason:'Demais tributos permanecem sem confirmação documental.'},requirements:[],warnings:[]}) as any;
+const run=(r=base(),rows:any[]=costs(),volume=203254000000000n)=>spotSupplierCost(r,unit,'2026-08',volume,230000000000000n,rows);
+describe('audited purchase without NF',()=>{
+ it('accepts explicit evidence in DTO and cost validation',async()=>{const dto=await validateWriteDto(MonthlyCostDto,{consumerUnitId:id,month:'2026-08',costs:{noCosts:false,items:[item]},sourceReference:item.source,notes:'',correctionReason:''});expect(costIssues(dto.costs,true)).toEqual([]);});
+ it.each([{reason:'ok'},{reason:' '.repeat(60)},{reference:'portal'},{paymentTerms:''},{kind:'INVOICE'},{extra:'spoof'}])('rejects incomplete exception %j',async patch=>{await expect(validateWriteDto(MonthlyCostDto,{consumerUnitId:id,month:'2026-08',costs:{noCosts:false,items:[{...item,supplierEvidence:{...evidence,...patch} as any}]},sourceReference:item.source,notes:'',correctionReason:''}).then(d=>{if(costIssues(d.costs,true).length)throw Error('Invalid evidence');})).rejects.toThrow();});
+ it.each([{scenario:'ACR'},{category:'OTHER'},{effect:'CREDIT'}])('rejects wrong exception scope %j',patch=>expect(costIssues({noCosts:false,items:[{...item,...patch}]},true).length).toBeGreaterThan(0));
+ it('reconciles validated matching purchase and preserves explicit qualification',()=>{const r=run();expect(r.status).toBe('READY');expect(r.totalAmount).toBe('46748.42');expect(r.invoiceSources[0].supplierEvidence).toEqual(evidence);const entry=reservedSupplierEntry(r);expect(entry.amount).toBe('46748.42');expect(entry.label).toContain('sem NF');expect(entry.source).toContain('não quitação');expect(entry.references.some(v=>v.kind==='SUPPLIER_WITHOUT_INVOICE')).toBe(true);});
+ it('requires validation by the existing workflow',()=>{const rows=costs();rows[0].status='DRAFT';expect(run(base(),rows).status).toBe('BLOCKED');});
+ it('does not waive volume differences',()=>expect(run(base(),costs(),203255000000000n).status).toBe('BLOCKED'));
+ it('does not waive price differences',()=>{const rows=costs();rows[0].costs.items[0].amount='46748.43';expect(run(base(),rows).status).toBe('BLOCKED');});
+ it('does not waive unrelated blockers',()=>{const r=base();r.requirements=[{code:'CYCLE_OPEN'}];expect(run(r).status).toBe('BLOCKED');});
+ it('does not invent exception for legacy invoice',()=>{const rows:any[]=costs();delete rows[0].costs.items[0].supplierEvidence;expect(run(base(),rows).status).toBe('BLOCKED');});
+ it('requires billing rule author',()=>{const r=base();delete r.taxReservation.createdBy;expect(run(r).status).toBe('BLOCKED');});
+ it('cannot compose an exception with stale or missing cost validation',()=>{const r=run();r.costVersion.validatedAt=null;expect(()=>reservedSupplierEntry(r)).toThrow();});
+ it('calculates confirmed 18 percent inside without modifying energy value',()=>expect(supplierIcmsAmount(item.amount,{parameterId:id,revision:1,rate:'18',reason:'ICMS confirmado não embutido pelo responsável.'})).toEqual({base:'46748.42',tax:'10261.85',total:'57010.27',rate:'18'}));
+});

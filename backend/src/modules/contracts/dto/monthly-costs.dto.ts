@@ -6,7 +6,14 @@ export class SupplierIcmsDto {
  @IsString() @Matches(/^(0|[1-9][0-9]?)([.][0-9]{1,6})?$/) rate!:string;
  @IsString() @Matches(/\S/) @MaxLength(1000) reason!:string;
 }
+export class SupplierEvidenceDto {
+ @IsIn(['WITHOUT_INVOICE']) kind!:'WITHOUT_INVOICE';
+ @IsString() @MinLength(50) @MaxLength(1000) reason!:string;
+ @IsString() @MinLength(20) @MaxLength(1000) reference!:string;
+ @IsString() @MinLength(5) @MaxLength(200) paymentTerms!:string;
+}
 export class MonthlyCostItemDto {
+ @IsOptional() @IsObject() @ValidateNested() @Type(()=>SupplierEvidenceDto) supplierEvidence?:SupplierEvidenceDto;
  @IsOptional() @IsObject() @ValidateNested() @Type(()=>SupplierIcmsDto) supplierIcms?:SupplierIcmsDto;
  @IsUUID() id!:string;
  @IsString() @Matches(/\S/) @MaxLength(200) label!:string;
