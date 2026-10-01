@@ -24,4 +24,9 @@ for(const change of [`UPDATE calculation_parameters SET source=replace(source,re
 }
 await reset();await assert.rejects(()=>approve('other'));await assert.rejects(()=>approve('org',2));
 assert.equal((await db.query(`SELECT has_function_privilege('authenticated','approve_parameter_replacement(text,uuid,integer,text)','EXECUTE') AS allowed`)).rows[0].allowed,false);
+await reset();
+await db.query('UPDATE calculation_parameters SET tax_basis=$1 WHERE id=$2',[JSON.stringify({version:1,items:[1,2,3,4].map(item)}),uuid(10)]);
+for(let n=5;n<=8;n++)await insert({...common,id:uuid(n),component_code:n===5?'TUSD_DEMAND_USED':n===6?'TUSD_DEMAND_UNUSED':'REACTIVE',time_band:n<=6?'ALL':n===7?'PEAK':'OFF_PEAK',measure:n<=6?'BRL_KW':'BRL_MWH',source:src+' · tables[3].row['+n+']'});
+await db.query('UPDATE calculation_parameters SET tax_basis=$1 WHERE id=$2',[JSON.stringify({version:1,items:[1,2,3,4,5,6,7,8].map(item)}),uuid(11)]);
+assert.equal((await approve()).rows[0].result.status,'APPROVED');
 console.log('PASS: legacy/generic CPFL CDE and Elektro demand; idempotency; cross-tenant/source, stale revision, retired base and invalid exclusions rejected; failed approval preserves predecessor; browser role denied. Isolated schema; other production guards not simulated.');await db.close();
