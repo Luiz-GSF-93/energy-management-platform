@@ -17,7 +17,7 @@ export class OcrSplitDemandIntegrationService {
  constructor(private db:SupabaseService,private monthly:OcrMonthlyIntegrationService,private queue:OcrQueueService,private identity:OcrIdentityReviewService,private consumption:OcrReviewService){}
  private fail(e:any){if(!e)return;if(['P4090','P4091','40001','23505','P3402'].includes(e.code))throw new ConflictException('A origem ou os registros mudaram. Atualize a integração; nenhum dado foi substituído.');throw new ServiceUnavailableException('Não foi possível integrar as parcelas. Atualize a situação antes de tentar novamente.');}
  private async context(document:string,t:TenantContext){
-  await this.monthly.preview(document,t);
+  const monthlyLink=await this.monthly.preview(document,t);
   const db=this.db.getClient(),source=await this.queue.reviewSource(t.organizationId,document),layout=extractCpflPaulistaLayout(source.raw),month=String(source.doc.reference_month).slice(0,7);
   const [identity,consumption,memory,monthly,parameters,saved]=await Promise.all([this.identity.list(t.organizationId,document),this.consumption.list(t.organizationId,document),loadDemandFinancialMemory(db,source.doc,source.jobId,layout),db.from('calculation_monthly_inputs').select('*').eq('organization_id',t.organizationId).eq('consumer_unit_id',source.doc.consumer_unit_id).eq('month',month).order('version',{ascending:false}).limit(1),db.from('calculation_parameters').select('*').eq('organization_id',t.organizationId).eq('consumer_unit_id',source.doc.consumer_unit_id).eq('scenario','ACL').eq('kind','TARIFF').in('component_code',['TUSD_DEMAND','TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED']).range(0,999),db.from('document_ocr_split_demand_integrations').select('*').eq('organization_id',t.organizationId).eq('document_id',document).maybeSingle()]);
   [monthly,parameters,saved].forEach(r=>this.fail(r.error));if(!Array.isArray(monthly.data)||!Array.isArray(parameters.data)||parameters.data.length>=1000)this.fail(true);
@@ -27,7 +27,8 @@ export class OcrSplitDemandIntegrationService {
   const demandRefs=Object.fromEntries(candidates.filter(r=>r.review).map(r=>[demandReviewDigest(r.source),{id:r.review!.id,sourceHash:r.review!.sourceHash}]));
   const reference=[...new Set(layout.fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
   const ready=groups[0].complete&&groups[1].complete&&memory?.state==='RECONCILED'&&reviewedLayoutSupported(layout.layoutId)&&layout.reconciliation.state==='MATCH'&&reference.length===1&&reference[0]===month&&candidates.length===2&&['USED','UNUSED'].every(k=>candidates.filter(r=>r.classification===k).length===1)&&candidates.every(r=>r.taxCodes.includes('PIS')&&r.taxCodes.includes('COFINS'));
-  const scope=current?.origin==='OCR_REVIEWED'&&current?.source_ocr_document_id===document&&current?.unit_context?.tariff_group==='A'&&current?.unit_context?.tariff_modality==='GREEN'&&current?.unit_context?.free_market===true;
+  const linked=(current?.origin==='OCR_REVIEWED'&&current?.source_ocr_document_id===document)||(monthlyLink.state==='INTEGRATED'&&monthlyLink.inputId===current?.id);
+  const scope=linked&&current?.unit_context?.tariff_group==='A'&&current?.unit_context?.tariff_modality==='GREEN'&&current?.unit_context?.free_market===true;
   const overlaps=parameters.data.filter((p:any)=>p.status!=='RETIRED'&&p.start_date<=month+'-31'&&p.end_date>=month+'-01');
   const state=saved.data?'INTEGRATED':!current?'MONTHLY_REQUIRED':!scope?'UNSUPPORTED':overlaps.length||current.billed_demand?.ACL?.used!=null||current.billed_demand?.ACL?.unused!=null?'RECORD_PRESERVED':ready?'READY':'REVIEW_REQUIRED';
   const token=ocrReviewDigest({document,job:source.jobId,fileHash:source.doc.file_hash,reviewRefs,demandRefs,candidates,current,overlaps});
