@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+
+let calls=[],saved=false,fail=false;
+const data=()=>({rows:saved?[{id:'decl',scenario:'ACR',version:1,absent:true,source_reference:'Fatura',reason:'ACR sem custos adicionais. ACL preservado.',created_by:'actor',created_at:'2026-10-01'}]:[],active:saved?[{id:'decl'}]:[],costId:'draft',costRevision:1,canValidate:true});
+const ui={Button:({children,variant,...p})=>React.createElement('button',p,children),Card:({title,children})=>React.createElement('section',null,React.createElement('h2',null,title),children),Alert:({children})=>React.createElement('div',{role:'alert'},children)};
+const original=Module._load;Module._load=function(n,p,m){if(n==='@/app/components/ui')return ui;if(n==='@/app/lib/api/client')return {apiRequest:async(url,options)=>{calls.push({url,options});if(options){if(fail)throw Error('Custos alterados. Atualize a consulta.');saved=true;}return data();}};if(n.startsWith('@/app/'))return original.call(this,path.resolve(__dirname,'..',n.slice(2)),p,m);return original.call(this,n,p,m);};
+const Panel=require('../app/backoffice/contracts/ScenarioCostAbsence.tsx').default,root=createRoot(document.getElementById('root'));
+const render=(props={})=>act(async()=>root.render(React.createElement(Panel,{unitId:'u',month:'2026-08',canUpdate:true,refreshKey:'1',onDirty:()=>{},...props}))),text=()=>document.body.textContent;
+const fill=async(i,value)=>act(async()=>{const e=document.querySelectorAll('textarea')[i];Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event('input',{bubbles:true}));});
+(async()=>{try{
+ await render();assert.equal(calls.filter(c=>c.options).length,0);assert.equal(document.querySelector('button').disabled,true);
+ await fill(0,'Fatura');await fill(1,'ACR sem custos adicionais. ACL preservado.');await act(async()=>document.querySelector('input[type=checkbox]').click());await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ const post=calls.find(c=>c.options);assert.ok(post.url.endsWith('/absences'));assert.equal(post.options.body.scenario,'ACR');assert.equal(post.options.body.costId,'draft');assert.equal(post.options.body.costRevision,1);assert.equal(post.options.body.absent,true);assert.ok(!('status' in post.options.body));assert.ok(!('created_by' in post.options.body));assert.ok(text().includes('Declaração salva no histórico'));assert.ok(text().includes('Ausência confirmada'));assert.equal(document.querySelector('input[type=checkbox]').checked,false);assert.equal(document.querySelector('button').disabled,true);
+ await render({key:'readonly',canUpdate:false});assert.equal(document.querySelector('form'),null);assert.ok(text().includes('Histórico das declarações'));
+ await act(async()=>root.unmount());console.log('Scenario absence UI: 15 checks passed');
+}finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

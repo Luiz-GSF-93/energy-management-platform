@@ -1,4 +1,5 @@
 'use client';
+import ScenarioCostAbsence from './ScenarioCostAbsence';
 import AuditAuthor,{AuditAuthorFields} from './AuditAuthor';
 import {FormEvent,useEffect,useState} from 'react';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
@@ -15,6 +16,7 @@ type Event={id:string;revision:number;action:string;recorded_at:string;snapshot:
 type Editor={id?:string;revision?:number;previousId:string|null;costs:Costs;sourceReference:string;notes:string;correctionReason:string};
 const blank=():Costs=>({noCosts:false,items:[]});
 export default function MonthlyCosts({customerId,units,onDirty,initialContext}:{initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
+ const [absenceDirty,setAbsenceDirty]=useState(false);
  const {hasPermission}=useAuth();const [unitId,setUnit]=useState(initialContext?.unitId||''),[year,setYear]=useState(initialContext?.month.slice(0,4)||''),[month,setMonth]=useState(initialContext?.month.slice(5,7)||'');
  const [rows,setRows]=useState<Row[]|null>(null),[canValidate,setValidate]=useState(false),[busy,setBusy]=useState(!!initialContext&&initialContext.customerId===customerId&&units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)),[error,setError]=useState(''),[message,setMessage]=useState(''),[editor,setEditor]=useState<Editor|null>(null),[discard,setDiscard]=useState(false),[confirm,setConfirm]=useState<Row|null>(null),[history,setHistory]=useState<{id:string;events:Event[]}|null>(null);
  const period=year+'-'+month,available=units.filter(u=>u.customer_id===customerId),create=hasPermission(PERM.create),update=hasPermission(PERM.update);
@@ -24,12 +26,12 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext}:{
  function patch(p:Partial<Editor>){setEditor(d=>d?{...d,...p}:d);onDirty(true);}
  function patchItem(index:number,p:Partial<CostItem>){if(editor)patch({costs:{...editor.costs,items:editor.costs.items.map((item,i)=>i===index?(()=>{const next={...item,...p};if(next.taxTreatment!=='RESERVED'){delete next.taxReservationReason;delete next.supplierIcms;}if(next.category!=='SUPPLIER_INVOICE'||next.scenario!=='ACL'||next.effect!=='COST')delete next.supplierIcms;return next;})():item)}});}
  async function load(e:FormEvent){e.preventDefault();setError('');setMessage('');setRows(null);setConfirm(null);setHistory(null);if(!unitId||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(period)){setError('Selecione unidade, mês e ano entre 2000 e 2199.');return;}setBusy(true);try{const r=await apiRequest<{rows:Row[];canValidate:boolean}>('/api/v1/calculation-monthly-costs?consumerUnitId='+encodeURIComponent(unitId)+'&month='+period);setRows(r.rows);setValidate(r.canValidate);}catch(e){setError(e instanceof Error?e.message:'Falha na consulta.');}finally{setBusy(false);}}
- function start(row?:Row){setEditor(row?{...(row.status==='DRAFT'?{id:row.id,revision:row.revision}:{}),previousId:row.status==='DRAFT'?row.previous_id:row.id,costs:{...row.costs,items:row.costs.items.map(i=>({...i}))},sourceReference:row.source_reference,notes:row.notes,correctionReason:row.status==='DRAFT'?row.correction_reason:''}:{previousId:null,costs:blank(),sourceReference:'',notes:'',correctionReason:''});onDirty(true);setConfirm(null);setHistory(null);setError('');setMessage('');}
+ function start(row?:Row){if(absenceDirty){setError('Conclua ou descarte a declaração em edição.');return;}setEditor(row?{...(row.status==='DRAFT'?{id:row.id,revision:row.revision}:{}),previousId:row.status==='DRAFT'?row.previous_id:row.id,costs:{...row.costs,items:row.costs.items.map(i=>({...i}))},sourceReference:row.source_reference,notes:row.notes,correctionReason:row.status==='DRAFT'?row.correction_reason:''}:{previousId:null,costs:blank(),sourceReference:'',notes:'',correctionReason:''});onDirty(true);setConfirm(null);setHistory(null);setError('');setMessage('');}
  async function addSupplierIcms(index:number){
   if(!editor||busy)return;setBusy(true);setError('');try{const ref=await apiRequest<{parameterId:string;revision:number;rate:string}>('/api/v1/calculation-monthly-costs/supplier-icms?consumerUnitId='+encodeURIComponent(unitId)+'&month='+encodeURIComponent(period));patchItem(index,{supplierIcms:{parameterId:ref.parameterId,revision:ref.revision,rate:ref.rate,reason:''}});}catch(e){setError(e instanceof Error?e.message:'Referência ICMS indisponível.');}finally{setBusy(false);}
  }
  async function integrateInvoice(row:Row){
-  if(busy)return;setBusy(true);setError('');setMessage('');try{
+  if(busy||absenceDirty)return;setBusy(true);setError('');setMessage('');try{
    const docs=Array.from(new Set(row.costs.items.filter(i=>i.category==='CHARGE'&&i.scenario==='ACL').map(i=>i.source.match(/^OCR CPFL · CIP · documento ([a-f0-9-]{36}) · SHA-256 [a-f0-9]{64} · /i)?.[1]).filter(Boolean)));
    if(docs.length!==1)throw new Error('Identifique uma única origem OCR da CIP nesta competência.');
    const path='/api/v1/documents/'+encodeURIComponent(docs[0]! as string)+'/ocr/cip-integration';
@@ -40,7 +42,7 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext}:{
  }
  async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;setBusy(true);setError('');setMessage('');try{const row=await apiRequest<Row>('/api/v1/calculation-monthly-costs'+(editor.id?'/'+editor.id:''),{method:editor.id?'PUT':'POST',body:{consumerUnitId:unitId,month:period,costs:editor.costs,sourceReference:editor.sourceReference,notes:editor.notes,correctionReason:editor.correctionReason,previousId:editor.previousId,...(editor.id?{revision:editor.revision}:{})}});setRows(old=>[row,...(old||[]).filter(r=>r.id!==row.id)].sort((a,b)=>b.version-a.version));close();setMessage('Rascunho salvo. Confira os custos e a fonte antes da validação.');}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}finally{setBusy(false);}}
  async function review(row:Row){
-  if(busy)return;setBusy(true);setError('');setMessage('');setConfirm(null);setHistory(null);
+  if(busy||absenceDirty)return;setBusy(true);setError('');setMessage('');setConfirm(null);setHistory(null);
   try{
    let current=row;
    if(row.origin==='OCR_CIP'){
@@ -61,11 +63,12 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext}:{
  if(!customerId)return <p>Selecione um cliente para consultar os custos mensais de suas unidades.</p>;
  return <section className='backoffice-page'><h2>Custos mensais para apuração</h2><p>Registre a fatura do fornecedor, compras extras e demais custos/créditos desta unidade e competência. A referência do contrato não substitui a fatura validada. Não duplique valores entre categorias.</p>
  {error?<Alert variant='error'>{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
- <Card title='Unidade e competência dos dados'><form onSubmit={load}><fieldset disabled={busy||!!editor} className='organizations-create__form'>
+ <Card title='Unidade e competência dos dados'><form onSubmit={load}><fieldset disabled={busy||!!editor||absenceDirty} className='organizations-create__form'>
  <label>Unidade dos custos mensais<select className='ds-input' required value={unitId} onChange={e=>{setUnit(e.target.value);clearResults();}}><option value=''>Selecione</option>{available.map(u=><option key={u.id} value={u.id}>{u.name} — {u.consumer_unit_number}</option>)}</select></label>
  <label>Mês dos custos mensais<select className='ds-input' required value={month} onChange={e=>{setMonth(e.target.value);clearResults();}}><option value=''>Selecione</option>{['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].map((m,i)=><option key={m} value={String(i+1).padStart(2,'0')}>{m}</option>)}</select></label>
  <label>Ano dos custos mensais<select className='ds-input' required autoComplete='off' value={year} onChange={e=>{setYear(e.target.value);clearResults();}}><option value=''>Selecione o ano</option>{Array.from({length:200},(_,i)=>String(2000+i)).map(y=><option key={y} value={y}>{y}</option>)}</select></label>
  <Button type='submit'>{busy?'Aguarde...':'Consultar custos mensais'}</Button></fieldset></form></Card>
+ {rows&&!editor&&<ScenarioCostAbsence unitId={unitId} month={period} canUpdate={update} refreshKey={rows.map(r=>r.id+':'+r.revision).join(',')} onDirty={v=>{setAbsenceDirty(v);onDirty(v);}}/>}
  {rows&&!editor&&create&&!rows.some(r=>r.status==='DRAFT')?<Button disabled={busy} onClick={()=>start(rows[0])}>{rows.length?'Criar versão corrigida':'Novo rascunho mensal'}</Button>:null}
  {editor?<Card title={editor.id?'Editar custos do rascunho':editor.previousId?'Nova versão dos custos':'Novo rascunho mensal'}><form onSubmit={save}><fieldset disabled={busy} className='organizations-create__form'><p>{available.find(u=>u.id===unitId)?.name} · {period}</p><p>Para fornecedor, selecione Fatura do fornecedor ou Compra extra de energia e use o cenário ACL. Identifique a fatura e eventual rateio na fonte. Lance a compra extra separadamente somente quando não incluída na fatura regular. Informe o valor em reais conforme o documento de origem. Identifique tributos incluídos ou excluídos; o ICMS por dentro pode ser confirmado separadamente, usando a alíquota ACL aprovada. Custos do cliente ou da organização precisam de rateio justificado antes do lançamento por unidade.</p>
  <label><input type='checkbox' checked={editor.costs.noCosts} disabled={editor.costs.items.length>0} onChange={e=>patch({costs:{...editor.costs,noCosts:e.target.checked}})}/> Revisei e não há custos ou créditos adicionais nesta competência</label>

@@ -1,4 +1,4 @@
-import {IsUUID,IsString,IsInt,Min,MaxLength,Matches,IsOptional,ValidateNested,IsObject,IsArray,ArrayMaxSize,IsBoolean,IsIn} from 'class-validator';
+import {MinLength,IsUUID,IsString,IsInt,Min,MaxLength,Matches,IsOptional,ValidateNested,IsObject,IsArray,ArrayMaxSize,IsBoolean,IsIn} from 'class-validator';
 import {Type} from 'class-transformer';
 export class SupplierIcmsDto {
  @IsUUID() parameterId!:string;
@@ -32,3 +32,13 @@ export class MonthlyCostDto extends MonthlyCostQueryDto {
 }
 export class MonthlyCostRevisionDto { @IsInt() @Min(1) revision!:number; }
 export class UpdateMonthlyCostDto extends MonthlyCostDto { @IsInt() @Min(1) revision!:number; }
+
+export class CostAbsenceDto extends MonthlyCostQueryDto {
+ @IsIn(['ACL','ACR']) scenario!:'ACL'|'ACR';
+ @IsBoolean() absent!:boolean;
+ @IsOptional() @IsUUID() previousId?:string|null;
+ @IsOptional() @IsUUID() costId?:string|null;
+ @IsOptional() @IsInt() @Min(1) costRevision?:number|null;
+ @IsString() @Matches(/\S/) @MaxLength(2000) sourceReference!:string;
+ @IsString() @MinLength(20) @MaxLength(2000) reason!:string;
+}
