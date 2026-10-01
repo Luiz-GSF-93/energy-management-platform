@@ -16,3 +16,5 @@ describe('Biblioteca tarifária e aplicação',()=>{
  it('não presume alíquota ausente nem componente de base inexistente',()=>{const d=settings();d.taxes.pop();expect(()=>libraryPlan(record(),d,unit,'2026-10-01')).toThrow('individualmente');const e=settings();e.taxes[0].included=['TE:PEAK'];expect(()=>libraryPlan(record(),e,unit,'2026-10-01')).toThrow('não selecionado');});
  it('preserva números do documento A4 Verde',()=>{const r=record().profile;expect(r.items.filter(i=>i.component==='TUSD_ENERGY').map(i=>i.value)).toEqual(['1.707280','0.171900']);expect(r.items.filter(i=>i.component==='TE').map(i=>i.value)).toEqual(['0.496660','0.310680']);expect(r.startDate).toBe('2026-08-27');});
 });
+
+it('aceita Comercial como alias de Commercial sem alterar a versão da biblioteca',()=>{const r=record();r.profile.consumptionClass='COMERCIAL';const before=JSON.stringify(r);expect(libraryPlan(r,settings(),{...unit,consumption_class:'COMMERCIAL'},'2026-10-01').rows.length).toBeGreaterThan(0);expect(JSON.stringify(r)).toBe(before);expect(()=>libraryPlan(r,settings(),unit,'2026-10-01')).toThrow('classe');});
