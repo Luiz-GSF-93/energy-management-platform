@@ -1,3 +1,4 @@
+import {cpflTaxIdentityAttestation} from './cpfl-tax-identity-confirmation';
 import {elektroIdentityAttestation} from './elektro-identity-confirmation';
 import {Injectable,BadRequestException,ConflictException,ServiceUnavailableException,NotFoundException,ForbiddenException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
@@ -17,7 +18,7 @@ export class OcrIdentityReviewService{
  private async context(org:string,document:string){
  const {source,registration,preview}=await this.identity.context(org,document);
  const fields=preview.checks.map(check=>{
- const attestation=elektroIdentityAttestation(preview,check);
+ const attestation=elektroIdentityAttestation(preview,check)??cpflTaxIdentityAttestation(preview,check);
  const confirmable=!!attestation||preview.registrationAvailable&&!preview.duplicate&&check.comparison==='EQUAL'&&['MATCH','REVIEW'].includes(check.state)&&check.candidates.length>0&&check.candidates.every(c=>c.pages.length>0&&c.issues.every(issue=>['MISSING_CONFIDENCE','CONFIDENCE_REQUIRES_REVIEW'].includes(issue)));
  const field={...(attestation?{attestation}:{}),key:check.key,label:check.label,unit:'',decimal:attestation?.mode==='REGISTERED_MARKET'?check.expected:check.candidates.map(c=>c.text).join(' | ')||null,state:confirmable?'EXTRACTED_REVIEW':'BLOCKED',description:'Cadastro atual: '+(check.expected??'Não informado')+'. '+check.message+(attestation?' Confirmação humana específica: '+attestation.mode+'. Justifique o vínculo; não aumenta a confiança OCR.':''),source:check.candidates.map(c=>c.source).join('; '),check};
  const snapshot={format:'ocr-identity-review-v1',jobId:source.jobId,registration,document:{id:source.doc.id,organizationId:org,customerId:source.doc.customer_id,unitId:source.doc.consumer_unit_id,month:String(source.doc.reference_month).slice(0,7),fileHash:source.doc.file_hash},field};
