@@ -1,8 +1,10 @@
+import {validSupplierEvidence} from './supplier-evidence';
 import {supplierIcmsAmount} from './supplier-icms';
 import {MonthlyCostsPayloadDto} from '../dto/monthly-costs.dto';
 export function normalizeCosts(c:MonthlyCostsPayloadDto){return {noCosts:c.noCosts,items:c.items.map(i=>({...i,label:i.label.trim(),source:i.source.trim()}))};}
 export function costIssues(c:MonthlyCostsPayloadDto,validating=false){const issues:string[]=[];
  for(const item of c.items){
+  if(item.supplierEvidence!==undefined&&(item.category!=='SUPPLIER_INVOICE'||item.scenario!=='ACL'||item.effect!=='COST'||!validSupplierEvidence(item.supplierEvidence)))issues.push('Validação sem NF exige compra do fornecedor ACL, justificativa de ao menos 50 caracteres, origem da confirmação e condição de pagamento.');
   if(item.category==='DISTRIBUTOR_ADJUSTMENT'&&(item.scenario!=='ACL'||item.taxTreatment!=='INCLUDED'))issues.push('Ajuste da distribuidora exige ACL e valor final documentado.');
   if(item.supplierIcms){
    if(item.category!=='SUPPLIER_INVOICE'||item.scenario!=='ACL'||item.effect!=='COST'||item.taxTreatment!=='RESERVED')issues.push('ICMS adicional exige nota do fornecedor ACL com ressalva dos demais tributos, sem ICMS já embutido.');

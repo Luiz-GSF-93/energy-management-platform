@@ -42,7 +42,7 @@ export function operationalComposition(unit:any,month:string,parameters:any[],ta
      const entry=reservedSupplierEntry(supplier);out.entries.push(entry);
      const icms=supplier.invoiceSources[0].supplierIcms;
      if(icms){verifySupplierIcms(unit,month,parameters,icms);const calc=supplierIcmsAmount(entry.amount,icms);out.entries.push({id:entry.id+':icms',revision:entry.revision,label:'ICMS fornecedor por dentro — '+icms.rate+'%',group:'TAX',amount:calc.tax,source:icms.reason+' · Parâmetro '+icms.parameterId+' revisão '+icms.revision+' · Base '+calc.base+' · Total '+calc.total});}
-     result.qualifications!.push('Fornecedor com ressalva tributária: '+supplier.reconciliation.reason);
+     result.qualifications!.push(supplier.invoiceSources[0].supplierEvidence?'Fornecedor validado sem NF: '+supplier.invoiceSources[0].supplierEvidence.reason+' Origem declarada: '+supplier.invoiceSources[0].supplierEvidence.reference+'; condição de pagamento: '+supplier.invoiceSources[0].supplierEvidence.paymentTerms+'. Não comprova quitação. Demais tributos permanecem com ressalva.':'Fornecedor com ressalva tributária: '+supplier.reconciliation.reason);
     }else{if(supplier.invoiceSources?.some((i:any)=>i.supplierIcms))throw Error('ICMS adicional e origem tributária do fornecedor não podem ser acumulados.');expected.set('SUPPLIER_ENERGY',{amount:regular-minimum});}
     if(minimum>0n||auto.some(p=>p.monetary_source==='SUPPLIER_MINIMUM'))expected.set('SUPPLIER_MINIMUM',{amount:minimum});
     if(extra>0n||auto.some(p=>p.monetary_source==='SUPPLIER_EXTRA'))expected.set('SUPPLIER_EXTRA',{amount:extra});
