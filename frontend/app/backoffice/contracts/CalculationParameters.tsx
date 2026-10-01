@@ -4,6 +4,7 @@ import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
 import {Unit,PERM,date} from './types';
+import TariffLibrary from './TariffLibrary';
 import ParameterEvidence from './ParameterEvidence';
 import TaxIncidenceEditor from './TaxIncidenceEditor';
 import {incidenceProblem,incidenceText} from './tax-incidence';
@@ -54,6 +55,7 @@ export default function CalculationParameters({customerId,units,onDirty,initialC
  const available=units.filter(u=>!customerId||u.customer_id===customerId),unit=units.find(u=>u.id===draft.consumerUnitId),tax=draft.kind==='TAX';
  const filtered=rows.filter(r=>(!contextFilter||!initialContext||((!initialContext.scenario||r.scenario===initialContext.scenario)&&(!initialContext.component||r.component_code===initialContext.component)&&(!initialContext.recordId||r.id===initialContext.recordId)))&&(!customerId||r.customer_id===customerId)&&(!kindFilter||r.kind===kindFilter)&&(!unitFilter||r.consumer_unit_id===unitFilter)&&(!statusFilter||r.status===statusFilter)).sort((a,b)=>b.start_date.localeCompare(a.start_date));
  return <section className="backoffice-page"><h2>Parâmetros de cálculo</h2><p>Cadastre tarifas, tributos e custos por unidade, cenário e vigência. As memórias de cálculo usam configurações aprovadas; o fechamento financeiro ACL × ACR ainda depende da consolidação final.</p>
+ <TariffLibrary customerId={customerId} units={units} onApplied={()=>{void reload();}} />
  {contextFilter?<Alert>Exibindo os parâmetros relacionados à pendência. Confira se as vigências cobrem {initialContext?.month} e aprove os rascunhos adequados.<Button variant='secondary' onClick={()=>{setContextFilter(false);setKindFilter('');setUnitFilter('');setStatusFilter('');}}>Mostrar todos os parâmetros deste cliente</Button></Alert>:null}
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
  <Button variant="secondary" disabled={busy||loading} onClick={()=>void reload()}>Atualizar parâmetros</Button><Button variant='secondary' disabled={busy||loading||checking||dirty||failed} onClick={()=>void inspect()}>{checking?'Verificando...':'Verificar cadastro'}</Button>{checks?<p role='status'>Verificação cadastral concluída. As pendências aparecem nos parâmetros abaixo. Esta verificação não substitui os dados das faturas nem calcula o resultado ACL × ACR.</p>:null}
