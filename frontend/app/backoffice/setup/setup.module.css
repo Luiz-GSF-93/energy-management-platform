@@ -6,3 +6,5 @@
 .units{margin-top:20px;}
 .units>summary{cursor:pointer;font-weight:600;padding:16px 0;}
 @media(max-width:480px){.dialog{padding:16px;}.actions>button{flex:1 1 100%;}}
+
+.search{margin-bottom:20px}.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:16px 0}.advanced>summary{cursor:pointer;padding-top:12px}.pagination{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin:20px 0}.records{display:grid;gap:12px}.records .actions{margin:12px 0 0}

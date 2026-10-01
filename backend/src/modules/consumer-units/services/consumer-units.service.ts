@@ -1,3 +1,4 @@
+import {searchRegistrations} from '../../../common/registration-search';
 import {editEnvelope,saveRegistration,registrationHistory} from '../../../common/registration-edit';
 import { Injectable, NotFoundException, ConflictException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
@@ -46,6 +47,8 @@ export class ConsumerUnitsService {
     }
     throw new InternalServerErrorException('Unable to access consumer units');
   }
+
+  search(org:string,query:Record<string,unknown>){return searchRegistrations(this.supabaseService.getClient(),org,'consumer_units',query);}
 
   async findAll(organizationId: string) {
     const { data, error } = await this.supabaseService

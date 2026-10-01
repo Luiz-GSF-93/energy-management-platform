@@ -1,3 +1,4 @@
+import {searchRegistrations} from '../../../common/registration-search';
 import {editEnvelope,saveRegistration,registrationHistory} from '../../../common/registration-edit';
 import { Injectable, BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import {normalizeTaxId,validTaxId} from '../../../common/validation/tax-id';
@@ -22,6 +23,8 @@ export class CustomersService {
       return {cnpj,company_name:data.razao_social.slice(0,200),trade_name:typeof data.nome_fantasia==='string'?data.nome_fantasia.slice(0,200):'',registration_status:typeof data.descricao_situacao_cadastral==='string'?data.descricao_situacao_cadastral:'Não informada',source:'Minha Receita'};
     }catch(e){if(e instanceof NotFoundException)throw e;throw new ServiceUnavailableException('Consulta indisponível. O número foi validado; preencha os dados manualmente ou tente novamente.');}
   }
+
+  search(org:string,query:Record<string,unknown>){return searchRegistrations(this.supabaseService.getClient(),org,'customers',query);}
 
   async findAll(organizationId: string) {
     const { data, error } = await this.supabaseService
