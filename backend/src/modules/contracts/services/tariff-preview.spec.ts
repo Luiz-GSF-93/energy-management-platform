@@ -121,3 +121,12 @@ describe('F1.118 reactive billing and explicit tariff flag',()=>{
 describe('Elektro reactive charge in one documented band',()=>{
  it('calculates only the documented off-peak band in ACL and ACR without manufacturing peak zero',()=>{const input={...m,measurements:normalizeMeasurements({...m.measurements,reactiveTotal:null,reactiveBilledOffPeakKwh:'39'})};const tariff={...p,component_code:'REACTIVE',time_band:'OFF_PEAK',measure:'BRL_MWH',amount_text:'403.59'};const result=run([tariff,{...tariff,id:'acl',scenario:'ACL'},{...tariff,id:'missing-peak',time_band:'PEAK'}],[input]);expect(result.lines.map(l=>l.amount)).toEqual(['15.74','15.74']);expect(result.pending.some(l=>l.parameterId==='missing-peak')).toBe(true);expect(input.measurements).not.toHaveProperty('reactiveBilledPeakKwh');});
 });
+
+describe('reviewed billed reactive independent of missing measured demand',()=>{
+ const reactive={...p,component_code:'REACTIVE',measure:'BRL_MWH',time_band:'OFF_PEAK',amount_text:'403.59',scenario:'ACL',treatment:'GROSS',embedded_tax_codes:['ICMS','PIS','COFINS']};
+ const measured={...m,measurements:normalizeMeasurements({...m.measurements,demandSingle:null,reactiveTotal:null,reactiveBilledOffPeakKwh:'39'})};
+ it.each(['ACL','ACR'])('calculates documented reactive for %s while closing remains blocked',scenario=>{const before=JSON.stringify(measured),r=run([{...reactive,scenario}],[measured]);expect(r.pending).toEqual([]);expect(r.lines[0]).toMatchObject({quantity:'39',amount:'15.74',quantityUnit:'kWh',measurementKey:'reactiveBilledOffPeakKwh'});expect(r.warnings.some(w=>w.includes('demanda medida continua pendente'))).toBe(true);expect(prepareMeasurements(u,'2026-08',[measured]).findings.some(f=>f.code==='MEASUREMENTS_DEMAND')).toBe(true);expect(JSON.stringify(measured)).toBe(before);});
+ it.each([null,''])('does not invent missing reactive quantity %s',value=>pending(run([reactive],[{...measured,measurements:{...measured.measurements,reactiveBilledOffPeakKwh:value}}])));
+ it('accepts explicit zero but never takes consumption as reactive',()=>{const r=run([reactive],[{...measured,measurements:{...measured.measurements,reactiveBilledOffPeakKwh:'0'}}]);expect(r.lines[0].amount).toBe('0.00');});
+ it('retains draft, source, tenant, context and consistency guards',()=>{for(const patch of [{status:'DRAFT'},{validated_by:null},{organization_id:'foreign'},{unit_context:{...u,state:'MG'}},{measurements:{...measured.measurements,consumptionTotal:'2000'}}])pending(run([reactive],[{...measured,...patch}]));});
+});

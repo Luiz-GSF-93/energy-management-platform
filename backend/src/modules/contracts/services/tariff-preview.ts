@@ -43,10 +43,11 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
  for(const p of candidates){
   const reject=(reason:string)=>result.pending.push({parameterId:String(p.id),label:String(p.label||'Tarifa'),scenario:String(p.scenario||''),reason});
   const usesConsumption=['TE','TUSD_ENERGY','CDE_WATER_SCARCITY','TARIFF_FLAG'].includes(p.component_code)&&['BRL_KWH','BRL_MWH'].includes(p.measure);
+  const usesBilledReactive=p.component_code==='REACTIVE'&&['BRL_KWH','BRL_MWH'].includes(p.measure)&&['PEAK','OFF_PEAK'].includes(p.time_band)&&unit.tariff_group==='A';
   const demandCodes=['TUSD_DEMAND','TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED'];
   const usesBilling=demandCodes.includes(p.component_code)&&p.measure==='BRL_KW';
   const split=p.component_code==='TUSD_DEMAND_USED'||p.component_code==='TUSD_DEMAND_UNUSED';
-  const relevantFindings=checked.findings.filter(f=>!((usesConsumption||split)&&f.code==='MEASUREMENTS_DEMAND'));
+  const relevantFindings=checked.findings.filter(f=>!((usesConsumption||usesBilledReactive||split)&&f.code==='MEASUREMENTS_DEMAND'));
   if(!measurementVersionReady||relevantFindings.length){reject('Medições pendentes ou inconsistentes. Corrija e valide em Dados mensais.');continue;}
   if(unit.free_market!==true||!((unit.tariff_group==='A'&&['BLUE','GREEN'].includes(unit.tariff_modality))||(unit.tariff_group==='B'&&unit.tariff_modality==='CONVENTIONAL'))){reject('Enquadramento ou modalidade ainda não suportado por esta prévia.');continue;}
   if(!validDay(p.start_date)||!validDay(p.end_date)||p.start_date>period.start||p.end_date<period.end){reject('A tarifa não cobre o mês inteiro. É necessária medição segmentada, sem rateio automático por dias.');continue;}
@@ -76,7 +77,7 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
   const quantity=explicitQuantity??v!.measurements[key];
   if(!key||typeof quantity!=='string'||!DECIMAL.test(quantity)||typeof p.amount_text!=='string'||!(usesBilling?RATE:DECIMAL).test(p.amount_text)){reject('Quantidade ou tarifa decimal não informada/ inválida. Ausência não equivale a zero.');continue;}
   const product=tariffProduct(quantity,p.amount_text,p.measure==='BRL_MWH');
-  if((usesConsumption||split)&&checked.findings.some(f=>f.code==='MEASUREMENTS_DEMAND'))partialConsumptionPreview=true;
+  if((usesConsumption||usesBilledReactive||split)&&checked.findings.some(f=>f.code==='MEASUREMENTS_DEMAND'))partialConsumptionPreview=true;
   result.lines.push({parameterId:p.id,revision:p.revision,label:p.label,scenario:p.scenario,component:p.component_code,timeBand:p.time_band,measure:p.measure,rate:p.amount_text,quantity,quantityUnit,measurementKey:key,exactAmount:product.exact,amount:product.rounded,treatment:p.treatment,embeddedTaxCodes:Array.isArray(p.embedded_tax_codes)?p.embedded_tax_codes:[],source:p.source,startDate:p.start_date,endDate:p.end_date,...(quantitySource?{quantitySource}:{}),formula:p.measure==='BRL_KW'?'demanda faturável informada × tarifa':p.measure==='BRL_MWH'?'kWh × R$/MWh ÷ 1000':'quantidade × tarifa'});
  }
  // Split billing is indivisible: an invalid counterpart must not produce a partial charge.
@@ -88,6 +89,6 @@ export function previewTariffs(unit:any,month:string,period:Period,parameters:an
    for(const l of removed)result.pending.push({parameterId:l.parameterId,label:l.label,scenario,reason:'Uma das parcelas está pendente; revise o conjunto antes de calcular a demanda.'});
   }
  }
- if(partialConsumptionPreview)result.warnings.push('Prévia parcial: consumos e quantidades faturáveis usam as respectivas fontes validadas. A demanda medida continua pendente e impede o fechamento completo; seus valores não foram inferidos.');
+ if(partialConsumptionPreview)result.warnings.push('Prévia parcial: consumos, reativo faturado e quantidades faturáveis usam as respectivas fontes validadas. A demanda medida continua pendente e impede o fechamento completo; seus valores não foram inferidos.');
  return result;
 }
