@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Query,
   Post,
   Body,
   Param,
@@ -34,6 +35,10 @@ export class ConsumerUnitsController {
   async findAll(@OrganizationId() organizationId: string) {
     return this.consumerUnitsService.findAll(organizationId);
   }
+
+  @Get('search')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CONSUMER_UNITS_VIEW])
+  search(@OrganizationId() organizationId:string,@Query() query:Record<string,unknown>){return this.consumerUnitsService.search(organizationId,query);}
 
   @Get(':id')
   @RequirePermission([PERMISSIONS.ORGANIZATION_CONSUMER_UNITS_VIEW])

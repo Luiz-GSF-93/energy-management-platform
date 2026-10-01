@@ -1,5 +1,6 @@
 'use client';
 import RegistrationEditor from './RegistrationEditor';
+import RegistrationList from './RegistrationList';
 import styles from './setup.module.css';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import BackofficeShell from '@/app/components/BackofficeShell';
@@ -12,6 +13,7 @@ import {validTaxId,normalizeTaxId} from '@/app/lib/tax-id';
 type Customer={id:string;company_name:string;document:string;status?:string};
 type Unit={id:string;name:string;consumer_unit_number:string};
 function Setup(){
+ const [listRevision,setListRevision]=useState(0);
  const dialog=useRef<HTMLDialogElement>(null),unitsList=useRef<HTMLDetailsElement>(null);
  const [creating,setCreating]=useState<'customer'|'unit'|null>(null),[formError,setFormError]=useState('');
  useEffect(()=>{if(creating&&!dialog.current?.open)dialog.current?.showModal();},[creating]);
@@ -19,9 +21,9 @@ function Setup(){
  const [editing,setEditing]=useState<{kind:'customers'|'consumer-units';id:string;readOnly?:boolean}|null>(null);
  const {hasPermission}=useAuth();const [customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const canView=hasPermission('cbb2e904-0718-4eec-9396-dba899118cdd'),viewUnits=hasPermission('b142bd7b-05a3-45ee-befd-e593066c2775');
- useEffect(()=>{let cancelled=false;if(!canView)return;Promise.all([apiRequest<Customer[]>('/api/v1/customers'),viewUnits?apiRequest<Unit[]>('/api/v1/consumer-units'):Promise.resolve([])]).then(([c,u])=>{if(!cancelled){setCustomers(c);setUnits(u);}}).catch(e=>{if(!cancelled)setError(e.message);});return()=>{cancelled=true;};},[canView,viewUnits]);
+ useEffect(()=>{let cancelled=false;if(!canView)return;apiRequest<Customer[]>('/api/v1/customers').then(c=>{if(!cancelled)setCustomers(c);}).catch(e=>{if(!cancelled)setError(e.message);});return()=>{cancelled=true;};},[canView,viewUnits]);
  async function save(e:FormEvent<HTMLFormElement>,unit:boolean){e.preventDefault();if(busy)return;const form=e.currentTarget;const f=new FormData(form);const body=Object.fromEntries(Array.from(f.entries()).map(([k,v])=>[k,String(v).trim()]).filter(([,v])=>v!==''));if(!unit){if(!validTaxId(body.document||'')){setFormError('CPF ou CNPJ inválido. Confira o número.');return;}body.document=normalizeTaxId(body.document);}setBusy(true);setFormError('');setMessage('');
- try{if(unit){const row=await apiRequest<Unit>('/api/v1/consumer-units',{method:'POST',body});setUnits(old=>[...old,row]);if(unitsList.current)unitsList.current.open=true;}else{const row=await apiRequest<Customer>('/api/v1/customers',{method:'POST',body});setCustomers(old=>[...old,row]);}form.reset();dialog.current?.close();setCreating(null);setMessage(unit?'Unidade cadastrada. Você já pode selecionar seus documentos.':'Cliente cadastrado. Cadastre agora a unidade consumidora.');}
+ try{if(unit){const row=await apiRequest<Unit>('/api/v1/consumer-units',{method:'POST',body});setUnits(old=>[...old,row]);if(unitsList.current)unitsList.current.open=true;}else{const row=await apiRequest<Customer>('/api/v1/customers',{method:'POST',body});setCustomers(old=>[...old,row]);}setListRevision(v=>v+1);form.reset();dialog.current?.close();setCreating(null);setMessage(unit?'Unidade cadastrada. Você já pode selecionar seus documentos.':'Cliente cadastrado. Cadastre agora a unidade consumidora.');}
  catch(ex){setFormError(ex instanceof Error?ex.message:'Não foi possível cadastrar.');}finally{setBusy(false);}}
  if(!canView)return <p>Acesso não autorizado.</p>;
  return <section className="backoffice-page"><h1>Clientes e unidades</h1><p>Cadastre os vínculos necessários aos documentos da organização ativa.</p>{error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
@@ -29,9 +31,9 @@ function Setup(){
  {hasPermission('ac18624a-9fc7-49a1-9680-9a4cf47ec492')?<Button onClick={()=>openRegistration('customer')}>Cadastrar cliente</Button>:null}
  {hasPermission('05613764-311a-4e71-ac99-475ad1dfe87a')?<Button variant="secondary" disabled={!customers.length} onClick={()=>openRegistration('unit')}>Cadastrar unidade</Button>:null}
  </div>
- {editing?<RegistrationEditor key={editing.kind+editing.id+String(editing.readOnly)} {...editing} onClose={()=>setEditing(null)} onSaved={row=>{if(editing.kind==='customers')setCustomers(old=>old.map(c=>c.id===row.id?{...c,company_name:String(row.company_name??c.company_name),document:String(row.document??c.document),status:row.status}:c));else setUnits(old=>old.map(u=>u.id===row.id?{...u,name:String(row.name??u.name),consumer_unit_number:String(row.consumer_unit_number??u.consumer_unit_number)}:u));setEditing(null);setMessage('Cadastro atualizado com auditoria.'+(row.deactivated_user_ids?.length?' '+row.deactivated_user_ids.length+' usuário(s) desativado(s); vagas liberadas.':''));}}/>:null}
- <Card title="Clientes cadastrados">{customers.length?customers.map(c=><article key={c.id} className="ds-card"><p>{c.company_name} · {c.document} · {c.status==='INACTIVE'?'Inativo':c.status==='ACTIVE'?'Ativo':c.status}</p>{hasPermission('0f80e33b-bb78-4f3d-9f75-22b7977ef885')?<Button variant="secondary" onClick={()=>setEditing({kind:'customers',id:c.id})}>Editar cliente / situação</Button>:null} <Button variant="secondary" onClick={()=>setEditing({kind:'customers',id:c.id,readOnly:true})}>Histórico</Button></article>):<p>Nenhum cliente carregado.</p>}</Card>
- {viewUnits?<details ref={unitsList} className={styles.units}><summary>Unidades cadastradas ({units.length})</summary><Card title="Unidades cadastradas">{units.length?units.map(u=><article key={u.id} className="ds-card"><p>{u.name} · {u.consumer_unit_number}</p>{hasPermission('0f2e539d-03f9-4168-bc8c-55ac3a371628')?<Button variant="secondary" onClick={()=>setEditing({kind:'consumer-units',id:u.id})}>Editar unidade</Button>:null} <Button variant="secondary" onClick={()=>setEditing({kind:'consumer-units',id:u.id,readOnly:true})}>Histórico</Button></article>):<p>Nenhuma unidade carregada.</p>}</Card></details>:null}
+ {editing?<RegistrationEditor key={editing.kind+editing.id+String(editing.readOnly)} {...editing} onClose={()=>setEditing(null)} onSaved={row=>{if(editing.kind==='customers')setCustomers(old=>old.map(c=>c.id===row.id?{...c,company_name:String(row.company_name??c.company_name),document:String(row.document??c.document),status:row.status}:c));else setUnits(old=>old.map(u=>u.id===row.id?{...u,name:String(row.name??u.name),consumer_unit_number:String(row.consumer_unit_number??u.consumer_unit_number)}:u));setEditing(null);setListRevision(v=>v+1);setMessage('Cadastro atualizado com auditoria.'+(row.deactivated_user_ids?.length?' '+row.deactivated_user_ids.length+' usuário(s) desativado(s); vagas liberadas.':''));}}/>:null}
+ <RegistrationList kind="customers" customers={customers} refresh={listRevision} canEdit={hasPermission('0f80e33b-bb78-4f3d-9f75-22b7977ef885')} onEdit={(id,readOnly)=>setEditing({kind:'customers',id,readOnly})}/>
+ {viewUnits?<details ref={unitsList} className={styles.units}><summary>Unidades cadastradas</summary><RegistrationList kind="consumer-units" customers={customers} refresh={listRevision} canEdit={hasPermission('0f2e539d-03f9-4168-bc8c-55ac3a371628')} onEdit={(id,readOnly)=>setEditing({kind:'consumer-units',id,readOnly})}/></details>:null}
  <dialog ref={dialog} className={styles.dialog} aria-labelledby="registration-title" onCancel={e=>{if(busy)e.preventDefault();}} onClose={()=>{setCreating(null);setFormError('');}}>
  <div className={styles.header}><h2 id="registration-title">{creating==='unit'?'Cadastrar unidade':'Cadastrar cliente'}</h2><Button type="button" variant="secondary" disabled={busy} onClick={()=>dialog.current?.close()}>Fechar</Button></div>
  {formError?<Alert variant="error">{formError}</Alert>:null}

@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Query,
   Post,
   Body,
   Param,
@@ -35,6 +36,10 @@ export class CustomersController {
   @Get('cnpj/:cnpj')
   @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_CREATE])
   async lookupCnpj(@Param('cnpj') cnpj:string) {return this.customersService.lookupCnpj(cnpj);}
+
+  @Get('search')
+  @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_VIEW])
+  search(@OrganizationId() organizationId:string,@Query() query:Record<string,unknown>){return this.customersService.search(organizationId,query);}
 
   @Get(':id')
   @RequirePermission([PERMISSIONS.ORGANIZATION_CUSTOMERS_VIEW])
