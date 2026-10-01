@@ -1,3 +1,4 @@
+import {costAbsences} from './cost-absence';
 import {supplierIcmsReference,verifySupplierIcms} from './supplier-icms';
 import {auditAuthorNames} from './audit-author-names';
 import {Injectable,BadRequestException,NotFoundException,ConflictException,InternalServerErrorException,UnauthorizedException,ForbiddenException} from '@nestjs/common';
@@ -5,7 +6,7 @@ import {SupabaseService} from '../../../services/supabase.service';
 import {LicensesService} from '../../licenses/services/licenses.service';
 import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {TenantContext} from '../../../common/interfaces/tenant-context.interface';
-import {MonthlyCostDto,MonthlyCostQueryDto,UpdateMonthlyCostDto,MonthlyCostRevisionDto} from '../dto/monthly-costs.dto';
+import {CostAbsenceDto,MonthlyCostDto,MonthlyCostQueryDto,UpdateMonthlyCostDto,MonthlyCostRevisionDto} from '../dto/monthly-costs.dto';
 import {costIssues,normalizeCosts} from './monthly-costs';
 @Injectable()
 export class MonthlyCostsService {
@@ -17,6 +18,18 @@ export class MonthlyCostsService {
  private async unit(id:string,t:TenantContext){const r=await this.table('consumer_units').select('*').eq('id',id).eq('organization_id',t.organizationId).maybeSingle();this.fail(r.error);if(!r.data)throw new NotFoundException('Unidade não encontrada nesta organização.');const c=await this.table('customers').select('id').eq('id',r.data.customer_id).eq('organization_id',t.organizationId).is('deleted_at',null).maybeSingle();this.fail(c.error);if(!c.data)throw new NotFoundException('Cliente indisponível.');return r.data;}
  private context(u:any){return Object.fromEntries(['distributor','tariff_group','tariff_subgroup','tariff_modality','state','free_market'].map(k=>[k,u[k]??null]));}
  private async taxParameters(u:any,t:TenantContext){const r=await this.table('calculation_parameters').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('kind','TAX').eq('component_code','ICMS').eq('scenario','ACL').in('status',['DRAFT','APPROVED']).limit(1001);this.fail(r.error);if(!Array.isArray(r.data)||r.data.length>1000)throw new InternalServerErrorException('Referências de ICMS indisponíveis.');return r.data;}
+ async absences(input:MonthlyCostQueryDto,t:TenantContext){
+  const d=await validateWriteDto(MonthlyCostQueryDto,input),listed=await this.list(d,t),u=await this.unit(d.consumerUnitId,t);
+  const r=await this.table('calculation_cost_absences').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('month',d.month).order('version',{ascending:false}).range(0,999);this.fail(r.error);
+  if(!Array.isArray(r.data)||r.data.length>=1000)throw new InternalServerErrorException('Histórico de declarações indisponível.');
+  const latest=listed.rows[0];return {rows:await auditAuthorNames(this.db.getClient(),t.organizationId,r.data),active:costAbsences(u,d.month,listed.rows,r.data),costId:latest?.id??null,costRevision:latest?.revision??null,canValidate:listed.canValidate};
+ }
+ async declareAbsence(input:CostAbsenceDto,t:TenantContext){
+  if(!this.canValidate(t))throw new ForbiddenException('A declaração exige Gestor ou Administrador da organização.');
+  await this.allowed(t);const d=await validateWriteDto(CostAbsenceDto,input),u=await this.unit(d.consumerUnitId,t);
+  if(d.reason.trim().length<20)throw new BadRequestException('Informe justificativa de pelo menos 20 caracteres.');
+  const r=await this.table('calculation_cost_absences').insert([{organization_id:t.organizationId,customer_id:u.customer_id,consumer_unit_id:u.id,month:d.month,scenario:d.scenario,absent:d.absent,previous_id:d.previousId??null,cost_id:d.costId??null,cost_revision:d.costRevision??null,source_reference:d.sourceReference.trim(),reason:d.reason.trim(),unit_context:this.context(u),created_by:t.userId}]).select().single();this.fail(r.error);return r.data;
+ }
  async supplierIcms(input:MonthlyCostQueryDto,t:TenantContext){await this.allowed(t);const d=await validateWriteDto(MonthlyCostQueryDto,input),u=await this.unit(d.consumerUnitId,t);try{return supplierIcmsReference(u,d.month,await this.taxParameters(u,t));}catch(e){throw new BadRequestException(e instanceof Error?e.message:'ICMS indisponível.');}}
  private async checkIcms(costs:any,u:any,month:string,t:TenantContext){if(!costs.items.some((i:any)=>i.supplierIcms))return;const ps=await this.taxParameters(u,t);try{for(const i of costs.items)if(i.supplierIcms)verifySupplierIcms(u,month,ps,i.supplierIcms);}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Revise o ICMS.');}}
  private mapped(d:MonthlyCostDto){const issues=costIssues(d.costs);if(issues.length)throw new BadRequestException(issues.join(' '));return {costs:normalizeCosts(d.costs),source_reference:d.sourceReference.trim(),notes:d.notes.trim(),correction_reason:d.correctionReason.trim()};}

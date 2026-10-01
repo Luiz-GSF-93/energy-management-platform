@@ -49,7 +49,7 @@ export class CalculationPreparationService {
   return {...customerFinancialPreview(org,customerId,d.month,units,inputs,adjustedContracts(contracts,adjustments,d.month),rules),checkedAt:new Date().toISOString()};
  }
  async inspect(input:PreparationQueryDto,org:string,capture?:(sources:Record<string,unknown>)=>void){await this.licenses.requireEntitlement(org,'free_market_management');const d=await validateWriteDto(PreparationQueryDto,input);const unitResult=await this.table('consumer_units').select('*').eq('id',d.consumerUnitId).eq('organization_id',org).maybeSingle();this.fail(unitResult.error);const u=unitResult.data;if(!u)throw new NotFoundException('Unidade não encontrada nesta organização.');const customer=await this.table('customers').select('id').eq('id',u.customer_id).eq('organization_id',org).is('deleted_at',null).maybeSingle();this.fail(customer.error);if(!customer.data)throw new NotFoundException('Cliente indisponível nesta organização.');
- const [parameters,contracts,management,services,monthly,monthlyCosts,feeRules,billingRules,adjustments,ocrDocuments]=await Promise.all([
+ const [parameters,contracts,management,services,monthly,monthlyCosts,feeRules,billingRules,adjustments,ocrDocuments,absenceRows]=await Promise.all([
  this.all(()=>this.table('calculation_parameters').select('*').eq('organization_id',org).eq('consumer_unit_id',u.id)),
  this.all(()=>this.table('energy_contracts').select('*').eq('organization_id',org).eq('consumer_unit_id',u.id)),
  this.all(()=>this.table('management_contracts').select('*').eq('organization_id',org).eq('customer_id',u.customer_id)),
@@ -59,7 +59,8 @@ export class CalculationPreparationService {
  this.all(()=>this.table('management_fee_allocations').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('month',d.month)),
  this.all(()=>this.table('supplier_billing_rules').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id)),
  this.all(()=>this.table('commercial_fee_adjustments').select('*').eq('organization_id',org).eq('customer_id',u.customer_id)),
- ocrPreparationCandidates(this.db.getClient(),u,d.month)]);
+ ocrPreparationCandidates(this.db.getClient(),u,d.month),
+ this.all(()=>this.table('calculation_cost_absences').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('month',d.month))]);
  const effectiveManagement=adjustedContracts(management,adjustments,d.month);
  const period=monthPeriod(d.month),ids=contracts.filter(c=>['ACTIVE','APPROVED'].includes(c.status)&&c.contract_type==='ENERGY_PURCHASE'&&String(c.start_date).slice(0,10)<=period.end&&(!c.end_date||String(c.end_date).slice(0,10)>=period.start)).map(c=>c.id),prices:any[]=[];
  for(let i=0;i<ids.length;i+=100){const batch=ids.slice(i,i+100);prices.push(...await this.all(()=>this.table('contract_price_history').select('*').in('contract_id',batch)));}
@@ -79,12 +80,12 @@ export class CalculationPreparationService {
  prepared.counts.reviews=prepared.findings.filter(f=>f.severity==='REVIEW').length;
  for(const c of effectiveManagement.filter(c=>c.fee_adjustment_pending&&c.status==='ACTIVE'&&String(c.start_date).slice(0,10)<=period.end&&String(c.end_date).slice(0,10)>=period.start))prepared.findings.push({code:'MANAGEMENT_INDEX_PENDING:'+c.id,section:'Honorários',severity:'BLOCKER',message:'Índice anual dos honorários pendente. Confirme o reajuste antes de apurar.'});
  const tariffPreview=previewTariffs(u,d.month,period,tariffParameters,monthly);
- const costs=monthlyCostLedger(u,d.month,monthlyCosts);
+ const costs=monthlyCostLedger(u,d.month,monthlyCosts,'ADDITIONAL',absenceRows);
  const operational=operationalTaxBases(u,d.month,parameters,supplier,costs);
  const taxes=taxMemory(u,d.month,parameters,tariffPreview,operational);
  for(const pending of operational.pending)prepared.findings.push({code:'PARAMETER_ISSUE:'+pending.parameterId,section:'Bases operacionais',severity:'BLOCKER',message:pending.label+': '+pending.reason});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
- if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments,adjustments,reconciliationRows,reconciliationDocuments})));
+ if(capture)capture(JSON.parse(JSON.stringify({unit:u,parameters,contracts,prices,management,services,monthly,monthlyCosts,feeRules,billingRules,ocrDocuments,adjustments,reconciliationRows,reconciliationDocuments,absenceRows})));
  const composition=operationalComposition(u,d.month,tariffParameters,tariffPreview,taxes,operational,supplier,costs,prepared.findings,ocrDocuments.flatMap(d=>d.invoiceFinancialEvidence?[d.invoiceFinancialEvidence]:[]));
  for(const s of composition.scenarios)for(const message of s.blockers)if(!prepared.findings.some(f=>f.message===message))prepared.findings.push({code:'COMPOSITION:'+s.scenario+':'+prepared.findings.length,section:'Custos mensais',severity:'BLOCKER',message});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;

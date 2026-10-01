@@ -1,3 +1,4 @@
+import {costAbsences,CostAbsenceReference} from './cost-absence';
 import type {SupplierIcms} from './supplier-icms';
 import {prepareCosts} from './preparation-costs';
 
@@ -5,13 +6,13 @@ type Treatment='INCLUDED'|'EXCLUDED'|'NOT_APPLICABLE'|'RESERVED';
 type Scenario='ACL'|'ACR';
 export type CostLedgerLine={id:string;label:string;category:string;effect:string;amount:string;signedAmount:string;source:string;supplierIcms?:SupplierIcms;taxReservationReason?:string};
 export type CostLedgerGroup={scenario:Scenario;taxTreatment:Treatment;count:number;costs:string;credits:string;balance:string;lines:CostLedgerLine[]};
-export type CostLedger={mode:'MONTHLY_COST_LEDGER';formulaVersion:'monthly-costs-1.0';status:'BLOCKED'|'AVAILABLE'|'NO_COSTS_DECLARED';version:{id:string;version:number;revision:number;validatedAt:string;source:string}|null;groups:CostLedgerGroup[];blockers:string[];warnings:string[]};
+export type CostLedger={absences?:CostAbsenceReference[];mode:'MONTHLY_COST_LEDGER';formulaVersion:'monthly-costs-1.0';status:'BLOCKED'|'AVAILABLE'|'NO_COSTS_DECLARED';version:{id:string;version:number;revision:number;validatedAt:string;source:string}|null;groups:CostLedgerGroup[];blockers:string[];warnings:string[]};
 function cents(value:string){const [whole,fraction='']=value.split('.');return BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'));}
 function money(value:bigint){const absolute=value<0n?-value:value;const text=absolute.toString().padStart(3,'0');return (value<0n?'-':'')+text.slice(0,-2)+'.'+text.slice(-2);}
 /** Read-only reconciliation aid, not a total energy cost or a publishable settlement. */
-export function monthlyCostLedger(unit:any,month:string,rows:any[],scope:'ADDITIONAL'|'SUPPLIER'='ADDITIONAL'):CostLedger{
+export function monthlyCostLedger(unit:any,month:string,rows:any[],scope:'ADDITIONAL'|'SUPPLIER'='ADDITIONAL',absenceRows:any[]=[]):CostLedger{
  const checked=prepareCosts(unit,month,rows),v=checked.validatedVersion;
- const result:CostLedger={mode:'MONTHLY_COST_LEDGER',formulaVersion:'monthly-costs-1.0',status:'BLOCKED',version:v?{id:v.id,version:v.version,revision:v.revision,validatedAt:v.validatedAt,source:v.source}:null,groups:[],blockers:checked.findings.filter(f=>f.severity==='BLOCKER').map(f=>f.message),warnings:[
+ const result:CostLedger={absences:scope==='ADDITIONAL'?costAbsences(unit,month,rows,absenceRows):[],mode:'MONTHLY_COST_LEDGER',formulaVersion:'monthly-costs-1.0',status:'BLOCKED',version:v?{id:v.id,version:v.version,revision:v.revision,validatedAt:v.validatedAt,source:v.source}:null,groups:[],blockers:checked.findings.filter(f=>f.severity==='BLOCKER').map(f=>f.message),warnings:[
   'Saldo dos lançamentos = custos menos créditos, calculado em centavos no servidor. Saldo negativo significa créditos maiores que os custos deste grupo.',
   'Os grupos não são somados entre si: tributos incluídos, excluídos e não aplicáveis permanecem separados. Não há aplicação de tributos nesta conferência.',
   'Concilie cada lançamento com documentos, contratos e tarifas antes da apuração para evitar duplicidade. A validação do cadastro não substitui essa conciliação.',

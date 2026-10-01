@@ -39,6 +39,7 @@ export function comparisonRows(data:ComparisonInput):ComparisonRow[]{
  const ledger=data.costLedger;
  if(ledger?.status==='AVAILABLE')for(const g of ledger.groups)add('costs',g.taxTreatment,'Custos e créditos · '+(treatments[g.taxTreatment]||g.taxTreatment),g.scenario,{state:'VALUE',label:'Saldo do grupo',amount:g.balance,detail:g.count+' lançamento(s) · custos '+comparisonMoney(g.costs)+' · créditos '+comparisonMoney(g.credits)+'. Não é o custo total do cenário.',source:ledger.version?.source,revision:ledger.version?.revision,kind:'COST'});
  if(ledger?.status==='NO_COSTS_DECLARED')for(const scenario of ['ACR','ACL'])add('costs','declared','Custos adicionais',scenario,{state:'DECLARED',label:'Ausência declarada',detail:'Ausência de custos e créditos adicionais validada para esta competência.',source:ledger.version?.source,kind:'COST'});
- if(ledger?.status==='BLOCKED')for(const scenario of ['ACR','ACL'])add('costs','blocked','Custos adicionais',scenario,{state:'PENDING',label:'Revisão necessária',detail:ledger.blockers.join(' '),kind:'COST'});
+ for(const d of ledger?.absences||[])add('costs','declared','Custos adicionais',d.scenario,{state:'DECLARED',label:'Ausência declarada',detail:d.reason,source:d.source,revision:d.version,kind:'COST'});
+ if(ledger?.status==='BLOCKED')for(const scenario of ['ACR','ACL'].filter(s=>!ledger.absences?.some(d=>d.scenario===s)))add('costs','blocked','Custos adicionais',scenario,{state:'PENDING',label:'Revisão necessária',detail:ledger.blockers.join(' '),kind:'COST'});
  return Array.from(rows.values()).sort((a,b)=>a.key.localeCompare(b.key));
 }

@@ -47,8 +47,12 @@ export function operationalComposition(unit:any,month:string,parameters:any[],ta
     if(minimum>0n||auto.some(p=>p.monetary_source==='SUPPLIER_MINIMUM'))expected.set('SUPPLIER_MINIMUM',{amount:minimum});
     if(extra>0n||auto.some(p=>p.monetary_source==='SUPPLIER_EXTRA'))expected.set('SUPPLIER_EXTRA',{amount:extra});
    }
-   if(!validRevision(costs.version)||!costs.version?.validatedAt||costs.blockers.length||!['AVAILABLE','NO_COSTS_DECLARED'].includes(costs.status))throw Error('Valide os custos mensais ou a declaração explícita de ausência.');
-   if(costs.status==='NO_COSTS_DECLARED'){
+   const absence=costs.absences?.find(d=>d.scenario===s.scenario);
+   if(!absence&&(!validRevision(costs.version)||!costs.version?.validatedAt||costs.blockers.length||!['AVAILABLE','NO_COSTS_DECLARED'].includes(costs.status)))throw Error('Valide os custos mensais ou a declaração explícita de ausência.');
+   if(absence){
+    if(costs.groups.some(g=>g.scenario===s.scenario))throw Error('Declaração incompatível com custos do cenário.');
+    out.entries.push({id:absence.id,revision:absence.version,label:'Ausência de custos adicionais — '+s.scenario,group:'ADDITIONAL',amount:'0.00',source:absence.source+' · '+absence.reason});
+   }else if(costs.status==='NO_COSTS_DECLARED'){
     if(costs.groups.length)throw Error('Declaração de ausência incompatível com os lançamentos.');
     for(const p of auto.filter(p=>p.monetary_source.startsWith('MONTHLY_')))expected.set(p.monetary_source,{amount:0n,itemIds:[]});
    }else{
