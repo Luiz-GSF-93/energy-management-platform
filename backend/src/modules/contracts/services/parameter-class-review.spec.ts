@@ -1,0 +1,11 @@
+import {CalculationParametersService} from './parameters.service';
+const unit='52eaf99b-ffa6-4836-88af-39b3c8f767f1',id='7b909de6-6f2a-4523-85d9-90b8257a2c37';
+const dto={consumerUnitId:unit,month:'2026-08',consumptionClass:'INDUSTRIAL',reason:'Classe confirmada pelo responsável',parameters:[{id,revision:2}]};
+describe('audited parameter class review',()=>{
+ const setup=()=>{const rpc=jest.fn().mockResolvedValue({data:{count:1},error:null});const license=jest.fn().mockResolvedValue(undefined);const s=new CalculationParametersService({getClient:()=>({rpc})} as any,{requireEntitlement:license} as any);const scope=jest.spyOn(s as any,'unit').mockResolvedValue({id:unit});return{s,rpc,license,scope};};
+ it('uses authenticated organization and author, not request metadata',async()=>{const t=setup();await t.s.reviewClass(dto,'organization','operator');expect(t.scope).toHaveBeenCalledWith(unit,'organization');expect(t.rpc).toHaveBeenCalledWith('review_parameter_class',expect.objectContaining({p_org:'organization',p_actor:'operator',p_refs:dto.parameters}));});
+ it('blocks license before any write',async()=>{const t=setup();t.license.mockRejectedValue(new Error('blocked'));await expect(t.s.reviewClass(dto,'o','a')).rejects.toThrow();expect(t.rpc).not.toHaveBeenCalled();});
+ it('requires author and available scoped unit',async()=>{const t=setup();await expect(t.s.reviewClass(dto,'o','')).rejects.toThrow();t.scope.mockRejectedValue(new Error('foreign'));await expect(t.s.reviewClass(dto,'o','a')).rejects.toThrow();expect(t.rpc).not.toHaveBeenCalled();});
+ it.each([{reason:'short'},{parameters:[]},{parameters:[...dto.parameters,...dto.parameters]},{month:'2026-13'},{organization_id:'foreign'},{actor:'spoof'},{parameters:[{id,revision:0}]}])('rejects malformed review %p',async patch=>{const t=setup();await expect(t.s.reviewClass({...dto,...patch} as any,'o','a')).rejects.toThrow();expect(t.rpc).not.toHaveBeenCalled();});
+ it('reports concurrent change without retrying the write',async()=>{const t=setup();t.rpc.mockResolvedValue({data:null,error:{code:'40001'}});await expect(t.s.reviewClass(dto,'o','a')).rejects.toThrow('registro');expect(t.rpc).toHaveBeenCalledTimes(1);});
+});
