@@ -1,5 +1,6 @@
 'use client';
 import PendingResolution from './PendingResolution';
+import {useRefreshOnReturn} from './useRefreshOnReturn';
 import OcrReactiveIntegration from '../documents/OcrReactiveIntegration';
 import OcrDemandTaxes from '../documents/OcrDemandTaxes';
 import OcrSplitDemandIntegration from '../documents/OcrSplitDemandIntegration';
@@ -33,13 +34,21 @@ export type Result={financial?:Preview|null;processing?:{unitMs:number;totalMs:n
 export default function CalculationPreparation({customerId,units,initialContext,onCorrect}:{customerId:string;units:Unit[];initialContext?:CorrectionContext;onCorrect?:(context:CorrectionContext)=>void}){
  const [unitId,setUnit]=useState(initialContext?.unitId||''),[monthNumber,setMonthNumber]=useState(initialContext?.month.slice(5,7)||''),[year,setYear]=useState(initialContext?.month.slice(0,4)||''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[result,setResult]=useState<Result|null>(null);const version=useRef(0);
  useEffect(()=>()=>{version.current++;},[]);
- useEffect(()=>{if(!initialContext||initialContext.customerId!==customerId||!units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(initialContext.month))return;
- const request=++version.current;setBusy(true);setError('');
- apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(initialContext.unitId)+'&month='+encodeURIComponent(initialContext.month)).then(r=>{if(version.current===request){if(r.unit.id!==initialContext.unitId||r.month!==initialContext.month)throw new Error('A resposta não corresponde à unidade e competência selecionadas.');setResult(r);}}).catch(e=>{if(version.current===request)setError(e instanceof Error?e.message:'Falha ao atualizar diagnóstico.');}).finally(()=>{if(version.current===request)setBusy(false);});return()=>{version.current++;};
+ useEffect(()=>{
+  if(!initialContext||initialContext.customerId!==customerId||!units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(initialContext.month))return;
+  let cancelled=false;const request=++version.current;
+  // Defer the request so replaced/unmounted effects cannot start another query.
+  void Promise.resolve().then(async()=>{
+   if(cancelled)return;setBusy(true);setError('');
+   try{const r=await apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(initialContext.unitId)+'&month='+encodeURIComponent(initialContext.month));if(!cancelled&&version.current===request){if(r.unit.id!==initialContext.unitId||r.month!==initialContext.month)throw new Error('A resposta não corresponde à unidade e competência selecionadas.');setResult(r);}}
+   catch(e){if(!cancelled&&version.current===request)setError(e instanceof Error?e.message:'Falha ao atualizar diagnóstico.');}
+   finally{if(!cancelled&&version.current===request)setBusy(false);}
+  });return()=>{cancelled=true;};
  },[initialContext,customerId,units]);
  function change(action:()=>void){version.current++;setResult(null);setError('');action();}
  async function inspect(e:FormEvent){e.preventDefault();const month=year+'-'+monthNumber;if(!unitId||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month)){setError('Selecione a unidade, o mês e um ano entre 2000 e 2199.');return;}const request=++version.current;setBusy(true);setError('');setResult(null);try{const r=await apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(unitId)+'&month='+encodeURIComponent(month));if(version.current===request)setResult(r);}catch(e){if(version.current===request)setError(e instanceof Error?e.message:'Não foi possível consultar a competência.');}finally{if(version.current===request)setBusy(false);}}
- async function refreshIntegrated(){const request=++version.current;setBusy(true);setError('');setResult(null);try{const r=await apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(unitId)+'&month='+encodeURIComponent(year+'-'+monthNumber));if(version.current===request)setResult(r);}catch{if(version.current===request)setError('A integração foi salva, mas a atualização da apuração falhou. Consulte novamente a competência.');}finally{if(version.current===request)setBusy(false);}}
+ async function refreshIntegrated(preserveResult=false){const request=++version.current;setBusy(true);setError('');if(!preserveResult)setResult(null);try{const r=await apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(unitId)+'&month='+encodeURIComponent(year+'-'+monthNumber));if(version.current===request)setResult(r);}catch{if(version.current===request)setError('Não foi possível atualizar o diagnóstico. Consulte novamente a competência; nenhum registro foi alterado por esta consulta.');}finally{if(version.current===request)setBusy(false);}}
+ useRefreshOnReturn(!!result&&!busy,()=>{void refreshIntegrated(true);});
  const available=units.filter(u=>!customerId||u.customer_id===customerId);
  function showCoverage(c:Coverage){return <>{c.gaps.length?<ul>{c.gaps.map(g=><li key={g.start}>Sem cobertura de {date(g.start)} a {date(g.end)}</li>)}</ul>:<p>Vigências cobrem o período consultado.</p>}{c.overlap?<p>Há vigências simultâneas. Revise as fontes.</p>:null}</>;}
  return <section className='backoffice-page ee-preparation'><header className='ee-preparation-title'><span>INTELIGÊNCIA ENERGÉTICA</span><h2>Comparativo ACL × ACR</h2><p>Escolha a unidade e a competência para explorar os componentes calculados e revisar o que falta para a apuração.</p></header>
