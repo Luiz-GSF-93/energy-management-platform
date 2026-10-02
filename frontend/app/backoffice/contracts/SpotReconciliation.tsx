@@ -8,9 +8,9 @@ import AuditAuthor from './AuditAuthor';
 import {invoicePermissions} from './SupplierInvoices';
 type Row={id:string;version:number;status:string;reason:string;document_id:string;source_hash:string;created_by:string;created_by_name?:string;created_at:string};
 type View={documentaryContext?:{hash:string};canConfigure:boolean;rows:Row[];documents:{id:string;original_filename:string}[];supplier:{taxTreatment?:string;contract?:{id:string};consumedMwh:string|null;billedMwh:string|null;volumeDifferenceMwh?:string;reconciliationContext?:{hash:string};reconciliation?:{current:boolean};requirements:{code:string;message:string}[]}};
-export default function SpotReconciliation({contract,onDirty}:{contract:{id:string;start_date:string;end_date:string};onDirty:(v:boolean)=>void}){
+export default function SpotReconciliation({contract,onDirty,initialMonth}:{initialMonth?:string;contract:{id:string;start_date:string;end_date:string};onDirty:(v:boolean)=>void}){
  const {context,hasPermission}=useAuth(),org=context&&context.scope!=='global'?context.currentOrganization.id:'',canView=hasPermission(invoicePermissions.view),canEdit=hasPermission('fd8a932f-87c0-4f86-8389-9f30c50e95b7');
- const [month,setMonth]=useState(contract.start_date.slice(0,7)),[attempt,setAttempt]=useState(0),[view,setView]=useState<View|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
+ const [month,setMonth]=useState(initialMonth||contract.start_date.slice(0,7)),[attempt,setAttempt]=useState(0),[view,setView]=useState<View|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
  const current=useRef(''),pending=useRef(false);const key=org+':'+contract.id+':'+month;
  useEffect(()=>{let cancelled=false;current.current=key;setView(null);setError('');setLoading(true);setMessage('');
  if(!org||!canView||!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)){setLoading(false);return;}
