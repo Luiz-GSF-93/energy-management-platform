@@ -12,9 +12,16 @@ export default function SpotReconciliation({contract,onDirty,initialMonth}:{init
  const {context,hasPermission}=useAuth(),org=context&&context.scope!=='global'?context.currentOrganization.id:'',canView=hasPermission(invoicePermissions.view),canEdit=hasPermission('fd8a932f-87c0-4f86-8389-9f30c50e95b7');
  const [month,setMonth]=useState(initialMonth||contract.start_date.slice(0,7)),[attempt,setAttempt]=useState(0),[view,setView]=useState<View|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
  const current=useRef(''),pending=useRef(false);const key=org+':'+contract.id+':'+month;
- useEffect(()=>{let cancelled=false;current.current=key;setView(null);setError('');setLoading(true);setMessage('');
- if(!org||!canView||!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)){setLoading(false);return;}
- apiRequest<View>('/api/v1/supplier-spot-reconciliations?contractId='+encodeURIComponent(contract.id)+'&month='+month).then(r=>{if(!cancelled)setView(r);}).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setLoading(false);});return()=>{cancelled=true;current.current='';};},[key,attempt,canView]);
+ useEffect(()=>{
+  let cancelled=false;current.current=key;
+  void Promise.resolve().then(async()=>{
+   if(cancelled)return;setView(null);setError('');setLoading(true);setMessage('');
+   if(!org||!canView||!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)){setLoading(false);return;}
+   try{const r=await apiRequest<View>('/api/v1/supplier-spot-reconciliations?contractId='+encodeURIComponent(contract.id)+'&month='+month);if(!cancelled)setView(r);}
+   catch(e){if(!cancelled)setError(e instanceof Error?e.message:'Falha ao consultar conciliação.');}
+   finally{if(!cancelled)setLoading(false);}
+  });return()=>{cancelled=true;current.current='';};
+ },[key,attempt,canView,contract.id,month,org]);
  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(pending.current||!view)return;const form=e.currentTarget,f=new FormData(form),scope=current.current,status=String(f.get('status')),source=status==='PENDING'?(view.documentaryContext||view.supplier.reconciliationContext):view.supplier.reconciliationContext;if(!source)return;pending.current=true;setBusy(true);setError('');setMessage('');try{
  const row=await apiRequest<Row>('/api/v1/supplier-spot-reconciliations',{method:'POST',body:{contractId:contract.id,month,status,documentId:String(f.get('documentId')),reason:String(f.get('reason')||'').trim(),sourceHash:source.hash,confirmed:f.get('confirmed')==='on',...(view.rows[0]?{previousId:view.rows[0].id}:{})}});
  if(scope!==current.current)return;setView(old=>old?{...old,rows:[row,...old.rows]}:old);form.reset();onDirty(false);setMessage('Conciliação salva no histórico, versão '+row.version+'. Atualizando os requisitos desta competência…');

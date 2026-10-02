@@ -21,11 +21,16 @@ const row={id:'review8',version:8,status:'APPROVED_TAX_RESERVATION',reason:'Revi
 async function resolve(value){await act(async()=>pending.shift().resolve(value));}
 async function submit(){const f=document.querySelector('form');f.elements.status.value='APPROVED_TAX_RESERVATION';f.elements.documentId.value='doc-test';f.elements.reason.value=row.reason;f.elements.confirmed.checked=true;await act(async()=>f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));}
 (async()=>{try{
- await act(async()=>root.render(React.createElement(Spot,{contract,onDirty:()=>{}})));await resolve(view);
+ await act(async()=>root.render(React.createElement(React.StrictMode,null,React.createElement(Spot,{contract,onDirty:()=>{}}))));assert.equal(calls.length,1,'cancelled StrictMode effect must not start a duplicate query');await resolve(view);
  assert.ok(document.querySelector('option[value=APPROVED_NO_COST]').disabled);assert.ok(!document.querySelector('option[value=APPROVED_TAX_RESERVATION]').disabled);
  await submit();assert.equal(calls.at(-1).options.body.sourceHash,row.source_hash);await resolve(row);assert.equal(calls.at(-1).options,undefined);assert.ok(document.body.textContent.includes('Atualizando os requisitos'));
  await resolve({...view,rows:[row],supplier:{...view.supplier,requirements:[],reconciliation:{current:true}}});assert.ok(!document.body.textContent.includes('difference pending'));assert.ok(!document.body.textContent.includes('tax pending'));assert.ok(document.body.textContent.includes('Requisitos atualizados'));
  await submit();await resolve({...row,id:'review9',version:9});await act(async()=>pending.shift().reject(Error('offline')));assert.ok(document.body.textContent.includes('versão 9 foi salva'));assert.ok(document.body.textContent.includes('não salve novamente'));assert.equal(calls.filter(c=>c.options).length,2);
+ const nextContract={...contract,id:'contract-next'},lastContract={...contract,id:'contract-last'};
+ await act(async()=>root.render(React.createElement(Spot,{contract:nextContract,onDirty:()=>{}})));
+ await act(async()=>root.render(React.createElement(Spot,{contract:lastContract,onDirty:()=>{}})));
+ await resolve({...view,rows:[{...row,reason:'STALE RESPONSE'}],supplier:{...view.supplier,contract:{id:nextContract.id}}});assert.ok(!document.body.textContent.includes('STALE RESPONSE'),'late response from old contract is ignored');
+ await resolve({...view,rows:[{...row,reason:'CURRENT RESPONSE'}],supplier:{...view.supplier,contract:{id:lastContract.id}}});assert.ok(document.body.textContent.includes('CURRENT RESPONSE'));assert.ok(calls.at(-1).url.includes('contract-last'));
  await act(async()=>root.unmount());
  const root2=createRoot(document.getElementById('root'));let count=0,now=10000;const clock=Date.now;Date.now=()=>now;
  function Harness({enabled}){useRefreshOnReturn(enabled,()=>count++);return null;}
@@ -36,5 +41,5 @@ async function submit(){const f=document.querySelector('form');f.elements.status
  await act(async()=>root2.render(React.createElement(Harness,{enabled:true})));Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});await act(async()=>window.dispatchEvent(new Event('focus')));assert.equal(count,1);
  Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});await act(async()=>document.dispatchEvent(new Event('visibilitychange')));assert.equal(count,2);
  await act(async()=>root2.unmount());now+=2000;window.dispatchEvent(new Event('focus'));assert.equal(count,2);Date.now=clock;
- console.log('PASS reconciliation save/reload, partial success, tax guardrails, return refresh, duplicate events, busy/hidden guards and cleanup');
+ console.log('PASS reconciliation save/reload, partial success, tax guardrails, return refresh, duplicate events, busy/hidden guards, cancelled StrictMode query, stale contract response and cleanup');
 }catch(e){console.error(e);process.exitCode=1;}finally{dom.window.close();}})();

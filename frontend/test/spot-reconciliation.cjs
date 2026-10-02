@@ -1,4 +1,4 @@
-const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
 for(const k of ['window','document','HTMLElement','HTMLSelectElement','Event','MouseEvent','File'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
 let file=null;global.FormData=class extends dom.window.FormData{constructor(form){super(form);if(file&&form){if(form.querySelector('[name="file"]'))this.set('file',file);if(form.querySelector('[name="supplierInvoice"]'))this.set('supplierInvoice',file);}}};

@@ -10,8 +10,17 @@ const colors=['#54cee7','#8da8ff','#c59bff','#f2c76c','#6fdeb0','#f58eaa'];
 export default function ContractReadiness({customerId,units,revision,onOpen}:{customerId:string;units:Unit[];revision:number;onOpen:(context:CorrectionContext)=>void}){
  const available=units.filter(u=>u.customer_id===customerId);
  const [unitId,setUnit]=useState(available.length===1?available[0].id:''),[month,setMonth]=useState(''),[result,setResult]=useState<Result|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);const generation=useRef(0);
- const unit=available.find(u=>u.id===unitId);
- useEffect(()=>{const seq=++generation.current;setResult(null);setError('');setBusy(false);if(!unit||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month))return;setBusy(true);apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(unit.id)+'&month='+encodeURIComponent(month)).then(r=>{if(seq===generation.current){if(r.unit.id!==unit.id||r.month!==month)throw new Error('A resposta não corresponde à unidade e competência selecionadas.');setResult(r);}}).catch(e=>{if(seq===generation.current)setError(e.message||'Falha ao consultar pendências.');}).finally(()=>{if(seq===generation.current)setBusy(false);});return()=>{generation.current++;};},[unitId,month,customerId,revision,refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+ const unit=available.find(u=>u.id===unitId),selectedUnitId=unit?.id;
+ useEffect(()=>{
+  let cancelled=false;const seq=++generation.current;
+  void Promise.resolve().then(async()=>{
+   if(cancelled)return;setResult(null);setError('');setBusy(false);
+   if(!selectedUnitId||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month))return;setBusy(true);
+   try{const r=await apiRequest<Result>('/api/v1/calculation-preparation/combined?consumerUnitId='+encodeURIComponent(selectedUnitId)+'&month='+encodeURIComponent(month));if(!cancelled&&seq===generation.current){if(r.unit.id!==selectedUnitId||r.month!==month)throw new Error('A resposta não corresponde à unidade e competência selecionadas.');setResult(r);}}
+   catch(e){if(!cancelled&&seq===generation.current)setError(e instanceof Error?e.message:'Falha ao consultar pendências.');}
+   finally{if(!cancelled&&seq===generation.current)setBusy(false);}
+  });return()=>{cancelled=true;};
+ },[selectedUnitId,month,customerId,revision,refresh]);
  useRefreshOnReturn(!!result&&!busy,()=>setRefresh(v=>v+1));
  const progress=unit?contractReadiness(unit,result):null;
  function open(tab:string,message?:string){if(unit)onOpen({customerId,unitId:unit.id,month,tab,message});}
