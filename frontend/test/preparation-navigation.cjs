@@ -13,6 +13,9 @@ const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,
 (async()=>{try{
 for(const [section,tab] of Object.entries({'Medições':'monthly','Custos mensais':'costs','Unidade':'distributor','Parâmetros':'parameters','Tributos':'parameters','Bases tributárias':'parameters','Fornecedor':'supply','Preços':'supply','Volumes':'supply','Honorários':'management','Custos adicionais':'services'}))ok(correctionTarget({section,code:'X'},base).tab===tab,'destination '+section);
 ok(correctionTarget({section:'Desconhecido',code:'X'},base)===null,'unknown has no invented destination');
+let spotTarget=correctionTarget({section:'Medições',code:'SUPPLIER_AUTO:contract:SPOT_VOLUME_DIFFERENCE'},base);ok(spotTarget.tab==='supply'&&spotTarget.recordId==='contract'&&spotTarget.action==='reconciliation','volume discrepancy opens reconciliation, not measurement editing');
+const taxTarget=correctionTarget({section:'Custos mensais',code:'COMPOSITION:ACL:5',message:'Tributo PIS incluído na TUSD e CDE da fatura: concilie'},base);ok(taxTarget.tab==='parameters'&&taxTarget.kind==='TAX'&&taxTarget.component==='PIS'&&taxTarget.scenario==='ACL','composition tax opens matching tax parameters');
+ok(correctionTarget({section:'Custos mensais',code:'COMPOSITION:ACL:5',message:'Outro custo pendente'},base).tab==='costs','other costs retain their destination');
 let target=correctionTarget({section:'Tributos',code:'TAX_MISSING:ACL:ICMS'},base);ok(target.scenario==='ACL'&&target.component==='ICMS'&&target.kind==='TAX','tax filter');
 ok(correctionTarget({section:'Parâmetros',code:'DRAFT_PARAMETERS'},base).drafts,'draft filter');ok(correctionTarget({section:'Preços',code:'PRICE_GAP:contract-id'},base).recordId==='contract-id','specific contract');
 ok(correctionTarget({section:'Parâmetros',code:'PARAMETER_GAP:ACR/TARIFF/TE/ALL'},base).component==='TE','parameter key');

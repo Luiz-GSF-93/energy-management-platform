@@ -29,8 +29,8 @@ export default function SupplyContracts({customerId,onDirty,allowNew=true,initia
  const [loadFailed,setLoadFailed]=useState(false);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[lookupError,setLookupError]=useState(''),[message,setMessage]=useState(''),[revision,setRevision]=useState(0);
  const [busy,setBusy]=useState(false),[editing,setEditing]=useState<Contract|null>(null),[activating,setActivating]=useState<string|null>(null);
- const customer=customerId,filter=customerId;const [query,setQuery]=useState(''),[priceId,setPriceId]=useState<string|null>(null),[billingId,setBillingId]=useState<string|null>(initialContext?.recordId||null);
- const [reconciliationId,setReconciliationId]=useState<string|null>(null);
+ const customer=customerId,filter=customerId;const [query,setQuery]=useState(''),[priceId,setPriceId]=useState<string|null>(null),[billingId,setBillingId]=useState<string|null>(initialContext?.action==='reconciliation'?null:initialContext?.recordId||null);
+ const [reconciliationId,setReconciliationId]=useState<string|null>(initialContext?.action==='reconciliation'?initialContext.recordId||null:null);
  const [invoicesId,setInvoicesId]=useState<string|null>(null),[invoiceRefresh,setInvoiceRefresh]=useState(0);
  const pending=useRef(false);const [formVersion,setFormVersion]=useState(0),[hasSchedule,setHasSchedule]=useState(false);
  useEffect(()=>{let cancelled=false;if(!view)return;
