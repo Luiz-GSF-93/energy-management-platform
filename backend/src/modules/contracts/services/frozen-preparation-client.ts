@@ -17,7 +17,16 @@ class FrozenQuery implements PromiseLike<Reply> {
  private singleton = false;
  constructor(private readonly rows: Row[] | undefined) {}
  select(columns = '*') {this.columns = columns; return this;}
- eq(column: string, value: unknown) {this.filters.push(row => row[column] === value); return this;}
+ eq(column: string, value: unknown) {
+  // PostgreSQL accepts a date literal when comparing a midnight timestamp.
+  // JSON captures preserve the timestamp suffix; reproduce that typed equality.
+  this.filters.push(row => row[column] === value || (
+   ['reference_month', 'month'].includes(column) && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+   typeof row[column] === 'string' &&
+   new RegExp('^' + value + 'T00:00:00(?:[.]0+)?(?:Z|[+]00:00)?$').test(row[column] as string)
+  )); return this;
+ }
+
  is(column: string, value: null | boolean) {return this.eq(column, value);}
  in(column: string, values: unknown[]) {this.filters.push(row => values.includes(row[column])); return this;}
  gte(column: string, value: string) {this.filters.push(row => typeof row[column] === 'string' && (row[column] as string) >= value); return this;}
