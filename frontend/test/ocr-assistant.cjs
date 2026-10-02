@@ -25,6 +25,7 @@ const payload={token:'a'.repeat(64),unitName:'Unit',month:'2026-08',checkedAt:'2
  assert.ok(document.body.textContent.includes('Não identificado'));assert.ok(document.body.textContent.includes('Nenhum histórico foi presumido'));
  assert.ok([...document.querySelectorAll('a')].some(a=>a.href.endsWith('&area=management')));
  assert.ok([...document.querySelectorAll('a')].some(a=>a.href.endsWith('&area=distributor')));
+ assert.ok([...document.querySelectorAll('a')].filter(a=>a.href.includes('ocrDocument=')).every(a=>!a.target),'Form navigation must preserve the current tab tenant context');
  await act(async()=>boxes[2].click());await click('Confirmar e lançar 1 etapa(s)');
  assert.deepEqual(posted,{method:'POST',body:{token:payload.token,operations:['monthly'],acknowledged:true}});
  assert.ok(document.body.textContent.includes('rascunho registrado'));assert.ok(document.body.textContent.includes('Atualização obrigatória'));
