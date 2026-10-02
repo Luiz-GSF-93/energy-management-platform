@@ -23,3 +23,7 @@ API CCEE continua aguardando habilitação/validação de certificado. Não inic
 Fuga e Del Rei apareciam com 94% porque a memória por unidade retorna `VARIABLE_PENDING` mesmo com a regra mensal confirmada: o variável depende da consolidação do cliente. O indicador tratava essa mensagem como ausência de confirmação mensal.
 
 A etapa só passa quando a prévia consolidada do backend está `AVAILABLE`, sem bloqueios, corresponde ao mesmo cliente, mês, contrato e identificador/versão da regra e inclui a unidade com variável e total calculados. A regra mensal deve estar confirmada, com fonte, fixo e participação da unidade. Ausência, conflito ou consolidação incompleta continuam impedindo 100%. A correção é de apresentação; não muda fórmulas, dados, aprovações ou publicações.
+
+## Identidade visual
+
+Rosto vetorial inspirado nos arcos e no azul da marca Expert Energy. O botão do backoffice permanece compacto (48 px; rosto de 38 px), com identificação bot-energy e nome acessível. Clique abre o painel; ao fechar, retorna ao rosto. Piscada a cada 8 segundos e pequena inclinação a cada 20 segundos, desativadas com `prefers-reduced-motion`. As animações não indicam execução: o progresso operacional continua baseado nas etapas reais do backend. O mesmo rosto pode ser reutilizado no cliente quando seu atendimento for autorizado e implementado.
