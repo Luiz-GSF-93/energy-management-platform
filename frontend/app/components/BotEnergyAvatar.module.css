@@ -1,0 +1,25 @@
+.avatar {
+  transform-origin: center;
+  animation: greet 20s ease-in-out infinite;
+}
+
+.eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 8s ease-in-out 2s infinite;
+}
+
+@keyframes greet {
+  0%, 90%, 100% { transform: translateY(0) rotate(0); }
+  93% { transform: translateY(-2px) rotate(-4deg); }
+  96% { transform: translateY(0) rotate(3deg); }
+}
+
+@keyframes blink {
+  0%, 92%, 96%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(0.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar, .eyes { animation: none; }
+}

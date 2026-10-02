@@ -91,7 +91,7 @@ export class OcrAssistantService {
    values:reviews.fields.map(f=>({key:f.key,label:f.label,value:f.decimal,unit:f.unit,state:f.state,sources:f.sources,review:f.history[0]?.sourceHash===f.sourceHash?f.history[0]:null})),
    comparisons,operations:previews.map(p=>({...p,canPropose:ocrDraftRole(t)&&ocrDraftPermission(t)&&(p.canCreate||['REVIEWS_PENDING','CONSUMPTION_REQUIRED'].includes(p.state))&&[p.values,p.candidates].some(v=>Array.isArray(v)?v.length>0:!!v&&typeof v==='object'&&Object.keys(v).length>0),evidenceHash:ocrReviewDigest({values:p.values??null,candidates:p.candidates??null})})),counts:diagnosis.counts,findings:diagnosis.findings,
    configurations:areas.map(([area,label,sections])=>({area,label,state:diagnosis.findings.some(f=>(sections as readonly string[]).includes(f.section)&&f.severity==='BLOCKER')?'ACTION_REQUIRED':'AVAILABLE',findings:diagnosis.findings.filter(f=>(sections as readonly string[]).includes(f.section))})),
-   records:{measurements:diagnosis.measurements,costs:diagnosis.costs,catalog:diagnosis.catalog,suppliers:diagnosis.suppliers,feeCoverage:diagnosis.feeCoverage},
+   records:{measurements:diagnosis.measurements,costs:diagnosis.costs,catalog:diagnosis.catalog,suppliers:diagnosis.suppliers,feeCoverage:diagnosis.feeCoverage,managementFees:diagnosis.managementFeeMemory},
    canPrepare:diagnosis.counts.blockers===0,canPublish:false as const,
    message:'Extração IA e conferência pelas regras do backend. Configurações vigentes são reutilizadas; dúvidas exigem revisão. A execução cria somente rascunhos permitidos pelos serviços atuais, sem aprovar ou publicar apuração.'};
  }

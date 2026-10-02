@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {ocrContractLink,type OcrDestination} from '../contracts/ocr-navigation';
 import OcrAssistantForm from './OcrAssistantForm';
+import BotEnergyHelp from '@/app/components/BotEnergyHelp';
 import {prepareAssistant,activityLabels,type AssistantActivity} from './assistant-preparation';
 import OcrIdentityPreview from './OcrIdentityPreview';
 import OcrFieldReviews from './OcrFieldReviews';
@@ -67,7 +68,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false}:{id:string;
   finally{writing.current=false;if(g===generation.current){setBusy(false);setWriteBusy(false);}}
  }
  const activityView=<section aria-label="Atividades do assistente" aria-live="polite" style={panel}>
-  <strong>{writeBusy?'Registrando validações e rascunhos':busy?'Assistente trabalhando':error?'Conferência interrompida':plan?'Aguardando validação do operador':'Aguardando leitura OCR'}</strong>
+  <strong>{writeBusy?'bot-energy registrando validações e rascunhos':busy?'bot-energy trabalhando':error?'Conferência interrompida':plan?'Aguardando validação do operador':'Aguardando leitura OCR'}</strong>
   {activity&&<><progress aria-label="Etapas de preparação concluídas" value={activity.completed.length} max={activity.stages.length}/><p>{activity.completed.length} de {activity.stages.length} etapas · {(activity.elapsedMs/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})} s de processamento. Preparação não significa aprovação financeira.</p><ol>{activity.stages.map(stage=><li key={stage}>{activity.completed.includes(stage)?'✓ Concluído':'○ Aguardando conclusão'} · {activityLabels[stage]??stage}</li>)}</ol></>}
  </section>;
  async function apply(){
@@ -81,18 +82,19 @@ export default function OcrAssistant({id,canProcess,autoStart=false}:{id:string;
   finally{writing.current=false;if(g===generation.current){setBusy(false);setWriteBusy(false);}}
  }
  return <section aria-label="Assistente de conferência OCR" style={{marginTop:12}}>
-  <button type="button" onClick={()=>{dialog.current?.showModal();void load();}}>Assistente IA da fatura</button>
+  <button type="button" onClick={()=>{dialog.current?.showModal();void load();}}>bot-energy · conferir fatura</button>
   {activityView}
   <p>{busy?'Conferindo extração e cadastros…':plan?plan.counts.blockers+' pendência(s) para preparar apuração':'Assistente de conferência disponível após a extração.'}</p>
-  <dialog ref={dialog} aria-label="Assistente IA da fatura" style={{width:'min(1100px,94vw)',maxHeight:'90vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
+  <dialog ref={dialog} aria-label="bot-energy · conferir fatura" style={{width:'min(1100px,94vw)',maxHeight:'90vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
    <button type="button" onClick={()=>dialog.current?.close()} disabled={busy}>Fechar assistente</button>
-   <h2>Assistente IA da fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
+   <h2>bot-energy · conferir fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
    <button type="button" disabled={busy} onClick={()=>void load()}>Atualizar conferência</button>
    {activityView}{busy&&<p role="status">{writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}</p>}{error&&<p role="alert">{error}</p>}
    {notice&&<p role="status">{notice}</p>}
    {receipts.length>0&&<section style={panel}><h3>Resultado dos lançamentos</h3><ul>{receipts.map(r=><li key={r.key}><strong>{r.label}: {r.state==='REVIEW_SAVED'?'campo validado pelo operador':r.state==='SAVED_DRAFT'?'rascunho registrado':r.state==='VERIFY_REQUIRED'?'verificar histórico antes de repetir':'revisão necessária'}</strong>{r.message&&<p>{r.message}</p>}<Evidence value={r.result}/></li>)}</ul></section>}
    {form?<OcrAssistantForm key={form} id={id} area={form} onClose={()=>{setForm(null);void load();}}/>:plan&&<>
     <h3>{plan.unitName} · {plan.month}</h3><p>{plan.message}</p><small>Consulta em {new Date(plan.checkedAt).toLocaleString('pt-BR')}{stale?' · Atualização obrigatória antes de lançar':''}</small>
+    <BotEnergyHelp key={id} documentId={id}/>
     <section style={panel}><h3>1. Dados extraídos e dúvidas</h3>
      <p>Confiança mínima dos campos essenciais: {plan.confidence.criticalConfidence.complete&&plan.confidence.criticalConfidence.minimumAll!==null?(plan.confidence.criticalConfidence.minimumAll*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':'indeterminada — informação incompleta'}.</p>
      <p>Abaixo de 45%: automação bloqueada. Entre 45% e 85%: conferência humana. Acima de 85%: elegível somente após as demais verificações. A confirmação humana não altera a confiança OCR.</p>

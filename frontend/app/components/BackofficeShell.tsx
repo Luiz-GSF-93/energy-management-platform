@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 
 import Sidebar from '@/app/components/Sidebar';
+import BotEnergyBackoffice from '@/app/components/BotEnergyBackoffice';
 
 interface BackofficeShellProps {
   children: ReactNode;
@@ -15,6 +16,7 @@ export default function BackofficeShell({
 
       <main className="backoffice-main">
         {children}
+        <BotEnergyBackoffice />
       </main>
     </div>
   );
