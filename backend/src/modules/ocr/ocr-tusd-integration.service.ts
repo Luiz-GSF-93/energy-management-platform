@@ -1,3 +1,4 @@
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {classSuccessorId} from './class-parameter-successor';
 import {reviewedLayoutSupported,combinedTaxLayout} from './reviewed-layout-support';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
@@ -19,7 +20,7 @@ function parameterId(org:string,doc:string,band:string){const h=createHash('sha2
 export class OcrTusdIntegrationService {
  constructor(private db:SupabaseService,private licenses:LicensesService,private queue:OcrQueueService,private identity:OcrIdentityReviewService,private consumption:OcrReviewService){}
  private fail(error:any){if(error)throw new ServiceUnavailableException('Não foi possível consultar ou criar os rascunhos TUSD. Atualize a situação antes de tentar novamente.');}
- private canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&(['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions?.includes(P.ORGANIZATION_CONTRACTS_CREATE);}
+ private canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&ocrDraftRole(t)&&ocrDraftPermission(t);}
  private async context(document:string,t:TenantContext){
   if(!t?.userId||!t.organizationId||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p)))throw new ForbiddenException('A integração exige acesso aos documentos e contratos.');
   await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
@@ -39,7 +40,7 @@ export class OcrTusdIntegrationService {
  async taxIntegrationSource(document:string,t:TenantContext){const c=await this.context(document,t);return {...c,taxIds:['ICMS','PIS','COFINS'].map(code=>parameterId(t.organizationId,document,'TAX-'+code))};}
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
-  if(!this.canWrite(t))throw new ForbiddenException('A criação exige Gestor ou Administrador com permissão de cadastro de contratos.');
+  if(!this.canWrite(t))throw new ForbiddenException('A criação exige Operador, Gestor ou Administrador com permissão de preparação de contratos.');
   if(!body||Array.isArray(body)||Object.keys(body).length!==1||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Atualize a prévia antes de criar.');
   const c=await this.context(document,t);if(c.preview.state==='CREATED')return {alreadyCreated:true,parameterIds:c.ids};
   if(body.token!==c.preview.token)throw new ConflictException('A prévia mudou. Atualize antes de criar os rascunhos.');if(!c.preview.canCreate)throw new ConflictException(c.preview.message);
@@ -66,7 +67,7 @@ export class OcrTusdIntegrationService {
  }
  async taxPreview(document:string,t:TenantContext){return (await this.taxContext(document,t)).preview;}
  async createTaxes(document:string,t:TenantContext,body:any){
-  if(!this.canWrite(t))throw new ForbiddenException('A criação exige Gestor ou Administrador com permissão de cadastro de contratos.');
+  if(!this.canWrite(t))throw new ForbiddenException('A criação exige Operador, Gestor ou Administrador com permissão de preparação de contratos.');
   if(!body||Array.isArray(body)||Object.keys(body).length!==1||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Atualize a prévia antes de criar.');
   const x=await this.taxContext(document,t);if(x.preview.state==='CREATED')return {alreadyCreated:true,parameterIds:x.ids};if(body.token!==x.preview.token||!x.preview.canCreate)throw new ConflictException('A base mudou ou está pendente. Atualize e confira os parâmetros TUSD.');
   const {c}=x,rows=x.preview.amounts.map((v,i)=>({id:x.ids[i],organization_id:t.organizationId,customer_id:c.source.doc.customer_id,consumer_unit_id:c.unit.id,kind:'TAX',component_code:v.code,label:v.code+' incluído na TUSD da fatura',scenario:'ACL',time_band:'ALL',measure:'PERCENT',amount_text:null,treatment:'INCLUDED',embedded_tax_codes:[],included_taxes:'',base_rule:'Declaração somente sobre TUSD ponta e fora ponta; sem nova incidência.',tax_basis:{version:1,items:x.bases.map((p:any)=>({parameterId:p.id,revision:p.revision,operation:'INCLUDE'}))},direction:'DEBIT',source:'OCR fatura · documento '+document+' · SHA-256 '+c.source.doc.file_hash,notes:v.combined?'PIS/Cofins apresentados em coluna conjunta na Elektro. Inclusão pela tarifa bruta e conciliação do resumo; sem ratear valores individuais, inferir alíquota ou cobrar novamente. Prévia '+x.preview.token:'Destaque da fatura: ponta R$ '+v.peak+'; fora ponta R$ '+v.offPeak+'; soma R$ '+v.amount+'. Valores informativos de conciliação, não são alíquota nem custo adicional. Demais componentes não abrangidos. Prévia '+x.preview.token,start_date:c.period.start,end_date:c.period.end,unit_context:x.bases[0].unit_context,status:'DRAFT',created_by:t.userId,updated_by:t.userId}));

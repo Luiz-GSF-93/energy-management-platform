@@ -1,3 +1,4 @@
+import {ocrReadOnce} from './ocr-read-scope';
 import {elektroMeasurementAudit} from './elektro-measurement-audit';
 import {reconcileDemand} from './demand-reconciliation';
 import {loadDemandRegistration} from './demand-registration';
@@ -43,7 +44,8 @@ export class OcrQueueService {
   if(!verified)throw new ServiceUnavailableException('A origem da extração requer conferência administrativa.');
   try{return invoiceReadout(verified.raw,{page,offset,section} as ReadoutQuery);}catch{throw new BadRequestException('Página não encontrada.');}
  }
- async reviewSource(org:string,document:string){
+ reviewSource(org:string,document:string){return ocrReadOnce('source:'+org+':'+document,()=>this.loadReviewSource(org,document));}
+ private async loadReviewSource(org:string,document:string){
   await this.licenses.requireEntitlement(org,'document_management');
   const r=await this.db.getClient().from('document_ocr_jobs').select('id,state').eq('organization_id',org).eq('document_id',document).maybeSingle();
   if(r.error)throw new ServiceUnavailableException('Não foi possível consultar a extração.');

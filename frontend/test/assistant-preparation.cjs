@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+require.extensions['.ts']=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,file);
+const load=Module._load;let api;Module._load=function(name,parent,main){if(name==='@/app/lib/api/client')return {apiRequest:(...args)=>api(...args)};return load.call(this,name,parent,main);};
+const {prepareAssistant}=require('../app/backoffice/documents/assistant-preparation.ts');
+(async()=>{let paths=[],events=[];api=async(path,options)=>{paths.push([path,options?.method]);return paths.length===1?{id:'job',state:'RUNNING',completed:['source'],stages:['source','ready'],elapsedMs:10}:{id:'job',state:'READY',completed:['source','ready'],stages:['source','ready'],elapsedMs:20,plan:{token:'checked'}};};
+assert.deepEqual(await prepareAssistant('doc',j=>events.push(j.state),new AbortController().signal),{token:'checked'});assert.deepEqual(events,['RUNNING','READY']);assert.deepEqual(paths,[['/api/v1/documents/doc/ocr/assistant/prepare','POST'],['/api/v1/documents/doc/ocr/assistant/prepare/job',undefined]]);
+api=async()=>({id:'job',state:'FAILED',completed:[],stages:[],elapsedMs:1,message:'Conferência falhou'});await assert.rejects(prepareAssistant('doc',()=>{},new AbortController().signal),/Conferência falhou/);
+api=async()=>({id:'job',state:'READY',completed:[],stages:[],elapsedMs:1});await assert.rejects(prepareAssistant('doc',()=>{},new AbortController().signal),/Proposta indisponível/);
+const abort=new AbortController();api=async()=>({id:'job',state:'RUNNING',completed:[],stages:[],elapsedMs:1});const pending=prepareAssistant('doc',()=>{},abort.signal);await Promise.resolve();abort.abort();await assert.rejects(pending,/cancelada/);
+console.log('Assistant polling: real stages, failures and cancellation PASS; no validation or financial writes');
+})().catch(e=>{console.error(e);process.exitCode=1;});
