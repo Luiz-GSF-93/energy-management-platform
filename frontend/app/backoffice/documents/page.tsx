@@ -26,6 +26,7 @@ function DocumentsContent() {
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const [attempt,setAttempt] = useState(0);
+  const [uploadedDocument,setUploadedDocument] = useState<{id:string;organizationId:string}|null>(null);
   const currentOrg = useRef(organizationId);
 
   const canUpload = hasPermission(uploadPermission);
@@ -59,7 +60,7 @@ function DocumentsContent() {
         catch{ocrNotice=' O arquivo foi salvo, mas não foi possível iniciar o OCR automaticamente. Consulte a leitura para verificar a disponibilidade.';}
       }
       if(currentOrg.current!==org)return;
-      setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(ocrNotice||(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.'));
+      setUploadedDocument({id:saved.id,organizationId:org});setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(ocrNotice||(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.'));
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.'); }
     finally { setBusy(false); }
   }
@@ -102,7 +103,7 @@ function DocumentsContent() {
         <button type="submit" disabled={busy || !customer} style={{padding:12,background:'#123c66',color:'white',borderRadius:8}}>{busy?'Enviando…':'Enviar arquivo'}</button>
       </form>}
       <h2>Arquivos cadastrados</h2>
-      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{receiptLabel(d)}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
+      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{receiptLabel(d)}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} autoAssist={uploadedDocument?.id===d.id&&uploadedDocument.organizationId===organizationId} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
     </>}
   </section>;
 }

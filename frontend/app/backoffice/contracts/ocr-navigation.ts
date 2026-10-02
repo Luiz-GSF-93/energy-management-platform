@@ -1,5 +1,5 @@
 import type {CorrectionContext} from './preparation-navigation';
-const tabs=['parameters','monthly','costs','preparation'] as const;
+const tabs=['parameters','monthly','costs','preparation','distributor','supply','management','services'] as const;
 export type OcrDestination=typeof tabs[number];
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function ocrContractLink(documentId:string,tab:OcrDestination){return '/backoffice/contracts?ocrDocument='+encodeURIComponent(documentId)+'&area='+tab;}

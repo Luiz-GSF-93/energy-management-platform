@@ -1,0 +1,40 @@
+/* Isolated DOM and mocked API; no production writes. */
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','Event','MouseEvent'])global[k]=dom.window[k];
+global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+let api=async()=>{throw Error('API not configured');};const original=Module._load;
+Module._load=function(name,parent,main){
+ if(['./OcrIdentityPreview','./OcrFieldReviews','./OcrDemandReviews','./OcrHomologation','./OcrReadout'].includes(name))return {__esModule:true,default:()=>null};
+ if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};
+ return original.call(this,name,parent,main);
+};
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;};
+const Panel=require('../app/backoffice/documents/OcrAssistant.tsx').default,root=createRoot(document.getElementById('root'));
+const click=async label=>act(async()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent===label);assert.ok(button,label);button.click();});
+const payload={token:'a'.repeat(64),unitName:'Unit',month:'2026-08',checkedAt:'2026-10-02T12:00:00Z',message:'Check evidence',canPrepare:false,counts:{blockers:1,reviews:1},confidence:{criticalConfidence:{complete:false,minimumAll:null},fieldConfidence:{low:1,review:0,high:0,missing:1}},values:[{key:'total',label:'Consumo total',value:null,unit:'kWh',state:'MISSING',sources:[],review:null}],comparisons:[],configurations:[{area:'management',label:'Honorários',state:'AVAILABLE',findings:[]},{area:'distributor',label:'Distribuidora',state:'ACTION_REQUIRED',findings:[{code:'MISSING',message:'Confira vigência'}]}],records:{measurements:{status:'MISSING'},costs:{status:'DRAFT'},catalog:[],suppliers:[],feeCoverage:{gaps:[],overlap:false}},operations:[{key:'monthly',label:'Consumos mensais',area:'monthly',state:'READY',canCreate:true,message:'Ready'},{key:'tax',label:'Tributos',area:'parameters',state:'REVIEWS_PENDING',canCreate:false,message:'Conferir bases'}],findings:[{code:'missing',section:'Unidade',severity:'BLOCKER',message:'Falta cadastro'}]};
+(async()=>{try{
+ let gets=0,posted;api=async(_p,options)=>{if(options){posted=options;return {receipts:[{key:'monthly',label:'Consumos mensais',state:'SAVED_DRAFT',result:{inputId:'saved'}}],complete:true,current:null,message:'Atualize o painel'};}gets++;return payload;};
+ await act(async()=>root.render(React.createElement(Panel,{id:'doc',canProcess:true})));
+ assert.equal(gets,0,'Historical documents are not automatically reanalysed');
+ await click('Assistente IA da fatura');assert.equal(gets,1);assert.equal(document.querySelector('dialog').open,true);
+ let boxes=[...document.querySelectorAll('input[type=checkbox]')];assert.equal(boxes[0].checked,true);assert.equal(boxes[1].disabled,true);
+ assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Confirmar e lançar')).disabled,true);
+ assert.ok(document.body.textContent.includes('Não identificado'));assert.ok(document.body.textContent.includes('Nenhum histórico foi presumido'));
+ assert.ok([...document.querySelectorAll('a')].some(a=>a.href.endsWith('&area=management')));
+ assert.ok([...document.querySelectorAll('a')].some(a=>a.href.endsWith('&area=distributor')));
+ await act(async()=>boxes[2].click());await click('Confirmar e lançar 1 etapa(s)');
+ assert.deepEqual(posted,{method:'POST',body:{token:payload.token,operations:['monthly'],acknowledged:true}});
+ assert.ok(document.body.textContent.includes('rascunho registrado'));assert.ok(document.body.textContent.includes('Atualização obrigatória'));
+ assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Confirmar e lançar')).disabled,true);
+ api=async()=>{throw Error('offline');};await click('Atualizar conferência');assert.ok(document.querySelector('[role=alert]'));assert.ok(document.body.textContent.includes('rascunho registrado'));
+ let resolveOld;api=async()=>new Promise(resolve=>{resolveOld=resolve;});await click('Atualizar conferência');
+ const previousRequest=resolveOld;
+ await act(async()=>root.render(React.createElement(Panel,{id:'new-doc',canProcess:true,key:'new-doc',autoStart:true})));
+ const resolveNew=resolveOld;await act(async()=>resolveNew({...payload,unitName:'New unit'}));
+ await act(async()=>previousRequest({...payload,unitName:'Obsolete unit'}));
+ assert.ok(document.body.textContent.includes('New unit'));assert.ok(!document.body.textContent.includes('rascunho registrado'));
+ await act(async()=>root.unmount());console.log('OCR assistant UI: on-demand history, automatic new upload, blocked options, explicit batch confirmation, object payload, preserved receipts and context reset passed');
+}finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

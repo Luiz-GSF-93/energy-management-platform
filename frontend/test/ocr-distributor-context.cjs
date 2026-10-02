@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+let canEdit=true,calls=0;const original=Module._load;Module._load=function(n,p,m){
+ if(n==='./DemandPeriods')return {__esModule:true,default:()=>null};
+ if(n==='@/app/providers')return {useAuth:()=>({hasPermission:permission=>permission!=='0f2e539d-03f9-4168-bc8c-55ac3a371628'||canEdit})};
+ if(n==='@/app/lib/api/client')return {apiRequest:async()=>{calls++;throw Error('Unexpected write');}};
+ if(n==='@/app/components/ui')return {Alert:({children})=>React.createElement('div',null,children),Card:({title,children})=>React.createElement('section',null,React.createElement('h3',null,title),children),Button:({children,variant,...props})=>React.createElement('button',props,children),Input:({label,...props})=>React.createElement('label',null,label,React.createElement('input',props))};
+ return original.call(this,n,p,m);
+};
+const Panel=require('../app/backoffice/contracts/Distributor.tsx').default,root=createRoot(document.getElementById('root'));
+const unit={id:'unit',customer_id:'customer',name:'Bonfim',consumer_unit_number:'4.631.654.035-55',distributor:'CPFL Paulista',tariff_group:'A',tariff_subgroup:'A4',tariff_modality:'BLUE',contracted_demand_peak:0,contracted_demand_off_peak:137,edit_version:4};
+const props={customerId:'customer',units:[unit],customers:[{id:'customer',company_name:'Cliente'}],onUnits:()=>{},onDirty:()=>{},initialContext:{customerId:'customer',unitId:'unit',month:'2026-08',tab:'distributor'}};
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Panel,{...props,key:'valid'})));assert.ok(document.body.textContent.includes('Editar configuração da unidade'));assert.equal(document.querySelector('[name=code]').value,unit.consumer_unit_number);assert.equal(document.querySelector('[name=distributor]').value,'CPFL Paulista');assert.equal(document.querySelector('[name=tariffGroup]').value,'A');assert.equal(document.querySelector('[name=tariffModality]').value,'BLUE');assert.equal(document.querySelector('[name=contractedDemandPeak]').value,'0');assert.equal(document.querySelector('[name=contractedDemandOffPeak]').value,'137');assert.equal(document.querySelector('[name=reason]').required,true);assert.equal(calls,0);
+ await act(async()=>root.render(React.createElement(Panel,{...props,key:'foreign',initialContext:{...props.initialContext,customerId:'other'}})));assert.equal(document.querySelector('[name=code]').value,'');assert.ok(!document.querySelector('[name=reason]'));assert.equal(calls,0);
+ canEdit=false;await act(async()=>root.render(React.createElement(Panel,{...props,key:'readonly'})));assert.equal(document.querySelector('form'),null);assert.equal(calls,0);await act(async()=>root.unmount());console.log('OCR distributor context: exact unit prefill, zero preserved, audited reason, no automatic write, foreign customer refusal and edit permission passed');
+}finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
