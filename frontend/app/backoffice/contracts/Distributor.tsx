@@ -5,13 +5,16 @@ import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
 import {Customer,Unit,date} from './types';
+import type {CorrectionContext} from './preparation-navigation';
 const modalities:Record<string,string>={BLUE:'Azul',GREEN:'Verde',WHITE:'Branca',CONVENTIONAL:'Convencional'};
 const subgroups:Record<string,string>={"A1":"A1 (>230 kV)","A2":"A2 (88 a 138 kV)","A3":"A3 (69 kV)","A3a":"A3a (30 a 44 kV)","A4":"A4 (2,3 a 25 kV)","AS":"AS (Subterrâneo)","B1":"B1 Residencial","B2":"B2 Rural","B3":"B3 Comercial/Industrial de pequeno porte","B4":"B4 Iluminação Pública"};
 const classes:Record<string,string>={"INDUSTRIAL":"Industrial","COMMERCIAL":"Comercial","RURAL":"Rural","PUBLIC_AUTHORITY":"Poder Público","PUBLIC_SERVICE":"Serviço Público","RESIDENTIAL":"Residencial"};
 const numbers:Record<string,string>={"contractedDemandPeak":"contracted_demand_peak","contractedDemandOffPeak":"contracted_demand_off_peak","demandTariff":"demand_tariff","demandTariffPeak":"demand_tariff_peak","demandTariffOffPeak":"demand_tariff_off_peak","energyTariffPeak":"energy_tariff_peak","energyTariffOffPeak":"energy_tariff_off_peak","reactiveEnergyTariff":"reactive_energy_tariff","lastDemandValue":"last_demand_value","lastDemandPeak":"last_demand_peak","lastDemandOffPeak":"last_demand_off_peak"};
 const textFields:Record<string,string>={tariffSubgroup:'tariff_subgroup',consumptionClass:'consumption_class',lastDemandAdjustmentDate:'last_demand_adjustment_date'};
-export default function Distributor({customerId,units,customers,onUnits,onDirty,allowNew=true}:{allowNew?:boolean;customerId:string;units:Unit[];customers:Customer[];onUnits:(units:Unit[])=>void;onDirty:(dirty:boolean)=>void}){
- const {hasPermission}=useAuth();const [editing,setEditing]=useState<Unit|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[group,setGroup]=useState(''),[modality,setModality]=useState(''),[version,setVersion]=useState(0);const pending=useRef(false);const attempt=useRef({signature:"",id:""});
+export default function Distributor({customerId,units,customers,onUnits,onDirty,initialContext,allowNew=true}:{initialContext?:CorrectionContext;allowNew?:boolean;customerId:string;units:Unit[];customers:Customer[];onUnits:(units:Unit[])=>void;onDirty:(dirty:boolean)=>void}){
+ const {hasPermission}=useAuth();
+ const initialUnit=initialContext?.customerId===customerId?units.find(u=>u.id===initialContext.unitId&&u.customer_id===customerId)??null:null;
+ const [editing,setEditing]=useState<Unit|null>(initialUnit),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[group,setGroup]=useState(initialUnit&&['A','B'].includes(initialUnit.tariff_group)?initialUnit.tariff_group:''),[modality,setModality]=useState(initialUnit?.tariff_modality||''),[version,setVersion]=useState(0);const pending=useRef(false);const attempt=useRef({signature:"",id:""});
  const canCreate=hasPermission('05613764-311a-4e71-ac99-475ad1dfe87a'),canEdit=hasPermission('0f2e539d-03f9-4168-bc8c-55ac3a371628'),canView=hasPermission('b142bd7b-05a3-45ee-befd-e593066c2775');
  const blue=modality==='BLUE';
  function reset(){setEditing(null);setGroup('');setModality('');setVersion(v=>v+1);onDirty(false);}

@@ -1,4 +1,5 @@
 'use client';
+import OcrAssistant from './OcrAssistant';
 import OcrElektroAudit,{type ElektroAudit} from './OcrElektroAudit';
 import OcrHomologation from './OcrHomologation';
 import OcrDemandReviews from './OcrDemandReviews';
@@ -14,7 +15,7 @@ type Job={id:string;state:string;errorCode:string|null};
 type Intake={elektroAudit?:ElektroAudit|null;layout?:LayoutEvidence;readoutSummary?:ReadoutSummary;gd?:GdEvidence;electrical?:ElectricalEvidence;decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
 type Status={enabled:boolean;job:Job|null;intake?:Intake|null};
 const labels:Record<string,string>={QUEUED:'Na fila',SUBMITTING:'Enviando para leitura',POLLING:'Leitura em andamento',SUCCEEDED:'Extração recebida — aguarda conferência',FAILED:'Leitura interrompida',SUBMISSION_UNKNOWN:'Envio indeterminado — requer verificação administrativa'};
-export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:boolean}){
+export default function OcrDocumentStatus({id,canProcess,autoAssist=false}:{id:string;canProcess:boolean;autoAssist?:boolean}){
  const [status,setStatus]=useState<Status|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [checkedAt,setCheckedAt]=useState<string|null>(null);const active=useRef(true);const loading=useRef(false);
  useEffect(()=>{active.current=true;void load();return()=>{active.current=false;};},[id]);
  useEffect(()=>{if(!status?.job||!['QUEUED','SUBMITTING','POLLING'].includes(status.job.state))return;const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer);},[id,status?.job?.state]);
@@ -39,6 +40,7 @@ export default function OcrDocumentStatus({id,canProcess}:{id:string;canProcess:
    <p>Conferência registrada em {new Date(status.intake.checkedAt).toLocaleString('pt-BR')}.</p>
    <ul>{status.intake.checks.map(check=><li key={check.field}><strong>{check.label}: {check.state==='MATCH'?'Compatível':check.state==='MISMATCH'?'Divergente':'Conferir'}</strong><p>{check.message}</p>{check.confidence!==null&&<small>Confiança: {(check.confidence*100).toFixed(0)}%{check.pages.length?' · Página(s): '+check.pages.join(', '):''}</small>}</li>)}</ul>
   </details>}
+  {status?.intake&&<OcrAssistant key={'OcrAssistant:'+id} id={id} canProcess={canProcess} autoStart={autoAssist}/>}
   {status?.intake&&<OcrHomologation key={'OcrHomologation:'+id} id={id}/>}
   {status?.intake&&<OcrIdentityPreview key={'OcrIdentityPreview:'+id} id={id}/>}
   {status?.intake?.readoutSummary&&<OcrReadout key={'OcrReadout:'+id} id={id} summary={status.intake.readoutSummary}/>}
