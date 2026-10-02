@@ -1,6 +1,10 @@
-export type CorrectionContext={customerId:string;unitId:string;month:string;message?:string;tab?:string;kind?:string;scenario?:string;component?:string;recordId?:string;drafts?:boolean};
-export function correctionTarget(f:{code:string;section:string},base:CorrectionContext):CorrectionContext|null{
- const areas:Record<string,string>={'Medições':'monthly','Custos mensais':'costs','Unidade':'distributor','Parâmetros':'parameters','Tributos':'parameters','Bases tributárias':'parameters','Fornecedor':'supply','Preços':'supply','Volumes':'supply','Honorários':'management','Custos adicionais':'services'};
+export type CorrectionContext={customerId:string;unitId:string;month:string;message?:string;tab?:string;kind?:string;scenario?:string;component?:string;recordId?:string;drafts?:boolean;action?:"reconciliation"};
+export function correctionTarget(f:{code:string;section:string;message?:string},base:CorrectionContext):CorrectionContext|null{
+ const parts=f.code.split(':');
+ if(parts[0]==='SUPPLIER_AUTO'&&parts[1]&&parts[2]==='SPOT_VOLUME_DIFFERENCE')return {...base,tab:'supply',recordId:parts[1],action:'reconciliation'};
+ const tax=f.code.startsWith('COMPOSITION:')&&f.message?.match(/^Tributo (ICMS|PIS|COFINS) incluído /);
+ if(tax&&['ACL','ACR'].includes(parts[1]))return {...base,tab:'parameters',kind:'TAX',scenario:parts[1],component:tax[1]};
+ const areas:Record<string,string>={'Medições':'monthly','Custos mensais':'costs','Unidade':'distributor','Parâmetros':'parameters','Tributos':'parameters','Bases tributárias':'parameters','Bases operacionais':'parameters','Fornecedor':'supply','Preços':'supply','Volumes':'supply','Honorários':'management','Custos adicionais':'services'};
  const tab=areas[f.section];if(!tab)return null;const target:CorrectionContext={...base,tab};const [code,a,b]=f.code.split(':');
  if(code==='TAX_MISSING'){target.kind='TAX';target.scenario=a;target.component=b;}
  if(code==='TARIFF_MISSING'){target.kind='TARIFF';target.scenario=a;}
