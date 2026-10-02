@@ -1,3 +1,4 @@
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {invoiceFinancialAdjustments} from './invoice-financial-adjustments';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {auditAuthorNames} from '../contracts/services/audit-author-names';
@@ -13,7 +14,7 @@ function identifier(org:string,doc:string,kind:string){const h=createHash('sha25
 @Injectable()
 export class OcrCipIntegrationService{
  constructor(private db:SupabaseService,private tusd:OcrTusdIntegrationService){}
- private canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&(['gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_CREATE].every(p=>t.permissions?.includes(p));}
+ private canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&ocrDraftRole(t)&&ocrDraftPermission(t)&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p));}
  private fail(error:any){if(error)throw new ServiceUnavailableException('Não foi possível consultar ou integrar a CIP. Atualize a situação antes de tentar novamente.');}
  private async context(document:string,t:TenantContext){
   // Reuse the scoped, licensed CPFL/ACL source and current identity/consumption confirmations.

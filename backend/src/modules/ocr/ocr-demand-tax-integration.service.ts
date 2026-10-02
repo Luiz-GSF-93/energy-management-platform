@@ -1,3 +1,4 @@
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {OcrReactiveIntegrationService} from './ocr-reactive-integration.service';
 import {OcrTusdIntegrationService} from './ocr-tusd-integration.service';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
@@ -16,7 +17,7 @@ function sameBasis(b:any,items:any[]){return b?.version===1&&Object.keys(b).leng
 @Injectable()
 export class OcrDemandTaxIntegrationService{
  constructor(private db:SupabaseService,private cde:OcrCdeTaxIntegrationService,private demand:OcrSplitDemandIntegrationService,private tusd?:OcrTusdIntegrationService,private reactive?:OcrReactiveIntegrationService){}
- private canWrite(t:TenantContext){return !!t?.organizationId&&!!t.userId&&(['gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_CREATE,P.ORGANIZATION_CONTRACTS_UPDATE].every(p=>t.permissions?.includes(p));}
+ private canWrite(t:TenantContext){return !!t?.organizationId&&!!t.userId&&ocrDraftRole(t)&&ocrDraftPermission(t)&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_UPDATE].every(p=>t.permissions?.includes(p));}
  private async context(document:string,t:TenantContext){
   const b=await this.demand.taxIntegrationSource(document,t);
   if(extractCpflPaulistaLayout(b.source.raw).layoutId!=='neoenergia-elektro-verde')return this.cpflContext(document,t);
@@ -47,7 +48,7 @@ export class OcrDemandTaxIntegrationService{
  }
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
-  if(!this.canWrite(t))throw new ForbiddenException('A integração exige Gestor ou Administrador com permissão de cadastro e alteração de contratos.');
+  if(!this.canWrite(t))throw new ForbiddenException('A integração exige Operador, Gestor ou Administrador com permissão de preparação e alteração de contratos.');
   if(!body||Array.isArray(body)||Object.keys(body).sort().join(',')!=='code,token'||!codes.includes(body.code)||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Atualize a prévia e escolha o tributo.');
   const x=await this.context(document,t),d=x.declarations.find(v=>v.code===body.code)!;
   if(d.state==='CREATED')return {alreadyCreated:true,parameterId:d.proposed!.id};

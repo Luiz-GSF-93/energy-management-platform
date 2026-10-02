@@ -1,3 +1,4 @@
+import {ocrReadOnce} from './ocr-read-scope';
 import {cpflTaxIdentityAttestation} from './cpfl-tax-identity-confirmation';
 import {elektroIdentityAttestation} from './elektro-identity-confirmation';
 import {Injectable,BadRequestException,ConflictException,ServiceUnavailableException,NotFoundException,ForbiddenException} from '@nestjs/common';
@@ -14,7 +15,7 @@ export function identityReviewInput(input:any){if(!input||typeof input!=='object
 export class OcrIdentityReviewService{
  constructor(private db:SupabaseService,private identity:OcrIdentityService){}
  private fail(error:any){if(error)throw new ServiceUnavailableException('Não foi possível consultar ou salvar a conferência. Atualize o histórico antes de tentar novamente.');}
- canReview(org:string,t:any){return !!t?.userId&&t.organizationId===org&&(['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation');}
+ canReview(org:string,t:any){return !!t?.userId&&t.organizationId===org&&(['operacional','admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation');}
  private async context(org:string,document:string){
  const {source,registration,preview}=await this.identity.context(org,document);
  const fields=preview.checks.map(check=>{
@@ -27,8 +28,9 @@ export class OcrIdentityReviewService{
  }
  private table(){return this.db.getClient().from('document_ocr_identity_reviews');}
  private async present(rows:any[],org:string){if(rows.some(r=>r.organization_id!==org||identityReviewDigest(r.source_snapshot)!==r.source_hash))throw new ServiceUnavailableException('A integridade do histórico requer conferência.');const named=await auditAuthorNames(this.db.getClient(),org,rows);return named.map(r=>({id:r.id,fieldKey:r.field_key,sourceHash:r.source_hash,version:r.version,decision:r.decision,confirmationMode:r.source_snapshot.field.attestation?.mode??null,note:r.note,createdAt:r.created_at,author:r.created_by_name??'Autor sem nome cadastrado',value:r.source_snapshot.field.decimal,unit:r.source_snapshot.field.unit}));}
- async list(org:string,document:string){const source=await this.context(org,document);const fields=await Promise.all(source.fields.map(async c=>{const r=await this.table().select('*').eq('organization_id',org).eq('document_id',document).eq('field_key',c.field.key).order('version',{ascending:false}).limit(11);this.fail(r.error);if(!Array.isArray(r.data))this.fail(true);return {...c.field,sourceHash:c.sourceHash,history:await this.present(r.data.slice(0,10),org),hasOlder:r.data.length>10};}));return {canImport:false,fields,message:'Conferência humana de identidade e competência. Preserva a confiança original do OCR e não libera importação, tarifas ou apuração.'};}
- async create(org:string,document:string,t:any,input:any){if(!this.canReview(org,t))throw new ForbiddenException('A conferência de identidade exige Gestor ou Administrador da organização.');const actor=t.userId;const d=identityReviewInput(input);if(!actor?.trim())throw new BadRequestException('Autor obrigatório.');const source=await this.context(org,document);const candidate=source.fields.find(c=>c.field.key===d.fieldKey);if(!candidate)throw new NotFoundException('Campo não disponível para conferência neste layout.');
+ list(org:string,document:string){return ocrReadOnce('ocr-identity-review.service.ts'+':'+org+':'+document,()=>this.loadList(org,document));}
+ private async loadList(org:string,document:string){const source=await this.context(org,document);const fields=await Promise.all(source.fields.map(async c=>{const r=await this.table().select('*').eq('organization_id',org).eq('document_id',document).eq('field_key',c.field.key).order('version',{ascending:false}).limit(11);this.fail(r.error);if(!Array.isArray(r.data))this.fail(true);return {...c.field,sourceHash:c.sourceHash,history:await this.present(r.data.slice(0,10),org),hasOlder:r.data.length>10};}));return {canImport:false,fields,message:'Conferência humana de identidade e competência. Preserva a confiança original do OCR e não libera importação, tarifas ou apuração.'};}
+ async create(org:string,document:string,t:any,input:any){if(!this.canReview(org,t))throw new ForbiddenException('A conferência de identidade exige Operador, Gestor ou Administrador autorizado da organização.');const actor=t.userId;const d=identityReviewInput(input);if(!actor?.trim())throw new BadRequestException('Autor obrigatório.');const source=await this.context(org,document);const candidate=source.fields.find(c=>c.field.key===d.fieldKey);if(!candidate)throw new NotFoundException('Campo não disponível para conferência neste layout.');
  const lookup=async()=>{const r=await this.table().select('*').eq('organization_id',org).eq('request_id',d.requestId).maybeSingle();this.fail(r.error);return r.data;};
  const replay=async(r:any)=>{if(r.document_id!==document||r.field_key!==d.fieldKey||r.source_hash!==d.sourceHash||r.created_by!==actor||r.decision!==d.decision||r.note!==d.note)throw new ConflictException('Esta solicitação já pertence a outra conferência.');return {canImport:false,review:(await this.present([r],org))[0]};};
  const existing=await lookup();if(existing)return replay(existing);

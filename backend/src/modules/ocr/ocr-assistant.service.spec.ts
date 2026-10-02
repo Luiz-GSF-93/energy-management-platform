@@ -1,3 +1,4 @@
+import {FinancialSettlementsService} from '../contracts/services/financial-settlements.service';
 import {OcrAssistantService} from './ocr-assistant.service';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -40,8 +41,8 @@ describe('OCR assistant safety and partial execution',()=>{
  it('keeps the token stable across read times and rejects changed evidence before writing',async()=>{
   const f=fixture(),body=await f.body();expect((await f.service.inspect('doc',f.tenant)).token).toBe(body.token);f.source.doc.file_hash='changed';await expect(f.service.apply('doc',f.tenant,body)).rejects.toThrow('mudaram');expect(f.operations[0].create).not.toHaveBeenCalled();
  });
- it('preserves existing role restrictions on writes',async()=>{
-  const f=fixture(),body=await f.body();f.tenant.role='operador';await expect(f.service.apply('doc',f.tenant,body)).rejects.toThrow('Gestor');expect(f.operations[0].create).not.toHaveBeenCalled();
+ it('rejects roles outside the operator/manager draft workflow',async()=>{
+  const f=fixture(),body=await f.body();f.tenant.role='cliente';await expect(f.service.apply('doc',f.tenant,body)).rejects.toThrow('Operador');expect(f.operations[0].create).not.toHaveBeenCalled();
  });
  it('does not present an old-source confirmation as current',async()=>{
   const f=fixture();f.review.list.mockResolvedValueOnce({fields:[{key:'consumptionTotalKwh',label:'Total',decimal:'100',unit:'kWh',state:'EXTRACTED_REVIEW',sources:['page 1'],sourceHash:'new',history:[{sourceHash:'old',decision:'CONFIRMED',version:1}]}]});expect((await f.service.inspect('doc',f.tenant)).values[0].review).toBeNull();
@@ -65,4 +66,42 @@ describe('OCR assistant safety and partial execution',()=>{
  it('preserves successful receipts if the final diagnostic read fails',async()=>{
   const f=fixture(),body=await f.body(),original=f.service.inspect.bind(f.service);const inspect=jest.spyOn(f.service,'inspect');inspect.mockImplementationOnce(original).mockRejectedValueOnce(new Error('Final read failed'));const result=await f.service.apply('doc',f.tenant,body);expect(result.complete).toBe(true);expect(result.current).toBeNull();expect(result.receipts.every(r=>r.state==='SAVED_DRAFT')).toBe(true);
  });
+});
+
+describe('operator validation and financial separation',()=>{
+ const body=async(f:any,change:any={})=>({token:(await f.service.inspect('doc',f.tenant)).token,requestId:'11111111-1111-4111-a111-111111111111',fields:[],operations:[],note:'Conferido no PDF, página 1.',checkedPdf:true,acknowledged:true,...change});
+ function operator(){const f=fixture();f.tenant.role='operacional';f.tenant.permissions=f.tenant.permissions.filter(p=>p!==P.ORGANIZATION_CONTRACTS_CREATE);f.tenant.permissions.push(P.ENERGIA_OCR_PROCESS,P.ORGANIZATION_CONTRACTS_UPDATE);return f;}
+ it('allows operator draft writes with actual identity and denies financial approval',async()=>{
+  const f=operator();const result=await f.service.apply('doc',f.tenant,await f.body());expect(result.canPublish).toBe(false);expect(f.operations[0].create).toHaveBeenCalled();
+  f.tenant.permissions.push(P.ORGANIZATION_CONTRACTS_UPDATE);expect(FinancialSettlementsService.prototype.canManage(f.tenant)).toBe(false);f.tenant.role='gestor';expect(FinancialSettlementsService.prototype.canManage(f.tenant)).toBe(true);
+ });
+ it('validates existing-source fields with audit note and never impersonates manager',async()=>{
+  const f=operator(),field={key:'consumptionTotalKwh',label:'Total',decimal:'100',unit:'kWh',state:'EXTRACTED_REVIEW',sourceHash:'c'.repeat(64),sources:['page 1'],history:[]};f.review.list.mockResolvedValue({fields:[field]});
+  (f.review as any).create=jest.fn(async()=>({review:{id:'saved'}}));
+  const result=await f.service.validate('doc',f.tenant,await body(f,{fields:[{key:'consumption:consumptionTotalKwh',decision:'CONFIRMED'}]}));
+  expect(result.receipts[0].state).toBe('REVIEW_SAVED');expect(result.canPublish).toBe(false);expect((f.review as any).create).toHaveBeenCalledWith('org','doc','actor',expect.objectContaining({checkedPdf:true,note:'Conferido no PDF, página 1.',sourceHash:'c'.repeat(64),decision:'CONFIRMED'}));expect(f.operations[0].create).not.toHaveBeenCalled();
+ });
+ it('refuses unexpected fields, missing PDF, missing permission and stale proposals before writes',async()=>{
+  const f=operator(),input=await body(f);
+  for(const change of [{fields:[{key:'missing',decision:'CONFIRMED'}]},{checkedPdf:false},{note:'x'},{extra:'value'}])await expect(f.service.validate('doc',f.tenant,{...input,...change})).rejects.toThrow();
+  f.tenant.permissions=f.tenant.permissions.filter(p=>p!==P.ENERGIA_OCR_PROCESS);await expect(f.service.validate('doc',f.tenant,input)).rejects.toThrow('permissão OCR');
+ });
+ it('creates only the unchanged selected proposal as a draft after explicit validation',async()=>{
+  const f=operator();f.operations[0].preview.mockResolvedValue({token:'first-token',state:'READY',canCreate:true,message:'Ready',values:[{amount:'100'}]} as any);
+  const input=await body(f,{operations:['first']});const result=await f.service.validate('doc',f.tenant,input);expect(result.complete).toBe(true);expect(result.receipts[0].state).toBe('SAVED_DRAFT');expect(f.operations[1].create).not.toHaveBeenCalled();
+ });
+ it('stops when a dependent proposal changes its values after validation',async()=>{
+  const f=operator();f.operations[0].preview.mockResolvedValue({token:'first-token',state:'READY',canCreate:true,message:'Ready',values:[{amount:'100'}]} as any);const input=await body(f,{operations:['first']});
+  f.operations[0].preview.mockResolvedValueOnce({token:'first-token',state:'READY',canCreate:true,message:'Ready',values:[{amount:'100'}]} as any).mockResolvedValueOnce({token:'first-token',state:'READY',canCreate:true,message:'Ready',values:[{amount:'100'}]} as any).mockResolvedValueOnce({token:'changed',state:'READY',canCreate:true,message:'Ready',values:[{amount:'999'}]} as any);
+  const result=await f.service.validate('doc',f.tenant,input);expect(result.complete).toBe(false);expect(result.receipts[0].state).toBe('REVIEW_REQUIRED');expect(f.operations[0].create).not.toHaveBeenCalled();
+ });
+ it('preserves field receipts when rechecking sources fails before draft preparation',async()=>{
+  const f=operator();f.review.list.mockResolvedValue({fields:[{key:'total',label:'Total',decimal:'100',state:'EXTRACTED_REVIEW',sourceHash:'c'.repeat(64),sources:[],history:[]}]});(f.review as any).create=jest.fn(async()=>({review:{id:'saved'}}));
+  f.operations[0].preview.mockResolvedValue({token:'first-token',state:'READY',canCreate:true,message:'Ready',values:[{amount:'100'}]} as any);
+  const input=await body(f,{fields:[{key:'consumption:total',decision:'CONFIRMED'}],operations:['first']});
+  const original=f.service.inspect.bind(f.service);jest.spyOn(f.service,'inspect').mockImplementationOnce(original).mockRejectedValueOnce(new Error('Read failed')).mockImplementation(original);
+  const result=await f.service.validate('doc',f.tenant,input);expect(result.complete).toBe(false);expect(result.receipts.map(r=>r.state)).toEqual(['REVIEW_SAVED','VERIFY_REQUIRED']);expect(f.operations[0].create).not.toHaveBeenCalled();expect((f.review as any).create).toHaveBeenCalledTimes(1);
+ });
+ it('does not propose draft writes without nonempty evidence',async()=>{const f=operator();f.operations[0].preview.mockResolvedValue({token:'t',state:'REVIEWS_PENDING',canCreate:false,message:'Review',values:[]} as any);expect((await f.service.inspect('doc',f.tenant)).operations[0].canPropose).toBe(false);});
+
 });

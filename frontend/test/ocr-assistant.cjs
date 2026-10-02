@@ -7,7 +7,8 @@ const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
 let api=async()=>{throw Error('API not configured');};const original=Module._load;
 Module._load=function(name,parent,main){
- if(['./OcrIdentityPreview','./OcrFieldReviews','./OcrDemandReviews','./OcrHomologation','./OcrReadout'].includes(name))return {__esModule:true,default:()=>null};
+ if(['./OcrAssistantForm','./OcrIdentityPreview','./OcrFieldReviews','./OcrDemandReviews','./OcrHomologation','./OcrReadout'].includes(name))return {__esModule:true,default:()=>null};
+ if(name==='./assistant-preparation')return {prepareAssistant:async(id,notify)=>{notify({id:'job',state:'RUNNING',stages:['source','fields','ready'],completed:['source'],elapsedMs:100});const plan=await api('/api/v1/documents/'+id+'/ocr/assistant');notify({id:'job',state:'READY',stages:['source','fields','ready'],completed:['source','fields','ready'],elapsedMs:500});return plan;},activityLabels:{source:'Origem OCR',fields:'Conferência',ready:'Pronto para validação'}};
  if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};
  return original.call(this,name,parent,main);
 };
@@ -23,8 +24,8 @@ const payload={token:'a'.repeat(64),unitName:'Unit',month:'2026-08',checkedAt:'2
  let boxes=[...document.querySelectorAll('input[type=checkbox]')];assert.equal(boxes[0].checked,true);assert.equal(boxes[1].disabled,true);
  assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Confirmar e lançar')).disabled,true);
  assert.ok(document.body.textContent.includes('Não identificado'));assert.ok(document.body.textContent.includes('Nenhum histórico foi presumido'));
- assert.ok([...document.querySelectorAll('a')].some(a=>a.href.endsWith('&area=management')));
- assert.ok([...document.querySelectorAll('a')].some(a=>a.href.endsWith('&area=distributor')));
+ assert.equal([...document.querySelectorAll('button')].filter(b=>b.textContent==='Consultar registros').length,1);assert.ok(document.body.textContent.includes('Aguardando validação do operador'));assert.equal(document.querySelector('progress').value,3);
+ assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent==='Completar / revisar em tela'));
  assert.ok([...document.querySelectorAll('a')].filter(a=>a.href.includes('ocrDocument=')).every(a=>!a.target),'Form navigation must preserve the current tab tenant context');
  await act(async()=>boxes[2].click());await click('Confirmar e lançar 1 etapa(s)');
  assert.deepEqual(posted,{method:'POST',body:{token:payload.token,operations:['monthly'],acknowledged:true}});
@@ -37,5 +38,15 @@ const payload={token:'a'.repeat(64),unitName:'Unit',month:'2026-08',checkedAt:'2
  const resolveNew=resolveOld;await act(async()=>resolveNew({...payload,unitName:'New unit'}));
  await act(async()=>previousRequest({...payload,unitName:'Obsolete unit'}));
  assert.ok(document.body.textContent.includes('New unit'));assert.ok(!document.body.textContent.includes('rascunho registrado'));
+
+ const operatorPlan={...payload,canValidate:true,fieldTasks:[{kind:'consumption',key:'consumptionTotalKwh',label:'Consumo preenchido',value:'100',unit:'kWh',description:'',source:'page 1',canConfirm:true,confirmed:false},{kind:'identity',key:'taxId',label:'CNPJ',value:null,unit:'',description:'Divergência',source:'page 1',canConfirm:false,confirmed:false}]};
+ let validationPosts=[];api=async(path,options)=>{if(options){validationPosts.push({path,options});return {receipts:[{key:'consumption:total',label:'Consumo preenchido',state:'REVIEW_SAVED'},{key:'monthly',label:'Consumos mensais',state:'SAVED_DRAFT'}],complete:true,current:null,message:'Aprovação financeira exclusiva do gestor/administrador.'};}return operatorPlan;};
+ await act(async()=>root.render(React.createElement(Panel,{id:'operator-doc',canProcess:true,key:'operator-doc',autoStart:true})));
+ assert.equal(validationPosts.length,0,'Automatic preparation must not confirm PDF or write records');
+ const validateButton=[...document.querySelectorAll('button')].find(b=>b.textContent==='Validar preenchimentos e preparar lançamentos');assert.equal(validateButton.disabled,true);
+ const textarea=document.querySelector('textarea[aria-label="Justificativa da validação"]');await act(async()=>{const setter=Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value').set;setter.call(textarea,'Conferido no PDF, página 1');textarea.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});
+ const labels=[...document.querySelectorAll('label')];const pdf=labels.find(l=>l.textContent.includes('Conferi no PDF original')).querySelector('input');const acknowledge=labels.find(l=>l.textContent.includes('Confirmo a validação')).querySelector('input');
+ await act(async()=>{pdf.click();acknowledge.click();});assert.equal(validateButton.disabled,false);await click('Validar preenchimentos e preparar lançamentos');
+ assert.equal(validationPosts.length,1);assert.ok(validationPosts[0].path.endsWith('/assistant/validate'));assert.deepEqual(validationPosts[0].options.body.fields,[{key:'consumption:consumptionTotalKwh',decision:'CONFIRMED'}]);assert.equal(validationPosts[0].options.body.checkedPdf,true);assert.ok(document.body.textContent.includes('campo validado pelo operador'));assert.ok(document.body.textContent.includes('rascunho registrado'));
  await act(async()=>root.unmount());console.log('OCR assistant UI: on-demand history, automatic new upload, blocked options, explicit batch confirmation, object payload, preserved receipts and context reset passed');
 }finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

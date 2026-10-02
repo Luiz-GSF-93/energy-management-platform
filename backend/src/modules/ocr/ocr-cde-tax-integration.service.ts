@@ -1,3 +1,4 @@
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {Injectable,BadRequestException,ConflictException,ForbiddenException,ServiceUnavailableException} from '@nestjs/common';
 import {approvedDemandTaxSuccessor} from './approved-demand-tax-successor';
 import {createHash} from 'node:crypto';
@@ -18,7 +19,7 @@ function sameItems(basis:any,items:any[]){return basis?.version===1&&Object.keys
 export class OcrCdeTaxIntegrationService {
  constructor(private db:SupabaseService,private tusd:OcrTusdIntegrationService,private cde:OcrCdeIntegrationService,private parameters:CalculationParametersService){}
  private canUpdate(t:TenantContext){return !!t?.userId&&!!t.organizationId&&(['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions?.includes(P.ORGANIZATION_CONTRACTS_UPDATE);}
- private canCreateRevision(t:TenantContext){return this.canUpdate(t)&&t.permissions?.includes(P.ORGANIZATION_CONTRACTS_CREATE);}
+ private canCreateRevision(t:TenantContext){return ocrDraftRole(t)&&ocrDraftPermission(t)&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_UPDATE].every(p=>t.permissions?.includes(p));}
  private async context(document:string,t:TenantContext){
   if(!t?.userId||!t.organizationId||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p)))throw new ForbiddenException('A conciliação exige acesso aos documentos e parâmetros.');
   // Both sources enforce license, tenant, current identity/consumption reviews and invoice evidence.

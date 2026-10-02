@@ -1,3 +1,4 @@
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -21,7 +22,7 @@ function parameterId(org:string,doc:string,band:string){const h=createHash('sha2
 export class OcrCdeIntegrationService {
  constructor(private db:SupabaseService,private licenses:LicensesService,private queue:OcrQueueService,private identity:OcrIdentityReviewService,private consumption:OcrReviewService,private cdeReviews:OcrCdeReviewService){}
  private fail(error:any){if(error)throw new ServiceUnavailableException('Não foi possível consultar ou criar os rascunhos CDE. Atualize a situação antes de tentar novamente.');}
- private canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&(['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions?.includes(P.ORGANIZATION_CONTRACTS_CREATE);}
+ private canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&ocrDraftRole(t)&&ocrDraftPermission(t);}
  private async context(document:string,t:TenantContext){
   if(!t?.userId||!t.organizationId||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p)))throw new ForbiddenException('A integração exige acesso aos documentos e contratos.');
   await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
@@ -44,7 +45,7 @@ export class OcrCdeIntegrationService {
  async taxIntegrationSource(document:string,t:TenantContext){return this.context(document,t);}
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
-  if(!this.canWrite(t))throw new ForbiddenException('A criação exige Gestor ou Administrador com permissão de cadastro de contratos.');
+  if(!this.canWrite(t))throw new ForbiddenException('A criação exige Operador, Gestor ou Administrador com permissão de preparação de contratos.');
   if(!body||Array.isArray(body)||Object.keys(body).length!==1||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Atualize a prévia antes de criar.');
   const c=await this.context(document,t);if(c.preview.state==='CREATED')return {alreadyCreated:true,parameterIds:c.ids};
   if(body.token!==c.preview.token)throw new ConflictException('A prévia mudou. Atualize antes de criar os rascunhos.');if(!c.preview.canCreate)throw new ConflictException(c.preview.message);

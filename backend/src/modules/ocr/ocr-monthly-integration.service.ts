@@ -1,3 +1,4 @@
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {compatibleMonthlyDraft} from './compatible-monthly-draft';
 import {reviewedLayoutSupported} from './reviewed-layout-support';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
@@ -15,7 +16,7 @@ import {homologationProgress} from './homologation-progress';
 @Injectable()
 export class OcrMonthlyIntegrationService {
  constructor(private db:SupabaseService,private licenses:LicensesService,private queue:OcrQueueService,private identity:OcrIdentityReviewService,private consumption:OcrReviewService){}
- canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&(['gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CONTRACTS_CREATE].every(p=>t.permissions?.includes(p));}
+ canWrite(t:TenantContext){return !!t?.userId&&!!t.organizationId&&ocrDraftRole(t)&&ocrDraftPermission(t)&&[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p));}
  private async allowed(t:TenantContext){if(!t?.userId||!t.organizationId||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p)))throw new ForbiddenException('A integração exige acesso aos documentos e contratos da organização.');await this.licenses.requireEntitlement(t.organizationId,'free_market_management');}
  private fail(e:any){if(!e)return;if(e.code==='P4091')throw new ConflictException('Já existem dados mensais nesta unidade e competência. Nenhum registro foi substituído.');if(['P4090','40001','23505'].includes(e.code))throw new ConflictException('A origem ou as conferências mudaram. Atualize a integração antes de continuar.');throw new ServiceUnavailableException('Não foi possível consultar ou integrar os consumos. Consulte a situação antes de tentar novamente.');}
  private async context(document:string,t:TenantContext){
@@ -39,7 +40,7 @@ export class OcrMonthlyIntegrationService {
  }
  async preview(document:string,t:TenantContext){return (await this.context(document,t)).preview;}
  async create(document:string,t:TenantContext,body:any){
- if(!this.canWrite(t))throw new ForbiddenException('A integração exige Gestor ou Administrador com permissão para criar dados mensais.');
+ if(!this.canWrite(t))throw new ForbiddenException('A integração exige Operador, Gestor ou Administrador autorizado para preparar dados mensais.');
  if(!body||Array.isArray(body)||Object.keys(body).length!==1||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Atualize a prévia antes de integrar.');
  const context=await this.context(document,t);
  if(context.preview.state==='INTEGRATED')return {inputId:context.preview.inputId,alreadyIntegrated:true};
