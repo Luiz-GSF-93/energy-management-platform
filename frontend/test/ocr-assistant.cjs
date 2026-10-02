@@ -9,6 +9,7 @@ let api=async()=>{throw Error('API not configured');};const original=Module._loa
 Module._load=function(name,parent,main){
  if(['./OcrAssistantForm','./OcrIdentityPreview','./OcrFieldReviews','./OcrDemandReviews','./OcrHomologation','./OcrReadout'].includes(name))return {__esModule:true,default:()=>null};
  if(name==='./assistant-preparation')return {prepareAssistant:async(id,notify)=>{notify({id:'job',state:'RUNNING',stages:['source','fields','ready'],completed:['source'],elapsedMs:100});const plan=await api('/api/v1/documents/'+id+'/ocr/assistant');notify({id:'job',state:'READY',stages:['source','fields','ready'],completed:['source','fields','ready'],elapsedMs:500});return plan;},activityLabels:{source:'Origem OCR',fields:'Conferência',ready:'Pronto para validação'}};
+ if(name==='@/app/components/BotEnergyHelp')return {__esModule:true,default:()=>null};
  if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};
  return original.call(this,name,parent,main);
 };
@@ -20,7 +21,7 @@ const payload={token:'a'.repeat(64),unitName:'Unit',month:'2026-08',checkedAt:'2
  let gets=0,posted;api=async(_p,options)=>{if(options){posted=options;return {receipts:[{key:'monthly',label:'Consumos mensais',state:'SAVED_DRAFT',result:{inputId:'saved'}}],complete:true,current:null,message:'Atualize o painel'};}gets++;return payload;};
  await act(async()=>root.render(React.createElement(Panel,{id:'doc',canProcess:true})));
  assert.equal(gets,0,'Historical documents are not automatically reanalysed');
- await click('Assistente IA da fatura');assert.equal(gets,1);assert.equal(document.querySelector('dialog').open,true);
+ await click('bot-energy · conferir fatura');assert.equal(gets,1);assert.equal(document.querySelector('dialog').open,true);
  let boxes=[...document.querySelectorAll('input[type=checkbox]')];assert.equal(boxes[0].checked,true);assert.equal(boxes[1].disabled,true);
  assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Confirmar e lançar')).disabled,true);
  assert.ok(document.body.textContent.includes('Não identificado'));assert.ok(document.body.textContent.includes('Nenhum histórico foi presumido'));

@@ -1,0 +1,26 @@
+/* Isolated DOM; mocked authenticated API; no live financial writes. */
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','Event','MouseEvent'])global[k]=dom.window[k];
+global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+let api,auth;const original=Module._load;
+Module._load=function(name,parent,main){if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};if(name==='@/app/providers')return {useAuth:()=>auth};return original.call(this,name,parent,main);};
+const Help=require('../app/components/BotEnergyHelp.tsx').default,Backoffice=require('../app/components/BotEnergyBackoffice.tsx').default,root=createRoot(document.getElementById('root'));
+const click=async text=>act(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent===text);assert.ok(b,text);b.click();});
+const topics={topics:[{key:'workflow',question:'Quem valida e quem aprova?'},{key:'pending',question:'O que falta nesta fatura?'}]};
+const response={status:'SUPPORTED',answer:'Regra comprovada',items:[{label:'Registro',value:'<script>publish()</script>',source:'PDF, página 1'}],sources:[{label:'Fonte auditada',reference:'Revisão 2',url:'/backoffice/documents'}],checkedAt:'2026-10-02T12:00:00Z'};
+(async()=>{try{
+ const calls=[];api=async(p,o)=>{calls.push([p,o]);return o?.method==='POST'?response:topics;};
+ await act(async()=>root.render(React.createElement(Help,{documentId:'doc-a'})));assert.equal(calls.length,0);
+ await click('Perguntar ao bot-energy');await click('O que falta nesta fatura?');assert.equal(calls[1][0],'/api/v1/documents/doc-a/ocr/assistant/help');assert.deepEqual(calls[1][1].body,{topic:'pending'});assert.ok(document.body.textContent.includes('Fonte auditada'));assert.equal(document.querySelectorAll('script').length,0,'Evidence is escaped, not executed');
+ let finish,signal;api=async(_p,o)=>{signal=o.signal;return new Promise(r=>finish=r);};await click('Quem valida e quem aprova?');await click('Fechar dúvidas do bot-energy');assert.equal(signal.aborted,true);await act(async()=>finish({...response,answer:'Obsolete answer'}));assert.ok(!document.body.textContent.includes('Obsolete answer'));
+ const permitted={status:'authenticated',context:{scope:'organization',user:{id:'actor'},currentOrganization:{id:'org-a',role:'operacional',permissions:['view']}},hasPermission:()=>true};auth=permitted;api=async()=>topics;
+ await act(async()=>root.render(React.createElement(Backoffice)));await click('Perguntar ao bot-energy');assert.ok(!document.body.textContent.includes('O que falta nesta fatura?'),'Global help does not retrieve a client context');
+ api=async()=>new Promise(r=>finish=r);await click('Quem valida e quem aprova?');auth={...permitted,context:{...permitted.context,currentOrganization:{...permitted.context.currentOrganization,id:'org-b'}}};await act(async()=>root.render(React.createElement(Backoffice)));await act(async()=>finish(response));assert.ok(!document.body.textContent.includes('Regra comprovada'),'Organization switch clears prior answers');
+ for(const override of [{status:'loading'},{hasPermission:()=>false},{context:{scope:'global'}},{context:{...permitted.context,currentOrganization:{...permitted.context.currentOrganization,role:'cliente'}}}]){auth={...permitted,...override};await act(async()=>root.render(React.createElement(Backoffice)));assert.equal(document.querySelector('aside'),null);}
+ api=async(p,o)=>o?.method==='POST'?{...response,status:'NO_EVIDENCE',answer:'Não tenho resposta comprovada',items:[],sources:[]}:topics;await act(async()=>root.render(React.createElement(Help,{key:'unknown'})));await click('Perguntar ao bot-energy');
+ const input=document.querySelector('input');await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(input,'Pergunta não suportada');input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});await act(async()=>document.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));assert.ok(document.body.textContent.includes('Sem resposta comprovada'));assert.equal(document.querySelectorAll('[aria-label="Resposta do bot-energy"] a').length,0);
+ await act(async()=>root.unmount());console.log('bot-energy UI: scoped retrieval, sources, abstention, escaped evidence, cancellation, organization reset and role restrictions passed');
+}finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
