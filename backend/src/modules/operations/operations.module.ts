@@ -5,5 +5,8 @@ import {LicensesModule} from '../licenses/licenses.module';
 import {SupabaseService} from '../../services/supabase.service';
 import {OperationsService} from './operations.service';
 import {OperationsController} from './operations.controller';
-@Module({imports:[LicensesModule,OcrModule],providers:[SupabaseService,OperationsService,DiagnosticRequestsService],controllers:[OperationsController]})
+import {DocumentsService} from '../documents/services/documents.service';
+import {ClientEvidenceService} from './client-evidence.service';
+import {ClientEvidenceController,PortalEvidenceController} from './client-evidence.controller';
+@Module({imports:[LicensesModule,OcrModule],providers:[SupabaseService,OperationsService,DiagnosticRequestsService,DocumentsService,ClientEvidenceService],controllers:[OperationsController,ClientEvidenceController,PortalEvidenceController]})
 export class OperationsModule {}

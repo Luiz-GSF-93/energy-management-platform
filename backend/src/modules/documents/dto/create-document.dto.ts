@@ -8,7 +8,7 @@ export class CreateDocumentDto {
   consumerUnitId!: string;
   @IsString() @Matches(/\S/) @MaxLength(255)
   fileName!: string;
-  @IsIn(['application/pdf', 'image/jpeg', 'image/png'])
+  @IsIn(['application/pdf', 'image/jpeg', 'image/png','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
   fileType!: string;
   @IsIn(['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','CONTRACT_ENERGY','CONTRACT_MANAGEMENT','CCEE_SETTLEMENT','CCEE_CHARGES','TAX_DOCUMENT','COMPLIANCE_REPORT','OTHER'])
   documentType!: string;

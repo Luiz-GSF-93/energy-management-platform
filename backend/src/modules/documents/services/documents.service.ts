@@ -97,7 +97,7 @@ export class DocumentsService {
   async upload(input: UploadDocumentDto, file: DocumentFile | undefined, organizationId: string, actorUserId?: string) {
     await this.requireDocumentManagement(organizationId);
     const dto = await validateWriteDto(UploadDocumentDto, input);
-    const detected = inspectDocument(file);
+    const detected = inspectDocument(file, dto.documentType==='OTHER');
     const bytes = file!.buffer;
     const path = organizationId + '/' + dto.consumerUnitId + '/' + randomUUID() + '.' + detected.extension;
     const row = await this.prepareCreate({ ...dto, fileName: detected.name, fileType: detected.mime,
