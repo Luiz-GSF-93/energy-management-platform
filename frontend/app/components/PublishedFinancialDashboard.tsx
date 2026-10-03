@@ -34,7 +34,7 @@ export default function PublishedFinancialDashboard({organizationId,organization
  },[organizationId,request]);
  const update=(key:keyof Filters,value:string)=>{setFilters(f=>({...f,[key]:value}));setData(null);setError('');};
  const consult=(e:FormEvent)=>{e.preventDefault();setData(null);setError('');setLoading(true);setRequest({...filters,revision:request.revision+1});};
- const download=()=>{if(!data?.rows.length)return;const url=URL.createObjectURL(new Blob([publishedFinancialCsv(data)],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`EnergyOS-publicacoes-${data.period.from}-${data.period.to}.csv`;link.click();URL.revokeObjectURL(url);};
+ const download=()=>{if(!data?.rows.length)return;const url=URL.createObjectURL(new Blob([publishedFinancialCsv(data)],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`EnergyOS-publicacoes-${data.period.from}-${data.period.to}.csv`;link.hidden=true;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  return <section className="published-financial" aria-label="Financeiro publicado">
   <h2>Financeiro publicado</h2><p>Custos e economia das apurações aprovadas e publicadas. A confirmação do operador e as prévias não substituem a publicação pelo gestor.</p>
   <form onSubmit={consult} className="published-financial__filters">
