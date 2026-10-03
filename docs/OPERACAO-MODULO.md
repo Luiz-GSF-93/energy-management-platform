@@ -21,3 +21,5 @@ Aplicar somente após inspeção do catálogo real e testes. Verificar marcador 
 Teste SQL em PostgreSQL embarcado: 29 verificações de isolamento, idempotência, conflito de revisão, vínculos, publicação exclusiva, imutabilidade, leitura de notificações e negação de escrita direta/browser. Testes de serviço verificam tenant, RBAC, licença, filtros e fluxo. Builds e regressões devem acompanhar a integração.
 
 A migration 20261003_f3_2_source_alerts acrescenta somente RPC de recibos das novas origens. Não modifica a RPC original de Operação, fontes ou histórico. A API confere a identidade vigente antes da escrita; o banco repete tenant, perfil, permissão de origem e existência/vigência. RPC disponível somente para service_role, search_path fixo, sem acesso browser. O endpoint continua exigindo licença free_market_management; aviso de licença não é caminho alternativo após expiração.
+
+Compatibilidade de atualização: somente a interface que solicita sources=1 recebe as novas origens; a resposta sem esse parâmetro preserva as origens tradicionais para sessões já abertas. A leitura sempre confere a notificação atual autorizada antes de gravar recibo.
