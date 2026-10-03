@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import {
   BarChart3,
+  Building2, LayoutGrid, ShieldCheck, UsersRound, FileSignature, Files, ContactRound, PanelLeftClose, PanelLeftOpen,
   LogOut,
 } from 'lucide-react';
 import {
   ChangeEvent,
   useState,
 } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter,usePathname } from 'next/navigation';
 
 import {
   Alert,
@@ -22,9 +23,11 @@ import {
 import { useAuth } from '@/app/providers';
 
 const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
+const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,licenses:ShieldCheck,setup:ContactRound,contracts:FileSignature,documents:Files,users:UsersRound};
 
-export default function Sidebar() {
+export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;onToggle?:()=>void}={}) {
   const router = useRouter();
+  const pathname=usePathname();
 
   const {
     context,
@@ -93,9 +96,11 @@ export default function Sidebar() {
           : 'organization'
         : undefined,
     );
+  const activeIndex=navigationItems.findIndex(item=>pathname===item.href||pathname.startsWith(item.href+'/'));
 
   return (
-    <aside className="backoffice-sidebar">
+    <aside className="backoffice-sidebar" aria-label="Menu EnergyOS">
+      <button className="backoffice-sidebar__toggle" type="button" onClick={onToggle} aria-label={collapsed?'Expandir menu':'Recolher menu'} aria-expanded={!collapsed} title={collapsed?'Expandir menu':'Recolher menu'}>{collapsed?<PanelLeftOpen size={20}/>:<PanelLeftClose size={20}/>}</button>
       <header className="backoffice-brand">
         <div
           className="backoffice-brand__mark"
@@ -104,10 +109,11 @@ export default function Sidebar() {
           EE
         </div>
 
-        <div>
+        <div className="backoffice-brand__text">
           <h1 className="backoffice-brand__name">
-            Expert Energy
+            EnergyOS
           </h1>
+          <p className="backoffice-brand__powered">Powered by Expert Energy</p>
 
           <p className="backoffice-brand__context">
             {context
@@ -119,7 +125,7 @@ export default function Sidebar() {
         </div>
       </header>
 
-      {organizationContext ? <div className="backoffice-context">
+      {organizationContext ? <div className="backoffice-context" title={organizationContext.currentOrganization.name||organizationContext.currentOrganization.id}>
         <p>Organização ativa</p><strong>{organizationContext.currentOrganization.name || organizationContext.currentOrganization.id}</strong>
         {organizationContext.accessMode === 'platform_operation' ? <>
           <p>Operação pelo administrador da plataforma</p>
@@ -171,26 +177,32 @@ export default function Sidebar() {
         className="backoffice-nav"
         aria-label="Administração"
       >
-        {navigationItems.map((item) => (
+        {activeIndex>=0?<span className="backoffice-nav__indicator" aria-hidden="true" style={{transform:`translateY(${activeIndex*56}px)`}}/>:null}
+        {navigationItems.map((item,index) => {const Icon=navigationIcons[item.href.split('/').pop()||'']||LayoutGrid;return (
           <Link
             key={item.href}
             href={item.href}
-            className="backoffice-nav__link"
+            className={`backoffice-nav__link${index===activeIndex?' backoffice-nav__link--active':''}`}
+            aria-current={index===activeIndex?'page':undefined}
+            aria-label={item.label}
+            title={collapsed?item.label:undefined}
           >
-            <BarChart3
+            <Icon
               size={20}
               className="backoffice-nav__icon"
               aria-hidden="true"
             />
 
-            <span>{item.label}</span>
+            <span className="backoffice-nav__label">{item.label}</span>
           </Link>
-        ))}
+        );})}
       </nav>
 
       <footer className="backoffice-sidebar__footer">
         <Button
           variant="danger"
+          aria-label="Sair"
+          title={collapsed?'Sair':undefined}
           onClick={handleLogout}
         >
           <LogOut
@@ -198,7 +210,7 @@ export default function Sidebar() {
             aria-hidden="true"
           />
 
-          Sair
+          <span className="backoffice-nav__label">Sair</span>
         </Button>
       </footer>
     </aside>
