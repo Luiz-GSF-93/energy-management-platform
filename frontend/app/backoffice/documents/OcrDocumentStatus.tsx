@@ -8,18 +8,26 @@ import OcrFieldReviews from './OcrFieldReviews';
 import OcrLayoutEvidence,{type LayoutEvidence} from './OcrLayoutEvidence';
 import OcrReadout,{type ReadoutSummary} from './OcrReadout';
 import OcrGdEvidence,{type GdEvidence} from './OcrGdEvidence';
-import {useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import OcrElectricalEvidence, {type ElectricalEvidence} from './OcrElectricalEvidence';
 import {apiRequest} from '@/app/lib/api/client';
+import type {InboxUpdate} from './assistant-inbox';
 type Job={id:string;state:string;errorCode:string|null};
 type Intake={elektroAudit?:ElektroAudit|null;layout?:LayoutEvidence;readoutSummary?:ReadoutSummary;gd?:GdEvidence;electrical?:ElectricalEvidence;decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
 type Status={enabled:boolean;job:Job|null;intake?:Intake|null};
 const labels:Record<string,string>={QUEUED:'Na fila',SUBMITTING:'Enviando para leitura',POLLING:'Leitura em andamento',SUCCEEDED:'Extração recebida — aguarda conferência',FAILED:'Leitura interrompida',SUBMISSION_UNKNOWN:'Envio indeterminado — requer verificação administrativa'};
-export default function OcrDocumentStatus({id,canProcess,autoAssist=false}:{id:string;canProcess:boolean;autoAssist?:boolean}){
+export default function OcrDocumentStatus({id,canProcess,autoAssist=false,openRequest=0,onAssistantUpdate}:{id:string;canProcess:boolean;autoAssist?:boolean;openRequest?:number;onAssistantUpdate?:(id:string,update:InboxUpdate)=>void}){
  const [status,setStatus]=useState<Status|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [checkedAt,setCheckedAt]=useState<string|null>(null);const active=useRef(true);const loading=useRef(false);
- useEffect(()=>{active.current=true;void load();return()=>{active.current=false;};},[id]);
- useEffect(()=>{if(!status?.job||!['QUEUED','SUBMITTING','POLLING'].includes(status.job.state))return;const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer);},[id,status?.job?.state]);
- async function load(manual=false){if(loading.current)return;loading.current=true;setBusy(true);setError('');setNotice('');try{const next=await apiRequest<Status>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr');if(active.current){setStatus(next);setCheckedAt(new Date().toLocaleString('pt-BR'));if(manual)setNotice('Status atualizado com sucesso. A situação da leitura está indicada abaixo.');}}catch{if(active.current)setError('Não foi possível atualizar a leitura. Tente novamente. O status exibido é o da última consulta bem-sucedida.');}finally{loading.current=false;if(active.current)setBusy(false);}}
+ const requested=useRef(0);
+ const polling=['QUEUED','SUBMITTING','POLLING'].includes(status?.job?.state??'');
+ const load=useCallback(async(manual=false)=>{if(loading.current)return;loading.current=true;setBusy(true);setError('');setNotice('');try{const next=await apiRequest<Status>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr');if(active.current){setStatus(next);setCheckedAt(new Date().toLocaleString('pt-BR'));if(manual)setNotice('Status atualizado com sucesso. A situação da leitura está indicada abaixo.');}}catch{if(active.current)setError('Não foi possível atualizar a leitura. Tente novamente. O status exibido é o da última consulta bem-sucedida.');}finally{loading.current=false;if(active.current)setBusy(false);}},[id]);
+ useEffect(()=>{active.current=true;let mounted=true;queueMicrotask(()=>{if(mounted)void load();});return()=>{mounted=false;active.current=false;};},[load]);
+ useEffect(()=>{if(openRequest&&openRequest!==requested.current){requested.current=openRequest;if(!status?.intake)queueMicrotask(()=>{if(active.current)void load(true);});}},[openRequest,status?.intake,load]);
+ useEffect(()=>{if(!polling)return;const timer=setInterval(()=>void load(),5000);return()=>clearInterval(timer);},[polling,load]);
+ useEffect(()=>{
+  if(!autoAssist||status?.intake)return;
+  onAssistantUpdate?.(id,{state:error||['FAILED','SUBMISSION_UNKNOWN','SUCCEEDED'].includes(status?.job?.state??'')?'FAILED':'WAITING',message:error||(['FAILED','SUBMISSION_UNKNOWN'].includes(status?.job?.state??'')?'Leitura interrompida. Consulte a situação e solicite revisão.':status?.job?.state==='SUCCEEDED'?'Extração recebida, mas a origem exige conferência administrativa.':'Aguardando conclusão do OCR. O bot-energy iniciará a conferência automaticamente.')});
+ },[id,autoAssist,status,error,onAssistantUpdate]);
  async function start(){if(busy)return;setBusy(true);setError('');setNotice('');try{const job=await apiRequest<Job>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr',{method:'POST'});if(active.current){setStatus({enabled:true,job});setNotice('Solicitação de leitura recebida. Acompanhe o status abaixo.');setCheckedAt(new Date().toLocaleString('pt-BR'));}}catch{if(active.current)setError('Não foi possível iniciar a leitura. Consulte o status antes de tentar novamente. O arquivo permanece salvo.');}finally{if(active.current)setBusy(false);}}
  const needsAttention=status?.intake?.decision==='REJECT_AUTOMATION'||['FAILED','SUBMISSION_UNKNOWN'].includes(status?.job?.state??'');
  const statusColor=needsAttention?'#fca5a5':status?.intake?'#fcd34d':'#67e8f9';
@@ -40,7 +48,7 @@ export default function OcrDocumentStatus({id,canProcess,autoAssist=false}:{id:s
    <p>Conferência registrada em {new Date(status.intake.checkedAt).toLocaleString('pt-BR')}.</p>
    <ul>{status.intake.checks.map(check=><li key={check.field}><strong>{check.label}: {check.state==='MATCH'?'Compatível':check.state==='MISMATCH'?'Divergente':'Conferir'}</strong><p>{check.message}</p>{check.confidence!==null&&<small>Confiança: {(check.confidence*100).toFixed(0)}%{check.pages.length?' · Página(s): '+check.pages.join(', '):''}</small>}</li>)}</ul>
   </details>}
-  {status?.intake&&<OcrAssistant key={'OcrAssistant:'+id} id={id} canProcess={canProcess} autoStart={autoAssist}/>}
+  {status?.intake&&<OcrAssistant key={'OcrAssistant:'+id} id={id} canProcess={canProcess} autoStart={autoAssist} autoOpen={false} openRequest={openRequest} onUpdate={onAssistantUpdate}/>}
   {status?.intake&&<OcrHomologation key={'OcrHomologation:'+id} id={id}/>}
   {status?.intake&&<OcrIdentityPreview key={'OcrIdentityPreview:'+id} id={id}/>}
   {status?.intake?.readoutSummary&&<OcrReadout key={'OcrReadout:'+id} id={id} summary={status.intake.readoutSummary}/>}

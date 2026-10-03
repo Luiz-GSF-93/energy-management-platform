@@ -49,5 +49,10 @@ const payload={token:'a'.repeat(64),unitName:'Unit',month:'2026-08',checkedAt:'2
  const labels=[...document.querySelectorAll('label')];const pdf=labels.find(l=>l.textContent.includes('Conferi no PDF original')).querySelector('input');const acknowledge=labels.find(l=>l.textContent.includes('Confirmo a validação')).querySelector('input');
  await act(async()=>{pdf.click();acknowledge.click();});assert.equal(validateButton.disabled,false);await click('Validar preenchimentos e preparar lançamentos');
  assert.equal(validationPosts.length,1);assert.ok(validationPosts[0].path.endsWith('/assistant/validate'));assert.deepEqual(validationPosts[0].options.body.fields,[{key:'consumption:consumptionTotalKwh',decision:'CONFIRMED'}]);assert.equal(validationPosts[0].options.body.checkedPdf,true);assert.ok(document.body.textContent.includes('campo validado pelo operador'));assert.ok(document.body.textContent.includes('rascunho registrado'));
- await act(async()=>root.unmount());console.log('OCR assistant UI: on-demand history, automatic new upload, blocked options, explicit batch confirmation, object payload, preserved receipts and context reset passed');
+ let backgroundEvents=[];gets=0;api=async(_p,options)=>{assert.equal(options,undefined);gets++;return operatorPlan;};
+ await act(async()=>root.render(React.createElement(Panel,{id:'background-doc',key:'background-doc',canProcess:true,autoStart:true,autoOpen:false,onUpdate:(_id,event)=>backgroundEvents.push(event)})));
+ assert.equal(document.querySelector('dialog').open,false);assert.equal(gets,1);assert.ok(backgroundEvents.some(v=>v.state==='READY'&&v.fields===2));
+ await act(async()=>root.render(React.createElement(Panel,{id:'background-doc',key:'background-doc',canProcess:true,autoStart:true,autoOpen:false,openRequest:1,onUpdate:(_id,event)=>backgroundEvents.push(event)})));
+ assert.equal(document.querySelector('dialog').open,true);assert.equal(gets,2,'Opening validation refreshes sources');assert.ok(document.body.textContent.includes('O que precisa da sua validação'));
+ await act(async()=>root.unmount());console.log('OCR assistant UI: on-demand history, automatic background preparation, fresh operator validation, blocked options, explicit batch confirmation, preserved receipts and context reset passed');
 }finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

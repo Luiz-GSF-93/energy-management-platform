@@ -1,6 +1,8 @@
 'use client';
-import { FormEvent, useEffect, useState, useRef } from 'react';
+import { FormEvent, useCallback, useEffect, useState, useRef } from 'react';
 import OcrDocumentStatus from './OcrDocumentStatus';
+import AssistantInbox from './AssistantInbox';
+import {inboxScope,readInbox,writeInbox,type InboxEntry,type InboxUpdate} from './assistant-inbox';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
 import { useAuth } from '@/app/providers';
@@ -26,11 +28,31 @@ function DocumentsContent() {
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const [attempt,setAttempt] = useState(0);
-  const [uploadedDocument,setUploadedDocument] = useState<{id:string;organizationId:string}|null>(null);
+  const [inbox,setInbox]=useState<InboxEntry[]>([]),[inboxLoaded,setInboxLoaded]=useState(false);
+  const [updates,setUpdates]=useState<Record<string,InboxUpdate>>({}),[activated,setActivated]=useState<string[]>([]);
+  const [opened,setOpened]=useState<{id:string;request:number}|null>(null);
+  const scope=inboxScope(context);
   const currentOrg = useRef(organizationId);
 
   const canUpload = hasPermission(uploadPermission);
   const canView = hasPermission(viewPermission);
+  const canAssist=!!context&&context.scope!=='global'&&(['operacional','gestor','admin_org'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')&&hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&canView;
+  useEffect(()=>{
+    let active=true;
+    queueMicrotask(()=>{if(active){let saved:InboxEntry[]=[];try{saved=readInbox(window.sessionStorage,scope);}catch{/* Storage is optional. */}setInbox(saved);setInboxLoaded(true);}});
+    return()=>{active=false;};
+  },[scope]);
+  useEffect(()=>{if(inboxLoaded){try{writeInbox(window.sessionStorage,scope,inbox);}catch{/* Storage is optional. */}}},[scope,inbox,inboxLoaded]);
+  const updateAssistant=useCallback((id:string,update:InboxUpdate)=>setUpdates(old=>JSON.stringify(old[id])===JSON.stringify(update)?old:{...old,[id]:update}),[]);
+  useEffect(()=>{
+    if(!canAssist||!inboxLoaded)return;
+    const eligible=inbox.filter(item=>documents.some(d=>d.id===item.id&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR'));
+    const running=activated.filter(id=>eligible.some(item=>item.id===id)&&(!updates[id]||['WAITING','PREPARING'].includes(updates[id].state))).length;
+    const next=eligible.filter(item=>!activated.includes(item.id)).slice(0,Math.max(0,2-running)).map(item=>item.id);
+    if(next.length){let active=true;queueMicrotask(()=>{if(active)setActivated(old=>[...old,...next.filter(id=>!old.includes(id))]);});return()=>{active=false;};}
+  },[canAssist,inboxLoaded,inbox,documents,activated,updates]);
+  function track(id:string){setUpdates(old=>({...old,[id]:{state:'WAITING',message:'Aguardando leitura OCR e conferência automática.'}}));setInbox(old=>old.some(item=>item.id===id)?old:[...old,{id,addedAt:Date.now()}].slice(-32));}
+  function remove(id:string){setInbox(old=>old.filter(item=>item.id!==id));setActivated(old=>old.filter(value=>value!==id));setOpened(old=>old?.id===id?null:old);}
   useEffect(() => {
     let cancelled=false;
     currentOrg.current = organizationId;
@@ -60,7 +82,8 @@ function DocumentsContent() {
         catch{ocrNotice=' O arquivo foi salvo, mas não foi possível iniciar o OCR automaticamente. Consulte a leitura para verificar a disponibilidade.';}
       }
       if(currentOrg.current!==org)return;
-      setUploadedDocument({id:saved.id,organizationId:org});setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(ocrNotice||(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.'));
+      if(saved.document_type==='INVOICE_DISTRIBUTOR'&&saved.file_verified&&canAssist)track(saved.id);
+      setDocuments(old=>[saved,...old]);form.reset();setCustomer('');setNotice(ocrNotice||(saved.document_type==='INVOICE_DISTRIBUTOR'?'Fatura recebida em quarentena, sem liberação para apuração. A conferência do conteúdo ainda é necessária.':'Arquivo enviado e armazenado com acesso privado.'));
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.'); }
     finally { setBusy(false); }
   }
@@ -102,9 +125,10 @@ function DocumentsContent() {
         <label>Descrição (opcional)<textarea name="description" maxLength={4096} disabled={busy} style={{display:'block',width:'100%',padding:10}} /></label>
         <button type="submit" disabled={busy || !customer} style={{padding:12,background:'#123c66',color:'white',borderRadius:8}}>{busy?'Enviando…':'Enviar arquivo'}</button>
       </form>}
+      {canAssist&&<AssistantInbox items={inbox.flatMap(item=>{const d=documents.find(d=>d.id===item.id&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR');return d?[{id:d.id,name:d.original_filename,month:d.reference_month.slice(0,7),update:updates[d.id]}]:[];})} onOpen={id=>setOpened(old=>({id,request:(old?.request??0)+1}))} onRemove={remove}/>}
       <h2>Arquivos cadastrados</h2>
-      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{receiptLabel(d)}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} autoAssist={uploadedDocument?.id===d.id&&uploadedDocument.organizationId===organizationId} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
+      {!documents.length ? <p>Nenhum documento cadastrado.</p> : <div style={{overflowX:'auto'}}><table style={{width:'100%',textAlign:'left',borderSpacing:'0 16px'}}><thead><tr><th>Arquivo</th><th>Competência</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{documents.map(d=><tr key={d.id}><td>{d.original_filename}</td><td>{d.reference_month.slice(0,7)}</td><td>{receiptLabel(d)}</td><td>{d.file_verified && <span style={{display:"flex",gap:8}}><button type="button" onClick={()=>void preview(d.id)} aria-label={"Visualizar "+d.original_filename+" em nova aba"}>Visualizar</button><button type="button" onClick={()=>void download(d.id)}>Baixar</button></span>}{canAssist&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR'&&!inbox.some(item=>item.id===d.id)&&<button type='button' onClick={()=>track(d.id)}>Adicionar à fila bot-energy</button>}{d.file_verified && d.document_type==='INVOICE_DISTRIBUTOR' && <OcrDocumentStatus key={organizationId+':'+d.id} id={d.id} autoAssist={canAssist&&activated.includes(d.id)} openRequest={opened?.id===d.id?opened.request:0} onAssistantUpdate={updateAssistant} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')} />}</td></tr>)}</tbody></table></div>}
     </>}
   </section>;
 }
-export default function DocumentsPage() { const {context}=useAuth(); const key=context && context.scope!=='global' ? context.currentOrganization.id : 'none'; return <ProtectedRoute><BackofficeShell><DocumentsContent key={key} /></BackofficeShell></ProtectedRoute>; }
+export default function DocumentsPage() { const {context}=useAuth(); const key=inboxScope(context)||'none'; return <ProtectedRoute><BackofficeShell><DocumentsContent key={key} /></BackofficeShell></ProtectedRoute>; }
