@@ -84,11 +84,11 @@ export default function LoginPage() {
       <div className="auth-shell">
         <header className="auth-brand">
           <h1 className="auth-brand__name">
-            Expert Energy
+            EnergyOS
           </h1>
 
-          <p className="auth-brand__description">
-            Gestão Inteligente do Mercado Livre
+          <p className="auth-brand__description auth-brand__powered">
+            Powered by Expert Energy
           </p>
         </header>
 
@@ -144,6 +144,7 @@ export default function LoginPage() {
               </Button>
             </div>
             <Link href="/auth/forgot-password">Esqueci minha senha</Link>
+            <div className="auth-account-preview"><span role="link" aria-disabled="true">Não tenho conta</span><small>Em breve</small></div>
           </form>
         </Card>
       </div>
