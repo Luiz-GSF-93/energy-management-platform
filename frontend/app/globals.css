@@ -842,3 +842,8 @@ a {
 .operation-form h2,.operation-form p { grid-column:1/-1; }
 .operation-text,.operation-table-text { white-space:pre-wrap;overflow-wrap:anywhere; }
 .operation-table-text { overflow:auto; }
+
+.diagnostic-request > label { display:grid;gap:8px;margin:12px 0; }
+.diagnostic-request fieldset { grid-column:1/-1;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px;border:0;padding:0; }
+.diagnostic-request fieldset > p,.diagnostic-request fieldset > a,.diagnostic-request fieldset > label:first-child { grid-column:1/-1; }
+.diagnostic-request select,.diagnostic-request input,.diagnostic-request textarea { min-width:0;max-width:100%;width:100%; }
