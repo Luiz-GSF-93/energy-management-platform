@@ -71,6 +71,11 @@ describe('OCR assistant safety and partial execution',()=>{
 describe('operator validation and financial separation',()=>{
  const body=async(f:any,change:any={})=>({token:(await f.service.inspect('doc',f.tenant)).token,requestId:'11111111-1111-4111-a111-111111111111',fields:[],operations:[],note:'Conferido no PDF, página 1.',checkedPdf:true,acknowledged:true,...change});
  function operator(){const f=fixture();f.tenant.role='operacional';f.tenant.permissions=f.tenant.permissions.filter(p=>p!==P.ORGANIZATION_CONTRACTS_CREATE);f.tenant.permissions.push(P.ENERGIA_OCR_PROCESS,P.ORGANIZATION_CONTRACTS_UPDATE);return f;}
+ it('keeps independent drafts moving when one selected dependency remains pending',async()=>{
+  const f=operator(),input=await body(f,{operations:['first','second']});
+  f.operations[0].preview.mockResolvedValueOnce({token:'first-token',state:'READY',canCreate:true,message:'Ready'}).mockResolvedValueOnce({token:'first-token',state:'READY',canCreate:true,message:'Ready'}).mockResolvedValueOnce({token:'pending',state:'BASE_APPROVAL_REQUIRED',canCreate:false,message:'Awaiting manager'});
+  const result=await f.service.validate('doc',f.tenant,input);expect(result.complete).toBe(false);expect(result.receipts.map(r=>r.state)).toEqual(['REVIEW_REQUIRED','SAVED_DRAFT']);expect(f.operations[0].create).not.toHaveBeenCalled();expect(f.operations[1].create).toHaveBeenCalled();expect(result.canPublish).toBe(false);
+ });
  it('allows operator draft writes with actual identity and denies financial approval',async()=>{
   const f=operator();const result=await f.service.apply('doc',f.tenant,await f.body());expect(result.canPublish).toBe(false);expect(f.operations[0].create).toHaveBeenCalled();
   f.tenant.permissions.push(P.ORGANIZATION_CONTRACTS_UPDATE);expect(FinancialSettlementsService.prototype.canManage(f.tenant)).toBe(false);f.tenant.role='gestor';expect(FinancialSettlementsService.prototype.canManage(f.tenant)).toBe(true);

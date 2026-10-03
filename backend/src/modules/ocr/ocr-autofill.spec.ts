@@ -1,0 +1,15 @@
+import {invoiceAutofill} from './ocr-autofill';
+const unit={distributor:'CPFL Paulista',tariff_group:'A',tariff_subgroup:'A4',tariff_modality:'GREEN',consumption_class:'COMMERCIAL',free_market:true};
+const library={id:'lib',version:1,profile:{distributor:'CPFL Paulista',group:'A',subgroup:'A4',modality:'GREEN',consumptionClass:'COMERCIAL',startDate:'2026-04-22',endDate:'2026-12-31',source:'Official reference',items:[{component:'TE',band:'PEAK',measure:'BRL_KWH',value:'0.43188',label:'TE'}]}};
+const field=(text:string)=>({text,confidence:null,transcription:{state:'VERIFIED_WORDS',confidence:.99},pages:[1],spans:[{offset:1,length:text.length}],issues:['MISSING_CONFIDENCE']});
+const cell=(column:number,text:string)=>({column,rowSpan:1,columnSpan:1,value:field(text)});
+const layout=():any=>({operations:[],blocks:[{kind:'TAX_SUMMARY',source:'tables[4]',rows:[{index:0,cells:[cell(0,'Tributo'),cell(1,'Base de Cálculo'),cell(2,'Alíquota %'),cell(3,'Valor R$')]},...['ICMS','PIS/PASEP','COFINS'].map((c,i)=>({index:i+1,cells:[cell(0,c),cell(1,'100,00'),cell(2,['18,00','1,03','4,83'][i]),cell(3,'10,00')]}))]}],preparation:{values:[{key:'consumptionTotalKwh',decimal:'12345.67',unit:'kWh',state:'EXTRACTED_REVIEW'}]}});
+describe('source-grounded OCR automatic filling',()=>{
+ const run=(l=layout(),libs=[library])=>invoiceAutofill(l,unit,'2026-08',libs,'document','filehash');
+ it('fills actual invoice rates and consumption, keeps ledger/approval separate',()=>{const p=run();expect(p.measurements).toEqual({consumptionTotal:'12345.67'});expect(p.taxes.map(t=>t.rate)).toEqual(['18.00','1.03','4.83']);expect(p.taxes.every(t=>t.state==='REVIEW_REQUIRED')).toBe(true);expect(p.library?.scenario).toBe('ACR');expect(p.costs).toEqual([]);expect(p.source).toContain('filehash');});
+ it.each([{...library,profile:{...library.profile,startDate:'2026-08-10'}},{...library,profile:{...library.profile,subgroup:'A3'}},{...library,profile:{...library.profile,consumptionClass:'INDUSTRIAL'}}])('does not use partial validity or another tariff profile',l=>expect(run(layout(),[l]).library).toBeNull());
+ it('does not choose among conflicting tables',()=>expect(run(layout(),[library,{...library,id:'other'}]).libraryState).toBe('AMBIGUOUS'));
+ it('does not use superseded versions',()=>expect(run(layout(),[library,{...library,id:'next',version:2,previous_id:'lib'}] as any).library?.id).toBe('next'));
+ it('does not infer missing taxes or zero consumption',()=>{const l=layout();l.preparation.values[0].decimal=null;l.blocks[0].rows[2].cells[2].value.text='';const p=run(l);expect(p.measurements).toEqual({});expect(p.taxes.map(t=>t.code)).toEqual(['ICMS','COFINS']);});
+ it('rejects duplicated tax rows and merged cells',()=>{const l=layout();l.blocks[0].rows.push({...l.blocks[0].rows[1],index:4});l.blocks[0].rows[2].cells[2].columnSpan=2;expect(run(l).taxes.map(t=>t.code)).toEqual(['COFINS']);});
+});

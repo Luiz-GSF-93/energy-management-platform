@@ -22,8 +22,10 @@ import {OcrCdeTaxIntegrationService} from './ocr-cde-tax-integration.service';
 import {OcrDemandTaxIntegrationService} from './ocr-demand-tax-integration.service';
 import {ocrReadoutSummary} from './invoice-readout';
 import {assistantHistory} from './ocr-assistant-history';
+import {OcrAutofillService} from './ocr-autofill.service';
 
-type Preview = {token:string; state:string; canCreate:boolean; message:string; values?:unknown; candidates?:unknown; existing?:unknown};
+type Preview = {token:string; state:string; canCreate:boolean; message:string; values?:unknown; candidates?:unknown; candidate?:{ready?:boolean}; existing?:unknown};
+const canPropose=(p:Preview)=>p.canCreate||(['REVIEWS_PENDING','CONSUMPTION_REQUIRED','MONTHLY_REQUIRED','REVIEW_REQUIRED'].includes(p.state)&&((Array.isArray(p.candidates)&&p.candidates.length>0&&p.candidates.every(c=>c.ready===true))||p.candidate?.ready===true||p.state==='REVIEWS_PENDING'&&Array.isArray(p.values)&&p.values.length>0));
 type Operation = {key:string; label:string; area:string; preview:()=>Promise<Preview>; create:(token:string)=>Promise<unknown>};
 @Injectable()
 export class OcrAssistantService {
@@ -33,7 +35,7 @@ export class OcrAssistantService {
   private tusd:OcrTusdIntegrationService, private cde:OcrCdeIntegrationService,
   private split:OcrSplitDemandIntegrationService, private reactive:OcrReactiveIntegrationService,
   private cip:OcrCipIntegrationService, private cdeTax:OcrCdeTaxIntegrationService,
-  private demandTax:OcrDemandTaxIntegrationService, @Optional() private identities?:OcrIdentityReviewService, @Optional() private demands?:OcrDemandReviewService) {}
+  private demandTax:OcrDemandTaxIntegrationService, @Optional() private identities?:OcrIdentityReviewService, @Optional() private demands?:OcrDemandReviewService, @Optional() private autofill?:OcrAutofillService) {}
  private async allowed(t:TenantContext,write=false) {
   const required=[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,];
   if(!t?.userId||!t.organizationId||!required.every(p=>t.permissions?.includes(p)))throw new ForbiddenException('O assistente exige acesso aos documentos e contratos desta organização.');
@@ -69,6 +71,7 @@ export class OcrAssistantService {
  private async inspectPlan(document:string,t:TenantContext,progress:(key:string)=>void) {
   await this.allowed(t);
   const source=await this.queue.reviewSource(t.organizationId,document),month=String(source.doc.reference_month).slice(0,7);
+  const prefilled=await this.autofill?.inspect(document,t);
   progress('source');
   let sources:Record<string,any>={};
   const diagnosisPromise=this.preparation.inspect({consumerUnitId:source.doc.consumer_unit_id,month},t.organizationId,s=>{sources=s;}).then(d=>{progress('configuration');return d;});
@@ -83,13 +86,13 @@ export class OcrAssistantService {
   const consumption=reviews.fields.find(f=>f.key==='consumptionTotalKwh')?.decimal??null;
   const comparisons=assistantHistory(consumption,history.data);
   const confidence=ocrReadoutSummary(source.raw,source.assessment.intake.checks);
-  const token=ocrReviewDigest({format:'ocr-assistant-1',organization:t.organizationId,actor:t.userId,document:source.doc,job:source.jobId,raw:ocrReviewDigest(source.raw),sources,reviews,identity,demand,history:history.data,previews});
+  const token=ocrReviewDigest({format:'ocr-assistant-1',organization:t.organizationId,actor:t.userId,document:source.doc,job:source.jobId,raw:ocrReviewDigest(source.raw),sources,reviews,identity,demand,history:history.data,previews,prefilled:prefilled??null});
   const areas=[['distributor','Distribuidora e unidade',['Unidade']],['supply','Contrato e fornecedor',['Fornecedor','Preços','Volumes']],['management','Honorários vigentes',['Honorários']],['parameters','Tarifas e parâmetros',['Parâmetros','Tributos','Bases tributárias','Bases operacionais']],['monthly','Dados mensais',['Medições']],['costs','Custos mensais',['Custos mensais','Custos adicionais']]] as const;
   progress('ready');
-  return {token,basis,fieldTasks,canValidate:ocrDraftRole(t)&&t.permissions?.includes(P.ENERGIA_OCR_PROCESS),documentId:document,customerId:diagnosis.unit.customerId,unitId:diagnosis.unit.id,unitName:diagnosis.unit.name,month,checkedAt:new Date().toISOString(),
+  return {token,basis,fieldTasks,prefilled,canValidate:ocrDraftRole(t)&&t.permissions?.includes(P.ENERGIA_OCR_PROCESS),documentId:document,customerId:diagnosis.unit.customerId,unitId:diagnosis.unit.id,unitName:diagnosis.unit.name,month,checkedAt:new Date().toISOString(),
    extractionEngine:'Azure Document Intelligence',calculationEngine:'Motor ACL × ACR existente',confidence,
    values:reviews.fields.map(f=>({key:f.key,label:f.label,value:f.decimal,unit:f.unit,state:f.state,sources:f.sources,review:f.history[0]?.sourceHash===f.sourceHash?f.history[0]:null})),
-   comparisons,operations:previews.map(p=>({...p,canPropose:ocrDraftRole(t)&&ocrDraftPermission(t)&&(p.canCreate||['REVIEWS_PENDING','CONSUMPTION_REQUIRED'].includes(p.state))&&[p.values,p.candidates].some(v=>Array.isArray(v)?v.length>0:!!v&&typeof v==='object'&&Object.keys(v).length>0),evidenceHash:ocrReviewDigest({values:p.values??null,candidates:p.candidates??null})})),counts:diagnosis.counts,findings:diagnosis.findings,
+   comparisons,operations:previews.map(p=>({...p,canPropose:ocrDraftRole(t)&&ocrDraftPermission(t)&&canPropose(p),evidenceHash:ocrReviewDigest({values:p.values??null,candidates:p.candidates??null,candidate:p.candidate??null})})),counts:diagnosis.counts,findings:diagnosis.findings,
    configurations:areas.map(([area,label,sections])=>({area,label,state:diagnosis.findings.some(f=>(sections as readonly string[]).includes(f.section)&&f.severity==='BLOCKER')?'ACTION_REQUIRED':'AVAILABLE',findings:diagnosis.findings.filter(f=>(sections as readonly string[]).includes(f.section))})),
    records:{measurements:diagnosis.measurements,costs:diagnosis.costs,catalog:diagnosis.catalog,suppliers:diagnosis.suppliers,feeCoverage:diagnosis.feeCoverage,managementFees:diagnosis.managementFeeMemory},
    canPrepare:diagnosis.counts.blockers===0,canPublish:false as const,
@@ -126,14 +129,15 @@ export class OcrAssistantService {
     if(stopped)break;
     try{
      const preview=await op.preview(),expected=plan.operations.find(p=>p.key===op.key)!;
-     if(!preview.canCreate||ocrReviewDigest({values:preview.values??null,candidates:preview.candidates??null})!==expected.evidenceHash){receipts.push({key:op.key,label:op.label,state:'REVIEW_REQUIRED',message:'Etapa depende de revisão, aprovação ou alteração dos valores. Nenhum valor foi presumido.'});stopped=true;break;}
+     if(!preview.canCreate){receipts.push({key:op.key,label:op.label,state:'REVIEW_REQUIRED',message:preview.message});continue;}
+     if(ocrReviewDigest({values:preview.values??null,candidates:preview.candidates??null,candidate:preview.candidate??null})!==expected.evidenceHash){receipts.push({key:op.key,label:op.label,state:'REVIEW_REQUIRED',message:'Os valores propostos mudaram. Confira esta etapa; lançamentos independentes continuam.'});continue;}
      const result=await op.create(preview.token);receipts.push({key:op.key,label:op.label,state:'SAVED_DRAFT',result});
     }catch{receipts.push({key:op.key,label:op.label,state:'VERIFY_REQUIRED',message:'Confira o histórico antes de repetir; lançamentos anteriores foram preservados.'});stopped=true;}
    }
   }
   let current:Awaited<ReturnType<OcrAssistantService['inspect']>>|null=null;
   try{current=await this.inspect(document,t);}catch{/* Preserve successful receipts, never repeat a write. */}
-  return {receipts,current,complete:!stopped,canPublish:false,message:'Validações e rascunhos registrados abaixo. Aprovação financeira exclusiva do gestor/administrador.'};
+  return {receipts,current,complete:!stopped&&receipts.every(r=>['REVIEW_SAVED','SAVED_DRAFT'].includes(r.state)),canPublish:false,message:'Validações e rascunhos registrados abaixo. Etapas que exigem revisão permanecem identificadas. Aprovação financeira exclusiva do gestor/administrador.'};
  }
  async apply(document:string,t:TenantContext,body:unknown) {
   await this.allowed(t,true);
