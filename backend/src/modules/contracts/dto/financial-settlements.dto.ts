@@ -1,4 +1,4 @@
-import {Equals,IsBoolean,IsString,IsUUID,Matches,MaxLength,MinLength} from 'class-validator';
+import {Equals,IsBoolean,IsOptional,IsString,IsUUID,Matches,MaxLength,MinLength} from 'class-validator';
 import {PreparationQueryDto} from './preparation.dto';
 export class PrepareFinancialSettlementDto extends PreparationQueryDto {
  @IsUUID() requestId!:string;
@@ -8,4 +8,9 @@ export class FinancialSettlementTransitionDto {
  @Matches(/^[0-9a-f]{64}$/) payloadHash!:string;
  @IsString() @MinLength(20) @MaxLength(2000) note!:string;
  @IsBoolean() @Equals(true) acknowledgeReservations!:boolean;
+}
+export class PublishedFinancialQueryDto {
+ @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) from!:string;
+ @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) to!:string;
+ @IsOptional() @IsUUID() customerId?:string;
 }
