@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLTextAreaElement','HTMLFormElement','FormData','Event','MouseEvent'])global[k]=dom.window[k];
+global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+const doc='11111111-1111-4111-a111-111111111111',docs=[{id:doc,original_filename:'Invoice.pdf',file_verified:true,customer_id:'customer',consumer_unit_id:'unit'},{id:'unverified',original_filename:'Hidden.pdf',file_verified:false}];
+let calls=[],saved=0,failure=true,plan={documentId:doc,unitName:'Unit A',month:'2026-08',token:'a'.repeat(64),checkedAt:'2026-10-03T12:00:00Z',canManage:true,message:'Operação não aprova apuração.',requests:[{id:'old',title:'Pedido existente',status:'OPEN'}],findings:[{key:'b'.repeat(64),section:'Custos mensais',severity:'BLOCKER',message:'Validar custos existentes',href:'/backoffice/contracts?ocrDocument='+doc+'&area=costs'}]};
+const original=Module._load;Module._load=function(name,parent,main){if(name==='@/app/lib/api/client')return {apiRequest:async(url,options)=>{assert.equal(url,'/api/v1/operations/diagnostic-documents/'+doc);calls.push({url,options});if(options.method==='POST'){if(failure)throw Error('Resultado incerto');return {id:'saved'};}return plan;}};if(name==='@/app/lib/operations')return original.call(this,require('node:path').resolve(__dirname,'../app/lib/operations.ts'),parent,main);if(name==='next/link')return {__esModule:true,default:({children,...p})=>React.createElement('a',p,children)};return original.call(this,name,parent,main);};
+const Form=require('../app/components/DiagnosticRequestForm.tsx').default,root=createRoot(document.getElementById('root'));
+const choose=async(value)=>{const s=document.querySelector('select');await act(async()=>{s.value=value;s.dispatchEvent(new Event('change',{bubbles:true}));});};
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Form,{docs,owners:[],actor:'actor',onSaved:()=>saved++})));
+ assert.equal(calls.length,0);assert.equal(document.querySelector('option[value="unverified"]'),null);
+ await choose(doc);assert.ok(document.body.textContent.includes('Unit A · 2026-08'));assert.ok(document.body.textContent.includes('Pedido existente'));assert.ok(document.querySelector('a').href.endsWith('&area=costs'));
+ document.querySelector('input[name="due"]').value='2026-10-05T12:00';document.querySelector('textarea[name="reason"]').value='Conferir documento';
+ const submit=async()=>act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await submit();assert.ok(document.body.textContent.includes('Resultado incerto'));const first=calls.at(-1).options.body;await submit();assert.equal(calls.at(-1).options.body.requestId,first.requestId);assert.equal(first.findingKey,plan.findings[0].key);assert.equal(first.customerId,undefined);assert.equal(first.documentId,undefined);
+ failure=false;await submit();assert.equal(saved,1);
+ await choose('');assert.equal(document.querySelector('form'),null);assert.equal(document.querySelector('a'),null);
+ plan={...plan,findings:[]};await choose(doc);assert.ok(document.body.textContent.includes('Nenhum bloqueio ou revisão'));assert.equal(document.querySelector('form'),null);
+ console.log('Diagnostic request UI: private source selection, current finding/correction, existing requests, deadline/owner, idempotent retry, cleared source and no findings. PASS');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

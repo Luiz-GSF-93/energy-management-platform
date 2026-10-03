@@ -1,0 +1,22 @@
+import {DiagnosticRequestsService,findingKey} from './diagnostic-requests.service';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+const document='11111111-1111-4111-a111-111111111111';
+function fixture(){
+ const finding={code:'COSTS_DRAFT',section:'Custos mensais',severity:'BLOCKER',message:'Confira custos existentes.'};
+ const plan={token:'a'.repeat(64),documentId:document,customerId:'22222222-2222-4222-a222-222222222222',unitId:'33333333-3333-4333-a333-333333333333',unitName:'Unidade A',month:'2026-08',checkedAt:'2026-10-03T12:00:00Z',findings:[finding]};
+ const assistant:any={inspect:jest.fn(async()=>plan)},operations:any={list:jest.fn(async()=>({rows:[{id:'own',document_id:document},{id:'other',document_id:'other'}]})),save:jest.fn(async()=>({id:'saved',revision:1}))};
+ const t:any={organizationId:'org',userId:'actor',scope:'organization',role:'operacional',permissions:[P.OPERACAO_REQUESTS_VIEW,P.OPERACAO_REQUESTS_MANAGE,P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW]};
+ const body={requestId:document,token:plan.token,findingKey:findingKey(finding),responsibleId:'actor',dueAt:'2026-10-05T12:00:00Z',priority:'NORMAL',reason:'Encaminhar para conferência'};
+ return {s:new DiagnosticRequestsService(operations,assistant),operations,assistant,t,plan,finding,body};
+}
+describe('Diagnostic request handoff',()=>{
+ it.each([{scope:'global'},{role:'consulta'},{organizationId:''},{permissions:[]}])('denies invalid scope before accessing OCR %p',async patch=>{const f=fixture();await expect(f.s.inspect(document,{...f.t,...patch})).rejects.toThrow();expect(f.assistant.inspect).not.toHaveBeenCalled();});
+ it('requires manage independently of source read permissions',async()=>{const f=fixture();f.t.permissions=f.t.permissions.filter((p:string)=>p!==P.OPERACAO_REQUESTS_MANAGE);await expect(f.s.create(document,f.body,f.t)).rejects.toThrow();expect(f.assistant.inspect).not.toHaveBeenCalled();});
+ it('propagates denied source/licence without partial plan or write',async()=>{const f=fixture();f.assistant.inspect.mockRejectedValue(new Error('Source denied'));await expect(f.s.create(document,f.body,f.t)).rejects.toThrow('Source denied');expect(f.operations.save).not.toHaveBeenCalled();});
+ it('returns only requests for this source and a safe correction destination',async()=>{const f=fixture(),r=await f.s.inspect(document,f.t);expect(r.requests.map((v:any)=>v.id)).toEqual(['own']);expect(r.findings[0].href).toBe('/backoffice/contracts?ocrDocument='+document+'&area=costs');expect(f.operations.list).toHaveBeenCalledWith('requests',f.t,{customerId:f.plan.customerId});});
+ it('rejects injected fields and invented findings before writes',async()=>{const f=fixture();await expect(f.s.create(document,{...f.body,customerId:'foreign'} as any,f.t)).rejects.toThrow();await expect(f.s.create(document,{...f.body,findingKey:'b'.repeat(64)},f.t)).rejects.toThrow('diagnóstico atual');expect(f.operations.save).not.toHaveBeenCalled();});
+ it('rejects changed diagnostics; cannot turn a resolved finding into an outstanding request',async()=>{const f=fixture();f.plan.token='b'.repeat(64);await expect(f.s.create(document,f.body,f.t)).rejects.toThrow('mudou');expect(f.operations.save).not.toHaveBeenCalled();});
+ it('saves canonical source evidence using existing audited/idempotent operation service',async()=>{const f=fixture();await f.s.create(document,f.body,f.t);expect(f.operations.save).toHaveBeenCalledWith('requests',null,expect.objectContaining({requestId:f.body.requestId,revision:0,customerId:f.plan.customerId,unitId:f.plan.unitId,documentId:document,requestType:'VALIDATION',responsibleId:'actor',dueAt:f.body.dueAt}),f.t);const d=f.operations.save.mock.calls[0][2];expect(d.description).toContain(f.finding.message);expect(d.description).toContain(f.plan.token);expect(d.description).toContain('exclusiva do gestor');expect(Object.keys(f.assistant)).toEqual(['inspect']);});
+ it('does not write when no blocker or review remains',async()=>{const f=fixture();f.plan.findings=[];const r=await f.s.inspect(document,f.t);expect(r.findings).toEqual([]);await expect(f.s.create(document,f.body,f.t)).rejects.toThrow('diagnóstico atual');expect(f.operations.save).not.toHaveBeenCalled();});
+ it('does not confuse the same code with changed evidence',()=>{const f=fixture();expect(findingKey(f.finding)).not.toBe(findingKey({...f.finding,message:'New evidence'}));});
+});
