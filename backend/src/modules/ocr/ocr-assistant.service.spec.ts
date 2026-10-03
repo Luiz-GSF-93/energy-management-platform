@@ -1,5 +1,5 @@
 import {FinancialSettlementsService} from '../contracts/services/financial-settlements.service';
-import {OcrAssistantService} from './ocr-assistant.service';
+import {OcrAssistantService,confirmedSplitEvidence} from './ocr-assistant.service';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 function fixture(){
@@ -69,8 +69,17 @@ describe('OCR assistant safety and partial execution',()=>{
 });
 
 describe('operator validation and financial separation',()=>{
+ it('accepts only explicitly selected demand classifications while preserving every original numeric value',()=>{const old=[{quantity:'10.00',rate:'2.00000000',amount:'20.00',classification:'PENDING'},{quantity:'5.00',rate:'1.00000000',amount:'5.00',classification:'PENDING'}],now=old.map((v,i)=>({...v,classification:i?'UNUSED':'USED'})),choices=[{value:'10.00',decision:'USED'},{value:'5.00',decision:'UNUSED'}];expect(confirmedSplitEvidence(old,now,choices)).toBe(true);expect(confirmedSplitEvidence(old,now,[])).toBe(false);expect(confirmedSplitEvidence(old,now,[choices[0],choices[0]])).toBe(false);expect(confirmedSplitEvidence(old,[{...now[0],amount:'99.00'},now[1]],choices)).toBe(false);expect(confirmedSplitEvidence(old,now.map(v=>({...v,classification:v.classification==='USED'?'UNUSED':'USED'})),choices)).toBe(false);});
  const body=async(f:any,change:any={})=>({token:(await f.service.inspect('doc',f.tenant)).token,requestId:'11111111-1111-4111-a111-111111111111',fields:[],operations:[],note:'Conferido no PDF, página 1.',checkedPdf:true,acknowledged:true,...change});
  function operator(){const f=fixture();f.tenant.role='operacional';f.tenant.permissions=f.tenant.permissions.filter(p=>p!==P.ORGANIZATION_CONTRACTS_CREATE);f.tenant.permissions.push(P.ENERGIA_OCR_PROCESS,P.ORGANIZATION_CONTRACTS_UPDATE);return f;}
+ it.each([false,true])('creates demand drafts after explicit classifications in the same batch, unless numeric evidence changes (%s)',async drift=>{
+  const f=operator(),rows=[{classification:'PENDING',quantity:'10.00',rate:'2.00000000',amount:'20.00'},{classification:'PENDING',quantity:'5.00',rate:'1.00000000',amount:'5.00'}];let classified=false;
+  (f.service as any).demands={list:jest.fn(async()=>({fields:rows.map((r,i)=>({key:'row'+i,label:'Demand '+i,decimal:r.quantity,unit:'kW',state:'BILLED_UNCLASSIFIED',sourceHash:'d'.repeat(64),history:[]}))})),create:jest.fn(async()=>{classified=true;})};
+  const op=f.operations[0];op.key='split-demand';op.preview.mockImplementation(async()=>({token:'fresh-demand',state:classified?'READY':'REVIEW_REQUIRED',canCreate:classified,message:'Classify demand',candidates:rows.map((r,i)=>({...r,classification:classified?(i?'UNUSED':'USED'):'PENDING',amount:classified&&drift&&i===0?'99.00':r.amount}))}) as any);
+  const input=await body(f,{fields:[{key:'demand:row0',decision:'USED'},{key:'demand:row1',decision:'UNUSED'}],operations:['split-demand']});expect((await f.service.inspect('doc',f.tenant)).operations[0].canPropose).toBe(true);
+  const result=await f.service.validate('doc',f.tenant,input);expect(result.canPublish).toBe(false);expect(result.receipts.slice(0,2).map(r=>r.state)).toEqual(['REVIEW_SAVED','REVIEW_SAVED']);
+  if(drift){expect(op.create).not.toHaveBeenCalled();expect(result.receipts[2].state).toBe('REVIEW_REQUIRED');}else{expect(op.create).toHaveBeenCalledWith('fresh-demand');expect(result.receipts[2].state).toBe('SAVED_DRAFT');}
+ });
  it('keeps independent drafts moving when one selected dependency remains pending',async()=>{
   const f=operator(),input=await body(f,{operations:['first','second']});
   f.operations[0].preview.mockResolvedValueOnce({token:'first-token',state:'READY',canCreate:true,message:'Ready'}).mockResolvedValueOnce({token:'first-token',state:'READY',canCreate:true,message:'Ready'}).mockResolvedValueOnce({token:'pending',state:'BASE_APPROVAL_REQUIRED',canCreate:false,message:'Awaiting manager'});

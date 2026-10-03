@@ -78,6 +78,7 @@ export class BotEnergyService {
    const fees=plan.records.managementFees;
    if(fees)items.push({label:'Honorários da unidade',value:fees.status==='VARIABLE_PENDING'?'Regra mensal confirmada; parcela variável depende da consolidação do cliente.':fees.status==='FIXED_AVAILABLE'?'Fixo por unidade disponível.':'Conferência necessária.',source:fees.allocation?.source||'Memória de honorários da competência'});
    items.push(...plan.records.suppliers.map(s=>({label:'Contrato do fornecedor',value:`${s.number} · ${s.start} a ${s.end}`,source:s.id})));
+   items.push(...(plan.prefilled?.relatedDocuments??[]).map(d=>({label:'Arquivo relacionado · '+d.name,value:d.message,source:d.source})));
    items.push(...plan.records.catalog.flatMap(c=>c.versions.map(v=>({label:c.label,value:`Revisão ${v.revision} · ${v.start} a ${v.end}`,source:v.source||v.id}))));
   }
   return {...base,checkedAt:plan.checkedAt,status:'SUPPORTED',answer,items,sources:[{label:`Fatura ${document} · ${plan.unitName} · ${plan.month}`,reference:'Inspeção atual do assistente e histórico auditado',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=preparation'}]};

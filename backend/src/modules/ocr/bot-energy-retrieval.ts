@@ -9,7 +9,7 @@ const concepts:Record<string,string[]>={
  regulation:['regulatoria','regulatorio','regulacao','aneel','resolucao','normativa'],
  pending:['pendencia','pendencias','bloqueio','bloqueios','divergencia','divergencias','inconsistencia','inconsistencias','falta','faltando'],
  fields:['consumo','consumos','demanda','demandas','cnpj','endereco','medicao','medicoes','leitura','extraido','extraidos'],
- records:['contrato','contratos','vigencia','vigencias','fornecedor','distribuidora','tarifa','tarifas','custo','custos','registro','registros'],
+ records:['contrato','contratos','vigencia','vigencias','fornecedor','distribuidora','tarifa','tarifas','custo','custos','registro','registros','arquivo','arquivos','documento','documentos','nf','nfe','nota','notas'],
 };
 export function retrieveTopics(question:string){
  const n=normalizeQuestion(question),words=new Set(n.match(/[a-z0-9%]+/g)??[]);
