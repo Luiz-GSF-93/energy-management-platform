@@ -132,6 +132,18 @@ try{
  const includedNoRate=await service.create({...tax,componentCode:'ICMS',treatment:'INCLUDED',amount:null,taxBasis:base(ag)},'org-a','actor-a');ok(includedNoRate.amount_text===null&&includedNoRate.treatment==='INCLUDED');
  for(const treatment of ['INSIDE','OUTSIDE'])await deny(()=>service.create({...tax,treatment,amount:null},'org-a','actor-a'),400);
  ok((await service.events(includedNoRate.id,'org-a')).some(e=>e.snapshot.amount_text===null&&e.snapshot.created_by==='actor-a'));
+ const preparedId='70000000-0000-5000-8000-000000000001',preparedBody={...body,scenario:'ACL',componentCode:'TE',startDate:'2031-08-01',endDate:'2031-08-31',treatment:'GROSS',includedTaxes:'ICMS',embeddedTaxCodes:['ICMS']};
+ const prepared=await service.createPrepared(preparedId,preparedBody,'org-a','actor-a');
+ const repeated=await service.createPrepared(preparedId,preparedBody,'org-a','actor-a');ok(prepared.id===repeated.id&&repeated.revision===1);
+ ok((await service.events(preparedId,'org-a')).length===1);
+ await deny(()=>service.createPrepared(preparedId,{...preparedBody,amount:'0'},'org-a','actor-a'),409);
+ await deny(()=>service.createPrepared(preparedId,{...preparedBody,consumerUnitId:b},'org-b','actor-b'),409);
+ const preparedTaxId='70000000-0000-5000-8000-000000000002',preparedTaxBody={...tax,scenario:'ACL',componentCode:'ICMS',amount:null,treatment:'INCLUDED',startDate:'2031-08-01',endDate:'2031-08-31',taxBasis:base(prepared)};
+ const preparedTax=await service.createPrepared(preparedTaxId,preparedTaxBody,'org-a','actor-a');
+ ok((await service.createPrepared(preparedTaxId,preparedTaxBody,'org-a','actor-a')).id===preparedTax.id);
+ ok((await service.events(preparedTaxId,'org-a')).length===1);
+ await service.approve(prepared.id,{revision:1},'org-a','approver');ok((await service.createPrepared(preparedId,preparedBody,'org-a','actor-a')).status==='APPROVED');
+ await deny(()=>service.createPrepared(preparedId,{...preparedBody,source:'tampered'},'org-a','actor-a'),409);
  const rights=await db.query("SELECT bool_and(NOT has_table_privilege(r,t,'SELECT') AND NOT has_table_privilege(r,t,'INSERT') AND NOT has_table_privilege(r,t,'UPDATE')) AS restricted FROM unnest(ARRAY['anon','authenticated']) r CROSS JOIN unnest(ARRAY['calculation_parameters','calculation_parameter_events']) t");ok(rights.rows[0].restricted);
  const rls=await db.query("SELECT bool_and(relrowsecurity) AS enabled FROM pg_class WHERE relname IN ('calculation_parameters','calculation_parameter_events')");ok(rls.rows[0].enabled);
  console.log(JSON.stringify({status:'passed',checks},null,2));

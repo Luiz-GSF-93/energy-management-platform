@@ -4,9 +4,18 @@ import {RequirePermission} from '../../common/decorators/require-permission.deco
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {OcrAssistantService} from './ocr-assistant.service';
 import {OcrAutofillService} from './ocr-autofill.service';
+import {OcrResolutionService} from './ocr-resolution.service';
 @Controller('documents')
 export class OcrAssistantController {
- constructor(private service:OcrAssistantService,private progress:OcrAssistantProgressService,private autofill:OcrAutofillService){}
+ constructor(private service:OcrAssistantService,private progress:OcrAssistantProgressService,private autofill:OcrAutofillService,private resolution:OcrResolutionService){}
+ @Get(':id/ocr/assistant/resolution') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
+ resolutionPlan(@Param('id') id:string,@Req() req:any){return this.resolution.inspect(id,req.tenantContext);}
+ @Post(':id/ocr/assistant/resolution/prepare') @RequirePermission([P.ENERGIA_OCR_PROCESS])
+ resolutionPrepare(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.prepare(id,req.tenantContext,body);}
+ @Post(':id/ocr/assistant/resolution/repair') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE])
+ resolutionRepair(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.repair(id,req.tenantContext,body);}
+ @Post(':id/ocr/assistant/resolution/approve') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE])
+ resolutionApprove(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.approve(id,req.tenantContext,body);}
  @Get(':id/ocr/assistant/autofill') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
  filled(@Param('id') id:string,@Req() req:any){return this.autofill.inspect(id,req.tenantContext);}
  @Post(':id/ocr/assistant/autofill/library') @RequirePermission([P.ENERGIA_OCR_PROCESS])

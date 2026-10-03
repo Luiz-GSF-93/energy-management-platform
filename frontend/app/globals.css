@@ -881,3 +881,13 @@ a {
 .evidence-thread .ds-button--primary {background:var(--color-primary);color:var(--color-primary-contrast);}
 
 .evidence-compose fieldset {border:0;min-width:0;padding:0;}
+.bot-resolution{border:1px solid #4cc8df;border-radius:14px;padding:18px;margin:16px 0;background:#152335}
+.bot-resolution header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.bot-resolution details{border:1px solid #33465a;border-radius:10px;padding:12px;margin:10px 0}
+.bot-resolution summary{cursor:pointer;color:#64d4e7;font-weight:600}
+.bot-resolution label{display:block;margin:12px 0}
+.bot-resolution input[type=checkbox]{margin-right:8px}
+.bot-resolution table{width:100%;text-align:left;display:block;overflow-x:auto;border-spacing:8px;overflow-wrap:anywhere}
+.bot-resolution small{display:block;color:#a6bed1;font-size:.78rem}
+.bot-resolution fieldset{border:0;padding:0;margin:0;min-width:0}
+.bot-resolution-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
