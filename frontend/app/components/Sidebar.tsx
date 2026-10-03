@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   BarChart3,
   Building2, LayoutGrid, ShieldCheck, UsersRound, FileSignature, Files, ContactRound, PanelLeftClose, PanelLeftOpen,
-  LogOut,
+  LogOut, CalendarDays,ClipboardList,CalendarClock,TrendingUp,Bell,ChevronDown,
 } from 'lucide-react';
 import {
   ChangeEvent,
@@ -23,7 +23,7 @@ import {
 import { useAuth } from '@/app/providers';
 
 const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
-const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,licenses:ShieldCheck,setup:ContactRound,contracts:FileSignature,documents:Files,users:UsersRound};
+const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,licenses:ShieldCheck,setup:ContactRound,contracts:FileSignature,documents:Files,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
 
 export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;onToggle?:()=>void}={}) {
   const router = useRouter();
@@ -86,7 +86,8 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
   const organizations =
     organizationContext?.organizations ?? [];
 
-  const navigationItems =
+  const [operationOpen,setOperationOpen]=useState(true);
+  const allNavigationItems =
     filterBackofficeNavigation(
       backofficeNavigation,
       hasPermission,
@@ -96,6 +97,9 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
           : 'organization'
         : undefined,
     );
+  const navigationItems=allNavigationItems.filter(item=>!item.group);
+  const operationItems=allNavigationItems.filter(item=>item.group==='operation');
+  const operationIndex=operationItems.findIndex(item=>pathname===item.href);
   const activeIndex=navigationItems.findIndex(item=>pathname===item.href||pathname.startsWith(item.href+'/'));
 
   return (
@@ -197,6 +201,8 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
           </Link>
         );})}
       </nav>
+
+      {operationItems.length?<section className="operation-menu"><button className="backoffice-nav__link operation-menu__toggle" type="button" onClick={()=>setOperationOpen(v=>!v)} aria-expanded={operationOpen} aria-controls="operation-submenu" aria-label="Operação" title={collapsed?'Operação':undefined}><CalendarDays size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">Operação</span>{!collapsed?<ChevronDown size={16}/>:null}</button>{operationOpen?<nav id="operation-submenu" className="backoffice-nav operation-submenu" aria-label="Operação">{operationIndex>=0?<span className="backoffice-nav__indicator" aria-hidden="true" style={{transform:`translateY(${operationIndex*56}px)`}}/>:null}{operationItems.map((item,index)=>{const Icon=navigationIcons[item.href.split('/').pop()||'']||LayoutGrid;return <Link key={item.href} href={item.href} aria-label={item.label} aria-current={index===operationIndex?'page':undefined} title={collapsed?item.label:undefined} className={`backoffice-nav__link${index===operationIndex?' backoffice-nav__link--active':''}`}><Icon size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">{item.label}</span></Link>;})}</nav>:null}</section>:null}
 
       <footer className="backoffice-sidebar__footer">
         <Button
