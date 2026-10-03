@@ -4,8 +4,8 @@ for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelect
 global.IS_REACT_ACT_ENVIRONMENT=true;
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
-let calls=[],scope='organization';const hasPermission=()=>true;
-const apiRequest=async(url)=>{calls.push(url);assert.ok(url.startsWith('/api/v1/'),'Deployed API requires version prefix');if(url.includes('/operations/')&&!url.endsWith('/responsible'))return {rows:[],canManage:true,canPublish:false};return [];};
+let calls=[],scope='organization',alerts=[];const hasPermission=()=>true;
+const apiRequest=async(url)=>{calls.push(url);assert.ok(url.startsWith('/api/v1/'),'Deployed API requires version prefix');if(url==='/api/v1/operations/notifications')return {rows:alerts};if(url.includes('/operations/')&&!url.endsWith('/responsible'))return {rows:[],canManage:true,canPublish:false};return [];};
 const original=Module._load;Module._load=function(name,parent,main){
  if(name==='@/app/providers')return {useAuth:()=>({context:scope==='global'?{scope,user:{id:'actor'}}:{scope,user:{id:'actor'},currentOrganization:{id:'org-a',permissions:[]}},hasPermission})};
  if(name==='@/app/lib/api/client')return {apiRequest};
@@ -16,6 +16,11 @@ const original=Module._load;Module._load=function(name,parent,main){
 const Workspace=require('../app/components/OperationsWorkspace.tsx').default,root=createRoot(document.getElementById('root'));
 (async()=>{try{
  for(const area of ['agenda','requests','events','notifications']){await act(async()=>root.render(React.createElement(Workspace,{area})));assert.equal(document.querySelector('[role="alert"]'),null);assert.ok(document.body.textContent.includes(area==='notifications'?'Nenhuma notificação':'Nenhum registro'));}
+ alerts=[{key:'energy:c:hash',id:'c',origin:'energy',title:'Contrato próximo',description:'Fonte contratual',priority:'HIGH',status:'EXPIRING',date:'2026-10-03T12:00:00Z',dueAt:null,read:false,href:'/backoffice/contracts'},{key:'ocr:d:hash',id:'d',origin:'ocr',title:'OCR concluído',description:'Extração não é aprovação financeira',priority:'NORMAL',status:'SUCCEEDED',date:'2026-10-03T12:00:00Z',dueAt:null,read:true,href:'/backoffice/documents'}];
+ await act(async()=>root.render(React.createElement(Workspace,{area:'agenda'})));await act(async()=>root.render(React.createElement(Workspace,{area:'notifications'})));
+ assert.equal(document.querySelectorAll('article').length,2);assert.ok(document.body.textContent.includes('não resolve pendências'));
+ const choose=async(label,value)=>{const e=[...document.querySelectorAll('label')].find(e=>e.firstChild.textContent===label).querySelector('select');await act(async()=>{e.value=value;e.dispatchEvent(new Event('change',{bubbles:true}));});};
+ await choose('Origem','energy');assert.equal(document.querySelectorAll('article').length,1);assert.ok(document.body.textContent.includes('Fonte contratual'));await choose('Leitura','read');assert.equal(document.querySelectorAll('article').length,0);await choose('Origem','');assert.equal(document.querySelectorAll('article').length,1);assert.ok(document.body.textContent.includes('Extração não é aprovação financeira'));await choose('Prioridade','HIGH');assert.equal(document.querySelectorAll('article').length,0);
  const count=calls.length;await act(async()=>root.render(React.createElement(Workspace,{area:'pld'})));assert.ok(document.body.textContent.includes('Aguardando API CCEE'));assert.equal(calls.length,count);
  scope='global';await act(async()=>root.render(React.createElement(Workspace,{area:'agenda'})));assert.ok(document.body.textContent.includes('Acesso indisponível'));assert.equal(calls.length,count);
  for(const path of ['/customers','/consumer-units','/documents','/operations/responsible'])assert.ok(calls.includes('/api/v1'+path));

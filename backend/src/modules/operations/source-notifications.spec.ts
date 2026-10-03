@@ -1,0 +1,12 @@
+import {alertDay,sourceNotification} from './source-notifications';
+const base={id:'contract-1',organization_id:'a',status:'ACTIVE',end_date:'2026-10-10T00:00:00',updated_at:'2026-10-03T10:00:00Z',contract_number:'E-1'};
+describe('Source alert meaning and revision',()=>{
+ it('rejects impossible and absent dates',()=>{expect(alertDay('2026-02-31')).toBeNull();expect(alertDay(null)).toBeNull();expect(alertDay('2024-02-29')).toBe('2024-02-29');});
+ it('never infers absent dates or draft validity',()=>{expect(sourceNotification('energy',{...base,end_date:null},'2026-10-03')).toBeNull();expect(sourceNotification('energy',{...base,status:'DRAFT'},'2026-10-03')).toBeNull();});
+ it('warns within 30 days and escalates at 7 days',()=>{expect(sourceNotification('energy',base,'2026-10-03')).toMatchObject({priority:'HIGH',status:'EXPIRING',overdue:false});expect(sourceNotification('energy',{...base,end_date:'2026-11-03'},'2026-10-03')).toBeNull();});
+ it('preserves calendar dates for overdue contracts',()=>{expect(sourceNotification('management',{...base,end_date:'2026-10-02T00:00:00'},'2026-10-03')).toMatchObject({status:'OVERDUE',overdue:true});expect(sourceNotification('management',{...base,end_date:'2026-08-01'},'2026-10-03')).toBeNull();});
+ it('distinguishes renewal from licence expiry',()=>{expect(sourceNotification('license',{...base,active:true,end_date:null,renewal_date:'2026-10-20'},'2026-10-03')?.title).toContain('Renovação');expect(sourceNotification('license',{...base,active:false},'2026-10-03')).toBeNull();});
+ it('never equates OCR success to financial approval',()=>{const r=sourceNotification('ocr',{...base,state:'SUCCEEDED',documents:{original_filename:'invoice.pdf',organization_id:'a',file_verified:true}},'2026-10-03');expect(r?.description).toContain('não comprova apuração aprovada');});
+ it('excludes foreign and unverified files and non-terminal OCR',()=>{for(const doc of [{organization_id:'b',file_verified:true},{organization_id:'a',file_verified:false}])expect(sourceNotification('ocr',{...base,state:'SUCCEEDED',documents:doc},'2026-10-03')).toBeNull();expect(sourceNotification('ocr',{...base,state:'POLLING'},'2026-10-03')).toBeNull();});
+ it('keeps receipts stable across days and invalidates on source change',()=>{const a=sourceNotification('energy',base,'2026-10-03')!,b=sourceNotification('energy',base,'2026-10-04')!;expect(a.key).toBe(b.key);expect(sourceNotification('energy',{...base,end_date:'2026-10-12'},'2026-10-03')!.key).not.toBe(a.key);});
+});
