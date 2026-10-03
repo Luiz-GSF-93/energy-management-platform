@@ -1,3 +1,4 @@
+import {financialAnalytics,compareFinancialAnalytics} from './financial-analytics';
 import {Injectable,BadRequestException,ConflictException,ForbiddenException,InternalServerErrorException,NotFoundException,UnauthorizedException} from '@nestjs/common';
 import {SupabaseService} from '../../../services/supabase.service';
 import {LicensesService} from '../../licenses/services/licenses.service';
@@ -5,7 +6,7 @@ import {TenantContext} from '../../../common/interfaces/tenant-context.interface
 import {PERMISSIONS as P} from '../../../common/constants/permissions';
 import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {PreparationQueryDto} from '../dto/preparation.dto';
-import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto,PublishedFinancialQueryDto,PortalFinancialQueryDto} from '../dto/financial-settlements.dto';
+import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto,PublishedFinancialQueryDto,PortalFinancialQueryDto,FinancialAnalyticsQueryDto} from '../dto/financial-settlements.dto';
 import {publishedFinancialSummary} from './published-financial-summary';
 import {CalculationPreparationService} from './preparation.service';
 import {frozenPreparationClient} from './frozen-preparation-client';
@@ -88,6 +89,34 @@ export class FinancialSettlementsService {
    publications.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,customerName:loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===row.customer_id)?.company_name??row.customer_id,reservations:loaded.payload.reservations});
   }
   return publishedFinancialSummary(t.organizationId,d,publications);
+ }
+ async reports(input:FinancialAnalyticsQueryDto,t:TenantContext){
+  await this.allowed(t,P.DOCUMENTS_REPORTS_VIEW);
+  const d=await validateWriteDto(FinancialAnalyticsQueryDto,input);
+  if(Boolean(d.compareFrom)!==Boolean(d.compareTo)||(d.compareUnitId&&!d.compareFrom))throw new BadRequestException('Informe início e fim do período comparativo.');
+  for(const id of new Set([d.unitId,d.compareUnitId].filter(Boolean))){const unit=await this.unit(id!,t);if(d.customerId&&unit.customer_id!==d.customerId)throw new BadRequestException('A unidade pertence a outro cliente. Confira o filtro.');}
+  const capturedPrimary=new Map<string,{id:string;version:number;hash:string}>();
+  const read=async(from:string,to:string,unitId?:string,primaryRead=false)=>{
+   const q={from,to,...(d.customerId?{customerId:d.customerId}:{})},summary=await this.published(q,t);
+   for(const row of summary.rows){const key=row.customerId+'|'+row.month,old=capturedPrimary.get(key);if(!primaryRead&&old&&(old.id!==row.id||old.version!==row.version||old.hash!==row.payloadHash))throw new ConflictException('As versões mudaram entre os recortes. Consulte novamente.');if(primaryRead)capturedPrimary.set(key,{id:row.id,version:row.version,hash:row.payloadHash});}
+   if(summary.rows.length>200)throw new BadRequestException('Relatório extenso. Reduza o período ou selecione um cliente.');
+   const pubs=[];for(const row of summary.rows){const loaded=await this.load(row.id,t);if(loaded.first.status!=='PUBLISHED'||loaded.first.financial_hash!==row.payloadHash||loaded.first.customer_id!==row.customerId||loaded.first.version_number!==row.version)throw new ConflictException('A publicação mudou. Atualize o relatório.');pubs.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,preparations:loaded.payload.preparations,customerName:row.customerName,reservations:loaded.payload.reservations});}
+   return financialAnalytics(t.organizationId,q,pubs,unitId);
+  };
+  const primary=await read(d.from,d.to,d.unitId,true),comparison=d.compareFrom&&d.compareTo?await read(d.compareFrom,d.compareTo,d.compareUnitId):null;
+  let h=this.client().from('monthly_energy_settlements').select('financial_group_id,customer_id,month,version_number,status,validation_status,financial_hash').eq('organization_id',t.organizationId).eq('financial_format','financial-settlement-1.0').eq('status','PUBLISHED').eq('validation_status','VALIDATED').gte('month',d.from+'-01').lte('month',d.to+'-01');if(d.customerId)h=h.eq('customer_id',d.customerId);
+  const historyResult=await h.order('month',{ascending:false}).order('version_number',{ascending:false}).limit(500);this.fail(historyResult.error);
+  if(!Array.isArray(historyResult.data)||historyResult.data.length>=500)throw new BadRequestException('Histórico extenso. Nenhum relatório parcial foi emitido.');
+  const history=[];for(const id of new Set(historyResult.data.map((r:any)=>r.financial_group_id))){
+   const loaded=await this.load(id as string,t),month=String(loaded.first.month).slice(0,7);
+   if(loaded.first.status!=='PUBLISHED'||loaded.rows.some((r:any)=>r.validation_status!=='VALIDATED'||!r.approved_at||!r.published_at)||month<d.from||month>d.to||(d.customerId&&loaded.first.customer_id!==d.customerId))throw new InternalServerErrorException('Histórico publicado fora do escopo.');
+   const captured=capturedPrimary.get(loaded.first.customer_id+'|'+month);if(!captured||loaded.first.version_number>captured.version||(loaded.first.version_number===captured.version&&(loaded.first.financial_group_id!==captured.id||loaded.first.financial_hash!==captured.hash)))throw new ConflictException('Histórico mudou durante a consulta. Atualize o relatório.');
+   if(d.unitId&&!loaded.payload.financial.units.some((u:any)=>u.id===d.unitId))continue;
+   const name=loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===loaded.first.customer_id)?.company_name??loaded.first.customer_id;
+   const snapshot=financialAnalytics(t.organizationId,{from:month,to:month},[{meta:this.summary(loaded.first),financial:loaded.payload.financial,preparations:loaded.payload.preparations,customerName:name,reservations:loaded.payload.reservations}],d.unitId);
+   history.push({...this.summary(loaded.first),customerName:name,amounts:snapshot.totals,current:primary.publications.some(p=>p.id===id)});
+  }
+  return {organizationId:t.organizationId,primary,comparison,comparisonResult:comparison?compareFinancialAnalytics(primary,comparison):null,history,mode:'PUBLISHED_REPORTS',updatedAt:new Date().toISOString()};
  }
  private async portalMember(t:TenantContext){
   if(!t.organizationId||!t.userId)throw new UnauthorizedException('Contexto organizacional ausente.');

@@ -18,3 +18,10 @@ export class PortalFinancialQueryDto {
  @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) from!:string;
  @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) to!:string;
 }
+
+export class FinancialAnalyticsQueryDto extends PublishedFinancialQueryDto {
+ @IsOptional() @IsUUID() unitId?:string;
+ @IsOptional() @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) compareFrom?:string;
+ @IsOptional() @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) compareTo?:string;
+ @IsOptional() @IsUUID() compareUnitId?:string;
+}
