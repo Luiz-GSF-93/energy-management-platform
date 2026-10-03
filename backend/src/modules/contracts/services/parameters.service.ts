@@ -5,6 +5,7 @@ import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {ParameterClassReviewDto,ParameterDto,UpdateParameterDto,ParameterRevisionDto,RetireParameterDto} from '../dto/parameters.dto';
 import {auditAuthorNames} from './audit-author-names';
 import {parameterIssues} from './parameter-issues';
+const canonical=(v:any):string=>JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
 @Injectable()
 export class CalculationParametersService {
  constructor(private db:SupabaseService,private licenses:LicensesService){}
@@ -21,6 +22,16 @@ export class CalculationParametersService {
  async one(id:string,org:string){await this.allowed(org);const r=await this.table().select('*').eq('id',id).eq('organization_id',org).maybeSingle();this.fail(r.error);if(!r.data)throw new NotFoundException('Parâmetro não encontrado nesta organização.');return r.data;}
  async events(id:string,org:string){await this.one(id,org);const r=await this.table('calculation_parameter_events').select('*').eq('parameter_id',id).eq('organization_id',org);this.fail(r.error);return (await auditAuthorNames(this.db.getClient(),org,r.data??[])).map((e:any)=>e.actor_id==='system:f1.103-lineage'?{...e,actor_id_name:'Sistema — vinculação de versões OCR'}:e);}
  async create(input:ParameterDto,org:string,actor:string){await this.allowed(org);this.actor(actor);const d=await validateWriteDto(ParameterDto,input),u=await this.unit(d.consumerUnitId,org);const r=await this.table().insert([{...this.mapped(d),organization_id:org,customer_id:u.customer_id,consumer_unit_id:u.id,unit_context:this.context(u),created_by:actor,updated_by:actor,status:'DRAFT'}]).select().single();this.fail(r.error);return r.data;}
+ // Server-generated identity: retries cannot duplicate a prepared OCR parameter.
+ async createPrepared(id:string,input:ParameterDto,org:string,actor:string){
+  await this.allowed(org);this.actor(actor);const d=await validateWriteDto(ParameterDto,input),u=await this.unit(d.consumerUnitId,org),mapped=this.mapped(d);
+  const existing=await this.table().select('*').eq('id',id).eq('organization_id',org).maybeSingle();this.fail(existing.error);
+  const same=(p:any)=>p&&canonical(p.unit_context)===canonical(this.context(u))&&p.customer_id===u.customer_id&&p.consumer_unit_id===u.id&&['DRAFT','APPROVED'].includes(p.status)&&Object.entries(mapped).every(([k,v])=>['start_date','end_date'].includes(k)?String(p[k]).slice(0,10)===v:canonical(p[k])===canonical(v));
+  if(existing.data){if(!same(existing.data))throw new ConflictException('O rascunho preparado foi revisado. Seu conteúdo foi preservado.');return existing.data;}
+  const r=await this.table().insert([{id,...mapped,organization_id:org,customer_id:u.customer_id,consumer_unit_id:u.id,unit_context:this.context(u),created_by:actor,updated_by:actor,status:'DRAFT'}]).select().single();
+  if(r.error?.code==='23505'){const saved=await this.table().select('*').eq('id',id).eq('organization_id',org).maybeSingle();this.fail(saved.error);if(same(saved.data))return saved.data;}
+  this.fail(r.error);return r.data;
+ }
  async update(id:string,input:UpdateParameterDto,org:string,actor:string){this.actor(actor);const d=await validateWriteDto(UpdateParameterDto,input),old=await this.one(id,org);if(old.status!=='DRAFT'||old.consumer_unit_id!==d.consumerUnitId)throw new ConflictException('Edite somente rascunhos da mesma unidade.');const u=await this.unit(d.consumerUnitId,org);return this.write(id,org,d.revision,{...this.mapped(d),unit_context:this.context(u),updated_by:actor},'DRAFT');}
  private async write(id:string,org:string,revision:number,body:object,status:string){const r=await this.table().update(body).eq('id',id).eq('organization_id',org).eq('revision',revision).eq('status',status).select().maybeSingle();this.fail(r.error);if(!r.data)throw new ConflictException('O registro mudou. Atualize a lista antes de continuar.');return r.data;}
  async approve(id:string,input:ParameterRevisionDto,org:string,actor:string){this.actor(actor);const d=await validateWriteDto(ParameterRevisionDto,input),old=await this.one(id,org);if(old.status!=='DRAFT'&&!(old.supersedes_parameter_id&&old.status==='APPROVED'))throw new ConflictException('Somente rascunhos podem ser aprovados.');if(old.status==='DRAFT'){const issues=parameterIssues({...old,status:'APPROVED'},await this.list(org));if(issues.length)throw new BadRequestException(issues.join(' '));}if(old.supersedes_parameter_id){const r=await this.db.getClient().rpc('approve_parameter_replacement',{p_organization:org,p_parameter:id,p_revision:d.revision,p_actor:actor});this.fail(r.error);if(!r.data)throw new ConflictException('Atualize os parâmetros antes de aprovar.');return r.data;}const u=await this.unit(old.consumer_unit_id,org);return this.write(id,org,d.revision,{status:'APPROVED',updated_by:actor,unit_context:this.context(u)},'DRAFT');}
