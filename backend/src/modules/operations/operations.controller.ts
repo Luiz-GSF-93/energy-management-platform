@@ -1,0 +1,17 @@
+import {Body,Controller,Get,Param,Post,Put,Query} from '@nestjs/common';
+import {Tenant} from '../../common/decorators/tenant.decorator';
+import {TenantContext} from '../../common/interfaces/tenant-context.interface';
+import {OperationsService} from './operations.service';
+import {OperationWriteDto,OperationTransitionDto,NotificationReadDto} from './operations.dto';
+@Controller('operations')
+export class OperationsController {
+ constructor(private service:OperationsService){}
+ @Get('responsible') responsible(@Tenant() t:TenantContext){return this.service.responsible(t);}
+ @Get('notifications') notifications(@Tenant() t:TenantContext){return this.service.notifications(t);}
+ @Post('notifications/read') read(@Body() d:NotificationReadDto,@Tenant() t:TenantContext){return this.service.markRead(d,t);}
+ @Get(':kind') list(@Param('kind') k:string,@Query() q:{from?:string;to?:string;customerId?:string},@Tenant() t:TenantContext){return this.service.list(k,t,q);}
+ @Get(':kind/:id/history') history(@Param('kind') k:string,@Param('id') id:string,@Tenant() t:TenantContext){return this.service.history(id,k,t);}
+ @Post(':kind') create(@Param('kind') k:string,@Body() d:OperationWriteDto,@Tenant() t:TenantContext){return this.service.save(k,null,d,t);}
+ @Put(':kind/:id') update(@Param('kind') k:string,@Param('id') id:string,@Body() d:OperationWriteDto,@Tenant() t:TenantContext){return this.service.save(k,id,d,t);}
+ @Post(':kind/:id/transition') transition(@Param('kind') k:string,@Param('id') id:string,@Body() d:OperationTransitionDto,@Tenant() t:TenantContext){return this.service.transition(id,k,d,t);}
+}

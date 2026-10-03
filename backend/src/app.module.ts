@@ -1,3 +1,4 @@
+import {OperationsModule} from './modules/operations/operations.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -35,6 +36,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     DashboardModule,
     PlansModule,
     OcrModule,
+    OperationsModule,
   ],
   controllers: [AppController],
   providers: [
