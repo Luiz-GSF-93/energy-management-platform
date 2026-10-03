@@ -25,7 +25,7 @@ export default function ForgotPasswordPage() {
   return <main className="auth-page"><div className="auth-shell"><Card>
     <form className="auth-form" onSubmit={submit}>
       <h1>Recuperar senha</h1>
-      <p>Informe o e-mail usado para acessar a Expert Energy.</p>
+      <p>Informe o e-mail usado para acessar o EnergyOS.</p>
       {error && <Alert variant="error">{error}</Alert>}
       {message ? <p role="status">{message}</p> : <>
         <Input label="E-mail" type="email" autoComplete="email" required maxLength={254}
