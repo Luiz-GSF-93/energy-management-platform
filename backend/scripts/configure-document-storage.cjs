@@ -10,11 +10,11 @@ const assert = require('node:assert/strict');
   if(result.error) {
     // Only create for a confirmed absent bucket; never mask permission/network errors.
     assert(String(result.error.statusCode)==='404' || result.error.message==='Bucket not found', 'Unable to inspect bucket');
-    const created=await client.storage.createBucket(id,{public:false,fileSizeLimit:10485760,allowedMimeTypes:['application/pdf','image/jpeg','image/png']});
+    const created=await client.storage.createBucket(id,{public:false,fileSizeLimit:10485760,allowedMimeTypes:['application/pdf','image/jpeg','image/png','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']});
     assert(!created.error,'Unable to create private document bucket');result=await client.storage.getBucket(id);
   }
   assert(!result.error && result.data?.public===false,'Bucket must remain private');
   assert(Number(result.data.file_size_limit)===10485760,'Unexpected bucket size limit');
-  assert.deepEqual([...result.data.allowed_mime_types].sort(),['application/pdf','image/jpeg','image/png'].sort());
-  console.log('Private bucket verified: 10 MiB, PDF/JPEG/PNG');
+  assert.deepEqual([...result.data.allowed_mime_types].sort(),['application/pdf','image/jpeg','image/png','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].sort());
+  console.log('Private bucket verified: 10 MiB, PDF/JPEG/PNG/CSV/XLSX');
 })().catch(()=>{ console.error('Document storage configuration failed; inspect configuration without exposing credentials');process.exitCode=1; });

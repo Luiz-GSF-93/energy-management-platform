@@ -14,6 +14,7 @@ const newDocument={...documents[0],id:'12345678-1234-4123-a123-123456789abc',ori
 class UploadData{constructor(){this.data=new Map([['file',new File(['invoice'],'New upload.pdf',{type:'application/pdf'})],['referenceMonth','2026-08']]);}get(key){return this.data.get(key);}set(key,value){this.data.set(key,value);}}
 global.FormData=UploadData;
 Module._load=function(name,parent,main){
+ if(name==='@/app/components/DocumentEvidenceWorkspace')return {__esModule:true,default:()=>null}; // The evidence channel has its own DOM and scope tests.
  if(['@/app/components/BackofficeShell','@/app/components/ProtectedRoute'].includes(name))return {__esModule:true,default:({children})=>React.createElement('div',null,children)};
  if(name==='@/app/components/ui/Button')return {Button:({variant,...props})=>{void variant;return React.createElement('button',props);}};
  if(name==='@/app/providers')return {useAuth:()=>({context,hasPermission:p=>context.currentOrganization.permissions.includes(p)})};
