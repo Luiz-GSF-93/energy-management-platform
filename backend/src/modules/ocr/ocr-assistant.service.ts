@@ -25,7 +25,12 @@ import {assistantHistory} from './ocr-assistant-history';
 import {OcrAutofillService} from './ocr-autofill.service';
 
 type Preview = {token:string; state:string; canCreate:boolean; message:string; values?:unknown; candidates?:unknown; candidate?:{ready?:boolean}; existing?:unknown};
-const canPropose=(p:Preview)=>p.canCreate||(['REVIEWS_PENDING','CONSUMPTION_REQUIRED','MONTHLY_REQUIRED','REVIEW_REQUIRED'].includes(p.state)&&((Array.isArray(p.candidates)&&p.candidates.length>0&&p.candidates.every(c=>c.ready===true))||p.candidate?.ready===true||p.state==='REVIEWS_PENDING'&&Array.isArray(p.values)&&p.values.length>0));
+const canPropose=(p:Preview&{key?:string})=>p.canCreate||(['REVIEWS_PENDING','CONSUMPTION_REQUIRED','MONTHLY_REQUIRED','REVIEW_REQUIRED'].includes(p.state)&&((Array.isArray(p.candidates)&&p.candidates.length>0&&(p.candidates.every(c=>c.ready===true)||p.key==='split-demand'&&p.candidates.length===2&&p.candidates.every(c=>['quantity','rate','amount'].every(k=>typeof c[k]==='string'&&/^\d+(?:\.\d+)?$/.test(c[k])))))||p.candidate?.ready===true||p.state==='REVIEWS_PENDING'&&Array.isArray(p.values)&&p.values.length>0));
+export function confirmedSplitEvidence(expected:unknown,current:unknown,choices:{value:string|null;decision:string}[]){
+ if(!Array.isArray(expected)||!Array.isArray(current)||expected.length!==2||current.length!==2||choices.length!==2||new Set(choices.map(c=>c.value)).size!==2||!['USED','UNUSED'].every(d=>choices.filter(c=>c.decision===d).length===1))return false;
+ const numeric=(rows:any[])=>rows.map(r=>({quantity:r.quantity,rate:r.rate,amount:r.amount}));
+ return ocrReviewDigest(numeric(expected))===ocrReviewDigest(numeric(current))&&current.every(r=>choices.some(c=>c.value===r.quantity&&c.decision===r.classification));
+}
 type Operation = {key:string; label:string; area:string; preview:()=>Promise<Preview>; create:(token:string)=>Promise<unknown>};
 @Injectable()
 export class OcrAssistantService {
@@ -130,7 +135,9 @@ export class OcrAssistantService {
     try{
      const preview=await op.preview(),expected=plan.operations.find(p=>p.key===op.key)!;
      if(!preview.canCreate){receipts.push({key:op.key,label:op.label,state:'REVIEW_REQUIRED',message:preview.message});continue;}
-     if(ocrReviewDigest({values:preview.values??null,candidates:preview.candidates??null,candidate:preview.candidate??null})!==expected.evidenceHash){receipts.push({key:op.key,label:op.label,state:'REVIEW_REQUIRED',message:'Os valores propostos mudaram. Confira esta etapa; lançamentos independentes continuam.'});continue;}
+     const unchanged=ocrReviewDigest({values:preview.values??null,candidates:preview.candidates??null,candidate:preview.candidate??null})===expected.evidenceHash;
+     const explicitlyClassified=op.key==='split-demand'&&confirmedSplitEvidence(expected.candidates,preview.candidates,tasks.filter(f=>f.kind==='demand').map(f=>({value:f.value,decision:body.fields.find((r:any)=>r.key===f.kind+':'+f.key).decision})));
+     if(!unchanged&&!explicitlyClassified){receipts.push({key:op.key,label:op.label,state:'REVIEW_REQUIRED',message:'Os valores propostos mudaram. Confira esta etapa; lançamentos independentes continuam.'});continue;}
      const result=await op.create(preview.token);receipts.push({key:op.key,label:op.label,state:'SAVED_DRAFT',result});
     }catch{receipts.push({key:op.key,label:op.label,state:'VERIFY_REQUIRED',message:'Confira o histórico antes de repetir; lançamentos anteriores foram preservados.'});stopped=true;}
    }
