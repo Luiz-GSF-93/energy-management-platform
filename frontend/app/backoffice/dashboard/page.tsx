@@ -6,6 +6,7 @@ import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
 import FeeAdjustmentNotices from '@/app/components/FeeAdjustmentNotices';
 import DashboardMetrics from '@/app/components/DashboardMetrics';
+import PublishedFinancialDashboard from '@/app/components/PublishedFinancialDashboard';
 
 export default function DashboardPage() {
   const { context, hasPermission } = useAuth();
@@ -38,6 +39,7 @@ export default function DashboardPage() {
           </section>
           {context?.scope==='organization'?<FeeAdjustmentNotices key={context.currentOrganization.id}/>:null}
           {context?<DashboardMetrics key={context.scope==='global'?'global':context.currentOrganization.id} organizationId={context.scope==='global'?null:context.currentOrganization.id}/>:null}
+          {context?.scope==='organization'&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')?<PublishedFinancialDashboard key={JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.role,context.currentOrganization.permissions,context.accessMode])} organizationId={context.currentOrganization.id} organizationName={context.currentOrganization.name||context.currentOrganization.id}/>:null}
         </section>
       </BackofficeShell>
     </ProtectedRoute>

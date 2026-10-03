@@ -268,6 +268,28 @@ a {
   letter-spacing: 0.04em;
 }
 
+.published-financial { margin-top: var(--space-6); }
+.published-financial__filters, .published-financial__actions { display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:end;margin:var(--space-4) 0; }
+.published-financial__filters label { display:grid;gap:var(--space-2); }
+.published-financial__filters input,.published-financial__filters select { padding:var(--space-2);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text); }
+.published-financial__totals { display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:var(--space-3); }
+.published-financial__table { overflow:auto; }
+.published-financial table { width:100%;border-collapse:collapse; }
+.published-financial th,.published-financial td { padding:var(--space-3);text-align:left;border-bottom:1px solid var(--color-border); }
+.published-financial__publication { margin:var(--space-4) 0;padding:var(--space-4);border:1px solid var(--color-border);border-radius:var(--radius-md);break-inside:avoid; }
+.published-financial__publication code { overflow-wrap:anywhere; }
+.published-financial__signature { font-size:.8rem;font-style:italic;color:var(--color-text-muted); }
+@media print {
+ body:has(.published-financial__report) * { visibility:hidden; }
+ body:has(.published-financial__report) .published-financial__report,body:has(.published-financial__report) .published-financial__report * { visibility:visible; }
+ body:has(.published-financial__report) .backoffice { display:block; }
+ body:has(.published-financial__report) .backoffice-main { margin:0;padding:0; }
+ body:has(.published-financial__report) .backoffice>:not(.backoffice-main),body:has(.published-financial__report) .backoffice-main>:not(.backoffice-page),body:has(.published-financial__report) .backoffice-page>:not(.published-financial),body:has(.published-financial__report) .published-financial>:not(.published-financial__report) { display:none!important; }
+ .published-financial__report { position:static;width:100%;background:white;color:black;font-size:10pt; }
+ .published-financial__report .ds-card { background:white;color:black;border:1px solid #bbb;box-shadow:none; }
+ .published-financial__table { overflow:visible; }
+}
+
 .auth-account-preview {
   display: flex;
   align-items: center;

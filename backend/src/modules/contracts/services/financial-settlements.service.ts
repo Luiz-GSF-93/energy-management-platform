@@ -5,7 +5,8 @@ import {TenantContext} from '../../../common/interfaces/tenant-context.interface
 import {PERMISSIONS as P} from '../../../common/constants/permissions';
 import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {PreparationQueryDto} from '../dto/preparation.dto';
-import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto} from '../dto/financial-settlements.dto';
+import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto,PublishedFinancialQueryDto} from '../dto/financial-settlements.dto';
+import {publishedFinancialSummary} from './published-financial-summary';
 import {CalculationPreparationService} from './preparation.service';
 import {frozenPreparationClient} from './frozen-preparation-client';
 import {customerFinancialPreview} from './customer-financial-preview';
@@ -57,6 +58,33 @@ export class FinancialSettlementsService {
  async one(groupId:string,t:TenantContext){
   await this.allowed(t,P.ORGANIZATION_CONTRACTS_VIEW);const {rows,payload,first}=await this.load(groupId,t);
   return {...this.summary(first),unitIds:rows.map((row:any)=>row.consumer_unit_id),financial:payload.financial,preparations:payload.preparations,preparedBy:payload.preparedBy,captureConsistency:'SINGLE_DATABASE_STATEMENT',canManage:this.canManage(t)};
+ }
+ async published(input:PublishedFinancialQueryDto,t:TenantContext){
+  await this.allowed(t,P.ORGANIZATION_CONTRACTS_VIEW);
+  if(!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('O painel financeiro exige acesso de Backoffice.');
+  const d=await validateWriteDto(PublishedFinancialQueryDto,input);
+  const ordinal=(m:string)=>Number(m.slice(0,4))*12+Number(m.slice(5,7));
+  if(d.from>d.to||ordinal(d.to)-ordinal(d.from)>=12)throw new BadRequestException('Selecione um período de até 12 meses, em ordem crescente.');
+  if(d.customerId)await this.customer(d.customerId,t);
+  let query=this.client().from('monthly_energy_settlements').select('financial_group_id,customer_id,month,version_number,status,validation_status,financial_hash').eq('organization_id',t.organizationId).eq('financial_format','financial-settlement-1.0').eq('status','PUBLISHED').eq('validation_status','VALIDATED').gte('month',d.from+'-01').lte('month',d.to+'-01');
+  if(d.customerId)query=query.eq('customer_id',d.customerId);
+  const result=await query.order('month',{ascending:false}).order('version_number',{ascending:false}).limit(1000);this.fail(result.error);
+  if(!Array.isArray(result.data)||result.data.length>=1000)throw new BadRequestException('Consulta extensa. Reduza o período ou selecione um cliente; nenhum total parcial foi emitido.');
+  const latest=new Map<string,any>();
+  for(const row of result.data){
+   const month=String(row.month).slice(0,7),key=row.customer_id+'|'+month;
+   if(row.status!=='PUBLISHED'||row.validation_status!=='VALIDATED'||!row.financial_group_id||!Number.isInteger(row.version_number)||row.version_number<1||month<d.from||month>d.to||(d.customerId&&row.customer_id!==d.customerId))throw new InternalServerErrorException('Publicação fora do escopo solicitado.');
+   const prior=latest.get(key);
+   if(!prior||row.version_number>prior.version_number)latest.set(key,row);
+   else if(row.version_number===prior.version_number&&(row.financial_group_id!==prior.financial_group_id||row.financial_hash!==prior.financial_hash))throw new InternalServerErrorException('Versão publicada ambígua.');
+  }
+  const publications=[];
+  for(const row of latest.values()){
+   const loaded=await this.load(row.financial_group_id,t);
+   if(loaded.first.status!=='PUBLISHED'||loaded.rows.some((r:any)=>r.validation_status!=='VALIDATED'||!r.approved_at||!r.published_at||!r.published_by)||loaded.first.customer_id!==row.customer_id||loaded.first.version_number!==row.version_number||loaded.first.financial_hash!==row.financial_hash||String(loaded.first.month)!==String(row.month))throw new InternalServerErrorException('A publicação mudou durante a consulta. Atualize o painel.');
+   publications.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,customerName:loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===row.customer_id)?.company_name??row.customer_id,reservations:loaded.payload.reservations});
+  }
+  return publishedFinancialSummary(t.organizationId,d,publications);
  }
  async prepare(input:PrepareFinancialSettlementDto,t:TenantContext){
   await this.allowed(t,P.ORGANIZATION_CONTRACTS_CREATE);const d=await validateWriteDto(PrepareFinancialSettlementDto,input);const u=await this.unit(d.consumerUnitId,t);
