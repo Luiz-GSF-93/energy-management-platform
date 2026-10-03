@@ -1,4 +1,5 @@
 'use client';
+import type {OcrAutofill} from './ocr-autofill';
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
@@ -24,7 +25,7 @@ const statuses:Record<string,string>={DRAFT:'Rascunho',APPROVED:'Aprovado',RETIR
 const bands:Record<string,string>={ALL:'Todos / sem distinção',PEAK:'Ponta',OFF_PEAK:'Fora ponta'};
 const seed=():Draft=>({monetarySource:null,taxBasis:null,embeddedTaxCodes:[],consumerUnitId:'',kind:'TARIFF',componentCode:'TE',label:'Energia (TE)',scenario:'ACR',timeBand:'ALL',measure:'BRL_KWH',amount:'',treatment:'NET',includedTaxes:'',baseRule:'',direction:'DEBIT',source:'',notes:'',startDate:'',endDate:''});
 const fromRow=(r:Row):Draft=>({monetarySource:r.monetary_source??null,taxBasis:r.tax_basis??null,embeddedTaxCodes:r.embedded_tax_codes??[],consumerUnitId:r.consumer_unit_id,kind:r.kind,componentCode:r.component_code,label:r.label,scenario:r.scenario,timeBand:r.time_band,measure:r.measure,amount:r.amount_text,treatment:r.treatment,includedTaxes:r.included_taxes,baseRule:r.base_rule,direction:r.direction,source:r.source,notes:r.notes,startDate:r.start_date.slice(0,10),endDate:r.end_date.slice(0,10)});
-export default function CalculationParameters({customerId,units,onDirty,initialContext}:{initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(dirty:boolean)=>void}){
+export default function CalculationParameters({customerId,units,onDirty,initialContext,autofill}:{autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(dirty:boolean)=>void}){
  const {hasPermission}=useAuth(),create=hasPermission(PERM.create),update=hasPermission(PERM.update);
  const [showEditor,setShowEditor]=useState(!initialContext);
  const [contextFilter,setContextFilter]=useState(!!initialContext);
@@ -59,7 +60,7 @@ export default function CalculationParameters({customerId,units,onDirty,initialC
  const available=units.filter(u=>!customerId||u.customer_id===customerId),unit=units.find(u=>u.id===draft.consumerUnitId),tax=draft.kind==='TAX';
  const filtered=rows.filter(r=>(!contextFilter||!initialContext||((!initialContext.scenario||r.scenario===initialContext.scenario)&&(!initialContext.component||r.component_code===initialContext.component)&&(!initialContext.recordId||r.id===initialContext.recordId)))&&(!customerId||r.customer_id===customerId)&&(!kindFilter||r.kind===kindFilter)&&(!unitFilter||r.consumer_unit_id===unitFilter)&&(!statusFilter||r.status===statusFilter)).sort((a,b)=>b.start_date.localeCompare(a.start_date));
  return <section className="backoffice-page"><h2>Parâmetros de cálculo</h2><p>Cadastre tarifas, tributos e custos por unidade, cenário e vigência. As memórias de cálculo usam configurações aprovadas; o fechamento financeiro ACL × ACR ainda depende da consolidação final.</p>
- <TariffLibrary customerId={customerId} units={units} onApplied={()=>{void reload();}} />
+ <TariffLibrary initialContext={initialContext} autofill={autofill} customerId={customerId} units={units} onApplied={()=>{void reload();}} />
  {contextFilter?<Alert>Exibindo os parâmetros relacionados à pendência. Confira se as vigências cobrem {initialContext?.month} e aprove os rascunhos adequados.<Button variant='secondary' onClick={()=>{setContextFilter(false);setKindFilter('');setUnitFilter('');setStatusFilter('');}}>Mostrar todos os parâmetros deste cliente</Button></Alert>:null}
  {error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
  <Button variant="secondary" disabled={busy||loading} onClick={()=>void reload()}>Atualizar parâmetros</Button><Button variant='secondary' disabled={busy||loading||checking||dirty||failed} onClick={()=>void inspect()}>{checking?'Verificando...':'Verificar cadastro'}</Button>{checks?<p role='status'>Verificação cadastral concluída. As pendências aparecem nos parâmetros abaixo. Esta verificação não substitui os dados das faturas nem calcula o resultado ACL × ACR.</p>:null}

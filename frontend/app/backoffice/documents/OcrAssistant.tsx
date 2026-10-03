@@ -1,4 +1,6 @@
 'use client';
+import type {OcrAutofill} from '../contracts/ocr-autofill';
+import OcrCdeReviews from './OcrCdeReviews';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {ocrContractLink,type OcrDestination} from '../contracts/ocr-navigation';
@@ -15,7 +17,7 @@ type Finding={code:string;section:string;severity:string;message:string};
 type FieldTask={kind:string;key:string;label:string;value:string|null;unit:string;description:string;source:string;canConfirm:boolean;confirmed:boolean};
 type Operation={canPropose?:boolean;key:string;label:string;area:OcrDestination;state:string;canCreate:boolean;message:string;values?:unknown;candidates?:unknown};
 type History={inputId:string;month:string;version:number;previous:string|null;current:string|null;state:string;message:string};
-type Plan={canValidate?:boolean;fieldTasks?:FieldTask[];token:string;documentId:string;unitName:string;month:string;checkedAt:string;message:string;canPrepare:boolean;
+type Plan={prefilled?:OcrAutofill;canValidate?:boolean;fieldTasks?:FieldTask[];token:string;documentId:string;unitName:string;month:string;checkedAt:string;message:string;canPrepare:boolean;
  counts:{blockers:number;reviews:number};confidence:ReadoutSummary;
  values:{key:string;label:string;value:string|null;unit:string;state:string;sources:string[];review:null|{decision:string;version:number;author:string}}[];
  comparisons:History[];operations:Operation[];findings:Finding[];
@@ -107,6 +109,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
    {form?<OcrAssistantForm key={form} id={id} area={form} onClose={()=>{setForm(null);void load();}}/>:plan&&<>
     <h3>{plan.unitName} · {plan.month}</h3><p>{plan.message}</p><small>Consulta em {new Date(plan.checkedAt).toLocaleString('pt-BR')}{stale?' · Atualização obrigatória antes de lançar':''}</small>
     <BotEnergyHelp key={id} documentId={id}/>
+    {plan.prefilled&&<section style={panel} aria-label="Preenchimentos automáticos"><h3>Preenchidos pelo bot-energy para sua conferência</h3><p>{plan.prefilled.message}</p><p>Consumos: {Object.keys(plan.prefilled.measurements).length} campos · Alíquotas: {plan.prefilled.taxes.length} · Custos identificados: {plan.prefilled.costs.length}. A gravação auditada ocorre após sua validação; aprovação financeira exclusiva do gestor/administrador.</p><ul>{plan.prefilled.taxes.map(t=><li key={t.code}>{t.code}: {t.rate}% · {t.source}<p>{t.message}</p></li>)}</ul>{plan.prefilled.library?<p>Biblioteca compatível: versão {plan.prefilled.library.version} · {plan.prefilled.library.start} a {plan.prefilled.library.end} · {plan.prefilled.library.items.length} tarifas {plan.prefilled.library.scenario}. Abra “Tarifas e parâmetros” para conferir as bases tributárias já acompanhadas das alíquotas da fatura.</p>:<p>{plan.prefilled.libraryState==='AMBIGUOUS'?'Mais de uma tabela compatível: selecionar a vigência correta.':'Biblioteca sem correspondência única para todo o mês.'}</p>}</section>}
     <section style={panel} aria-label="O que precisa da sua validação"><h3>O que precisa da sua validação</h3><p>{pendingFields(plan.fieldTasks??[])} campo(s) ainda precisam de conferência. Configurações vigentes e conferências já salvas são preservadas.</p><ul>{(plan.fieldTasks??[]).filter(f=>!f.confirmed).map(f=><li key={f.kind+':'+f.key}><strong>{f.label}: {f.value??'Não identificado'} {f.unit}</strong><p>{f.canConfirm?'Conferir com o PDF e validar abaixo.':'Revisão específica necessária; não pode ser confirmado em lote.'} · Fonte: {f.source||'não identificada'}</p></li>)}</ul><p>Use “Conferir dados ou solicitar revisão” para registrar dúvidas e correções com justificativa. Nenhum dado ausente será tratado como zero.</p></section>
     <section style={panel}><h3>1. Dados extraídos e dúvidas</h3>
      <p>Confiança mínima dos campos essenciais: {plan.confidence.criticalConfidence.complete&&plan.confidence.criticalConfidence.minimumAll!==null?(plan.confidence.criticalConfidence.minimumAll*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':'indeterminada — informação incompleta'}.</p>
@@ -114,7 +117,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
      <OcrReadout id={id} summary={plan.confidence}/>
      <ul>{plan.values.map(v=><li key={v.key}><strong>{v.label}: {v.value??'Não identificado'} {v.unit}</strong><p>{v.review?.decision==='CONFIRMED'?'Conferência salva · versão '+v.review.version+' · '+v.review.author:v.review?.decision==='NEEDS_CORRECTION'?'Correção solicitada':'Conferência pendente'} · Fonte: {v.sources.join(', ')||'não identificada'}</p></li>)}</ul>
      <button type="button" onClick={()=>setReview(v=>!v)}>{review?'Ocultar campos de revisão':'Conferir dados ou solicitar revisão'}</button>
-     {review&&<><p>Abra o campo correspondente, escolha confirmar ou solicitar correção e registre a evidência ou o requisito de revisão. Depois atualize o assistente.</p><OcrIdentityPreview id={id}/><OcrFieldReviews id={id} canReview={canProcess}/><OcrDemandReviews id={id} canReview={canProcess}/></>}
+     {review&&<><p>Abra o campo correspondente, escolha confirmar ou solicitar correção e registre a evidência ou o requisito de revisão. Depois atualize o assistente.</p><OcrIdentityPreview id={id}/><OcrFieldReviews id={id} canReview={canProcess}/><OcrDemandReviews id={id} canReview={canProcess}/><OcrCdeReviews id={id} onSaved={()=>void load()}/></>}
     </section>
     <section style={panel}><h3>2. Comparação com o histórico da unidade</h3>{!plan.comparisons.length?<p>Não há competência anterior validada disponível para comparar. Nenhum histórico foi presumido.</p>:<ul>{plan.comparisons.map(h=><li key={h.inputId}><strong>{h.month} · versão {h.version}: {h.previous??'não informado'} kWh</strong><p>{h.message}</p></li>)}</ul>}</section>
     <section style={panel}><h3>3. Cadastros e vigências</h3><p>Configurações que cobrem a competência são reutilizadas. O assistente solicita complementação quando há ausência, conflito ou bloqueio; a fatura não determina preço do fornecedor nem honorários.</p><p>Complete as informações aqui no assistente. Ao voltar à conferência, os dados serão consultados novamente.</p>

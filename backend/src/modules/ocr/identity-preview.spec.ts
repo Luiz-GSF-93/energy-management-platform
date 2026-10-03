@@ -3,6 +3,8 @@ const c:any={customer:{company_name:'EMPRESA LTDA',document:'12345678000199'},un
 const candidate=(name:string,text:string,confidence:number|null=.99):any=>({name,label:name,source:name,value:{text,confidence,pages:[1],spans:[{offset:0,length:text.length}],issues:[]}});
 const layout=():any=>({layoutId:'cpfl-paulista-a',fields:[candidate('customer','EMPRESA LTDA'),candidate('customerTaxId','12.345.678/0001-99'),candidate('unit','00.123'),candidate('serviceAddress','RUA UM 10'),candidate('reference','AGO/2026'),candidate('classification','A4 VERDE LIVRE')]});
 describe('current identity comparison',()=>{
+ it('treats a separate trailing postal code as supplemental, without confirming OCR',()=>{const l=layout();l.fields[3].value.text='RUA UM 10\n14029-123';l.fields[3].value.confidence=null;expect(identityPreview(l,c).checks[3]).toMatchObject({comparison:'EQUAL',state:'REVIEW'});});
+ it('keeps different street numbers and explicit postal codes divergent',()=>{const l=layout();l.fields[3].value.text='RUA UM 11\n14029-123';expect(identityPreview(l,c).checks[3].comparison).toBe('DIFFERENT');l.fields[3].value.text='RUA UM 10\n14029-123';expect(identityPreview(l,{...c,unit:{...c.unit,address:'Rua Um 10\n14029-999'}}).checks[3].comparison).toBe('DIFFERENT');});
  it('compares six fields without approving import',()=>expect(identityPreview(layout(),c)).toMatchObject({matched:6,total:6,canImport:false}));
  it('keeps leading zeroes in UC',()=>{const l=layout();l.fields[2].value.text='123';expect(identityPreview(l,c).checks[2].state).toBe('MISMATCH');});
  it('does not fuzzy-match company names',()=>{const l=layout();l.fields[0].value.text='EMPRESA DE LTDA';expect(identityPreview(l,c).checks[0].state).toBe('MISMATCH');});

@@ -11,13 +11,14 @@ import CommercialTerms from '../contracts/CommercialTerms';
 import CalculationParameters from '../contracts/CalculationParameters';
 import MonthlyInputs from '../contracts/MonthlyInputs';
 import MonthlyCosts from '../contracts/MonthlyCosts';
+import type {OcrAutofill} from '../contracts/ocr-autofill';
 
 export default function OcrAssistantForm({id,area,onClose}:{id:string;area:OcrDestination;onClose:()=>void}){
  const {hasPermission}=useAuth();
- const [data,setData]=useState<{context:CorrectionContext;customers:Customer[];units:Unit[]}|null>(null),[error,setError]=useState(''),[dirty,setDirty]=useState(false),[confirm,setConfirm]=useState(false);
+ const [data,setData]=useState<{context:CorrectionContext;customers:Customer[];units:Unit[];autofill:OcrAutofill}|null>(null),[error,setError]=useState(''),[dirty,setDirty]=useState(false),[confirm,setConfirm]=useState(false);
  useEffect(()=>{let active=true;
-  Promise.all([apiRequest<Customer[]>('/api/v1/customers'),apiRequest<Unit[]>('/api/v1/consumer-units'),apiRequest<{documentId:string;customerId:string;unitId:string;month:string}>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr/calculation-context')])
-   .then(([customers,units,context])=>{if(active)setData({customers,units,context:ocrNavigationContext({id,tab:area},context,customers,units)});})
+  Promise.all([apiRequest<Customer[]>('/api/v1/customers'),apiRequest<Unit[]>('/api/v1/consumer-units'),apiRequest<{documentId:string;customerId:string;unitId:string;month:string}>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr/calculation-context'),apiRequest<OcrAutofill>('/api/v1/documents/'+encodeURIComponent(id)+'/ocr/assistant/autofill')])
+   .then(([customers,units,context,autofill])=>{if(active)setData({customers,units,autofill,context:ocrNavigationContext({id,tab:area},context,customers,units)});})
    .catch(e=>{if(active)setError(e instanceof Error?e.message:'Não foi possível carregar o formulário da unidade.');});
   return()=>{active=false;};
  },[id,area]);
@@ -30,9 +31,9 @@ export default function OcrAssistantForm({id,area,onClose}:{id:string;area:OcrDe
    {area==='distributor'&&<Distributor customers={data.customers} units={data.units} customerId={data.context.customerId} initialContext={data.context} onDirty={setDirty} onUnits={units=>setData(previous=>previous?{...previous,units}:null)}/>}
    {area==='supply'&&<SupplyContracts customerId={data.context.customerId} initialContext={data.context} onDirty={setDirty}/>}
    {area==='management'&&<CommercialTerms kind="management" customerId={data.context.customerId} units={data.units} customers={data.customers} initialContext={data.context} onDirty={setDirty}/>}
-   {area==='parameters'&&<CalculationParameters customerId={data.context.customerId} units={data.units} initialContext={data.context} onDirty={setDirty}/>}
-   {area==='monthly'&&<MonthlyInputs customerId={data.context.customerId} units={data.units} initialContext={data.context} onDirty={setDirty}/>}
-   {area==='costs'&&<MonthlyCosts customerId={data.context.customerId} units={data.units} initialContext={data.context} onDirty={setDirty}/>}
+   {area==='parameters'&&<CalculationParameters customerId={data.context.customerId} units={data.units} initialContext={data.context} autofill={data.autofill} onDirty={setDirty}/>}
+   {area==='monthly'&&<MonthlyInputs customerId={data.context.customerId} units={data.units} initialContext={data.context} autofill={data.autofill} onDirty={setDirty}/>}
+   {area==='costs'&&<MonthlyCosts customerId={data.context.customerId} units={data.units} initialContext={data.context} autofill={data.autofill} onDirty={setDirty}/>}
    {!hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&<p role="alert">Sem permissão para consultar contratos.</p>}
   </>}
  </section>;
