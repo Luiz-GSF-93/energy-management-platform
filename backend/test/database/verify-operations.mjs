@@ -28,5 +28,23 @@ try{
  ok((await db.query('select count(*)::int n from operation_record_history')).rows[0].n===7);
  await db.exec('RESET ROLE');await assert.rejects(()=>db.exec('delete from operation_record_history'),x=>x.code==='P2032');checks++;
  for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>db.exec('select * from operation_records'),x=>x.code==='42501');checks++;await assert.rejects(()=>save(),x=>x.code==='42501');checks++;await db.exec('RESET ROLE');}
+ await db.exec(`CREATE TABLE document_ocr_jobs(id uuid,organization_id text,document_id text,state text,updated_at timestamptz);CREATE TABLE energy_contracts(id text,organization_id text,status text,end_date timestamp);CREATE TABLE management_contracts(id text,organization_id text,status text,end_date timestamp);CREATE TABLE licenses(id text,organization_id text,status text,active boolean,end_date date,renewal_date date);INSERT INTO energy_contracts VALUES('energy-a','a','ACTIVE',now()+interval '5 days'),('energy-b','b','ACTIVE',now()+interval '5 days');INSERT INTO management_contracts VALUES('management-a','a','ACTIVE',now()+interval '15 days');INSERT INTO licenses VALUES('licence-a','a','ACTIVE',true,null,(now()+interval '10 days')::date);`);
+ const job=randomUUID();await db.query("INSERT INTO document_ocr_jobs VALUES($1,'a','doc','SUCCEEDED',now())",[job]);
+ await db.exec(await readFile(new URL('../../src/database/migrations/20261003_f3_2_source_alerts.sql',import.meta.url),'utf8'));
+ const readSource=async(key,actor=operator,org='a')=>db.query('select read_source_operation_notification($1,$2,$3)',[org,actor,key]);
+ const fingerprint='a'.repeat(64),energyKey='energy:energy-a:'+fingerprint;
+ await assert.rejects(()=>readSource(energyKey),x=>x.code==='P2031');checks++;
+ await db.query("UPDATE roles SET permissions=permissions||$1::jsonb WHERE id=$2",[JSON.stringify(['60f9690a-145b-4dba-b23f-9f945baca296','8f105b02-4443-49de-b188-847e0284e7ed','8c5673e4-115c-4ab7-bb11-3b410eddcad3']),operator]);
+ await db.exec('SET ROLE service_role');
+ for(const key of [energyKey,'management:management-a:'+fingerprint,'license:licence-a:'+fingerprint,'ocr:'+job+':'+fingerprint]){await readSource(key);checks++;}
+ await readSource(energyKey);ok((await db.query("SELECT count(*)::int n FROM operation_notification_reads WHERE notification_key=$1",[energyKey])).rows[0].n===1);
+ await assert.rejects(()=>readSource('energy:energy-b:'+fingerprint),x=>x.code==='P2033');checks++;
+ await assert.rejects(()=>readSource(energyKey,reader),x=>x.code==='P2031');checks++;
+ await assert.rejects(()=>readSource('energy:energy-a:fake'),x=>x.code==='P2031');checks++;
+ await db.query('select read_operation_notification($1,$2,$3)',['a',operator,req.id+':1']);checks++;
+ await db.exec('RESET ROLE');
+ await db.query("UPDATE energy_contracts SET status='DRAFT' WHERE id='energy-a'");await assert.rejects(()=>readSource(energyKey),x=>x.code==='P2033');checks++;
+ await db.query("UPDATE document_ocr_jobs SET updated_at=now()-interval '8 days'");await assert.rejects(()=>readSource('ocr:'+job+':'+fingerprint),x=>x.code==='P2033');checks++;
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>readSource('license:licence-a:'+fingerprint),x=>x.code==='42501');checks++;await db.exec('RESET ROLE');}
  console.log(JSON.stringify({checks,result:'PASS'}));
 }finally{await db.close();}
