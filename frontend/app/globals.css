@@ -262,6 +262,28 @@ a {
   color: var(--color-text-muted);
 }
 
+.auth-brand__powered {
+  font-size: 0.875rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.auth-account-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.auth-account-preview [role="link"] {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.auth-account-preview small {
+  font-size: 0.75rem;
+}
+
 .auth-form {
   display: grid;
   gap: var(--space-6);
