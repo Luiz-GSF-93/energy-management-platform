@@ -14,3 +14,7 @@ export class PublishedFinancialQueryDto {
  @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) to!:string;
  @IsOptional() @IsUUID() customerId?:string;
 }
+export class PortalFinancialQueryDto {
+ @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) from!:string;
+ @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) to!:string;
+}

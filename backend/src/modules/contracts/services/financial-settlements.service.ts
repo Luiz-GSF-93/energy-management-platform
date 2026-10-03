@@ -5,7 +5,7 @@ import {TenantContext} from '../../../common/interfaces/tenant-context.interface
 import {PERMISSIONS as P} from '../../../common/constants/permissions';
 import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {PreparationQueryDto} from '../dto/preparation.dto';
-import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto,PublishedFinancialQueryDto} from '../dto/financial-settlements.dto';
+import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto,PublishedFinancialQueryDto,PortalFinancialQueryDto} from '../dto/financial-settlements.dto';
 import {publishedFinancialSummary} from './published-financial-summary';
 import {CalculationPreparationService} from './preparation.service';
 import {frozenPreparationClient} from './frozen-preparation-client';
@@ -63,6 +63,9 @@ export class FinancialSettlementsService {
   await this.allowed(t,P.ORGANIZATION_CONTRACTS_VIEW);
   if(!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('O painel financeiro exige acesso de Backoffice.');
   const d=await validateWriteDto(PublishedFinancialQueryDto,input);
+  return this.publishedRead(d,t);
+ }
+ private async publishedRead(d:PublishedFinancialQueryDto,t:TenantContext){
   const ordinal=(m:string)=>Number(m.slice(0,4))*12+Number(m.slice(5,7));
   if(d.from>d.to||ordinal(d.to)-ordinal(d.from)>=12)throw new BadRequestException('Selecione um período de até 12 meses, em ordem crescente.');
   if(d.customerId)await this.customer(d.customerId,t);
@@ -85,6 +88,42 @@ export class FinancialSettlementsService {
    publications.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,customerName:loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===row.customer_id)?.company_name??row.customer_id,reservations:loaded.payload.reservations});
   }
   return publishedFinancialSummary(t.organizationId,d,publications);
+ }
+ private async portalMember(t:TenantContext){
+  if(!t.organizationId||!t.userId)throw new UnauthorizedException('Contexto organizacional ausente.');
+  if(t.accessMode||t.role!=='consulta')return null;
+  const r=await this.client().from('organization_members').select('organization_id,user_id,role_id,status,affiliation_type,exclusive_customer_id,roles(id,name,scope,organization_id,permissions)').eq('organization_id',t.organizationId).eq('user_id',t.userId).eq('status','active').maybeSingle();this.fail(r.error);
+  const member=r.data,role=member?.roles;
+  if(!member||member.organization_id!==t.organizationId||member.user_id!==t.userId||member.status!=='active'||member.role_id!==t.roleId||role?.id!==t.roleId||role?.organization_id!==t.organizationId||role?.scope!=='organization'||role?.name!=='consulta')throw new ForbiddenException('Vínculo de consulta indisponível. Atualize seu acesso.');
+  return member.affiliation_type==='external'?member:null;
+ }
+ async portalAccess(t:TenantContext){
+  const member=await this.portalMember(t);
+  return {organizationId:t.organizationId,audience:typeof member?.exclusive_customer_id==='string'&&member.exclusive_customer_id?'client':'backoffice'};
+ }
+ private async portalCustomer(t:TenantContext){
+  const member=await this.portalMember(t);
+  if(!member||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!Array.isArray(member.roles.permissions)||!member.roles.permissions.includes(P.DOCUMENTS_REPORTS_VIEW)||typeof member.exclusive_customer_id!=='string'||!member.exclusive_customer_id)throw new ForbiddenException('O portal exige consulta externa, permissão de relatórios e vínculo exclusivo com um cliente. Solicite a conferência à equipe de gestão.');
+  await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
+  const c=await this.client().from('customers').select('id,organization_id,status').eq('id',member.exclusive_customer_id).eq('organization_id',t.organizationId).is('deleted_at',null).maybeSingle();this.fail(c.error);
+  if(!c.data||c.data.id!==member.exclusive_customer_id||c.data.organization_id!==t.organizationId||c.data.status!=='ACTIVE')throw new ForbiddenException('Cliente indisponível para consulta. Solicite a conferência à equipe de gestão.');
+  return member.exclusive_customer_id as string;
+ }
+ async portalFinancial(input:PortalFinancialQueryDto,t:TenantContext){
+  const customerId=await this.portalCustomer(t),d=await validateWriteDto(PortalFinancialQueryDto,input);
+  const result=await this.publishedRead({...d,customerId},t);
+  if(await this.portalCustomer(t)!==customerId)throw new ForbiddenException('O vínculo mudou durante a consulta. Atualize o portal.');
+  return this.clientProjection(result,customerId);
+ }
+ async portalPreview(input:PublishedFinancialQueryDto,t:TenantContext){
+  if(!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('A prévia do portal exige gestor ou administrador.');
+  if(!input.customerId)throw new BadRequestException('Selecione um cliente publicado para conferir o portal.');
+  const result=await this.published(input,t);
+  return this.clientProjection(result,input.customerId);
+ }
+ private clientProjection(result:ReturnType<typeof publishedFinancialSummary>,customerId:string){
+  // Deliberately project published figures only; never expose OCR, captured tables or internal notes.
+  return {...result,audience:'client',customerId,disclosure:'Somente a última versão publicada de cada mês do seu cliente. Meses sem publicação não representam custo zero. Publicações com ressalvas exigem consulta à equipe de gestão sobre as condições desta versão.',rows:result.rows.map(row=>({id:row.id,customerId:row.customerId,customerName:row.customerName,month:row.month,version:row.version,publishedAt:row.publishedAt,payloadHash:row.payloadHash,units:row.units,amounts:row.amounts,publicationNote:'',reservations:row.reservations.length?['Resultado publicado com ressalvas. Consulte sua equipe de gestão para conhecer as condições desta versão.']:[]}))};
  }
  async prepare(input:PrepareFinancialSettlementDto,t:TenantContext){
   await this.allowed(t,P.ORGANIZATION_CONTRACTS_CREATE);const d=await validateWriteDto(PrepareFinancialSettlementDto,input);const u=await this.unit(d.consumerUnitId,t);

@@ -1,4 +1,5 @@
 import {FinancialSettlementsController} from './controllers/financial-settlements.controller';
+import {ClientPortalController} from './controllers/client-portal.controller';
 import {FinancialSettlementsService} from './services/financial-settlements.service';
 import {TariffLibraryService} from './services/tariff-library.service';
 import {TariffLibraryController} from './controllers/tariff-library.controller';
@@ -33,7 +34,7 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule,ConsumerUnitsModule],
-  controllers: [FinancialSettlementsController,TariffLibraryController,SpotReconciliationController,FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  controllers: [ClientPortalController,FinancialSettlementsController,TariffLibraryController,SpotReconciliationController,FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
   providers: [FinancialSettlementsService,TariffLibraryService,SpotReconciliationService,FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService],
 })
