@@ -10,6 +10,7 @@ import OcrFieldReviews from './OcrFieldReviews';
 import OcrDemandReviews from './OcrDemandReviews';
 import OcrHomologation from './OcrHomologation';
 import OcrReadout,{type ReadoutSummary} from './OcrReadout';
+import {pendingFields,type InboxUpdate} from './assistant-inbox';
 type Finding={code:string;section:string;severity:string;message:string};
 type FieldTask={kind:string;key:string;label:string;value:string|null;unit:string;description:string;source:string;canConfirm:boolean;confirmed:boolean};
 type Operation={canPropose?:boolean;key:string;label:string;area:OcrDestination;state:string;canCreate:boolean;message:string;values?:unknown;candidates?:unknown};
@@ -31,12 +32,19 @@ function Evidence({value}:{value:unknown}) {
  const rows=Array.isArray(value)?value:[value];
  return <ul>{rows.map((row,i)=><li key={i}>{row&&typeof row==='object'?Object.entries(row).filter(([k,v])=>!['token','sourceHash'].includes(k)&&['string','number'].includes(typeof v)).map(([k,v])=>(evidenceNames[k]??k)+': '+(evidenceValues[String(v)]??String(v))).join(' · '):String(row)}</li>)}</ul>;
 }
-export default function OcrAssistant({id,canProcess,autoStart=false}:{id:string;canProcess:boolean;autoStart?:boolean}) {
+export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=true,openRequest=0,onUpdate}:{id:string;canProcess:boolean;autoStart?:boolean;autoOpen?:boolean;openRequest?:number;onUpdate?:(id:string,update:InboxUpdate)=>void}) {
  const dialog=useRef<HTMLDialogElement>(null),generation=useRef(0),writing=useRef(false),controller=useRef<AbortController|null>(null);
  const [writeBusy,setWriteBusy]=useState(false);
  const [activity,setActivity]=useState<AssistantActivity|null>(null),[form,setForm]=useState<OcrDestination|null>(null),[choices,setChoices]=useState<Record<string,string>>({}),[note,setNote]=useState(''),[checkedPdf,setCheckedPdf]=useState(false);
  const [plan,setPlan]=useState<Plan|null>(null),[busy,setBusy]=useState(autoStart),[stale,setStale]=useState(true),[error,setError]=useState('');
  const [selected,setSelected]=useState<string[]>([]),[ack,setAck]=useState(false),[receipts,setReceipts]=useState<Receipt[]>([]),[notice,setNotice]=useState(''),[review,setReview]=useState(false);
+ const updates=useRef(onUpdate);
+ useEffect(()=>{updates.current=onUpdate;},[onUpdate]);
+ useEffect(()=>{
+  if(!autoStart&&!plan&&!error&&!busy)return;
+  const summary:InboxUpdate={state:busy?'PREPARING':error||stale?'FAILED':receipts.length?'RECORDED':'READY',message:busy?'bot-energy conferindo fontes, histórico e vigências…':error||stale?'Conferência interrompida. Abra e atualize antes de validar.':receipts.length?'Confira os recibos e as revisões restantes. Aprovação financeira ainda não realizada.':'Propostas prontas para a validação do operador.',...(plan?{blockers:plan.counts.blockers,reviews:plan.counts.reviews,fields:pendingFields(plan.fieldTasks??[]),proposals:plan.operations.filter(o=>o.canPropose??o.canCreate).length}:{})};
+  updates.current?.(id,summary);
+ },[id,autoStart,plan,error,busy,stale,receipts]);
  const install=useCallback((next:Plan)=>{setPlan(next);setSelected(next.operations.filter(o=>o.canPropose??o.canCreate).map(o=>o.key));setChoices(Object.fromEntries((next.fieldTasks??[]).filter(f=>f.canConfirm&&!f.confirmed&&f.kind!=='demand').map(f=>[f.kind+':'+f.key,'CONFIRMED'])));setCheckedPdf(false);setAck(false);setStale(false);},[]);
  const load=useCallback(async()=>{
   if(writing.current)return;
@@ -48,9 +56,13 @@ export default function OcrAssistant({id,canProcess,autoStart=false}:{id:string;
  },[id,install]);
  useEffect(()=>{
   let active=true;const request=generation;
-  if(autoStart)queueMicrotask(()=>{if(active){dialog.current?.showModal();void load();}});
+  if(autoStart)queueMicrotask(()=>{if(active){if(autoOpen)dialog.current?.showModal();void load();}});
   return()=>{active=false;request.current++;controller.current?.abort();};
- },[autoStart,load]);
+ },[autoStart,autoOpen,load]);
+ useEffect(()=>{
+  if(!openRequest)return;
+  dialog.current?.showModal();void load();
+ },[openRequest,load]);
  useEffect(()=>{
   const refresh=()=>{if(dialog.current?.open&&!writing.current&&!form)void load();};
   window.addEventListener('focus',refresh);
@@ -86,7 +98,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false}:{id:string;
   {activityView}
   <p>{busy?'Conferindo extração e cadastros…':plan?plan.counts.blockers+' pendência(s) para preparar apuração':'Assistente de conferência disponível após a extração.'}</p>
   <dialog ref={dialog} aria-label="bot-energy · conferir fatura" style={{width:'min(1100px,94vw)',maxHeight:'90vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
-   <button type="button" onClick={()=>dialog.current?.close()} disabled={busy}>Fechar assistente</button>
+   <button type="button" onClick={()=>dialog.current?.close()} disabled={writeBusy}>Fechar assistente</button>
    <h2>bot-energy · conferir fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
    <button type="button" disabled={busy} onClick={()=>void load()}>Atualizar conferência</button>
    {activityView}{busy&&<p role="status">{writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}</p>}{error&&<p role="alert">{error}</p>}
@@ -95,6 +107,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false}:{id:string;
    {form?<OcrAssistantForm key={form} id={id} area={form} onClose={()=>{setForm(null);void load();}}/>:plan&&<>
     <h3>{plan.unitName} · {plan.month}</h3><p>{plan.message}</p><small>Consulta em {new Date(plan.checkedAt).toLocaleString('pt-BR')}{stale?' · Atualização obrigatória antes de lançar':''}</small>
     <BotEnergyHelp key={id} documentId={id}/>
+    <section style={panel} aria-label="O que precisa da sua validação"><h3>O que precisa da sua validação</h3><p>{pendingFields(plan.fieldTasks??[])} campo(s) ainda precisam de conferência. Configurações vigentes e conferências já salvas são preservadas.</p><ul>{(plan.fieldTasks??[]).filter(f=>!f.confirmed).map(f=><li key={f.kind+':'+f.key}><strong>{f.label}: {f.value??'Não identificado'} {f.unit}</strong><p>{f.canConfirm?'Conferir com o PDF e validar abaixo.':'Revisão específica necessária; não pode ser confirmado em lote.'} · Fonte: {f.source||'não identificada'}</p></li>)}</ul><p>Use “Conferir dados ou solicitar revisão” para registrar dúvidas e correções com justificativa. Nenhum dado ausente será tratado como zero.</p></section>
     <section style={panel}><h3>1. Dados extraídos e dúvidas</h3>
      <p>Confiança mínima dos campos essenciais: {plan.confidence.criticalConfidence.complete&&plan.confidence.criticalConfidence.minimumAll!==null?(plan.confidence.criticalConfidence.minimumAll*100).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':'indeterminada — informação incompleta'}.</p>
      <p>Abaixo de 45%: automação bloqueada. Entre 45% e 85%: conferência humana. Acima de 85%: elegível somente após as demais verificações. A confirmação humana não altera a confiança OCR.</p>
