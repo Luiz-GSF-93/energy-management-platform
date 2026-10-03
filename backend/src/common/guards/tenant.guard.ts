@@ -1,4 +1,5 @@
 import { resolvePlatformOperation, PLATFORM_SESSION_HEADER } from '../services/platform-operation';
+import {restrictClientPortalRequest} from './client-portal-access';
 import {
   Injectable,
   CanActivate,
@@ -238,6 +239,8 @@ export class TenantGuard implements CanActivate {
           organization_id,
           role_id,
           status,
+          affiliation_type,
+          exclusive_customer_id,
           roles(id, name, permissions, organization_id, scope)
         `)
         .eq('user_id', userId)
@@ -274,6 +277,10 @@ export class TenantGuard implements CanActivate {
       }
 
       this.logger.log(`[ROLE_VALID] role validated`);
+
+      if(restrictClientPortalRequest(membership,role,request.path,request.method)) {
+        throw new ForbiddenException('Use o portal do cliente para consultar resultados publicados.');
+      }
 
       // 10. Extrair permissions (PRESERVADO DO ORIGINAL)
       const permissions: string[] = Array.isArray(role.permissions) ? role.permissions : [];

@@ -269,6 +269,8 @@ a {
 }
 
 .published-financial { margin-top: var(--space-6); }
+.client-portal { max-width:1100px;margin:auto;padding:var(--space-6); }
+.client-portal>footer { margin-top:var(--space-6); }
 .published-financial__filters, .published-financial__actions { display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:end;margin:var(--space-4) 0; }
 .published-financial__filters label { display:grid;gap:var(--space-2); }
 .published-financial__filters input,.published-financial__filters select { padding:var(--space-2);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text); }
@@ -284,6 +286,8 @@ a {
  body:has(.published-financial__report) .published-financial__report,body:has(.published-financial__report) .published-financial__report * { visibility:visible; }
  body:has(.published-financial__report) .backoffice { display:block; }
  body:has(.published-financial__report) .backoffice-main { margin:0;padding:0; }
+ body:has(.published-financial__report) .client-portal { padding:0; }
+ body:has(.published-financial__report) .client-portal>:not(.published-financial) { display:none!important; }
  body:has(.published-financial__report) .backoffice>:not(.backoffice-main),body:has(.published-financial__report) .backoffice-main>:not(.backoffice-page),body:has(.published-financial__report) .backoffice-page>:not(.published-financial),body:has(.published-financial__report) .published-financial>:not(.published-financial__report) { display:none!important; }
  .published-financial__report { position:static;width:100%;background:white;color:black;font-size:10pt; }
  .published-financial__report .ds-card { background:white;color:black;border:1px solid #bbb;box-shadow:none; }
