@@ -5,12 +5,12 @@ import {PublishedFinancialQueryDto} from '../dto/financial-settlements.dto';
 const fields=['acr','aclBeforeFees','totalFees','aclAfterFees','savingsBeforeFees','savingsAfterFees'] as const;
 type Field=typeof fields[number];
 type Amounts=Record<Field,string> & {savingsPercent:string|null};
-function cents(value:unknown,signed=false):bigint {
+export function cents(value:unknown,signed=false):bigint {
  if(typeof value!=='string'||!(signed?/^-?(0|[1-9]\d{0,14})\.\d{2}$/:/^(0|[1-9]\d{0,14})\.\d{2}$/).test(value))throw new InternalServerErrorException('Valor publicado indisponível. Nenhum valor ausente foi convertido em zero.');
  const negative=value.startsWith('-'),[whole,decimal]=value.replace(/^-/,'').split('.');
  return (BigInt(whole)*100n+BigInt(decimal))*(negative?-1n:1n);
 }
-function aggregate(rows:Amounts[]):Amounts|null {
+export function aggregate(rows:Amounts[]):Amounts|null {
  if(!rows.length)return null;
  const sums=Object.fromEntries(fields.map(f=>[f,rows.reduce((total,r)=>total+cents(r[f],f.startsWith('savings')),0n)])) as Record<Field,bigint>;
  const magnitude=sums.savingsAfterFees<0n?-sums.savingsAfterFees:sums.savingsAfterFees;
