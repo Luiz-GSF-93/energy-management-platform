@@ -1,0 +1,8 @@
+export function botGuidance(error:string){
+ const text=error.toLocaleLowerCase('pt-BR');
+ if(/revis|alterad|mudou|fontes/.test(text))return ['Atualize a consulta para carregar a versão atual e confira o histórico.', 'Compare a revisão e as fontes com o que acabou de salvar. Preserve os registros anteriores.', 'Ajuste somente os campos divergentes e confira novamente antes de enviar.'];
+ if(/tribut|icms|pis|cofins|base/.test(text))return ['Abra Parâmetros de cálculo da mesma unidade e competência.', 'Confira as fontes, as revisões e quais rubricas incluem ou excluem o tributo. Tributo embutido não deve ser cobrado novamente.', 'Valide a proposta; o gestor/administrador aprova os parâmetros. Depois atualize o diagnóstico.'];
+ if(/fornecedor|concilia|volume/.test(text))return ['Abra a conciliação do fornecedor da mesma competência.', 'Confira a revisão das medições, a compra e a nota. Escolha explicitamente manter pendente ou concluir com a evidência adequada.', 'Registre o motivo e confira o resultado salvo. Se continuar pendente, a apuração permanece bloqueada.'];
+ if(/permiss|autoriz|licen|sessão/.test(text))return ['Confira a organização e o perfil selecionados.', 'Solicite ao gestor a verificação da permissão ou da licença indicada no erro.', 'Retome após regularizar o acesso. Nenhum controle deve ser dispensado.'];
+ return ['Confira o histórico antes de repetir: uma falha de comunicação pode ocorrer após o registro ter sido salvo.', 'Atualize a consulta e compare o resultado com os campos enviados.', 'Se o registro estiver ausente, corrija o campo indicado no erro e envie novamente. Se persistir, solicite suporte com a mensagem acima.'];
+}

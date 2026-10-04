@@ -1,4 +1,5 @@
 'use client';
+import BotEnergyGuidance from '../contracts/BotEnergyGuidance';
 import type {OcrAutofill} from '../contracts/ocr-autofill';
 import OcrCdeReviews from './OcrCdeReviews';
 import OcrResolution from './OcrResolution';
@@ -69,8 +70,9 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
  },[openRequest,load]);
  useEffect(()=>{
   const refresh=()=>{if(dialog.current?.open&&!writing.current&&!form)void load();};
-  window.addEventListener('focus',refresh);
-  return()=>window.removeEventListener('focus',refresh);
+  const visible=()=>{if(document.visibilityState==='visible')refresh();};
+  window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
+  return()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
  },[load,form]);
  async function validate(){
   if(!plan||!plan.canValidate||busy||stale||!ack||!checkedPdf||note.trim().length<3||(!selected.length&&!Object.keys(choices).length)||writing.current)return;
@@ -105,7 +107,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
    <button type="button" onClick={()=>dialog.current?.close()} disabled={writeBusy}>Fechar assistente</button>
    <h2>bot-energy · conferir fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
    <button type="button" disabled={busy} onClick={()=>void load()}>Atualizar conferência</button>
-   {activityView}{busy&&<p role="status">{writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}</p>}{error&&<p role="alert">{error}</p>}
+   {activityView}{busy&&<p role="status">{writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}</p>}{error&&<BotEnergyGuidance error={error}/>}
    {notice&&<p role="status">{notice}</p>}
    {receipts.length>0&&<section style={panel}><h3>Resultado dos lançamentos</h3><ul>{receipts.map(r=><li key={r.key}><strong>{r.label}: {r.state==='REVIEW_SAVED'?'campo validado pelo operador':r.state==='SAVED_DRAFT'?'rascunho registrado':r.state==='VERIFY_REQUIRED'?'verificar histórico antes de repetir':'revisão necessária'}</strong>{r.message&&<p>{r.message}</p>}<Evidence value={r.result}/></li>)}</ul></section>}
    {form?<OcrAssistantForm key={form} id={id} area={form} onClose={()=>{setForm(null);void load();}}/>:plan&&<>
