@@ -3,6 +3,7 @@ import BotEnergyGuidance from '../contracts/BotEnergyGuidance';
 import type {OcrAutofill} from '../contracts/ocr-autofill';
 import OcrCdeReviews from './OcrCdeReviews';
 import OcrResolution from './OcrResolution';
+import OcrOverview from './OcrOverview';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {ocrContractLink,type OcrDestination} from '../contracts/ocr-navigation';
@@ -102,7 +103,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
  return <section aria-label="Assistente de conferência OCR" style={{marginTop:12}}>
   <button type="button" onClick={()=>{dialog.current?.showModal();void load();}}>bot-energy · conferir fatura</button>
   {activityView}
-  <p>{busy?'Conferindo extração e cadastros…':plan?plan.counts.blockers+' pendência(s) para preparar apuração':'Assistente de conferência disponível após a extração.'}</p>
+  <p>{busy?'Conferindo extração e cadastros…':plan?'Preenchimentos disponíveis para conferência; consulte a próxima ação no assistente.':'Assistente de conferência disponível após a extração.'}</p>
   <dialog ref={dialog} aria-label="bot-energy · conferir fatura" style={{width:'min(1100px,94vw)',maxHeight:'90vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
    <button type="button" onClick={()=>dialog.current?.close()} disabled={writeBusy}>Fechar assistente</button>
    <h2>bot-energy · conferir fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
@@ -112,8 +113,10 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
    {receipts.length>0&&<section style={panel}><h3>Resultado dos lançamentos</h3><ul>{receipts.map(r=><li key={r.key}><strong>{r.label}: {r.state==='REVIEW_SAVED'?'campo validado pelo operador':r.state==='SAVED_DRAFT'?'rascunho registrado':r.state==='VERIFY_REQUIRED'?'verificar histórico antes de repetir':'revisão necessária'}</strong>{r.message&&<p>{r.message}</p>}<Evidence value={r.result}/></li>)}</ul></section>}
    {form?<OcrAssistantForm key={form} id={id} area={form} onClose={()=>{setForm(null);void load();}}/>:plan&&<>
     <h3>{plan.unitName} · {plan.month}</h3><p>{plan.message}</p><small>Consulta em {new Date(plan.checkedAt).toLocaleString('pt-BR')}{stale?' · Atualização obrigatória antes de lançar':''}</small>
+    <OcrOverview unit={plan.unitName} month={plan.month} confidence={plan.confidence} prefilled={plan.prefilled} fields={plan.fieldTasks??[]} values={plan.values} disabled={busy||stale} onReview={()=>{setReview(true);queueMicrotask(()=>dialog.current?.querySelector('[data-ocr-review]')?.scrollIntoView?.({block:'start'}));}} onOpen={setForm}/>
     <BotEnergyHelp key={id} documentId={id} onAction={target=>target==='reconciliation'?setForm('costs'):setResolutionAction(previous=>({target,request:(previous?.request??0)+1}))}/>
     <OcrResolution key={'resolution:'+id} id={id} action={resolutionAction} contextToken={plan.token} enabled={canProcess} onChanged={()=>void load()}/>
+    <details open={review} data-ocr-review><summary>Conferir campos, fontes e lançamentos detalhados</summary>
     {!!plan.prefilled?.relatedDocuments?.length&&<section style={panel}><h3>Evidências relacionadas já enviadas</h3><p>O bot reconhece faturas desta unidade e competência e seus arquivos contratuais relacionados. Não é necessário reenviar um arquivo disponível. O nome do arquivo não comprova valores ou aprovação.</p><ul>{plan.prefilled.relatedDocuments.map(d=><li key={d.id}><strong>{d.name}</strong><p>{d.message} · {d.source}</p></li>)}</ul></section>}
     {plan.prefilled&&<section style={panel} aria-label="Preenchimentos automáticos"><h3>Preenchidos pelo bot-energy para sua conferência</h3><p>{plan.prefilled.message}</p><p>Consumos: {Object.keys(plan.prefilled.measurements).length} campos · Alíquotas: {plan.prefilled.taxes.length} · Custos identificados: {plan.prefilled.costs.length}. A gravação auditada ocorre após sua validação; aprovação financeira exclusiva do gestor/administrador.</p><ul>{plan.prefilled.taxes.map(t=><li key={t.code}>{t.code}: {t.rate}% · {t.source}<p>{t.message}</p></li>)}</ul>{plan.prefilled.library?<p>Biblioteca compatível: versão {plan.prefilled.library.version} · {plan.prefilled.library.start} a {plan.prefilled.library.end} · {plan.prefilled.library.items.length} tarifas {plan.prefilled.library.scenario}. Abra “Tarifas e parâmetros” para conferir as bases tributárias já acompanhadas das alíquotas da fatura.</p>:<p>{plan.prefilled.libraryState==='AMBIGUOUS'?'Mais de uma tabela compatível: selecionar a vigência correta.':'Biblioteca sem correspondência única para todo o mês.'}</p>}</section>}
     <section style={panel} aria-label="O que precisa da sua validação"><h3>O que precisa da sua validação</h3><p>{pendingFields(plan.fieldTasks??[])} campo(s) ainda precisam de conferência. Configurações vigentes e conferências já salvas são preservadas.</p><ul>{(plan.fieldTasks??[]).filter(f=>!f.confirmed).map(f=><li key={f.kind+':'+f.key}><strong>{f.label}: {f.value??'Não identificado'} {f.unit}</strong><p>{f.canConfirm?'Conferir com o PDF e validar abaixo.':'Revisão específica necessária; não pode ser confirmado em lote.'} · Fonte: {f.source||'não identificada'}</p></li>)}</ul><p>Use “Conferir dados ou solicitar revisão” para registrar dúvidas e correções com justificativa. Nenhum dado ausente será tratado como zero.</p></section>
@@ -139,6 +142,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
     <section style={panel}><h3>5. Revisão final para apuração</h3>{plan.findings.length?<p><a href={'/backoffice/operation/requests?ocrDocument='+encodeURIComponent(id)}>Encaminhar pendência para Solicitações →</a></p>:null}<p>{plan.counts.blockers} bloqueio(s) e {plan.counts.reviews} ponto(s) de revisão. {plan.canPrepare?'Diagnóstico sem bloqueios para preparar.':'Resolva os bloqueios e atualize a conferência.'}</p><ul>{plan.findings.map((f,i)=><li key={f.code+':'+i}><strong>{f.severity==='BLOCKER'?'Pendência':'Revisão'} · {f.section}</strong>: {f.message}</li>)}</ul>
      <OcrHomologation id={id}/><p><a href={ocrContractLink(id,'preparation')}>Conferir e preparar apuração</a></p><p>A preparação não publica. Aprovação do gestor e publicação seguem o fluxo financeiro existente.</p>
     </section>
+    </details>
    </>}
   </dialog>
  </section>;
