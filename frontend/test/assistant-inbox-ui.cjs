@@ -8,17 +8,17 @@ for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile
 const permissions=['8f105b02-4443-49de-b188-847e0284e7ed','92e1b670-ab10-483a-b825-c6e16799496d','60f9690a-145b-4dba-b23f-9f945baca296','8f3ff5eb-157a-468a-91af-6f89d92e23a7'];
 let context={scope:'organization',user:{id:'actor'},currentOrganization:{id:'org',role:'operacional',permissions}};
 const ids=['7b909de6-6f2a-4523-85d9-90b8257a2c37','ddaed3b2-7c81-4b42-8cd0-00182e39ea2d','caabcbf9-b660-4fce-b33b-9f769ad8f51f'];
-const documents=ids.map((id,i)=>({id,document_type:'INVOICE_DISTRIBUTOR',original_filename:'Invoice '+i,reference_month:'2026-08-01',file_verified:true,processing_status:'PENDING'}));
+const documents=ids.map((id,i)=>({id,document_type:'INVOICE_DISTRIBUTOR',original_filename:'Invoice '+i,reference_month:'2026-08-01',file_verified:true,processing_status:'PENDING',customer_id:'cust',consumer_unit_id:'unit',customerName:'Customer',unitName:'Unit',unitCode:'UC',code:'DOC-'+i,favorite:false,currentVersion:true,catalog:{version:1,revision:1,tag:'DRAFT',series_id:id}}));
 const mounted=new Map(),requests=[];const original=Module._load;
 const newDocument={...documents[0],id:'12345678-1234-4123-a123-123456789abc',original_filename:'New upload.pdf'};
-class UploadData{constructor(){this.data=new Map([['file',new File(['invoice'],'New upload.pdf',{type:'application/pdf'})],['referenceMonth','2026-08']]);}get(key){return this.data.get(key);}set(key,value){this.data.set(key,value);}}
+class UploadData{constructor(){this.data=new Map([['file',new File(['invoice'],'New upload.pdf',{type:'application/pdf'})],['referenceMonth','2026-08']]);}get(key){return this.data.get(key);}set(key,value){this.data.set(key,value);}delete(key){this.data.delete(key);}}
 global.FormData=UploadData;
 Module._load=function(name,parent,main){
  if(name==='@/app/components/DocumentEvidenceWorkspace')return {__esModule:true,default:()=>null}; // The evidence channel has its own DOM and scope tests.
  if(['@/app/components/BackofficeShell','@/app/components/ProtectedRoute'].includes(name))return {__esModule:true,default:({children})=>React.createElement('div',null,children)};
  if(name==='@/app/components/ui/Button')return {Button:({variant,...props})=>{void variant;return React.createElement('button',props);}};
  if(name==='@/app/providers')return {useAuth:()=>({context,hasPermission:p=>context.currentOrganization.permissions.includes(p)})};
- if(name==='@/app/lib/api/client')return {apiRequest:async(p,o)=>{requests.push([p,o]);if(o){assert.equal(o.method,'POST');if(p==='/api/v1/documents/upload'){assert.equal(o.body.get('referenceMonth'),'2026-08-01');return newDocument;}assert.equal(p,'/api/v1/documents/'+newDocument.id+'/ocr');return {id:'ocr',state:'QUEUED'};}return p==='/api/v1/documents'?documents:p==='/api/v1/customers'?[{id:'cust',company_name:'Customer'}]:[];}};
+ if(name==='@/app/lib/api/client')return {apiRequest:async(p,o)=>{requests.push([p,o]);if(o){assert.equal(o.method,'POST');if(p==='/api/v1/documents/upload'){assert.equal(o.body.get('referenceMonth'),'2026-08-01');if(!documents.some(d=>d.id===newDocument.id))documents.push(newDocument);return newDocument;}assert.equal(p,'/api/v1/documents/'+newDocument.id+'/ocr');return {id:'ocr',state:'QUEUED'};}return p==='/api/v1/document-catalog'?{documents,customers:[{id:'cust',company_name:'Customer'}],units:[{id:'unit',customer_id:'cust',name:'Unit',consumer_unit_number:'UC'}]}:[];}};
  if(name==='./OcrDocumentStatus')return {__esModule:true,default:props=>{mounted.set(props.id,props);return React.createElement('div',null,props.autoAssist?'Preparing '+props.id:'Idle '+props.id);}};
  return original.call(this,name,parent,main);
 };
@@ -36,13 +36,14 @@ const click=async label=>act(async()=>{const b=[...document.querySelectorAll('bu
  await click('Retirar da fila Invoice 0');assert.equal(readInbox(window.sessionStorage,inboxScope(context)).length,2);
  assert.ok(document.body.textContent.includes('Invoice 0'),'Removing a pointer must preserve the document');
  assert.ok(requests.every(([,options])=>!options),'Reload/scheduling/review/removal must not write or restart OCR');
+ await click('＋ Inserir novo');
  await act(async()=>document.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));
  assert.ok(readInbox(window.sessionStorage,inboxScope(context)).some(v=>v.id===newDocument.id),'New upload enters the recoverable queue automatically');
  assert.equal(requests.filter(([,options])=>options).length,2,'Only explicit upload and the existing OCR enqueue are written');
  mounted.clear();context={...context,currentOrganization:{...context.currentOrganization,id:'other-org'}};
  await act(async()=>root.render(React.createElement(Page)));
  assert.equal([...mounted.values()].filter(v=>v.autoAssist).length,0,'No automatic work from previous tenant');
- assert.ok(document.body.textContent.includes('Nenhuma fatura acompanhada'));
+ assert.equal(document.querySelector('[aria-label="Fila de validação bot-energy"]'),null,'Empty queue remains compact');
  assert.ok(requests.every(([path])=>!path.includes('/assistant/validate')&&!path.includes('settlement')),'No validation or financial writes');
  await act(async()=>root.unmount());console.log('Inbox UI: pointer reload, bounded scheduling, operator review, recoverable dismissal, source document preserved and tenant switch PASS');
 }finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

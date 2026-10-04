@@ -25,6 +25,7 @@ export class DocumentsService {
     if(error.code==='P3390')throw new ForbiddenException('É necessária uma licença ativa para enviar documentos.');
     if (error.code === 'P0001' && error.message === 'DOCUMENT_QUOTA_EXCEEDED') throw new ForbiddenException('Cota de documentos da licença esgotada');
     if (error.code === 'P0001' && error.message === 'DOCUMENT_LICENSE_REQUIRED') throw new ForbiddenException('Licença de documentos indisponível');
+    if (error.code === 'P2072') throw new ConflictException('Use a versão documental atual; o arquivo anterior permanece preservado.');
     if (error.code === '23505') throw new ConflictException('Document already registered in this organization');
     throw new InternalServerErrorException('Unable to access documents');
   }
@@ -81,6 +82,11 @@ export class DocumentsService {
       processing_status: 'PENDING', ocr_status: 'PENDING',
     };
     if (dto.energyContractId !== undefined) row.energy_contract_id = dto.energyContractId;
+    if (dto.previousDocumentId) {
+      const prior=await this.scopedDocument(dto.previousDocumentId,organizationId);
+      if(prior.customer_id!==dto.customerId||prior.consumer_unit_id!==dto.consumerUnitId||prior.document_type!==dto.documentType||String(prior.reference_month).slice(0,7)!==dto.referenceMonth.slice(0,7)||!prior.file_verified)throw new ConflictException("A nova versão precisa manter cliente, unidade, competência e tipo do arquivo original.");
+      row.catalog_previous_id=prior.id;
+    }
     if (dto.description !== undefined) row.description = dto.description;
     return row;
   }
@@ -97,7 +103,7 @@ export class DocumentsService {
   async upload(input: UploadDocumentDto, file: DocumentFile | undefined, organizationId: string, actorUserId?: string) {
     await this.requireDocumentManagement(organizationId);
     const dto = await validateWriteDto(UploadDocumentDto, input);
-    const detected = inspectDocument(file, dto.documentType==='OTHER');
+    const detected = inspectDocument(file, !['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','TAX_DOCUMENT'].includes(dto.documentType));
     const bytes = file!.buffer;
     const path = organizationId + '/' + dto.consumerUnitId + '/' + randomUUID() + '.' + detected.extension;
     const row = await this.prepareCreate({ ...dto, fileName: detected.name, fileType: detected.mime,
