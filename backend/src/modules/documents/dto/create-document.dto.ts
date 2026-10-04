@@ -4,6 +4,7 @@ import { Transform } from 'class-transformer';
 export class CreateDocumentDto {
   @IsUUID()
   customerId!: string;
+  @IsOptional() @IsUUID() previousDocumentId?: string;
   @IsUUID()
   consumerUnitId!: string;
   @IsString() @Matches(/\S/) @MaxLength(255)

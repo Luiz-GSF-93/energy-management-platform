@@ -11,6 +11,9 @@ try{
  await db.query("INSERT INTO documents VALUES($1,'a','c','u',true,$2,'OTHER'),($3,'b','foreign','foreign',true,$4,'OTHER')",[upload,client,foreign,other]);
  await db.exec(await readFile(new URL('../../src/database/migrations/20261003_f3_1_operations.sql',import.meta.url),'utf8'));
  await db.exec(await readFile(new URL('../../src/database/migrations/20261003_f3_3_client_evidence.sql',import.meta.url),'utf8'));
+ await db.exec(`ALTER TABLE documents ADD COLUMN reference_month timestamp DEFAULT '2026-08-01';ALTER TABLE documents ADD COLUMN file_hash text;CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,document_management boolean);INSERT INTO licenses VALUES('a',true,'ACTIVE','2020-01-01','2030-01-01',true);`);
+ await db.exec(await readFile(new URL('../../src/database/migrations/20261004_f3_7_document_catalog.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../../src/database/migrations/20261004_f3_8_client_document_returns.sql',import.meta.url),'utf8'));
  const data={title:'Atividade interna',description:'Nota interna não disponibilizada',priority:'NORMAL',customerId:'c',unitId:'u',responsibleId:operator,startsAt:'2026-10-04T12:00:00Z'};
  const save=async(id=null,revision=0,d=data)=>(await db.query('SELECT save_operation_record($1,$2,$3,$4,$5,$6,$7,$8) result',['a',operator,'agenda',id,randomUUID(),revision,'Fonte do registro',d])).rows[0].result;
  const append=async(actor=operator,record=null,request=randomUUID(),direction='OUTBOUND',docs=[],org='a',body='Mensagem ao cliente')=>(await db.query('SELECT append_operation_client_message($1,$2,$3,$4,$5,$6,$7,$8) result',[org,actor,record,request,direction,'Assunto externo',body,docs])).rows[0].result;
@@ -24,6 +27,11 @@ try{
  await reject(()=>append(internal,r.id,randomUUID(),'INBOUND'), 'P2031');
  await reject(()=>append(client,r.id,randomUUID(),'INBOUND',[foreign]), 'P2031');
  const reply=await append(client,r.id,randomUUID(),'INBOUND',[upload]);ok(reply.direction==='INBOUND');
+ await db.exec('RESET ROLE');const contract=randomUUID(),returned=randomUUID(),unshared=randomUUID(),orphan=randomUUID();
+ await db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_verified,uploaded_by_auth_user_id,document_type) VALUES($1,'a','c','u',true,$2,'CONTRACT_ENERGY'),($3,'a','c','u',true,$2,'CONTRACT_ENERGY')",[contract,operator,unshared]);
+ await db.exec('SET ROLE service_role');await append(operator,r.id,randomUUID(),'OUTBOUND',[contract]);await db.exec('RESET ROLE');
+ await db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_verified,uploaded_by_auth_user_id,document_type,catalog_previous_id) VALUES($1,'a','c','u',true,$2,'CONTRACT_ENERGY',$3),($4,'a','c','u',true,$2,'CONTRACT_ENERGY',$5)",[returned,client,contract,orphan,unshared]);
+ await db.exec('SET ROLE service_role');ok((await append(client,r.id,randomUUID(),'INBOUND',[returned])).direction==='INBOUND');await reject(()=>append(client,r.id,randomUUID(),'INBOUND',[orphan]),'P2031');await reject(()=>append(client,r.id,randomUUID(),'INBOUND',[contract]),'P2031');
  await db.query('SELECT open_operation_client_message($1,$2,$3)',['a',client,m.id]);await db.query('SELECT open_operation_client_message($1,$2,$3)',['a',client,m.id]);ok((await db.query('SELECT count(*)::int n FROM operation_client_reads')).rows[0].n===1);
  await reject(()=>db.query('SELECT open_operation_client_message($1,$2,$3)',['a',other,m.id]),'P2031');
  await reject(()=>db.query('SELECT open_operation_client_message($1,$2,$3)',['a',client,reply.id]),'P2033');
@@ -35,6 +43,6 @@ try{
  await db.query("UPDATE roles SET permissions='[]' WHERE id=$1",[client]);await db.exec('SET ROLE service_role');await reject(()=>append(client,r.id,randomUUID(),'INBOUND'),'P2031');await db.exec('RESET ROLE');
  for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>db.exec('SELECT * FROM operation_client_messages'),'42501');await reject(()=>append(operator,r.id),'42501');await db.exec('RESET ROLE');}
  ok((await db.query("SELECT allowed_mime_types FROM storage.buckets")).rows[0].allowed_mime_types.includes('text/csv'));
- ok((await db.query('SELECT count(*)::int n FROM operation_client_messages')).rows[0].n===2);
+ ok((await db.query('SELECT count(*)::int n FROM operation_client_messages')).rows[0].n===4);
  console.log(JSON.stringify({checks,result:'PASS'}));
 }finally{await db.close();}

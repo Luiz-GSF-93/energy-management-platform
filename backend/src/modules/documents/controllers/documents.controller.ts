@@ -34,7 +34,7 @@ export class DocumentsController {
 
   @Post('upload')
   @RequirePermission([PERMISSIONS.DOCUMENTS_UPLOAD])
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1, fields: 6, fieldSize: 8192, parts: 7 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_DOCUMENT_BYTES, files: 1, fields: 7, fieldSize: 8192, parts: 8 } }))
   async upload(@Body() dto: UploadDocumentDto, @UploadedFile() file: DocumentFile,
     @OrganizationId() organizationId: string, @UserId() actorUserId: string) {
     return this.documentsService.upload(dto, file, organizationId, actorUserId);
