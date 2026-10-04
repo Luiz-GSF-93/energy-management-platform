@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+
+  <defs>
+    <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0066FF"/>
+      <stop offset="100%" stop-color="#00E676"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hexágono -->
+  <polygon
+    points="128,15 225,72 225,184 128,241 31,184 31,72"
+    fill="url(#energyGradient)"
+  />
+
+  <!-- E em forma de raio -->
+  <path
+    d="
+      M108 60
+      L176 60
+      L142 98
+      L176 98
+      L104 178
+      L124 123
+      L84 123
+      Z"
+    fill="#FFFFFF"
+  />
+
+</svg>

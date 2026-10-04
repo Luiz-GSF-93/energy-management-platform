@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import Link from 'next/link';
+import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -83,9 +84,7 @@ export default function LoginPage() {
     <main className="auth-page">
       <div className="auth-shell">
         <header className="auth-brand">
-          <h1 className="auth-brand__name">
-            EnergyOS
-          </h1>
+          <h1 className="auth-brand__name"><EnergyOSLogo className="auth-brand__logo" /></h1>
 
           <p className="auth-brand__description auth-brand__powered">
             Powered by Expert Energy

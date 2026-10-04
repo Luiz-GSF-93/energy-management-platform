@@ -917,3 +917,11 @@ a {
 @media(prefers-reduced-motion:reduce){.document-manager *{scroll-behavior:auto}}
 
 .document-manager__options button,.document-manager__table td>button,.document-manager>footer button,.document-manager__dialog>button{border:1px solid var(--color-border);border-radius:999px;background:transparent;color:var(--color-text);padding:6px 12px;cursor:pointer;}.document-manager__options button:hover,.document-manager__table td>button:hover{border-color:var(--color-primary);color:var(--color-primary);}.document-manager__table td>button{font-size:12px;margin:4px 4px 0 0;}
+
+/* EnergyOS identity: preserve SVG aspect ratio in authentication and sidebar. */
+.auth-brand__logo { display:block;width:min(100%,20rem);height:auto;margin-inline:auto; }
+.backoffice-brand__text { min-width:0; }
+.backoffice-brand__logo { display:block;width:100%;max-width:13rem;height:auto; }
+.backoffice-brand__symbol { display:none; }
+.backoffice-brand__icon { display:block;width:2.5rem;height:2.5rem; }
+.backoffice--collapsed .backoffice-brand__symbol { display:block; }
