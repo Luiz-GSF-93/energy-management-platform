@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   BarChart3,
   Building2, LayoutGrid, ShieldCheck, UsersRound, FileSignature, Files, ContactRound, PanelLeftClose, PanelLeftOpen,
-  LogOut, CalendarDays,ClipboardList,CalendarClock,TrendingUp,Bell,ChevronDown,
+  LogOut, CalendarDays,ClipboardList,CalendarClock,TrendingUp,Bell,ChevronDown,ScanEye,
 } from 'lucide-react';
 import {
   ChangeEvent,
@@ -23,7 +23,7 @@ import {
 import { useAuth } from '@/app/providers';
 
 const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
-const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,licenses:ShieldCheck,setup:ContactRound,contracts:FileSignature,documents:Files,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
+const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,licenses:ShieldCheck,setup:ContactRound,contracts:FileSignature,documents:Files,'ocr-audit':ScanEye,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
 
 export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;onToggle?:()=>void}={}) {
   const router = useRouter();

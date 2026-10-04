@@ -14,6 +14,8 @@ export class OcrAssistantController {
  resolutionPrepare(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.prepare(id,req.tenantContext,body);}
  @Post(':id/ocr/assistant/resolution/repair') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE])
  resolutionRepair(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.repair(id,req.tenantContext,body);}
+ @Post(':id/ocr/assistant/resolution/validate-monthly') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE])
+ resolutionValidateMonthly(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.validateMonthly(id,req.tenantContext,body);}
  @Post(':id/ocr/assistant/resolution/approve') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE])
  resolutionApprove(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.resolution.approve(id,req.tenantContext,body);}
  @Get(':id/ocr/assistant/autofill') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
