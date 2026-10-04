@@ -4,8 +4,9 @@ import {apiRequest} from '@/app/lib/api/client';
 import BotEnergyAvatar from './BotEnergyAvatar';
 import {Button} from './ui/Button';
 type Topic={key:string;question:string};
-type Answer={status:string;answer:string;checkedAt:string;items:{label:string;value:string;source:string}[];sources:{label:string;reference:string;url:string}[]};
-export default function BotEnergyHelp({documentId,compact=false}:{documentId?:string;compact?:boolean}){
+export type BotEnergyTarget='review'|'monthly'|'costs'|'parameters'|'reconciliation';
+type Answer={actions?:{label:string;target:BotEnergyTarget;description:string}[];status:string;answer:string;checkedAt:string;items:{label:string;value:string;source:string}[];sources:{label:string;reference:string;url:string}[]};
+export default function BotEnergyHelp({documentId,compact=false,onAction}:{documentId?:string;compact?:boolean;onAction?:(target:BotEnergyTarget)=>void}){
  const [open,setOpen]=useState(false),[topics,setTopics]=useState<Topic[]>([]),[answer,setAnswer]=useState<Answer|null>(null),[question,setQuestion]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const generation=useRef(0),controller=useRef<AbortController|null>(null);
  const [canAsk,setCanAsk]=useState(false);
@@ -35,7 +36,7 @@ export default function BotEnergyHelp({documentId,compact=false}:{documentId?:st
    {!documentId&&<p>Para dúvidas sobre registros de um cliente, abra sua fatura em <a href="/backoffice/documents">Documentos</a> e chame o bot-energy.</p>}
    {!canAsk&&<p>Perguntas livres exigem a permissão de uso da IA no seu perfil. As consultas disponíveis acima continuam acessíveis.</p>}
    <form style={{display:'grid',gap:8,marginTop:12}} onSubmit={e=>{e.preventDefault();if(canAsk&&question.trim())void ask({question:question.trim()});}}><label style={{display:'grid',gap:6}}>Sua pergunta<input className="ds-input" aria-label="Pergunta para bot-energy" value={question} disabled={!canAsk} maxLength={500} onChange={e=>setQuestion(e.target.value)}/></label><Button type="submit" disabled={busy||!canAsk||!question.trim()}>Consultar resposta comprovada</Button></form>
-   {answer&&<section aria-label="Resposta do bot-energy" aria-live="polite"><p style={{whiteSpace:'pre-line'}}>{answer.answer}</p>{answer.status==='NO_EVIDENCE'&&<strong>Sem resposta comprovada para esta pergunta.</strong>}<ul>{answer.items.map((item,i)=><li key={i}><strong>{item.label}</strong>: {item.value}<p>Fonte: {item.source}</p></li>)}</ul>{answer.sources.map((s,i)=><p key={i}>Fonte: <a href={s.url} {...(s.url.startsWith('https://')?{target:'_blank',rel:'noopener noreferrer'}:{})}>{s.label}</a> · {s.reference}</p>)}<small>Consulta em {new Date(answer.checkedAt).toLocaleString('pt-BR')}</small></section>}
+   {answer&&<section aria-label="Resposta do bot-energy" aria-live="polite"><p style={{whiteSpace:'pre-line'}}>{answer.answer}</p>{answer.status==='NO_EVIDENCE'&&<strong>Sem resposta comprovada para esta pergunta.</strong>}<div style={{display:'grid',gap:8}}>{documentId&&onAction&&answer.actions?.filter(a=>['review','monthly','costs','parameters','reconciliation'].includes(a.target)).map(a=><div key={a.target}><Button variant="secondary" onClick={()=>onAction(a.target)}>{a.label}</Button><small style={{display:'block'}}>{a.description}</small></div>)}</div><ul>{answer.items.map((item,i)=><li key={i}><strong>{item.label}</strong>: {item.value}<details><summary>Ver fonte</summary><p style={{overflowWrap:'anywhere',whiteSpace:'pre-line'}}>{item.source}</p></details></li>)}</ul>{answer.sources.map((s,i)=><p key={i}>Fonte: <a href={s.url} {...(s.url.startsWith('https://')?{target:'_blank',rel:'noopener noreferrer'}:{})}>{s.label}</a> · {s.reference}</p>)}<small>Consulta em {new Date(answer.checkedAt).toLocaleString('pt-BR')}</small></section>}
   </>}
  </section>;
 }
