@@ -3,6 +3,8 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {OcrAssistantService} from './ocr-assistant.service';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {retrieveTopics,regulatoryReferences} from './bot-energy-retrieval';
+import {OcrResolutionService} from './ocr-resolution.service';
+import {completionAnswer,CompletionAction} from './bot-energy-completion';
 
 export const botEnergyTopics = [
  {key:'regulation',question:'Como conferir as regras regulatórias da fatura?',answer:'Confira distribuidora, enquadramento e vigência na tabela oficial correspondente. As tarifas de energia e demanda têm unidades diferentes. PIS e Cofins variam por mês; use a alíquota identificada na fatura e confirme a base de incidência. As referências oficiais abaixo apoiam a revisão, mas não comprovam por si só a correção desta fatura ou contrato.',reference:'Base regulatória controlada v1 · fontes oficiais consultadas em 03/10/2026'},
@@ -18,10 +20,10 @@ const contextualTopics = [
  {key:'records',question:'Quais registros e vigências foram encontrados?'},
 ] as const;
 type Item = {label:string;value:string;source:string};
-type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[]};
+type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[];actions?:CompletionAction[]};
 @Injectable()
 export class BotEnergyService {
- constructor(private readonly assistant:OcrAssistantService){}
+ constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService){}
  private async authorize(t:TenantContext){
   if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('O bot-energy está disponível somente no backoffice autorizado.');
   await this.assistant.authorize(t);
@@ -51,7 +53,7 @@ export class BotEnergyService {
     const sources=replies.flatMap(r=>r.sources);
     if(retrieved.some(k=>['taxes','records'].includes(k)))sources.push(...regulatoryReferences);
     const unique=sources.filter((s,i)=>sources.findIndex(x=>x.url===s.url&&x.reference===s.reference)===i);
-    return {...base,mode:'EXTRACTIVE_RETRIEVAL',version:2,status:contextual.length&&!document?'CONTEXT_REQUIRED':'SUPPORTED',answer:replies.map(r=>r.answer).join('\n\n'),items:replies.flatMap(r=>r.items).slice(0,80),sources:unique,retrievedTopics:retrieved};
+    return {...base,mode:'EXTRACTIVE_RETRIEVAL',version:2,status:contextual.length&&!document?'CONTEXT_REQUIRED':'SUPPORTED',answer:replies.map(r=>r.answer).join('\n\n'),items:replies.flatMap(r=>r.items).slice(0,80),sources:unique,retrievedTopics:retrieved,actions:replies.flatMap(r=>r.actions??[])};
    }
   }
   if(!topic)return {...base,status:'NO_EVIDENCE',answer:'Não encontrei evidência suficiente na base controlada para responder a esta pergunta. Registre uma revisão ou selecione a fatura relacionada. Não vou presumir valores ou regras.',items:[] as Item[],sources:[]};
@@ -63,9 +65,9 @@ export class BotEnergyService {
   const items:Item[]=[];
   let answer='';
   if(topic.key==='pending'){
-   answer=`${plan.unitName} · ${plan.month}: ${plan.counts.blockers} bloqueio(s) e ${plan.counts.reviews} revisão(ões) para preparar apuração. Este diagnóstico não comprova aprovação financeira ou publicação.`;
-   items.push(...plan.findings.map(f=>({label:`${f.severity==='BLOCKER'?'Bloqueio':'Revisão'} · ${f.section}`,value:f.message,source:f.code})));
-   items.push(...plan.fieldTasks.filter(f=>!f.confirmed).map(f=>({label:f.label,value:f.canConfirm?'Conferência do operador pendente.':'Campo bloqueado ou sem evidência suficiente; solicitar revisão.',source:f.source||'Fonte não identificada'})));
+   const current=await this.resolution.inspect(document,t);
+   const completion=completionAnswer(current);
+   return {...base,checkedAt:plan.checkedAt,status:'SUPPORTED',...completion,items:[...completion.items,...plan.fieldTasks.filter(f=>!f.confirmed).map(f=>({label:f.label,value:f.canConfirm?'Confirme o valor extraído na conferência da fatura.':'Solicite revisão: sem evidência suficiente ou com inconsistência.',source:f.source||'Fonte não identificada'}))],sources:[{label:'Plano atual da fatura · '+current.unit+' · '+current.month,reference:'Preenchimentos e decisões com evidências atuais; consulta sem gravação',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=preparation'}]};
   }else if(topic.key==='fields'){
    answer='Conferências atuais da evidência selecionada. Confirmações anteriores são preservadas. A confiança OCR não é alterada por estas conferências.';
    items.push(...plan.fieldTasks.map(f=>({label:f.label,value:`${f.value??'Não identificado'} ${f.unit??''} · ${f.confirmed?'Conferência salva':f.canConfirm?'Validação do operador pendente':'Revisão necessária'}`,source:f.source||'Fonte não identificada'})));
