@@ -57,7 +57,7 @@ export class BotEnergyService {
    }
   }
   if(!topic)return {...base,status:'NO_EVIDENCE',answer:'Não encontrei evidência suficiente na base controlada para responder a esta pergunta. Registre uma revisão ou selecione a fatura relacionada. Não vou presumir valores ou regras.',items:[] as Item[],sources:[]};
-  if(!document)return {...base,status:'CONTEXT_REQUIRED',answer:'Abra o bot-energy na fatura desejada em Documentos para consultar seus registros e fontes.',items:[] as Item[],sources:[]};
+  if(!document)return {...base,status:'CONTEXT_REQUIRED',answer:'Abra Auditoria OCR, escolha o cliente, a unidade e a fatura e clique em “Abrir auditoria”. Faça a pergunta dentro dessa fatura para consultar o estado atual dos custos e a ação pendente do gestor. A consulta geral não presume qual cliente você deseja.',items:[] as Item[],sources:[]};
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Fatura inválida.');
   // Existing inspection enforces tenant/document/customer/unit ownership and licences.
   // Retrieved text is evidence only. No model, tool execution or financial write occurs here.

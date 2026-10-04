@@ -1,7 +1,15 @@
 /** Current evidence becomes a review plan, never an instruction to execute a document. */
-export type CompletionAction={label:string;target:'review'|'monthly'|'costs'|'parameters'|'reconciliation';description:string};
+export type CompletionAction={label:string;target:'review'|'monthly'|'costs'|'parameters'|'reconciliation'|'saved-monthly'|'saved-costs'|'approval'|'parameter-records';description:string};
 export function completionAnswer(plan:any){
  const items:{label:string;value:string;source:string}[]=[],actions:CompletionAction[]=[];
+ for(const [kind,label,target] of [['monthly','Dados mensais','saved-monthly'],['costs','Custos mensais','saved-costs']] as const){
+  const record=plan[kind];
+  if(!record.status)continue;
+  const version=record.record?` · versão ${record.record.version}, revisão ${record.record.revision}`: '';
+  const validated=record.status==='VALIDATED';
+  items.push({label:label+(validated?' já validados':' aguardam conferência'),value:(validated?'Validação já concluída; não é necessário validar novamente.':'Abra os valores salvos. Se for um rascunho preparado pelo bot, confira os documentos e use “Validar registros conferidos e atualizar diagnóstico”; outro rascunho exige revisão no formulário de origem.')+version,source:record.source??'Registro mensal atual da unidade e competência'});
+  actions.push({label:validated?'Ver '+label.toLowerCase()+' validados':'Conferir e validar '+label.toLowerCase(),target,description:'Abre o registro salvo, sem criar outra versão ou aprovar financeiramente.'});
+ }
  const fieldLabels:Record<string,string>={reactiveBilledPeakKwh:'Reativo faturado ponta (kWh)',reactiveBilledOffPeakKwh:'Reativo faturado fora ponta (kWh)',consumptionPeak:'Consumo ponta (kWh)',consumptionOffPeak:'Consumo fora ponta (kWh)',consumptionTotal:'Consumo total (kWh)'};
  const display=(v:any)=>v&&typeof v==='object'?Object.entries(v).filter(([k])=>k!=='source').map(([k,x])=>({single:'Total',used:'Utilizada',unused:'Não utilizada',peak:'Ponta',offPeak:'Fora ponta'}[k]??k)+': '+(x??'não informado')).join(' · '):String(v??'não informado');
  const source=plan.monthly.source??'Evidência atual da fatura';
@@ -20,7 +28,11 @@ export function completionAnswer(plan:any){
  if(!plan.costs.supplierPresent){items.push({label:'Nota do fornecedor: confirmar valor e tributos',value:plan.costs.documents.length?`Arquivo(s) encontrado(s): ${plan.costs.documents.map((d:any)=>d.name).join('; ')}. Valor sugerido pelo contrato: R$ ${plan.costs.suggestedInvoiceAmount??'indisponível'}, ainda não comprovado pela leitura da NF. Abra a nota, confirme o valor e selecione preço líquido ou final.`:'Nenhuma NF verificada desta unidade/competência. Solicite o documento ou registre a exceção no fluxo de conciliação.',source:'Documentos privados da unidade e contrato vigente'});actions.push({label:'Conferir nota e custo sugerido',target:'costs',description:'Documento e sugestão contratual já ficam preenchidos quando disponíveis.'});}
  if(plan.costs.volumeDifferenceMwh&& !/^[-+]?0(?:\.0+)?$/.test(plan.costs.volumeDifferenceMwh)){items.push({label:'Diferença de volume a conciliar',value:`${plan.costs.volumeDifferenceMwh} MWh. Registre causa, evidência e resultado na revisão atual da conciliação; o bot não presume perdas ou compra adicional.`,source:'Diagnóstico vigente e contrato de compra'});actions.push({label:'Abrir conciliação atual',target:'reconciliation',description:'Informe a conclusão com fonte e justificativa, preservando o histórico.'});}
  for(const g of plan.groups??[])if(g.key==='other'&&g.findings.length)items.push({label:g.label,value:g.findings.map((f:any)=>f.message).join('; '),source:'Diagnóstico atual da fatura'});
- actions.unshift({label:'Revisar e aceitar preenchimentos',target:'review',description:'Confira propostas em lote. Somente as escolhas sem comprovação exigem complemento.'});
- if(plan.rates.some((r:any)=>r.status==='DRAFT')||plan.taxes.some((v:any)=>v.existing.some((p:any)=>p.status==='DRAFT')))actions.push({label:'Ver etapas de aprovação do gestor',target:'parameters',description:'Após a conferência do operador, o gestor aprova parâmetros, dados mensais, custos e apuração no fluxo financeiro.'});
- return {items,actions,answer:`${plan.unit} · ${plan.month}: ${plan.counts.blockers} bloqueio(s) e ${plan.counts.reviews} revisão(ões). As pendências abaixo estão organizadas por ação, incluindo os preenchimentos já prontos. Confira as propostas e confirme somente as decisões indicadas; isso não comprova aprovação financeira ou publicação.`};
+ actions.push({label:'Revisar propostas e solicitar correção',target:'review',description:'Confira propostas em lote. Somente as escolhas sem comprovação exigem complemento.'});
+ if(plan.rates.some((r:any)=>r.status==='DRAFT')||plan.taxes.some((v:any)=>v.existing.some((p:any)=>p.status==='DRAFT'))){
+  const codes=plan.taxes.filter((v:any)=>v.existing.some((p:any)=>p.status==='DRAFT')).map((v:any)=>v.code);
+  items.push({label:'Próxima decisão do gestor: parâmetros tributários',value:(codes.length?codes.join(', ')+': ':'')+(plan.approvalReady===false?'A aprovação em lote está indisponível. Abra “Conferir revisão tributária”, selecione o rascunho da competência e confira bases, fonte e vínculo com a versão aprovada. Somente o gestor/administrador pode aprovar a revisão pelo formulário existente.':'Abra “Conferir aprovação dos parâmetros”, confira tarifas, fontes e bases e marque a confirmação antes de aprovar.'),source:'Parâmetros e diagnóstico atuais; registros aprovados preservados'});
+  actions.push({label:plan.approvalReady===false?'Conferir revisão tributária':'Conferir aprovação dos parâmetros',target:plan.approvalReady===false?'parameter-records':'approval',description:'Abertura para revisão. Aprovação exige ação explícita do gestor/administrador; não publica a apuração.'});
+ }
+ return {items,actions,answer:`${plan.costs.status==='VALIDATED'?'Custos mensais já validados; não precisam de nova validação. ' : ''}${plan.unit} · ${plan.month}: ${plan.counts.blockers} bloqueio(s) e ${plan.counts.reviews} revisão(ões). As pendências abaixo estão organizadas por ação, incluindo os preenchimentos já prontos. Confira as propostas e confirme somente as decisões indicadas; isso não comprova aprovação financeira ou publicação.`};
 }
