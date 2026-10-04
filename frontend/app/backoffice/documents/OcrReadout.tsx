@@ -20,7 +20,7 @@ export default function OcrReadout({id,summary}:{id:string;summary:ReadoutSummar
  const critical=summary.criticalConfidence,fields=summary.fieldConfidence;
  return <section aria-label="Confiança da leitura técnica" style={box}>
   <strong>Confiança e conferência</strong>
-  <p>Aprovação automática: <strong>não</strong>. A extração requer conferência e ainda não alimenta o cálculo.</p>
+  <p>Aprovação automática: <strong>não</strong>. A leitura e os rascunhos requerem conferência. A apuração usa os registros validados e os parâmetros aprovados conforme as regras do backend.</p>
   <p>Identificação e período: confiança disponível em {critical.known} de {critical.total} campos essenciais; {critical.matched} compatíveis com o cadastro.</p>
   <p>Menor confiança dos campos essenciais: <strong>{critical.complete?pct(critical.minimumAll):'indeterminada — há campos sem confiança'}</strong>.</p>
   <p>Campos técnicos reconhecidos: {fields.total}. Alta: {fields.high} · Revisão: {fields.review} · Baixa: {fields.low} · Sem confiança: {fields.missing}.</p>
