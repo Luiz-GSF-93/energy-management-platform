@@ -3,7 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/app/providers';
 
 export const metadata = {
-  title: 'Energy Management Platform',
+  title: 'EnergyOS',
   description: 'Gestão do Mercado Livre de Energia',
 };
 

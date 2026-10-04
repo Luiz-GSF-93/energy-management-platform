@@ -1,0 +1,41 @@
+<svg width="900" height="220" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0066FF"/>
+      <stop offset="100%" stop-color="#00E676"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hexágono -->
+  <polygon
+    points="110,20 180,60 180,140 110,180 40,140 40,60"
+    fill="url(#energyGradient)"
+  />
+
+  <!-- E em forma de raio -->
+  <path
+    d="
+    M95 55
+    L145 55
+    L120 85
+    L145 85
+    L90 145
+    L105 105
+    L75 105
+    Z"
+    fill="white"
+  />
+
+  <!-- Texto -->
+  <text
+    x="220"
+    y="125"
+    font-family="Inter, Segoe UI, Arial, sans-serif"
+    font-size="96"
+    font-weight="700"
+    fill="#0A2540">
+    Energy<tspan fill="#0066FF">O</tspan><tspan fill="#00C853">S</tspan>
+  </text>
+
+</svg>

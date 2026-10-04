@@ -1,6 +1,7 @@
 'use client';
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
+import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import { Alert, Button, Card, Input } from '@/app/components/ui';
 import { apiRequest } from '@/app/lib/api/client';
 
@@ -22,7 +23,7 @@ export default function ForgotPasswordPage() {
       setError(err instanceof Error ? err.message : 'Não foi possível solicitar o link. Tente novamente.');
     } finally { setBusy(false); }
   }
-  return <main className="auth-page"><div className="auth-shell"><Card>
+  return <main className="auth-page"><div className="auth-shell"><header className="auth-brand"><EnergyOSLogo className="auth-brand__logo" /><p className="auth-brand__description auth-brand__powered">Powered by Expert Energy</p></header><Card>
     <form className="auth-form" onSubmit={submit}>
       <h1>Recuperar senha</h1>
       <p>Informe o e-mail usado para acessar o EnergyOS.</p>

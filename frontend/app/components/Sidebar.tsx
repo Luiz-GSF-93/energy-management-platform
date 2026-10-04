@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import {
   BarChart3,
   Building2, LayoutGrid, ShieldCheck, UsersRound, FileSignature, Files, ContactRound, PanelLeftClose, PanelLeftOpen,
@@ -106,17 +107,10 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
     <aside className="backoffice-sidebar" aria-label="Menu EnergyOS">
       <button className="backoffice-sidebar__toggle" type="button" onClick={onToggle} aria-label={collapsed?'Expandir menu':'Recolher menu'} aria-expanded={!collapsed} title={collapsed?'Expandir menu':'Recolher menu'}>{collapsed?<PanelLeftOpen size={20}/>:<PanelLeftClose size={20}/>}</button>
       <header className="backoffice-brand">
-        <div
-          className="backoffice-brand__mark"
-          aria-hidden="true"
-        >
-          EE
-        </div>
+        <div className="backoffice-brand__symbol"><EnergyOSLogo compact className="backoffice-brand__icon" /></div>
 
         <div className="backoffice-brand__text">
-          <h1 className="backoffice-brand__name">
-            EnergyOS
-          </h1>
+          <h1 className="backoffice-brand__name"><EnergyOSLogo className="backoffice-brand__logo" /></h1>
           <p className="backoffice-brand__powered">Powered by Expert Energy</p>
 
           <p className="backoffice-brand__context">
