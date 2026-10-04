@@ -35,3 +35,15 @@ describe('Resolution source preservation',()=>{
  it('recognizes only exact source, period, unit context and tax content; conflicts are preserved',()=>{expect(resolutionRateState(candidate,[],'2026-08-01','2026-08-31').state).toBe('MISSING');expect(resolutionRateState(candidate,[row],'2026-08-01','2026-08-31',{state:'SP'}).state).toBe('PRESERVED');for(const patch of [{source:'other'},{end_date:'2026-12-31'},{amount_text:'0'},{unit_context:{state:'RJ'}}])expect(resolutionRateState(candidate,[{...row,...patch}],'2026-08-01','2026-08-31',{state:'SP'}).state).toBe('CONFLICT');expect(resolutionRateState(candidate,[row,row],'2026-08-01','2026-08-31').state).toBe('CONFLICT');});
  it('retains every finding, including symptoms, in grouped UI',()=>{const findings=Array.from({length:14},(_,i)=>({code:String(i),section:['Parâmetros','Medições','Custos mensais','Other'][i%4]}));expect(resolutionGroups(findings).flatMap(g=>g.findings)).toHaveLength(14);expect(new Set(resolutionGroups(findings).flatMap(g=>g.findings.map(f=>f.code))).size).toBe(14);});
 });
+
+describe('Automatic omitted exclusion revision',()=>{
+ it('creates an audited linked draft and leaves the approved tax unchanged',async()=>{
+  const s=setup();s.c.rates=[{state:'PRESERVED',component:'TUSD_DEMAND_UNUSED',existing:{id:'unused',revision:3}}];s.c.input.status='DRAFT';s.c.cost.status='DRAFT';
+  const old={id:'tax',revision:4,status:'APPROVED',source:s.c.provenance,notes:s.c.marker,treatment:'INCLUDED',start_date:s.c.period.start,end_date:s.c.period.end,tax_basis:{version:1,items:[{parameterId:'used',revision:2,operation:'INCLUDE'}]}};
+  s.c.taxes=[{code:'ICMS',existing:[old],bases:[...old.tax_basis.items,{parameterId:'unused',revision:3,operation:'EXCLUDE'}]}];
+  const insert=jest.fn((_rows:any[])=>({select:()=>({single:async()=>({data:{id:'next'},error:null})})}));(s.service as any).db={getClient:()=>({from:()=>({insert})})};
+  const before=JSON.stringify(old),result=await s.service.prepare('doc',s.t,{token:s.c.token});
+  expect(insert.mock.calls[0][0][0]).toMatchObject({supersedes_parameter_id:'tax',status:'DRAFT',created_by:'operator',treatment:'INCLUDED',tax_basis:{items:s.c.taxes[0].bases}});
+  expect(JSON.stringify(old)).toBe(before);expect(result.canPublish).toBe(false);expect(s.parameters.approve).not.toHaveBeenCalled();expect(result.receipts[0].state).toBe('SAVED_DRAFT');
+ });
+});
