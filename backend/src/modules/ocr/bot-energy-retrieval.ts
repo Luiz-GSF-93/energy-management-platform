@@ -15,6 +15,8 @@ export function retrieveTopics(question:string){
  const n=normalizeQuestion(question),words=new Set(n.match(/[a-z0-9%]+/g)??[]);
  // Do not interpret commands or return unrelated excerpts as answers to unsupported requests.
  if(/ignore|ignorar|publique|publica agora|senha|chave privada|token|outra organizacao|todos os clientes|execute|executar|apague|deletar/.test(n))return [];
+ // Questions about where/how to validate records must use their current invoice state.
+ if(concepts.workflow.some(w=>words.has(w))&&['custo','custos','mensal','mensais','registro','registros','parametro','parametros'].some(w=>words.has(w)))return ['pending'];
  // Completion/filling is a request for the invoice plan, even when it mentions validation.
  if(concepts.pending.some(w=>words.has(w)))return ['pending',...Object.keys(concepts).filter(k=>!['pending','workflow'].includes(k)&&concepts[k].some(w=>words.has(w))).slice(0,2)];
  return Object.entries(concepts).map(([key,terms])=>({key,score:terms.filter(w=>words.has(w)).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.key.localeCompare(b.key)).slice(0,3).map(x=>x.key);
