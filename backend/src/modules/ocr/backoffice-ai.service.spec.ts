@@ -1,4 +1,12 @@
 import {BackofficeAiService,assistantAiEvidence,financialAiEvidence} from './backoffice-ai.service';
+describe('ACL cancellation evidence for AI',()=>{
+ it('explains verified zero pairs separately from supplier taxes and omits unreconciled pairs',()=>{
+  const financial={state:'RECONCILED',aclCancellation:[{period:'OFF_PEAK',charge:'100.00',credit:'-100.00',balance:'0.00',sources:['tables[0].row1','tables[0].row2'],icmsState:'NOT_SHOWN'}]};
+  const plan:any={unitName:'Unit',month:'2026-08',counts:{blockers:0,reviews:0},records:{measurements:{status:'VALIDATED'},costs:{status:'VALIDATED'}},operations:[{invoiceAdjustments:financial}]};
+  const evidence=assistantAiEvidence(plan).find(e=>e.id==='acl-cancellation-OFF_PEAK');expect(evidence?.value).toContain('saldo R$ 0,00');expect(evidence?.value).toContain('nota do fornecedor');expect(evidence?.value).toContain('não declara isenção geral');expect(evidence?.source).toContain('row2');
+  financial.state='REVIEW_REQUIRED';expect(assistantAiEvidence(plan).some(e=>e.id.startsWith('acl-cancellation-'))).toBe(false);
+ });
+});
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 const tenant:any={scope:'organization',organizationId:'org-a',userId:'actor',role:'operacional',permissions:[P.INTELLIGENCE_AI_USE]};
 const evidence=[{id:'e1',label:'Consumo',value:'123',source:'p1'}];

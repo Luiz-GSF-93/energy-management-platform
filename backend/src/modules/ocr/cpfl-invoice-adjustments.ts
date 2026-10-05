@@ -1,5 +1,5 @@
 import type {CpflOperation} from './cpfl-paulista-layout';
-export type InvoiceAdjustments={state:'RECONCILED'|'REVIEW_REQUIRED';total:string|null;tariffs:string|null;cip:string|null;cipSource:string|null;items:{source:string;label:string;component:string;effect:'COST'|'CREDIT';amount:string}[];issues:string[]};
+export type InvoiceAdjustments={state:'RECONCILED'|'REVIEW_REQUIRED';total:string|null;tariffs:string|null;cip:string|null;cipSource:string|null;aclCancellation?:{period:string;charge:string;credit:string;balance:'0.00';sources:string[];icmsState:'NOT_SHOWN'|'ZERO_NET'}[];items:{source:string;label:string;component:string;effect:'COST'|'CREDIT';amount:string}[];issues:string[]};
 const cents=(v:unknown)=>{if(typeof v!=='string'||! /^-?(0|[1-9][0-9]*)([.][0-9]{1,2})?$/.test(v)||v.length>30)throw Error('Valor monetário ausente ou inválido.');const negative=v.startsWith('-'),[a,b='']=(negative?v.slice(1):v).split('.');return (BigInt(a)*100n+BigInt(b.padEnd(2,'0')))*(negative?-1n:1n);};
 const money=(n:bigint)=>{const s=(n<0n?-n:n).toString().padStart(3,'0');return (n<0n?'-':'')+s.slice(0,-2)+'.'+s.slice(-2);};
 /** Reconciles invoice operations; subtotals and informative duplicates never become expenses. */
@@ -22,9 +22,23 @@ export function cpflInvoiceAdjustments(operations:CpflOperation[],requireCip=tru
    else throw Error('Componente monetário sem integração: '+o.component);
   }
   if(acl!==0n)throw Error('Energia ACL e descontos não se anulam.');
+  const aclRows=rows.filter(o=>['ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT'].includes(o.component));
+  if(aclRows.some(o=>!['PEAK','OFF_PEAK'].includes(o.period)))throw Error('Energia ACL e descontos exigem posto tarifário identificado; não compensar ponta com fora ponta.');
+  const cancellation:NonNullable<InvoiceAdjustments['aclCancellation']>=[];
+  for(const period of ['PEAK','OFF_PEAK']){
+   const band=aclRows.filter(o=>o.period===period);if(!band.length)continue;
+   const positive=band.filter(o=>o.component==='ACL_DISTRIBUTOR_INFORMATION'&&o.role==='CHARGE'),negative=band.filter(o=>o.component==='ACL_ENERGY_DISCOUNT'&&o.role==='CREDIT');
+   if(!positive.length||!negative.length||positive.length+negative.length!==band.length)throw Error('Energia ACL exige lançamento positivo e desconto negativo no mesmo posto.');
+   const charge=positive.reduce((n,o)=>n+amount(o),0n),credit=negative.reduce((n,o)=>n+amount(o),0n);
+   if(charge+credit!==0n)throw Error('Energia ACL e descontos não se anulam no posto '+period+'.');
+   let icms=0n,shown=false;
+   for(const o of band){const f=o.fields.icmsAmount;if(!f?.text?.trim()&&f?.decimal==null)continue;shown=true;if(f.issues.includes('UNVERIFIED_SOURCE'))throw Error('ICMS da energia ACL exige conferência da fonte.');icms+=cents(f.decimal);}
+   if(icms!==0n)throw Error('Há ICMS explícito não conciliado nas linhas de energia ACL do posto '+period+'.');
+   cancellation.push({period,charge:money(charge),credit:money(credit),balance:'0.00',sources:band.map(o=>o.source),icmsState:shown?'ZERO_NET':'NOT_SHOWN'});
+  }
   if(requireCip&&lights.length!==1||lights.length>1)throw Error('CIP ausente ou ambígua.');
   if(sum!==total)throw Error('As operações não conciliam com o total a pagar.');
-  Object.assign(r,{state:'RECONCILED',total:money(total),tariffs:money(tariffs),cip:lights.length?money(amount(lights[0])):null,cipSource:lights[0]?.source??null});
+  Object.assign(r,{state:'RECONCILED',total:money(total),tariffs:money(tariffs),cip:lights.length?money(amount(lights[0])):null,cipSource:lights[0]?.source??null,aclCancellation:cancellation});
  }catch(e){r.items=[];r.issues.push(e instanceof Error?e.message:'Conciliação indisponível.');}
  return r;
 }
