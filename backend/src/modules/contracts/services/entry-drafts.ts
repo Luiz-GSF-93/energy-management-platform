@@ -23,6 +23,7 @@ export function entryIssues(kind:string,p:Record<string,unknown>):string[]{
   if(p.tariffModality==='BLUE')for(const k of ['contractedDemandPeak','contractedDemandOffPeak'])if(p[k]==null)issues.push(k);
  }
  if(kind==='management'&&p.remunerationModel==='FIXED'&&p.savingsPercentage!==0)issues.push('savingsPercentage');
+ if(kind==='management'&&p.remunerationModel==='VARIABLE'&&(p.fixedFeeMonthly!==0||Number(p.savingsPercentage)<=0))issues.push('fixedFeeMonthly','savingsPercentage');
  if(kind==='services'&&p.billingBasis!=='CUSTOM'&&p.agreedValue==null)issues.push('agreedValue');
  if(kind==='supply'){
   if(!['ENERGY_PURCHASE','ENERGY_SALE'].includes(String(p.contractType)))issues.push('contractType');
@@ -30,7 +31,7 @@ export function entryIssues(kind:string,p:Record<string,unknown>):string[]{
   if(['RULE','BOTH'].includes(String(p.seasonalityMode))&&!String(p.seasonalityRule||'').trim())issues.push('seasonalityRule');
   if(['MONTHLY','BOTH'].includes(String(p.seasonalityMode))&&(!Array.isArray(p.seasonalVolumes)||!p.seasonalVolumes.length))issues.push('seasonalVolumes');
   if(['INDEXED','MIXED'].includes(String(p.pricingMode)))for(const k of ['adjustmentIndex','adjustmentDate','adjustmentRule'])if(!p[k])issues.push(k);
-  
+
   if(p.guaranteeType==='OTHER'&&!String(p.guaranteeDescription||'').trim())issues.push('guaranteeDescription');
   const start=String(p.startDate||''),end=String(p.endDate||'');
   if(Array.isArray(p.annualPrices)&&p.annualPrices.length){let next=start;for(const row of p.annualPrices){if(!row||row.startDate!==next||row.endDate<row.startDate||row.endDate>end||typeof row.pricePerMwh!=='number'||!Number.isFinite(row.pricePerMwh)||row.pricePerMwh<0){issues.push('annualPrices');break;}const date=new Date(row.endDate+'T00:00:00Z');if(!Number.isFinite(date.getTime())){issues.push('annualPrices');break;}date.setUTCDate(date.getUTCDate()+1);next=date.toISOString().slice(0,10);}if(p.annualPrices[p.annualPrices.length-1]?.endDate!==end)issues.push('annualPrices');}

@@ -12,3 +12,9 @@ describe('guided entry',()=>{
  it('keeps a price gap and invalid seasonal total pending',()=>{const p={startDate:'2026-01-01',endDate:'2026-12-31',annualPrices:[{startDate:'2026-02-01',endDate:'2026-12-31',pricePerMwh:100,priceStatus:'FINAL'}],seasonalityMode:'MONTHLY',seasonalVolumes:[{year:2026,annualVolumeMwh:120,monthlyPercentages:Array(12).fill(0)}]};expect(entryIssues('supply',p)).toEqual(expect.arrayContaining(['annualPrices','seasonalVolumes']));});
  it('requires a service price unless contractual custom rule',()=>{expect(entryIssues('services',{billingBasis:'PER_MWH'})).toContain('agreedValue');expect(entryIssues('services',{billingBasis:'CUSTOM'})).not.toContain('agreedValue');});
 });
+
+describe('Variable-only fee input',()=>{
+ const base={customerId:customer,contractNumber:'V1',startDate:'2026-01-01',endDate:'2026-12-31',remunerationModel:'VARIABLE',fixedFeeMonthly:0,savingsPercentage:9.8,applicationRules:'Somente variável confirmado'};
+ it('accepts explicit zero fixed amount and positive percentage',()=>expect(entryIssues('management',base)).toEqual([]));
+ it('rejects a hidden fixed amount or missing variable percentage',()=>{expect(entryIssues('management',{...base,fixedFeeMonthly:0.01})).toContain('fixedFeeMonthly');expect(entryIssues('management',{...base,savingsPercentage:0})).toContain('savingsPercentage');});
+});

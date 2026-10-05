@@ -16,3 +16,5 @@ describe('Management fee per unit',()=>{
  it('retains all cents including a zero participation',()=>{const rows=allocateFee('999999999999.99',[{consumerUnitId:'a',percentage:'33.3333'},{consumerUnitId:'b',percentage:'66.6667'},{consumerUnitId:'c',percentage:'0'}]);expect(rows.reduce((n,r)=>n+feeCents(r.amount),0n)).toBe(99999999999999n);expect(rows[2].amount).toBe('0.00');});
  it.each(['-1','1e3','NaN','1.001'])('rejects invalid money %s',v=>expect(()=>feeCents(v)).toThrow());
 });
+
+it('keeps an explicit variable-only fixed amount at zero and waits for client consolidation',()=>{expect(memory({...contract,fixed_fee_monthly:'0.00',savings_percentage:'9.8'})).toMatchObject({fixedUnit:'0.00',percentage:'9.8',status:'VARIABLE_PENDING',totalFee:null});});

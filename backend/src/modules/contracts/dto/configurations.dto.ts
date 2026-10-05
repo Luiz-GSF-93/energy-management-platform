@@ -6,7 +6,7 @@ class PeriodDto {
 export class ManagementDto extends PeriodDto {
  @IsUUID() customerId!:string;
  @IsString() @Matches(/\S/) @MaxLength(50) contractNumber!:string;
- @IsIn(['FIXED','HYBRID']) remunerationModel!:string;
+ @IsIn(['FIXED','HYBRID','VARIABLE']) remunerationModel!:string;
  @IsNumber() @Min(0) fixedFeeMonthly!:number;
  @IsNumber() @Min(0) @Max(100) savingsPercentage!:number;
  @IsString() @Matches(/\S/) @MaxLength(4096) applicationRules!:string;
@@ -25,4 +25,12 @@ export class ServiceAgreementDto extends PeriodDto {
  @IsIn(['FIXED_MONTHLY','PER_MWH','PERCENTAGE','CUSTOM']) billingBasis!:string;
  @IsOptional() @IsNumber() @Min(0) agreedValue?:number;
  @IsString() @Matches(/\S/) @MaxLength(4096) applicationRules!:string;
+}
+
+export class VariableFeeCorrectionDto {
+ @IsNumber() @Min(0) expectedFixed!:number;
+ @IsNumber() @Min(0) @Max(100) expectedPercentage!:number;
+ @IsNumber() @Min(0.0001) @Max(100) percentage!:number;
+ @IsString() @Matches(/\S/) @MaxLength(4096) reason!:string;
+ @IsUUID() requestId!:string;
 }
