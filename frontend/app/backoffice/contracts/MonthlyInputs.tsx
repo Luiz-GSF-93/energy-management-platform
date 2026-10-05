@@ -1,98 +1,211 @@
 'use client';
+
 import BotEnergyGuidance from './BotEnergyGuidance';
+
 import FormConversation from './FormConversation';
+
 import {ConversationField,conversationNote} from './form-conversation';
+
 import ConfigurationSuccess from './ConfigurationSuccess';
+
 import type {OcrAutofill} from './ocr-autofill';
+
+import {useInvoiceAutofill} from './useInvoiceAutofill';
+
+import {prefillMeasurements,ocrReviewNote} from './measurement-prefill';
+
 import AuditAuthor,{AuditAuthorFields} from './AuditAuthor';
+
 import {FormEvent,useEffect,useRef,useState} from 'react';
+
 import {Button,Card,Input} from '@/app/components/ui';
+
 import {apiRequest} from '@/app/lib/api/client';
+
 import {useAuth} from '@/app/providers';
+
 import {Unit,PERM} from './types';
+
 import {acrDemandFromValidated} from './acr-demand-reference';
+
 import {CorrectionContext} from './preparation-navigation';
+
 const fields={"consumptionTotal":"Consumo total (kWh)","consumptionPeak":"Consumo na ponta (kWh)","consumptionOffPeak":"Consumo fora ponta (kWh)","demandSingle":"Demanda medida única (kW)","demandPeak":"Demanda medida na ponta (kW)","demandOffPeak":"Demanda medida fora ponta (kW)","reactiveTotal":"Energia reativa excedente (kVArh)","reactiveBilledPeakKwh":"Reativo faturado na ponta (kWh da fatura)","reactiveBilledOffPeakKwh":"Reativo faturado fora ponta (kWh da fatura)"};
+
 type BilledDemand=Partial<Record<'ACL'|'ACR',{single:string|null;peak:string|null;offPeak:string|null;used?:string|null;unused?:string|null;source:string}>>;
+
 type Measurements=Record<keyof typeof fields,string|null>;
+
 type Row=AuditAuthorFields & {unit_context?:Record<string,unknown>;origin?:string;source_ocr_document_id?:string|null;billed_demand?:BilledDemand|null;id:string;consumer_unit_id:string;month:string;version:number;revision:number;previous_id:string|null;status:'DRAFT'|'VALIDATED';measurements:Measurements;source_reference:string;notes:string;correction_reason:string;created_by:string;updated_by:string;validated_by:string|null;validated_at:string|null;updated_at:string};
+
 type Event={id:string;revision:number;action:string;recorded_at:string;snapshot:Row};
+
 type Editor={requiresJustification?:boolean;billedDemand:BilledDemand;id?:string;revision?:number;previousId:string|null;measurements:Measurements;sourceReference:string;notes:string;correctionReason:string};
+
 const blank=()=>Object.fromEntries(Object.keys(fields).map(k=>[k,null])) as Measurements;
-export default function MonthlyInputs({customerId,units,onDirty,initialContext,autofill}:{autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
+
+export default function MonthlyInputs({customerId,units,onDirty,initialContext,autofill:acceptedAutofill}:{autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
+
  const {hasPermission}=useAuth();const [unitId,setUnit]=useState(initialContext?.unitId||''),[year,setYear]=useState(initialContext?.month.slice(0,4)||''),[month,setMonth]=useState(initialContext?.month.slice(5,7)||'');
+
  const [rows,setRows]=useState<Row[]|null>(null),[canValidate,setValidate]=useState(false),[busy,setBusy]=useState(!!initialContext&&initialContext.customerId===customerId&&units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)),[error,setError]=useState(''),[message,setMessage]=useState(''),[editor,setEditor]=useState<Editor|null>(null),[discard,setDiscard]=useState(false),[confirm,setConfirm]=useState<Row|null>(null),[history,setHistory]=useState<{id:string;events:Event[]}|null>(null);
+
  const writing=useRef(false);
+
  const [conversationSession,setConversationSession]=useState(0);
+
+ const [checkedOcr,setCheckedOcr]=useState(false),[ocrConflicts,setOcrConflicts]=useState<string[]>([]);
+
  const period=year+'-'+month,available=units.filter(u=>u.customer_id===customerId),create=hasPermission(PERM.create),update=hasPermission(PERM.update);
+
+ const {proposal:autofill,loading:sourceLoading,error:sourceError}=useInvoiceAutofill(customerId,unitId,period,acceptedAutofill);
+
  useEffect(()=>{if(!initialContext||initialContext.customerId!==customerId||!units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId))return;let cancelled=false;apiRequest<{rows:Row[];canValidate:boolean}>('/api/v1/calculation-monthly-inputs?consumerUnitId='+encodeURIComponent(initialContext.unitId)+'&month='+encodeURIComponent(initialContext.month)).then(r=>{if(!cancelled){setRows(r.rows);setValidate(r.canValidate);}}).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Falha na consulta.');}).finally(()=>{if(!cancelled)setBusy(false);});return()=>{cancelled=true;};},[initialContext,customerId,units]);
+
  function clearResults(){setRows(null);setError('');setMessage('');setConfirm(null);setHistory(null);}
+
  function close(){setEditor(null);setDiscard(false);onDirty(false);}
- function patch(p:Partial<Editor>){setEditor(d=>d?{...d,...p}:d);onDirty(true);}
+
+ function patch(p:Partial<Editor>){setCheckedOcr(false);setEditor(d=>d?{...d,...p}:d);onDirty(true);}
+
  async function load(e:FormEvent){e.preventDefault();setError('');setMessage('');setRows(null);setConfirm(null);setHistory(null);if(!unitId||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(period)){setError('Selecione unidade, mês e ano entre 2000 e 2199.');return;}setBusy(true);try{const r=await apiRequest<{rows:Row[];canValidate:boolean}>('/api/v1/calculation-monthly-inputs?consumerUnitId='+encodeURIComponent(unitId)+'&month='+period);setRows(r.rows);setValidate(r.canValidate);}catch(e){setError(e instanceof Error?e.message:'Falha na consulta.');}finally{setBusy(false);}}
- function start(row?:Row){setConversationSession(v=>v+1);setEditor(row?{...(row.status==='DRAFT'?{id:row.id,revision:row.revision}:{}),requiresJustification:row.origin==='OCR_REVIEWED',previousId:row.status==='DRAFT'?row.previous_id:row.id,measurements:{...row.measurements},billedDemand:row.billed_demand?structuredClone(row.billed_demand):{},sourceReference:row.source_reference,notes:row.notes,correctionReason:row.status==='DRAFT'&&row.origin!=='OCR_REVIEWED'?row.correction_reason:''}:{previousId:null,measurements:{...blank(),...(initialContext?.unitId===unitId&&initialContext.month===period?autofill?.measurements:{})},billedDemand:{},sourceReference:initialContext?.unitId===unitId&&initialContext.month===period?autofill?.source||'':'',notes:autofill?'Pré-preenchido pelo bot-energy. Conferir no PDF; demanda medida, demanda faturada e reativo têm unidades e fontes separadas.':'',correctionReason:''});onDirty(true);setConfirm(null);setHistory(null);setError('');setMessage('');}
+
+ function start(row?:Row){setCheckedOcr(false);const prefilled=prefillMeasurements(row?.measurements??blank(),autofill);setOcrConflicts(prefilled.conflicts);setConversationSession(v=>v+1);setEditor(row?{...(row.status==='DRAFT'?{id:row.id,revision:row.revision}:{}),requiresJustification:row.origin==='OCR_REVIEWED',previousId:row.status==='DRAFT'?row.previous_id:row.id,measurements:prefilled.measurements,billedDemand:row.billed_demand?structuredClone(row.billed_demand):{},sourceReference:[row.source_reference,prefilled.filled.length?autofill?.source:''].filter(Boolean).join(' · ').slice(0,2000),notes:row.notes,correctionReason:row.status==='DRAFT'&&row.origin!=='OCR_REVIEWED'?row.correction_reason:''}:{previousId:null,measurements:prefilled.measurements,billedDemand:{},sourceReference:autofill?.unitId===unitId&&autofill.month===period?autofill?.source||'':'',notes:autofill?'Pré-preenchido pelo bot-energy. Conferir no PDF; demanda medida, demanda faturada e reativo têm unidades e fontes separadas.':'',correctionReason:''});onDirty(true);setConfirm(null);setHistory(null);setError('');setMessage('');}
+
  async function persist(next:Editor,keepOpen=false){
+
+  if(autofill&&!checkedOcr)throw Error('Confira os valores preenchidos e marque OK antes de salvar.');
+
   if(writing.current)throw Error('Aguarde a gravação atual.');writing.current=true;setBusy(true);setError('');setMessage('');
+
   try{const row=await apiRequest<Row>('/api/v1/calculation-monthly-inputs'+(next.id?'/'+next.id:''),{method:next.id?'PUT':'POST',body:{consumerUnitId:unitId,month:period,measurements:next.measurements,billedDemand:next.billedDemand,sourceReference:next.sourceReference,notes:next.notes,correctionReason:next.correctionReason,previousId:next.previousId,...(next.id?{revision:next.revision}:{})}});
+
    setRows(old=>[row,...(old||[]).filter(r=>r.id!==row.id)].sort((a,b)=>b.version-a.version));
+
    if(keepOpen){setEditor({...next,id:row.id,revision:row.revision});onDirty(false);}else close();
+
    const result='Rascunho salvo · revisão '+row.revision+'. Validação permanece pendente.';setMessage(result);return result;
+
   }finally{writing.current=false;setBusy(false);}
+
  }
- async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;try{await persist(editor);}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}}
+
+ async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;try{await persist(autofill?{...editor,notes:ocrReviewNote(editor.notes,autofill)}:editor);}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}}
+
+
 
  async function validate(){if(!confirm||busy)return;setBusy(true);setError('');setMessage('');try{const row=await apiRequest<Row>('/api/v1/calculation-monthly-inputs/'+confirm.id+'/validate',{method:'POST',body:{revision:confirm.revision}});setRows(old=>(old||[]).map(r=>r.id===row.id?row:r));setConfirm(null);setMessage('Versão validada e preservada. Isso valida as medições informadas; não publica uma apuração financeira.');}catch(e){setError(e instanceof Error?e.message:'Não foi possível validar.');}finally{setBusy(false);}}
+
  async function audit(id:string){setBusy(true);setError('');try{setHistory({id,events:await apiRequest<Event[]>('/api/v1/calculation-monthly-inputs/'+id+'/events')});}catch(e){setError(e instanceof Error?e.message:'Histórico indisponível.');}finally{setBusy(false);}}
+
  const acrReference=editor?acrDemandFromValidated(rows?.[0],available.find(u=>u.id===unitId),period,editor.previousId,editor.billedDemand.ACR):null;
+
  function reuseAclDemand(){if(!editor||!acrReference)return;patch({billedDemand:{...editor.billedDemand,ACR:acrReference},correctionReason:[editor.correctionReason,'Cenário ACR com as mesmas condições de demanda da origem ACL validada; reaproveitamento somente das quantidades.'].filter(Boolean).join(' ')});}
 
+
+
  function conversationFields(d:Editor):ConversationField[]{
+
   const m=d.measurements;
+
   return [{key:'sourceReference',label:'Fonte e evidência das medições',value:d.sourceReference,kind:'text',required:true,question:'Qual documento e período comprovam estas medições? Identifique as páginas.'},
-   ...Object.entries(fields).filter(([k])=>!(k==='demandSingle'&&(m.demandPeak!==null||m.demandOffPeak!==null))&&!(['demandPeak','demandOffPeak'].includes(k)&&m.demandSingle!==null)&&!(k==='reactiveTotal'&&(m.reactiveBilledPeakKwh!=null||m.reactiveBilledOffPeakKwh!=null))&&!(k.startsWith('reactiveBilled')&&m.reactiveTotal!==null)).map(([key,label])=>({key,label,value:m[key as keyof Measurements],kind:'decimal' as const,unit:key==='reactiveTotal'?'kVArh':key.startsWith('demand')?'kW':'kWh',question:'Qual é '+label+'? Confira a grandeza e a fonte; demanda faturada não substitui demanda medida.'})),
+
+   ...Object.entries(fields).filter(([k])=>!(k==='demandSingle'&&(m.demandPeak!==null||m.demandOffPeak!==null))&&!(['demandPeak','demandOffPeak'].includes(k)&&m.demandSingle!==null)&&!(k==='reactiveTotal'&&(m.reactiveBilledPeakKwh!=null||m.reactiveBilledOffPeakKwh!=null))&&!(k.startsWith('reactiveBilled')&&m.reactiveTotal!==null)).map(([key,label])=>({key,label,value:m[key as keyof Measurements],kind:'decimal' as const,reviewRequired:ocrConflicts.includes(key)||autofill?.measurementReviews?.[key]?.state==='REVIEW_REQUIRED'||autofill?.measurementReviews?.[key]?.state==='CONFLICT',promptWhenEmpty:!autofill||key==='consumptionTotal'||key==='demandSingle'||key==='consumptionPeak'||key==='consumptionOffPeak',unit:key==='reactiveTotal'?'kVArh':key.startsWith('demand')?'kW':'kWh',question:autofill?.measurementReviews?.[key]?.reason||('Qual é '+label+'? Confira a grandeza e a fonte; demanda faturada não substitui demanda medida.')})),
+
    ...(['ACL','ACR'] as const).flatMap(s=>d.billedDemand[s]?[...(['single','peak','offPeak','used','unused'] as const).map(k=>({key:'billed.'+s+'.'+k,label:'Demanda faturável '+s+' · '+({single:'Única',peak:'Ponta',offPeak:'Fora ponta',used:'Utilizada',unused:'Não utilizada'})[k]+' (kW)',value:d.billedDemand[s]![k]??null,kind:'decimal' as const,unit:'kW'})),{key:'billed.'+s+'.source',label:'Fonte e regra da demanda faturável '+s,value:d.billedDemand[s]!.source,kind:'text' as const,required:true}]:[]),
+
    ...(d.previousId||d.requiresJustification?[{key:'correctionReason',label:'Justificativa do complemento ou correção',value:d.correctionReason,kind:'text' as const,required:true}]:[])];
+
  }
+
  async function applyConversation(field:ConversationField,value:string,evidence:string,autoSave:boolean){
+
   if(!editor||busy)throw Error('O formulário não está disponível.');
+
   const live=conversationFields(editor).find(f=>f.key===field.key);if(!live||live.value!==field.value)throw Error('O campo mudou. Confira o valor atual antes de responder.');
+
   const next:Editor={...editor,measurements:{...editor.measurements},billedDemand:structuredClone(editor.billedDemand),notes:conversationNote(editor.notes,field,value,evidence)};
+
   if(field.key in fields)next.measurements[field.key as keyof Measurements]=value;
+
   else if(['sourceReference','correctionReason'].includes(field.key))next[field.key as 'sourceReference'|'correctionReason']=value;
+
   else if(field.key.startsWith('billed.')){const [,scenario,key]=field.key.split('.');const target=next.billedDemand[scenario as 'ACL'|'ACR'];if(!target)throw Error('Ative o cenário no formulário primeiro.');(target as unknown as Record<string,string|null>)[key]=value;}
+
   else throw Error('Campo indisponível para preenchimento.');
+
   patch(next);
-  if(!autoSave)return 'Aplicado ao formulário; aguarda salvar.';
+
+  if(!autoSave||autofill)return 'Aplicado ao formulário; confira os valores e marque OK para salvar o rascunho.';
+
   if(!next.sourceReference.trim()||((next.previousId||next.requiresJustification)&&next.correctionReason.trim().length<3))return 'Aplicado ao formulário; informe fonte e justificativa para gravar automaticamente.';
+
   return persist(next,true);
+
  }
+
  const details=(r:Row)=><>{r.origin==='OCR_REVIEWED'&&<p><strong>Origem: dados iniciados por consumo de fatura OCR conferida.</strong> A fonte original e as conferências usadas permanecem preservadas. Complementos e correções posteriores constam no histórico das medições.</p>}<dl>{Object.entries(fields).map(([k,l])=><div key={k}><dt>{l}</dt><dd>{r.measurements[k as keyof Measurements]??'Não informado'}</dd></div>)}</dl>{(['ACL','ACR'] as const).map(s=>r.billed_demand?.[s]?<div key={s}><h4>Demanda faturável · {s}</h4><p>Única: {r.billed_demand[s]?.single??'Não informado'} kW · Ponta: {r.billed_demand[s]?.peak??'Não informado'} kW · Fora ponta: {r.billed_demand[s]?.offPeak??'Não informado'} kW</p>{r.billed_demand[s]?.used!=null||r.billed_demand[s]?.unused!=null?<p>Parcela utilizada: {r.billed_demand[s]?.used??'Não informado'} kW · Parcela não utilizada: {r.billed_demand[s]?.unused??'Não informado'} kW</p>:null}<p>Fonte e regra: {r.billed_demand[s]?.source}</p></div>:null)}<p style={{whiteSpace:'pre-wrap'}}>Fonte: {r.source_reference}</p><p style={{whiteSpace:'pre-wrap'}}>{r.notes}</p>{r.correction_reason?<p>Motivo da correção: {r.correction_reason}</p>:null}<p>Autor: {<AuditAuthor id={r.created_by} name={r.created_by_name}/> } · Última alteração: {<AuditAuthor id={r.updated_by} name={r.updated_by_name}/> } · {new Date(r.updated_at).toLocaleString('pt-BR')}</p>{r.validated_at?<p>Validado por {<AuditAuthor id={r.validated_by} name={r.validated_by_name}/> } em {new Date(r.validated_at).toLocaleString('pt-BR')}</p>:null}</>;
+
  if(!customerId)return <p>Selecione um cliente para consultar os dados mensais de suas unidades.</p>;
+
  return <section className='backoffice-page'><h2>Dados mensais para apuração</h2><p>Registre as medições conferidas na fatura ou relatório de medição. Campos vazios significam não informado. Esta etapa não calcula custos nem economia.</p>
+
  {error?<BotEnergyGuidance error={error}/>:null}{message?<ConfigurationSuccess message={message}/>:null}
+
  <Card title='Unidade e competência dos dados'><form onSubmit={load}><fieldset disabled={busy||!!editor} className='organizations-create__form'>
+
  <label>Unidade dos dados mensais<select className='ds-input' required value={unitId} onChange={e=>{setUnit(e.target.value);clearResults();}}><option value=''>Selecione</option>{available.map(u=><option key={u.id} value={u.id}>{u.name} — {u.consumer_unit_number}</option>)}</select></label>
+
  <label>Mês dos dados mensais<select className='ds-input' required value={month} onChange={e=>{setMonth(e.target.value);clearResults();}}><option value=''>Selecione</option>{['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].map((m,i)=><option key={m} value={String(i+1).padStart(2,'0')}>{m}</option>)}</select></label>
+
  <label>Ano dos dados mensais<select className='ds-input' required autoComplete='off' value={year} onChange={e=>{setYear(e.target.value);clearResults();}}><option value=''>Selecione o ano</option>{Array.from({length:200},(_,i)=>String(2000+i)).map(y=><option key={y} value={y}>{y}</option>)}</select></label>
+
  <Button type='submit'>{busy?'Aguarde...':'Consultar dados mensais'}</Button></fieldset></form></Card>
- {rows&&!editor&&create&&!rows.some(r=>r.status==='DRAFT')?<Button disabled={busy} onClick={()=>start(rows[0])}>{rows.length?'Criar versão corrigida':'Novo rascunho mensal'}</Button>:null}
+
+ {sourceLoading?<p role='status'>Carregando os preenchimentos OCR da fatura…</p>:sourceError?<p role='status'>{sourceError} O preenchimento manual continua disponível.</p>:autofill?<p role='status'>Valores da fatura carregados. Confira os preenchimentos; somente dados ausentes ou divergentes precisam de complemento.</p>:null}
+
+ {rows&&!editor&&create&&!rows.some(r=>r.status==='DRAFT')?<Button disabled={busy||sourceLoading} onClick={()=>start(rows[0])}>{rows.length?'Criar versão corrigida':'Novo rascunho mensal'}</Button>:null}
+
+ {editor&&autofill?<section className='ds-card' aria-label='Valores preenchidos pela fatura'><h3>Bot-Energy · conferir preenchimentos</h3><p>Confira os valores já preenchidos. O acompanhamento pede apenas complementos ou revisão de baixa confiança e divergências.</p><dl>{Object.entries(editor.measurements).filter(([,v])=>v!==null).map(([k,v])=><div key={k}><dt>{fields[k as keyof Measurements]}</dt><dd>{v} · {ocrConflicts.includes(k)?'Divergência — valor anterior preservado':autofill.measurementReviews?.[k]?.state==='REVIEW_REQUIRED'?'Revisão da transcrição necessária':'Preenchido — conferir OK'}</dd></div>)}</dl></section>:null}
+
  {editor?<FormConversation key={conversationSession} context={(available.find(u=>u.id===unitId)?.name||'Unidade')+' · '+period} fields={conversationFields(editor)} disabled={busy||!(editor.id?update:create)} onApply={applyConversation}/>:null}
+
  {editor?<Card title={editor.id?'Editar medições do rascunho':editor.previousId?'Nova versão das medições':'Novo rascunho mensal'}><form onSubmit={save}><fieldset disabled={busy} className='organizations-create__form'><p>{available.find(u=>u.id===unitId)?.name} · {period}</p><p>Informe consumo em kWh, demanda medida em kW e energia reativa excedente em kVArh. Demanda contratada permanece no cadastro da distribuidora. Use demanda única ou por posto.</p>
+
  {Object.entries(fields).map(([k,label])=><Input key={k} label={label} inputMode='decimal' maxLength={19} pattern='(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?' placeholder='Não informado' value={editor.measurements[k as keyof Measurements]??''} onChange={e=>patch({measurements:{...editor.measurements,[k]:e.target.value===''?null:e.target.value.replace(',','.')}})}/>)}
+
  <fieldset><legend>Demanda faturável por cenário</legend>{acrReference?<div><p>Se o comparativo ACR mantém as mesmas condições de demanda, reaproveite as quantidades ACL da versão validada. Tarifas e tributos ACR continuam independentes. A origem ficará registrada ao salvar esta versão.</p><Button type="button" disabled={busy} onClick={reuseAclDemand}>Usar quantidades ACL no ACR (mesmas condições)</Button></div>:null}<p>Informe somente a quantidade normal faturável em kW, conferida na fatura para ACL ou determinada pela regra documentada do cenário ACR. Não copie automaticamente a demanda medida ou contratada. No grupo A Verde, em ACL e ACR, informe as parcelas utilizada e não utilizada somente com evidência; a soma deve corresponder à demanda única. O cálculo usa tarifas próprias aprovadas para as duas parcelas. Ultrapassagem não é calculada nesta etapa.</p>{(['ACL','ACR'] as const).map(s=><div key={s}><label><input type='checkbox' checked={!!editor.billedDemand[s]} onChange={e=>{const next={...editor.billedDemand};if(e.target.checked)next[s]={single:null,peak:null,offPeak:null,source:''};else delete next[s];patch({billedDemand:next});}}/> Informar demanda faturável {s}</label>{editor.billedDemand[s]?<>{Object.entries({single:'Única',peak:'Ponta',offPeak:'Fora ponta',used:'Parcela utilizada (verde)',unused:'Parcela não utilizada (verde)'}).map(([k,l])=><Input key={k} label={'Demanda faturável '+s+' · '+l+' (kW)'} inputMode='decimal' maxLength={19} pattern='(0|[1-9][0-9]{0,11})([.][0-9]{1,6})?' placeholder='Não informado' value={editor.billedDemand[s]?.[k as 'single'|'peak'|'offPeak'|'used'|'unused']??''} onChange={e=>patch({billedDemand:{...editor.billedDemand,[s]:{...editor.billedDemand[s]!,[k]:e.target.value===''?null:e.target.value.replace(',','.')}}})}/>)}<label>Fonte e regra da demanda faturável {s}<textarea className='ds-input' required maxLength={2000} value={editor.billedDemand[s]?.source||''} placeholder='Documento, página, quantidade normal e regra utilizada neste cenário.' onChange={e=>patch({billedDemand:{...editor.billedDemand,[s]:{...editor.billedDemand[s]!,source:e.target.value}}})}/></label></>:null}</div>)}</fieldset>
+
  <label>Fonte e evidência das medições<textarea className='ds-input' required maxLength={2000} placeholder='Identifique fatura/relatório, número, período de leitura e páginas dos valores.' value={editor.sourceReference} onChange={e=>patch({sourceReference:e.target.value})}/></label>
+
  <label>Observações dos dados mensais<textarea className='ds-input' maxLength={2000} value={editor.notes} onChange={e=>patch({notes:e.target.value})}/></label>
+
  {editor.previousId||editor.requiresJustification?<label>{editor.requiresJustification?'Justificativa e evidência do complemento ou correção OCR':'Justificativa da nova versão'}<textarea className='ds-input' required maxLength={2000} value={editor.correctionReason} onChange={e=>patch({correctionReason:e.target.value})}/></label>:null}
- <Button type='submit'>Salvar dados mensais em rascunho</Button><Button type='button' variant='secondary' onClick={()=>setDiscard(true)}>Cancelar preenchimento mensal</Button>
+
+ {autofill?<section aria-label='Conferência dos valores preenchidos'><p>Fonte OCR: {autofill.source}</p>{ocrConflicts.length?<p role='alert'>Valores anteriores preservados por divergência: {ocrConflicts.map(k=>fields[k as keyof Measurements]).join(', ')}. Confira e corrija com justificativa antes de validar.</p>:null}<label><input type='checkbox' checked={checkedOcr} onChange={e=>setCheckedOcr(e.target.checked)}/> OK — conferi os valores preenchidos e a fonte da fatura.</label><p>Valores de baixa confiança e divergências exigem revisão no documento. Este aceite não publica a apuração.</p></section>:null}
+
+ <Button type='submit' disabled={!!autofill&&!checkedOcr}>Salvar dados mensais em rascunho</Button><Button type='button' variant='secondary' onClick={()=>setDiscard(true)}>Cancelar preenchimento mensal</Button>
+
  {discard?<div role='alert'><p>Descartar somente os campos não salvos deste formulário?</p><Button type='button' onClick={close}>Descartar preenchimento mensal</Button><Button type='button' variant='secondary' onClick={()=>setDiscard(false)}>Continuar preenchimento mensal</Button></div>:null}
+
  </fieldset></form></Card>:null}
+
  {rows?<Card title={'Versões da competência '+period}>{!rows.length?<p>Nenhuma versão cadastrada para esta unidade e competência.</p>:rows.map((r,i)=><article className='ds-card' key={r.id}><h3>Versão {r.version} · {r.status==='DRAFT'?'Rascunho':'Validada'}{i===0?' · Mais recente':''}</h3><p>{r.status==='VALIDATED'?'Conteúdo preservado. Correções exigem uma nova versão.':'Ainda não validada para a apuração.'}</p>{details(r)}
- {r.status==='DRAFT'&&update?<Button disabled={busy||!!editor} variant='secondary' onClick={()=>start(r)}>Editar medições</Button>:null}
+
+ {r.status==='DRAFT'&&update?<Button disabled={busy||sourceLoading||!!editor} variant='secondary' onClick={()=>start(r)}>Editar medições</Button>:null}
+
  {r.status==='DRAFT'&&update&&canValidate?<Button disabled={busy||!!editor} onClick={()=>setConfirm(r)}>Revisar e validar medições</Button>:null}
+
  <Button variant='secondary' disabled={busy||!!editor} onClick={()=>void audit(r.id)}>Histórico das medições</Button>
+
  {confirm?.id===r.id?<div role='alert'><p>Confirme que conferiu as medições acima com a fonte. A versão ficará imutável; dados não informados continuarão ausentes e poderão impedir o cálculo.</p><Button disabled={busy} onClick={()=>void validate()}>Confirmar validação das medições</Button><Button disabled={busy} variant='secondary' onClick={()=>setConfirm(null)}>Cancelar validação</Button></div>:null}
+
  {history?.id===r.id?<details open><summary>Histórico de alterações das medições</summary>{history.events.map(e=><details key={e.id}><summary>Revisão {e.revision} · {{CREATED:'Criado',UPDATED:'Atualizado',VALIDATED:'Validado'}[e.action]||e.action} · {new Date(e.recorded_at).toLocaleString('pt-BR')}</summary>{details(e.snapshot)}</details>)}</details>:null}
+
  </article>)}</Card>:null}
+
  <p>A validação das medições é feita por Gestor ou Administrador da organização. Custos, tributos, dados CCEE e resultados financeiros serão tratados nas etapas seguintes.</p>
+
  </section>;
+
 }
