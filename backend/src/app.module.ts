@@ -1,3 +1,4 @@
+import {TradingHubModule} from './modules/trading-hub/trading-hub.module';
 import {PlatformCostsModule} from './modules/platform-costs/platform-costs.module';
 import {PerformanceMiddleware} from './modules/platform-costs/performance.middleware';
 import {OperationsModule} from './modules/operations/operations.module';
@@ -40,6 +41,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     PlatformCostsModule,
     OcrModule,
     OperationsModule,
+    TradingHubModule,
   ],
   controllers: [AppController],
   providers: [
