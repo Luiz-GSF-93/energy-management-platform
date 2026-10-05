@@ -24,7 +24,7 @@ export default function EntryWizard({customers,units,filterCustomer,onDirty,onAc
  function mark(){setDirty(true);onDirty(true);setMessage('');}
  function start(row?:Entry){setInvoiceTarget(null);setEditing(row||null);setKind(row?.kind||'supply');setCustomer(row?.customer_id||filterCustomer);setPayload(row?.payload||initialEntry('supply'));setSeed(row?.payload||{});setDeferred(row?.deferred_steps||[]);setSchedule(!!row?.payload.annualPrices?.length);setStep(row?0:-1);setVersion(v=>v+1);setError('');setMessage('');setDirty(false);onDirty(false);setOpen(true);onActive(true);setCancel(false);setRegister(null);}
  function close(){setOpen(false);onActive(false);setDirty(false);onDirty(false);setCancel(false);setEditing(null);}
- function patch(key:string,value:Payload[string]){setPayload(old=>{const next={...old};if(value==='')delete next[key];else next[key]=value;
+ function patch(key:string,value:Payload[string]){setPayload(old=>{const next={...old};if(key==='remunerationModel'&&value==='VARIABLE')next.fixedFeeMonthly=0;if(value==='')delete next[key];else next[key]=value;
  if(key==='tariffGroup'){delete next.tariffSubgroup;delete next.tariffModality;for(const k of ['contractedDemand','contractedDemandPeak','contractedDemandOffPeak','demandTariff','demandTariffPeak','demandTariffOffPeak'])delete next[k];}
  if(key==='tariffModality'){for(const k of value==='BLUE'?['contractedDemand','demandTariff']:['contractedDemandPeak','contractedDemandOffPeak','demandTariffPeak','demandTariffOffPeak'])delete next[k];}
  if(key==='remunerationModel'&&value==='FIXED')next.savingsPercentage=0;
