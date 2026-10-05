@@ -8,6 +8,11 @@ import {AzureKnowledgeEmbeddingsConnector,KNOWLEDGE_EMBEDDING_MODEL,KNOWLEDGE_EM
 import {KnowledgeAuthority,KnowledgeFamily,EnergyMarket,officialKnowledgeUrl,knowledgeTextHash,knowledgeCatalogue} from './bot-energy-knowledge';
 
 export type RegulatorySource={documentKey:string;family:KnowledgeFamily;authority:KnowledgeAuthority;title:string;version:string;officialUrl:string;documentHash:string;publishedAt:string;validFrom:string;validTo:string|null;markets:EnergyMarket[];pages:{page:number|null;section:string;text:string}[]};
+export function authorizedKnowledgeIndexer(t:TenantContext){
+ return !!t.organizationId&&!!t.userId&&(t.scope as string)!=='global'&&
+  (['gestor','admin_org'].includes(t.role)||(t.role==='admin_platform'&&t.scope==='organization'&&t.accessMode==='platform_operation'))&&
+  t.permissions.includes(P.INTELLIGENCE_AI_USE);
+}
 export function regulatoryChunks(pages:RegulatorySource['pages']){
  const rows:{ordinal:number;section:string;page:number|null;content:string;content_hash:string}[]=[];
  for(const page of pages){
@@ -25,7 +30,7 @@ export function regulatoryChunks(pages:RegulatorySource['pages']){
 export class BotEnergyKnowledgeIndexService {
  constructor(private db:SupabaseService,private embeddings:AzureKnowledgeEmbeddingsConnector,private budget:BotEnergyBudgetService){}
  async index(t:TenantContext,source:RegulatorySource){
-  if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!['gestor','admin_org'].includes(t.role)||!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Indexação exige gestor autorizado.');
+  if(!authorizedKnowledgeIndexer(t))throw new ForbiddenException('Indexação exige gestor autorizado ou operação de plataforma em organização selecionada.');
   if(!knowledgeCatalogue.some(c=>c.family===source.family&&c.authority===source.authority)||!officialKnowledgeUrl(source.authority,source.officialUrl)||!/^[a-f0-9]{64}$/.test(source.documentHash))throw new Error('UNVERIFIED_OFFICIAL_SOURCE');
   const chunks=regulatoryChunks(source.pages),client=this.db.getClient();
   const existing=await client.from('bot_energy_knowledge_versions').select('id,status').eq('document_key',source.documentKey).eq('version',source.version).eq('document_hash',source.documentHash).maybeSingle();

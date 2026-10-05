@@ -15,6 +15,7 @@ export class BotEnergyBudgetService {
  constructor(private db:SupabaseService){}
  private prices(kind:'conversation'|'embeddings'){
   const prefix=kind==='conversation'?'BOT_ENERGY_AZURE_CHAT':'BOT_ENERGY_AZURE_EMBEDDING';
+  if(!process.env[prefix+'_INPUT_USD_PER_MILLION']?.trim()||kind==='conversation'&&!process.env[prefix+'_OUTPUT_USD_PER_MILLION']?.trim())throw new ServiceUnavailableException('Preços Azure ainda não verificados. Nenhuma chamada de IA foi iniciada.');
   const input=Number(process.env[prefix+'_INPUT_USD_PER_MILLION']);
   const output=kind==='embeddings'?0:Number(process.env[prefix+'_OUTPUT_USD_PER_MILLION']);
   if(process.env.BOT_ENERGY_AZURE_PRICES_VERIFIED!=='true'||!Number.isFinite(input)||input<=0||!Number.isFinite(output)||output<0)throw new ServiceUnavailableException('Preços Azure ainda não verificados. Nenhuma chamada de IA foi iniciada.');
