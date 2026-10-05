@@ -5,7 +5,7 @@ import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import {
   BarChart3,
   Building2, LayoutGrid, ShieldCheck, UsersRound, FileSignature, Files, ContactRound, PanelLeftClose, PanelLeftOpen,
-  LogOut, CalendarDays,ClipboardList,CalendarClock,TrendingUp,Bell,ChevronDown,ScanEye,
+  LogOut, CalendarDays,ClipboardList,CalendarClock,TrendingUp,Bell,ChevronDown,ScanEye,MapPinned,
 } from 'lucide-react';
 import {
   ChangeEvent,
@@ -24,7 +24,7 @@ import {
 import { useAuth } from '@/app/providers';
 
 const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
-const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,'trading-hub':TrendingUp,'platform-costs':TrendingUp,licenses:ShieldCheck,setup:ContactRound,contracts:FileSignature,documents:Files,'ocr-audit':ScanEye,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
+const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,'trading-hub':TrendingUp,'platform-costs':TrendingUp,licenses:ShieldCheck,setup:ContactRound,'energy-map':MapPinned,contracts:FileSignature,documents:Files,'ocr-audit':ScanEye,MapPinned,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
 
 export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;onToggle?:()=>void}={}) {
   const router = useRouter();

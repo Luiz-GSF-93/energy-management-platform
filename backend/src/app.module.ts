@@ -1,3 +1,4 @@
+import {EnergyMapModule} from './modules/energy-map/energy-map.module';
 import {TradingHubModule} from './modules/trading-hub/trading-hub.module';
 import {PlatformCostsModule} from './modules/platform-costs/platform-costs.module';
 import {PerformanceMiddleware} from './modules/platform-costs/performance.middleware';
@@ -42,6 +43,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     OcrModule,
     OperationsModule,
     TradingHubModule,
+    EnergyMapModule,
   ],
   controllers: [AppController],
   providers: [
