@@ -21,9 +21,9 @@ export class BotEnergyBudgetService {
   if(process.env.BOT_ENERGY_AZURE_PRICES_VERIFIED!=='true'||!Number.isFinite(input)||input<=0||!Number.isFinite(output)||output<0)throw new ServiceUnavailableException('Preços Azure ainda não verificados. Nenhuma chamada de IA foi iniciada.');
   return {input,output};
  }
- async reserve(org:string,actor:string,id:string,kind:'conversation'|'embeddings',maximum:AiUsage){
+ async reserve(org:string,actor:string,id:string,kind:'conversation'|'embeddings',maximum:AiUsage,module:'OCR'|'BOT_ENERGY'|'CHAT'|'AUDITORIA'|'ANALISES'|'RAG'|'INDEXACAO'='BOT_ENERGY'){
   const prices=this.prices(kind),reserved=usageCost(maximum,prices.input,prices.output);
-  const {data,error}=await this.db.getClient().rpc('reserve_bot_energy_ai_usage',{p_id:id,p_organization:org,p_actor:actor,p_kind:kind,p_reserved_micro_usd:reserved});
+  const {data,error}=await this.db.getClient().rpc('reserve_bot_energy_ai_usage_v2',{p_id:id,p_organization:org,p_actor:actor,p_kind:kind,p_reserved_micro_usd:reserved,p_module:module});
   if(error||data!==true)throw new ServiceUnavailableException('Limite mensal da IA atingido ou controle de consumo indisponível.');
   return {id,org,prices,reserved};
  }

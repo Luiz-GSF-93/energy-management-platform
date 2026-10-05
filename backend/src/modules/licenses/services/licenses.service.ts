@@ -15,9 +15,13 @@ export type LicenseCapability =
   | 'document_management'
   | 'advanced_analytics'
   | 'report_generation'
-  | 'free_market_management';
+  | 'free_market_management'
+  | 'bot_energy_rag';
 
 export interface LicenseRecord {
+  bot_energy_rag?:boolean;
+  ai_monthly_limit_micro_usd?:number;
+  monthly_price_brl_cents?:number|null;
   documents_unlimited?: boolean;
   plan_id?: string | null;
   plan_version?: number | null;

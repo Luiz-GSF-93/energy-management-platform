@@ -1,3 +1,5 @@
+import {PlatformCostsModule} from './modules/platform-costs/platform-costs.module';
+import {PerformanceMiddleware} from './modules/platform-costs/performance.middleware';
 import {OperationsModule} from './modules/operations/operations.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { PlansModule } from './modules/plans/plans.module';
@@ -35,11 +37,13 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     LicensesModule,
     DashboardModule,
     PlansModule,
+    PlatformCostsModule,
     OcrModule,
     OperationsModule,
   ],
   controllers: [AppController],
   providers: [
+    PerformanceMiddleware,
     AppService,
     SupabaseService,
     {
@@ -62,6 +66,6 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RateLimitMiddleware).forRoutes('*');
+    consumer.apply(PerformanceMiddleware,RateLimitMiddleware).forRoutes('*');
   }
 }
