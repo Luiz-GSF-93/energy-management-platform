@@ -50,7 +50,9 @@ export default function MonthlyInputs({customerId,units,onDirty,initialContext,a
 
  const [rows,setRows]=useState<Row[]|null>(null),[canValidate,setValidate]=useState(false),[busy,setBusy]=useState(!!initialContext&&initialContext.customerId===customerId&&units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)),[error,setError]=useState(''),[message,setMessage]=useState(''),[editor,setEditor]=useState<Editor|null>(null),[discard,setDiscard]=useState(false),[confirm,setConfirm]=useState<Row|null>(null),[history,setHistory]=useState<{id:string;events:Event[]}|null>(null);
 
- const writing=useRef(false);
+ const writing=useRef(false),editorAnchor=useRef<HTMLElement>(null);
+ const editingOpen=!!editor;
+ useEffect(()=>{if(editingOpen){editorAnchor.current?.focus({preventScroll:true});editorAnchor.current?.scrollIntoView?.({block:'start'});}},[editingOpen]);
 
  const [conversationSession,setConversationSession]=useState(0);
 
@@ -166,9 +168,9 @@ export default function MonthlyInputs({customerId,units,onDirty,initialContext,a
 
  {rows&&!editor&&create&&!rows.some(r=>r.status==='DRAFT')?<Button disabled={busy||sourceLoading} onClick={()=>start(rows[0])}>{rows.length?'Criar versão corrigida':'Novo rascunho mensal'}</Button>:null}
 
- {editor&&autofill?<section className='ds-card' aria-label='Valores preenchidos pela fatura'><h3>Bot-Energy · conferir preenchimentos</h3><p>Confira os valores já preenchidos. O acompanhamento pede apenas complementos ou revisão de baixa confiança e divergências.</p><dl>{Object.entries(editor.measurements).filter(([,v])=>v!==null).map(([k,v])=><div key={k}><dt>{fields[k as keyof Measurements]}</dt><dd>{v} · {ocrConflicts.includes(k)?'Divergência — valor anterior preservado':autofill.measurementReviews?.[k]?.state==='REVIEW_REQUIRED'?'Revisão da transcrição necessária':'Preenchido — conferir OK'}</dd></div>)}</dl></section>:null}
+ {editor&&autofill?<section ref={editorAnchor} tabIndex={-1} style={{scrollMarginTop:100}} className='ds-card' aria-label='Valores preenchidos pela fatura'><h3>Bot-Energy · conferir preenchimentos</h3><p>Confira os valores já preenchidos. O acompanhamento pede apenas complementos ou revisão de baixa confiança e divergências.</p><dl>{Object.entries(editor.measurements).filter(([,v])=>v!==null).map(([k,v])=><div key={k}><dt>{fields[k as keyof Measurements]}</dt><dd>{v} · {ocrConflicts.includes(k)?'Divergência — valor anterior preservado':autofill.measurementReviews?.[k]?.state==='REVIEW_REQUIRED'?'Revisão da transcrição necessária':'Preenchido — conferir OK'}</dd></div>)}</dl></section>:null}
 
- {editor?<FormConversation key={conversationSession} context={(available.find(u=>u.id===unitId)?.name||'Unidade')+' · '+period} fields={conversationFields(editor)} disabled={busy||!(editor.id?update:create)} onApply={applyConversation}/>:null}
+ {editor?<FormConversation key={conversationSession} context={(available.find(u=>u.id===unitId)?.name||'Unidade')+' · '+period} fields={conversationFields(editor)} reviewBeforeSave={!!autofill} disabled={busy||!(editor.id?update:create)} onApply={applyConversation}/>:null}
 
  {editor?<Card title={editor.id?'Editar medições do rascunho':editor.previousId?'Nova versão das medições':'Novo rascunho mensal'}><form onSubmit={save}><fieldset disabled={busy} className='organizations-create__form'><p>{available.find(u=>u.id===unitId)?.name} · {period}</p><p>Informe consumo em kWh, demanda medida em kW e energia reativa excedente em kVArh. Demanda contratada permanece no cadastro da distribuidora. Use demanda única ou por posto.</p>
 
