@@ -45,6 +45,16 @@ describe('CIP integration',()=>{
    await expect(x.s.integrateAdjustments('doc',x.t,await request(x))).resolves.toMatchObject({alreadyCreated:true});expect(x.insert).toHaveBeenCalledTimes(2);
   });
   it('rejects stale versions, incorrect amounts, missing permission and client amounts',async()=>{for(const kind of ['stale','cip','source','permission','amount']){const x=await current(),body:any=await request(x);if(kind==='stale')body.revision++;if(kind==='cip')x.data.calculation_monthly_costs[0].costs.items[0].amount='1.00';if(kind==='source')x.c.sourceReady=false;if(kind==='permission')x.t.permissions=[];if(kind==='amount')body.amount='0';await expect(x.s.integrateAdjustments('doc',x.t,body)).rejects.toThrow();expect(x.insert).toHaveBeenCalledTimes(1);}});
+  it('preserves a manually copied legacy OCR CIP and rejects a duplicate source',async()=>{
+   const x=await current(),cip=x.data.calculation_monthly_costs[0].costs.items[0];cip.id='legacy-manual-id';cip.category='OTHER';cip.source='OCR · documento doc · SHA-256 '+'a'.repeat(64)+' · table.row';
+   const before=structuredClone(cip);await x.s.integrateAdjustments('doc',x.t,await request(x));expect(x.insert.mock.calls[1][0].costs.items[0]).toEqual({...before,category:'CHARGE'});expect(before.category).toBe('OTHER');
+   const y=await current(),r=y.data.calculation_monthly_costs[0];r.costs.items.push({...r.costs.items[0],id:'duplicate',source:'OCR · documento doc · SHA-256 '+'a'.repeat(64)+' · table.row'});
+   await expect(y.s.integrateAdjustments('doc',y.t,await request(y))).rejects.toThrow('CIP atual');expect(y.insert).toHaveBeenCalledTimes(1);
+  });
+  it.each(['hash','document','row'])('rejects legacy CIP with a changed %s',async kind=>{
+   const x=await current(),cip=x.data.calculation_monthly_costs[0].costs.items[0];cip.id='legacy';cip.source='OCR · documento '+(kind==='document'?'other':'doc')+' · SHA-256 '+(kind==='hash'?'b':'a').repeat(64)+' · '+(kind==='row'?'other.row':'table.row');
+   await expect(x.s.integrateAdjustments('doc',x.t,await request(x))).rejects.toThrow('CIP atual');expect(x.insert).toHaveBeenCalledTimes(1);
+  });
   it('protects the revision route with both permissions',()=>expect(Reflect.getMetadata(PERMISSIONS_KEY,OcrCipIntegrationController.prototype.integrateAdjustments)).toEqual([P.ORGANIZATION_CONTRACTS_CREATE,P.ORGANIZATION_CONTRACTS_UPDATE]));
  });
 });

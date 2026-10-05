@@ -1,5 +1,6 @@
 import type {CpflOperation} from './cpfl-paulista-layout';
-export type InvoiceAdjustments={state:'RECONCILED'|'REVIEW_REQUIRED';total:string|null;tariffs:string|null;cip:string|null;cipSource:string|null;aclCancellation?:{period:string;charge:string;credit:string;balance:'0.00';sources:string[];icmsState:'NOT_SHOWN'|'ZERO_NET'}[];items:{source:string;label:string;component:string;effect:'COST'|'CREDIT';amount:string}[];issues:string[]};
+export type SubsidyTaxEvidence={ruleVersion:'cpfl-paulista-a@1.2.0';icms:'WITH_ICMS'|'WITHOUT_ICMS';icmsAmount:string|null;pisAmount:string;cofinsAmount:string};
+export type InvoiceAdjustments={state:'RECONCILED'|'REVIEW_REQUIRED';total:string|null;tariffs:string|null;cip:string|null;cipSource:string|null;aclCancellation?:{period:string;charge:string;credit:string;balance:'0.00';sources:string[];icmsState:'NOT_SHOWN'|'ZERO_NET'}[];items:{source:string;label:string;component:string;effect:'COST'|'CREDIT';amount:string;taxEvidence?:SubsidyTaxEvidence}[];issues:string[]};
 const cents=(v:unknown)=>{if(typeof v!=='string'||! /^-?(0|[1-9][0-9]*)([.][0-9]{1,2})?$/.test(v)||v.length>30)throw Error('Valor monetário ausente ou inválido.');const negative=v.startsWith('-'),[a,b='']=(negative?v.slice(1):v).split('.');return (BigInt(a)*100n+BigInt(b.padEnd(2,'0')))*(negative?-1n:1n);};
 const money=(n:bigint)=>{const s=(n<0n?-n:n).toString().padStart(3,'0');return (n<0n?'-':'')+s.slice(0,-2)+'.'+s.slice(-2);};
 /** Reconciles invoice operations; subtotals and informative duplicates never become expenses. */
@@ -18,7 +19,16 @@ export function cpflInvoiceAdjustments(operations:CpflOperation[],requireCip=tru
    if(['TUSD_ENERGY','DEMAND_BILLED','REACTIVE_ENERGY','CDE_WATER_SCARCITY','TARIFF_FLAG','TE'].includes(o.component))tariffs+=n;
    else if(['ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT'].includes(o.component))acl+=n;
    else if(o.component==='PUBLIC_LIGHTING')lights.push(o);
-   else if(['TARIFF_SUBSIDY','SUBSIDY_CREDIT','REFUND'].includes(o.component))r.items.push({source:o.source,label:o.fields.description?.text||o.component,component:o.component,effect:n<0n?'CREDIT':'COST',amount:money(n<0n?-n:n)});
+   else if(['TARIFF_SUBSIDY','SUBSIDY_CREDIT','REFUND'].includes(o.component)){
+    const label=(o.fields.description?.text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();let taxEvidence:SubsidyTaxEvidence|undefined;
+    if(o.component==='TARIFF_SUBSIDY'&&/TUSD/.test(label)&&/\b(COM|SEM) ICMS\b/.test(label)){
+     const tax=(key:string)=>{const f=o.fields[key];if(!f||f.issues.some(i=>i!=='MISSING_CONFIDENCE')||cents(f.decimal)<=0n)throw Error('Tributo da subvenção exige evidência válida: '+o.source+' · '+key);return money(cents(f.decimal));};
+     const without=/\bSEM ICMS\b/.test(label),icms=o.fields.icmsAmount;
+     if(without&&icms?.text?.trim()&&cents(icms.decimal)!==0n)throw Error('Subvenção sem ICMS contém ICMS explícito: '+o.source);
+     taxEvidence={ruleVersion:'cpfl-paulista-a@1.2.0',icms:without?'WITHOUT_ICMS':'WITH_ICMS',icmsAmount:without?null:tax('icmsAmount'),pisAmount:tax('pisAmount'),cofinsAmount:tax('cofinsAmount')};
+    }
+    r.items.push({source:o.source,label:o.fields.description?.text||o.component,component:o.component,effect:n<0n?'CREDIT':'COST',amount:money(n<0n?-n:n),...(taxEvidence?{taxEvidence}:{})});
+   }
    else throw Error('Componente monetário sem integração: '+o.component);
   }
   if(acl!==0n)throw Error('Energia ACL e descontos não se anulam.');
