@@ -4,8 +4,8 @@ import {apiRequest} from '@/app/lib/api/client';
 import {Button} from '@/app/components/ui';
 import {ConversationField, conversationValue} from './form-conversation';
 
-type Props = {context: string; fields: ConversationField[]; disabled: boolean; onApply: (field: ConversationField, value: string, evidence: string, persist: boolean) => Promise<string>};
-export default function FormConversation({context, fields, disabled, onApply}: Props) {
+type Props = {context: string; fields: ConversationField[]; disabled: boolean; reviewBeforeSave?:boolean; onApply: (field: ConversationField, value: string, evidence: string, persist: boolean) => Promise<string>};
+export default function FormConversation({context, fields, disabled, onApply,reviewBeforeSave=false}: Props) {
   const [authorized, setAuthorized] = useState(false), [open, setOpen] = useState(false), [autoSave, setAutoSave] = useState(true);
   const [selected, setSelected] = useState(''), [reply, setReply] = useState(''), [evidence, setEvidence] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [messages, setMessages] = useState<string[]>([]), [skipped, setSkipped] = useState<string[]>([]);
@@ -21,7 +21,7 @@ export default function FormConversation({context, fields, disabled, onApply}: P
       const existing=field.value??'';
       const value = conversationValue(field, confirmValue?(field.kind==='decimal'?existing.replace('.',','):existing):reply);
       // The adapter receives the current field and uses existing authenticated write APIs.
-      const result = await onApply(field, value, confirmValue?'OK do operador: valor sugerido conferido no documento. '+evidence.trim():evidence.trim(), autoSave);
+      const result = await onApply(field, value, confirmValue?'OK do operador: valor sugerido conferido no documento. '+evidence.trim():evidence.trim(), !reviewBeforeSave&&autoSave);
       if(alive.current){setReviewed(r=>[...r,field.key]);setMessages(m => [...m, `${field.label}: ${value}. ${result}`]); setReply(''); setEvidence(''); setSelected(''); setSkipped(s => s.filter(k => k !== field.key));}
     } catch(e) {if(alive.current)setError(e instanceof Error ? e.message : 'A resposta não foi salva. Confira o formulário.');}
     finally {lock.current = false; if(alive.current)setBusy(false);}
@@ -30,7 +30,7 @@ export default function FormConversation({context, fields, disabled, onApply}: P
   return <section className="ds-card" aria-label="Bot-Energy · acompanhamento do preenchimento">
     <h3>Bot-Energy · preencher em conversa</h3><p>{context}</p>
     {!open ? <><p>Confira primeiro os dados preenchidos pela fatura e pelos cadastros vigentes. O bot solicita apenas os complementos pendentes; você também pode selecionar um campo para corrigir com justificativa. Validação e aprovação seguem as permissões do seu perfil.</p><Button type="button" disabled={disabled} onClick={() => setOpen(true)}>Iniciar preenchimento acompanhado</Button></> : <>
-      <label><input type="checkbox" checked={autoSave} disabled={disabled || busy} onChange={e => setAutoSave(e.target.checked)}/> Salvar respostas automaticamente em rascunho</label>
+      {reviewBeforeSave?<p>As respostas completam o formulário. Confira os valores, marque “OK” e salve o rascunho ao concluir.</p>:<label><input type="checkbox" checked={autoSave} disabled={disabled || busy} onChange={e => setAutoSave(e.target.checked)}/> Salvar respostas automaticamente em rascunho</label>}
       <p>Dados informados pelo operador permanecem como informação humana para conferência; não se tornam evidência oficial ou confirmação OCR.</p>
       {messages.length > 0 && <details open><summary>Respostas aplicadas nesta conversa</summary><ul>{messages.map((m,i) => <li key={i}>{m}</li>)}</ul></details>}
       {error && <p role="alert">{error} Os campos permanecem disponíveis para correção; confira se a alteração ainda aguarda gravação.</p>}
