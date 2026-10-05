@@ -84,6 +84,10 @@ export class BotEnergyService {
     const completion=completionAnswer(await this.resolution.inspect(document,t));actions=completion.actions;
     evidence.push(...completion.items.map((item,i)=>({id:'completion-'+i,...item})));
     const intent=questionIntent(inputQuestion);
+    if(intent==='tariff'&&/tusd/i.test(inputQuestion)&&!questionRegulation(inputQuestion)){
+     const tariffs=evidence.filter(e=>e.id.startsWith('prefilled-tariff-')&&e.label.includes('TUSD')&&(!/energia/i.test(inputQuestion)||e.label.includes('ENERGY')));
+     return {...base,mode:'CONTROLLED_DATA',status:tariffs.length?'SUPPORTED':'NO_EVIDENCE',contextDocumentId:document,answer:tariffs.length?'Tarifas TUSD identificadas na fatura para conferência: '+tariffs.map(e=>e.label+': '+e.value+' R$/MWh. Fonte: '+e.source).join('\n')+'\nEstas são propostas documentais, não comprovação de parâmetro aprovado ou tarifa efetivamente paga. Confira a vigência e o tratamento tributário no formulário de Parâmetros.':'Não há tarifa TUSD documental comprovada nesta leitura para o componente solicitado. Confira as linhas da fatura e os parâmetros vigentes; campo ausente não equivale a tarifa zero.',items:tariffs.map(e=>({label:e.label,value:e.value,source:e.source})),sources:[{label:'Conferir tarifas e fontes',reference:'Fatura autorizada · conferência pendente',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=parameters'}],actions};
+    }
     if(this.contexts&&['economy','waste'].includes(intent))evidence.push(...await this.contexts.unitResults(t,document,inputQuestion));
     if(intent==='supplier'&&/tarifa|pre[cç]o|valor por|mwh|kwh/i.test(inputQuestion)){
      const price=evidence.find(e=>e.id==='supplier-pricePerMwh');
