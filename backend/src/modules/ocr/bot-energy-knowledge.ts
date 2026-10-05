@@ -24,6 +24,9 @@ const hosts:Record<KnowledgeAuthority,ReadonlyArray<string>>={
 export function officialKnowledgeUrl(authority:KnowledgeAuthority,value:string):boolean{
  try{
   const u=new URL(value);
+  // ANEEL's government legislation page links this institutional repository.
+  // https://www.gov.br/aneel/pt-br/centrais-de-conteudos/legislacao
+  if(authority==='ANEEL'&&u.hostname==='leis.org')return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&/^\/(?:aneel|institucionais\/br\/aneel)\/lei\/[^/]+\/\d{4}\/\d+\/[^/]+$/.test(u.pathname);
   return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&hosts[authority]?.includes(u.hostname)===true&&
    (u.hostname!=='www.gov.br'||u.pathname.startsWith('/aneel/'));
  }catch{return false;}
