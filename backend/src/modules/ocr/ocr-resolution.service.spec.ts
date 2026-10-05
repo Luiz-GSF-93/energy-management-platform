@@ -48,9 +48,30 @@ describe('Automatic omitted exclusion revision',()=>{
   const s=setup();s.c.rates=[{state:'PRESERVED',component:'TUSD_DEMAND_UNUSED',existing:{id:'unused',revision:3}}];s.c.input.status='DRAFT';s.c.cost.status='DRAFT';
   const old={id:'tax',revision:4,status:'APPROVED',source:s.c.provenance,notes:s.c.marker,treatment:'INCLUDED',start_date:s.c.period.start,end_date:s.c.period.end,tax_basis:{version:1,items:[{parameterId:'used',revision:2,operation:'INCLUDE'}]}};
   s.c.taxes=[{code:'ICMS',existing:[old],bases:[...old.tax_basis.items,{parameterId:'unused',revision:3,operation:'EXCLUDE'}]}];
-  const insert=jest.fn((_rows:any[])=>({select:()=>({single:async()=>({data:{id:'next'},error:null})})}));(s.service as any).db={getClient:()=>({from:()=>({insert})})};
+  const insert=jest.fn((_rows:any[])=>({select:()=>({single:async()=>({data:{id:'next'},error:null})})}));(s.service as any).db={getClient:()=>({from:()=>({insert,select:()=>({eq:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})})})})})};
   const before=JSON.stringify(old),result=await s.service.prepare('doc',s.t,{token:s.c.token});
   expect(insert.mock.calls[0][0][0]).toMatchObject({supersedes_parameter_id:'tax',status:'DRAFT',created_by:'operator',treatment:'INCLUDED',tax_basis:{items:s.c.taxes[0].bases}});
   expect(JSON.stringify(old)).toBe(before);expect(result.canPublish).toBe(false);expect(s.parameters.approve).not.toHaveBeenCalled();expect(result.receipts[0].state).toBe('SAVED_DRAFT');
+ });
+});
+
+describe('Linked tax repair provenance',()=>{
+ it('preserves the exclusion approval route when reviewing a linked draft',async()=>{
+  const s=setup();const source=s.c.provenance+' · exclusões completadas do parâmetro old-tax';
+  s.c.taxes=[{code:'ICMS',bases:[{parameterId:'r',revision:2,operation:'EXCLUDE'}],existing:[{id:'draft',revision:2,status:'DRAFT',supersedes_parameter_id:'old-tax',source,start_date:s.c.period.start,end_date:s.c.period.end}]}];
+  await s.service.repair('doc',s.t,{...s.repair,taxes:true,monthly:false});
+  expect(s.parameters.update).toHaveBeenCalledWith('draft',expect.objectContaining({source,revision:2}),'org-a','operator');
+ });
+ it('reproposes an archived attempt without changing or reusing its ID',async()=>{
+  const s=setup();s.c.rates=[{state:'PRESERVED',component:'TUSD_DEMAND_UNUSED',existing:{id:'unused',revision:3}}];s.c.input.status='DRAFT';s.c.cost.status='DRAFT';
+  const old={id:'tax',revision:4,status:'APPROVED',source:s.c.provenance,notes:s.c.marker,treatment:'INCLUDED',start_date:s.c.period.start,end_date:s.c.period.end,tax_basis:{version:1,items:[{parameterId:'used',revision:2,operation:'INCLUDE'}]}};
+  s.c.taxes=[{code:'ICMS',existing:[old],bases:[...old.tax_basis.items,{parameterId:'unused',revision:3,operation:'EXCLUDE'}]}];
+  const first=resolutionId(['org-a','doc',s.c.source.doc.file_hash,'TAX_EXCLUSIONS','tax',4,s.c.taxes[0].bases]);
+  const lookup=jest.fn().mockResolvedValueOnce({data:{id:first,status:'RETIRED',revision:3,supersedes_parameter_id:'tax'},error:null}).mockResolvedValueOnce({data:null,error:null});
+  const insert=jest.fn((rows:any[])=>({select:()=>({single:async()=>({data:{id:rows[0].id},error:null})})}));
+  (s.service as any).db={getClient:()=>({from:()=>({insert,select:()=>({eq:()=>({eq:()=>({maybeSingle:lookup})})})})})};
+  const result=await s.service.prepare('doc',s.t,{token:s.c.token});
+  expect(insert.mock.calls[0][0][0].id).toBe(resolutionId([first,'REPROPOSAL',3]));
+  expect(result.receipts[0].state).toBe('SAVED_DRAFT');expect(s.parameters.approve).not.toHaveBeenCalled();
  });
 });
