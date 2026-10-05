@@ -9,6 +9,7 @@ export function questionMonths(question:string):string[] {
  return [...matches];
 }
 export function questionMonth(question:string):string|null {const matches=questionMonths(question);return matches.length===1?matches[0]:null;}
+export function questionRegulation(question:string):boolean {const q=questionText(question);return /regra|norma|resolucao|legislacao|ofici|biblioteca|\blei\b/.test(q)&&/\bgd\b|geracao distribuida|tusd|demanda|tarifa|tribut|icms|pis|cofins/.test(q);}
 export function questionIntent(question:string){const q=questionText(question);return /economia|economizou|economiz|resultado|custo total/.test(q)?'economy':/fornecedor|contratual|preco.*energia/.test(q)?'supplier':/desperdicio|perda|ineficien/.test(q)?'waste':/demanda/.test(q)?'demand':/\bgd\b|geracao distribuida/.test(q)?'regulation':/tusd|tarifa/.test(q)?'tariff':'general';}
 
 /** Select evidence for this question, without deriving totals or changing source values. */
