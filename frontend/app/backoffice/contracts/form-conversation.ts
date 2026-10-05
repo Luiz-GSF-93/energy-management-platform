@@ -1,6 +1,6 @@
 export type ConversationField = {
   key: string; label: string; value: string | null; kind: 'decimal' | 'text' | 'date' | 'choice';
-  required?: boolean; question?: string; unit?: string; decimals?: number; maxLength?: number;
+  required?: boolean; promptWhenEmpty?: boolean; reviewRequired?: boolean; question?: string; unit?: string; decimals?: number; maxLength?: number;
   choices?: Record<string, string>;
 };
 const normalize = (s: string) => s.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');

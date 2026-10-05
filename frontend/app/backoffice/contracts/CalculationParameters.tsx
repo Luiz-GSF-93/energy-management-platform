@@ -4,6 +4,7 @@ import FormConversation from './FormConversation';
 import {ConversationField,conversationNote} from './form-conversation';
 import ConfigurationSuccess from './ConfigurationSuccess';
 import type {OcrAutofill} from './ocr-autofill';
+import {useInvoiceAutofill} from './useInvoiceAutofill';
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
@@ -29,8 +30,9 @@ const statuses:Record<string,string>={DRAFT:'Rascunho',APPROVED:'Aprovado',RETIR
 const bands:Record<string,string>={ALL:'Todos / sem distinção',PEAK:'Ponta',OFF_PEAK:'Fora ponta'};
 const seed=():Draft=>({monetarySource:null,taxBasis:null,embeddedTaxCodes:[],consumerUnitId:'',kind:'TARIFF',componentCode:'TE',label:'Energia (TE)',scenario:'ACR',timeBand:'ALL',measure:'BRL_KWH',amount:'',treatment:'NET',includedTaxes:'',baseRule:'',direction:'DEBIT',source:'',notes:'',startDate:'',endDate:''});
 const fromRow=(r:Row):Draft=>({monetarySource:r.monetary_source??null,taxBasis:r.tax_basis??null,embeddedTaxCodes:r.embedded_tax_codes??[],consumerUnitId:r.consumer_unit_id,kind:r.kind,componentCode:r.component_code,label:r.label,scenario:r.scenario,timeBand:r.time_band,measure:r.measure,amount:r.amount_text,treatment:r.treatment,includedTaxes:r.included_taxes,baseRule:r.base_rule,direction:r.direction,source:r.source,notes:r.notes,startDate:r.start_date.slice(0,10),endDate:r.end_date.slice(0,10)});
-export default function CalculationParameters({customerId,units,onDirty,initialContext,autofill}:{autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(dirty:boolean)=>void}){
+export default function CalculationParameters({customerId,units,onDirty,initialContext,autofill:acceptedAutofill}:{autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(dirty:boolean)=>void}){
  const {hasPermission}=useAuth(),create=hasPermission(PERM.create),update=hasPermission(PERM.update);
+ const {proposal:autofill}=useInvoiceAutofill(customerId,initialContext?.unitId||'',initialContext?.month||'',acceptedAutofill);
  const [libraryDirty,setLibraryDirty]=useState(false);
  const [showEditor,setShowEditor]=useState(!initialContext);
  const [contextFilter,setContextFilter]=useState(!!initialContext);

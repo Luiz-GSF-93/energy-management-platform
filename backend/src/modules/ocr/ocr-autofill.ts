@@ -12,8 +12,15 @@ const classKey=(v:unknown)=>normalized(v)==='COMERCIAL'?'COMMERCIAL':normalized(
 export function invoiceAutofill(layout:Layout,unit:any,month:string,libraries:any[],document:string,fileHash:string){
  const period=monthPeriod(month),source=`OCR · documento ${document} · SHA-256 ${fileHash}`;
  const measurements:Record<string,string>={};
+ const measurementReviews:Record<string,{state:string;sources:string[];reason:string}>={};
  const consumptionKeys:Record<string,string>={consumptionPeakKwh:'consumptionPeak',consumptionOffPeakKwh:'consumptionOffPeak',consumptionTotalKwh:'consumptionTotal'};
- for(const f of layout.preparation?.values??[])if(consumptionKeys[f.key]&&f.unit==='kWh'&&f.state==='EXTRACTED_REVIEW'&&f.decimal!==null)measurements[consumptionKeys[f.key]]=f.decimal;
+ for(const f of layout.preparation?.values??[]){const key=consumptionKeys[f.key];if(!key)continue;
+  if(f.unit==='kWh'&&f.state==='EXTRACTED_REVIEW'&&f.decimal!==null)measurements[key]=f.decimal;
+  const rows=layout.operations.filter(r=>(f.sources??[]).includes(r.source));
+  const fields=rows.flatMap(r=>[r.fields.quantity,r.fields.unit]).filter(Boolean);
+  const reliable=fields.length>0&&fields.every(v=>!v!.issues.includes('UNVERIFIED_SOURCE')&&(v!.confidence!=null?v!.confidence>0.85:v!.transcription?.state==='VERIFIED_WORDS'&&(v!.transcription?.confidence??0)>0.85));
+  measurementReviews[key]={state:f.state==='CONFLICT'?'CONFLICT':f.decimal===null?'MISSING':reliable?'CHECK':'REVIEW_REQUIRED',sources:f.sources??[],reason:f.state==='CONFLICT'?'Valores divergentes na leitura.':reliable?'Valor transcrito com fonte; conferir OK.':'Confiança da transcrição insuficiente; confira o valor no PDF.'};
+ }
  const superseded=new Set(libraries.map(l=>l.previous_id).filter(Boolean));
  const matched=libraries.filter(l=>{const p=l.profile;return !superseded.has(l.id)&&p&&p.startDate<=period.start&&p.endDate>=period.end&&normalized(p.distributor)===normalized(unit.distributor)&&normalized(p.group)===normalized(unit.tariff_group)&&normalized(p.subgroup)===normalized(unit.tariff_subgroup)&&p.modality===unit.tariff_modality&&(p.consumptionClass==='GENERAL'||classKey(p.consumptionClass)===classKey(unit.consumption_class));});
  const library=matched.length===1?matched[0]:null;
@@ -32,9 +39,10 @@ export function invoiceAutofill(layout:Layout,unit:any,month:string,libraries:an
  });
  const uniqueTaxes=taxes.filter(t=>taxes.filter(x=>x.code===t.code).length===1);
  const tariffs=[...tusdParameterCandidates(layout.operations).map(t=>({...t,component:'TUSD_ENERGY'})),...cdeParameterCandidates(layout.operations).map(t=>({...t,component:'CDE_WATER_SCARCITY'})),...reactiveParameterCandidates(layout.operations).map(t=>({...t,component:'REACTIVE'}))];
+ for(const candidate of reactiveParameterCandidates(layout.operations,layout.layoutId))if(candidate.ready&&candidate.quantity){const key=candidate.band==='PEAK'?'reactiveBilledPeakKwh':'reactiveBilledOffPeakKwh';measurements[key]=candidate.quantity;measurementReviews[key]={state:'CHECK',sources:candidate.source?[candidate.source]:[],reason:'Quantidade e tarifa do reativo conciliadas com o valor da linha; conferir OK.'};}
  const cip=cipCostCandidate(layout.operations,month);
  const costs=cip.ready?[{label:'Contribuição de iluminação pública (CIP)',amount:cip.amount,scenario:'ACL',category:'OTHER',effect:'COST',taxTreatment:'INCLUDED',source}]:[];
- return {version:1,source,measurements,tariffs,taxes:uniqueTaxes,costs,library:library?{id:library.id,version:library.version,source:library.profile.source,start:library.profile.startDate,end:library.profile.endDate,scenario:unit.free_market===true?'ACR':'ACL',items:library.profile.items}:null,
+ return {version:1,source,measurements,measurementReviews,tariffs,taxes:uniqueTaxes,costs,library:library?{id:library.id,version:library.version,source:library.profile.source,start:library.profile.startDate,end:library.profile.endDate,scenario:unit.free_market===true?'ACR':'ACL',items:library.profile.items}:null,
   libraryState:library?'MATCHED':matched.length>1?'AMBIGUOUS':'MISSING',
   message:'Preenchimentos preparados automaticamente para conferência. Valores ausentes permanecem vazios. Tributos da fatura não comprovam sua incidência no cenário comparativo. Dados financeiros existentes são preservados.'};
 }
