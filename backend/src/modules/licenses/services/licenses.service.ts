@@ -16,9 +16,11 @@ export type LicenseCapability =
   | 'advanced_analytics'
   | 'report_generation'
   | 'free_market_management'
+  | 'trading_hub'
   | 'bot_energy_rag';
 
 export interface LicenseRecord {
+  trading_hub?:boolean;
   bot_energy_rag?:boolean;
   ai_monthly_limit_micro_usd?:number;
   monthly_price_brl_cents?:number|null;
