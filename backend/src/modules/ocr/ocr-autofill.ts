@@ -18,7 +18,7 @@ export function invoiceAutofill(layout:Layout,unit:any,month:string,libraries:an
   if(f.unit==='kWh'&&f.state==='EXTRACTED_REVIEW'&&f.decimal!==null)measurements[key]=f.decimal;
   const rows=layout.operations.filter(r=>(f.sources??[]).includes(r.source));
   const fields=rows.flatMap(r=>[r.fields.quantity,r.fields.unit]).filter(Boolean);
-  const reliable=fields.length>0&&fields.every(v=>!v!.issues.includes('UNVERIFIED_SOURCE')&&((v!.transcription?.state==='VERIFIED_WORDS'&&(v!.transcription?.confidence??0)>0.85)||(v!.confidence!==null&&v!.confidence>0.85)));
+  const reliable=fields.length>0&&fields.every(v=>!v!.issues.includes('UNVERIFIED_SOURCE')&&(v!.confidence!=null?v!.confidence>0.85:v!.transcription?.state==='VERIFIED_WORDS'&&(v!.transcription?.confidence??0)>0.85));
   measurementReviews[key]={state:f.state==='CONFLICT'?'CONFLICT':f.decimal===null?'MISSING':reliable?'CHECK':'REVIEW_REQUIRED',sources:f.sources??[],reason:f.state==='CONFLICT'?'Valores divergentes na leitura.':reliable?'Valor transcrito com fonte; conferir OK.':'Confiança da transcrição insuficiente; confira o valor no PDF.'};
  }
  const superseded=new Set(libraries.map(l=>l.previous_id).filter(Boolean));
