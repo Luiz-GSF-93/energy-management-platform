@@ -100,6 +100,7 @@ export class OcrAssistantService {
    comparisons,operations:previews.map(p=>({...p,canPropose:ocrDraftRole(t)&&ocrDraftPermission(t)&&canPropose(p),evidenceHash:ocrReviewDigest({values:p.values??null,candidates:p.candidates??null,candidate:p.candidate??null})})),counts:diagnosis.counts,findings:diagnosis.findings,
    configurations:areas.map(([area,label,sections])=>({area,label,state:diagnosis.findings.some(f=>(sections as readonly string[]).includes(f.section)&&f.severity==='BLOCKER')?'ACTION_REQUIRED':'AVAILABLE',findings:diagnosis.findings.filter(f=>(sections as readonly string[]).includes(f.section))})),
    records:{measurements:diagnosis.measurements,costs:diagnosis.costs,catalog:diagnosis.catalog,suppliers:diagnosis.suppliers,feeCoverage:diagnosis.feeCoverage,managementFees:diagnosis.managementFeeMemory},
+   financialContext:{supplier:diagnosis.contractSupplierCost,managementFees:diagnosis.managementFeeMemory,distributor:diagnosis.distributorSubtotal},
    canPrepare:diagnosis.counts.blockers===0,canPublish:false as const,
    message:'Extração IA e conferência pelas regras do backend. Configurações vigentes são reutilizadas; dúvidas exigem revisão. A execução cria somente rascunhos permitidos pelos serviços atuais, sem aprovar ou publicar apuração.'};
  }
@@ -154,7 +155,18 @@ export class OcrAssistantService {
   const plan=await this.inspect(document,t);
   if(plan.token!==b.token)throw new ConflictException('Os dados ou as evidências mudaram. Atualize e confirme novamente o plano.');
   if(b.operations.some(key=>!plan.operations.some(op=>op.key===key&&op.canCreate)))throw new ConflictException('Há lançamentos pendentes de conferência ou sem permissão. Nenhum lançamento foi iniciado.');
-  const selected=b.operations as string[];
+  return this.executeDraftPlan(document,t,plan,b.operations as string[]);
+ }
+ // Internal preparation path: the user's automatic-fill workflow may create
+ // eligible drafts, but never manufactures PDF confirmation or approval.
+ async prepareAutomatic(document:string,t:TenantContext){
+  await this.allowed(t,true);
+  const plan=await this.inspect(document,t);
+  const selected=plan.operations.filter(op=>op.canCreate).map(op=>op.key);
+  if(!selected.length)return {mode:'AUTOMATIC_DRAFT' as const,receipts:[],current:plan,complete:true,canPublish:false as const,message:'Nenhum novo lançamento elegível. Valores e dúvidas permanecem preenchidos para conferência.'};
+  return {...await this.executeDraftPlan(document,t,plan,selected),mode:'AUTOMATIC_DRAFT' as const};
+ }
+ private async executeDraftPlan(document:string,t:TenantContext,plan:Awaited<ReturnType<OcrAssistantService['inspect']>>,selected:string[]){
   const receipts:{key:string;label:string;state:string;result?:unknown;message?:string}[]=[];
   for(const op of this.operations(document,t).filter(op=>selected.includes(op.key))) {
    try {
@@ -171,7 +183,7 @@ export class OcrAssistantService {
   }
   let current:Awaited<ReturnType<OcrAssistantService['inspect']>>|null=null;
   try{current=await this.inspect(document,t);}catch{/* Saved receipts remain successful if the final read fails. */}
-  return {documentId:document,receipts,complete:receipts.length===b.operations.length&&receipts.every(r=>r.state==='SAVED_DRAFT'),current,canPublish:false as const,
+  return {documentId:document,receipts,complete:receipts.length===selected.length&&receipts.every(r=>r.state==='SAVED_DRAFT'),current,canPublish:false as const,
    message:current?'Lançamentos conferidos abaixo. Revise e valide os rascunhos antes de preparar a apuração.':'Lançamentos registrados abaixo. A consulta final falhou; atualize o painel para conferir as pendências atuais.'};
  }
 }

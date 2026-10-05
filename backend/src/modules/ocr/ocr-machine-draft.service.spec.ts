@@ -1,0 +1,12 @@
+import {machineDraftFields,OcrMachineDraftService} from './ocr-machine-draft.service';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+const field={kind:'consumption',key:'total',value:'123',source:'página 1',sourceHash:'a'.repeat(64),canConfirm:true,confirmed:false};
+const plan={documentId:'doc',basis:'b'.repeat(64),fieldTasks:[field]};
+describe('Automatic OCR draft',()=>{
+ it('keeps an evidenced value filled even when uncertain',()=>{const rows=machineDraftFields({...plan,fieldTasks:[{...field,canConfirm:false}]});expect(rows[0].value).toBe('123');expect(rows[0].quality).toBe('REVIEW_REQUIRED');});
+ it('never replaces confirmed fields or invents absent/zero values',()=>{expect(machineDraftFields({...plan,fieldTasks:[{...field,confirmed:true},{...field,value:null},{...field,sourceHash:'invalid'}]})).toEqual([]);});
+ it('does not accept model numbers as extraction evidence',()=>{const rows=machineDraftFields(plan,{state:'READY',checkedAt:'now',message:'',fields:[{key:'consumption:total',value:'999',evidenceId:'e'}],evidence:[{id:'e',fieldKey:'consumption:total',label:'x',value:'999',source:'x'}]});expect(rows[0].value).toBe('123');expect(rows[0].interpreted).toBe(false);});
+ it('retains field doubts alongside the filled value',()=>{const rows=machineDraftFields(plan,{state:'READY',checkedAt:'now',message:'',doubts:[{question:'Confira o posto.',evidenceIds:['e']}],evidence:[{id:'e',fieldKey:'consumption:total',label:'x',value:'123',source:'x'}]});expect(rows[0].doubts).toEqual(['Confira o posto.']);expect(rows[0].value).toBe('123');});
+ it('writes an audited machine draft without impersonating PDF review or approval',async()=>{const rpc=jest.fn(async()=>({data:true,error:null}));const service=new OcrMachineDraftService({getClient:()=>({rpc})} as any);const t:any={userId:'actor',organizationId:'org',role:'operacional',permissions:[P.ORGANIZATION_CONTRACTS_UPDATE]};expect((await service.fill(t,plan)).state).toBe('FILLED_DRAFT');expect(JSON.stringify(rpc.mock.calls)).not.toContain('checkedPdf');expect(JSON.stringify(rpc.mock.calls)).not.toContain('CONFIRMED');});
+ it('cannot fill across unauthorized roles',async()=>{const rpc=jest.fn();const service=new OcrMachineDraftService({getClient:()=>({rpc})} as any);await expect(service.fill({role:'cliente',userId:'actor',organizationId:'org',permissions:[]} as any,plan)).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();});
+});
