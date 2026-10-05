@@ -5,6 +5,8 @@ import {BotEnergyService} from './bot-energy.service';
 @Controller('documents')
 export class BotEnergyController {
  constructor(private readonly bot:BotEnergyService){}
+ @Get('bot-energy/context') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
+ contextOptions(@Req() req:any){return this.bot.context(req.tenantContext);}
  @Get('bot-energy/topics') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
  topics(@Req() req:any){return this.bot.topics(req.tenantContext);}
  @Post('bot-energy/help') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])

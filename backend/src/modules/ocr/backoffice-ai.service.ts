@@ -5,7 +5,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {AuditService} from '../../common/services/audit.service';
-import {AiEvidence,AI_PROMPT_VERSION,AzureBackofficeAiConnector} from './azure-backoffice-ai.connector';
+import {AiEvidence,AI_PROMPT_VERSION,AzureBackofficeAiConnector,BackofficeAiError} from './azure-backoffice-ai.connector';
 
 export type AiReview={state:'READY'|'NOT_CONFIGURED'|'NOT_AUTHORIZED'|'FAILED'|'NO_EVIDENCE';message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:AiEvidence[];model?:string;promptVersion?:string;checkedAt:string};
 @Injectable()
@@ -36,7 +36,12 @@ export class BackofficeAiService {
    await log(result.supported?'READY':'NO_EVIDENCE',{model:result.model,citations:result.citations,fields:result.fields,doubts:result.doubts,answer:result.answer});
    if(!result.supported)return {state:'NO_EVIDENCE',message:'Não há evidência suficiente no contexto autorizado para responder. Nenhum preenchimento foi presumido.',checkedAt};
    return {state:'READY',message:'Interpretação da IA concluída. Confira as fontes; esta interpretação não valida nem aprova financeiramente.',answer:result.answer,fields:result.fields,doubts:result.doubts,evidence:evidence.filter(e=>result.citations.includes(e.id)||result.doubts.some(d=>d.evidenceIds.includes(e.id))),model:result.model,promptVersion:result.promptVersion,checkedAt};
-  }catch{return {state:'FAILED',message:'Não foi possível concluir a interpretação com fontes válidas. O bot-energy mantém o diagnóstico do backend disponível; nenhum valor foi alterado.',checkedAt};}
+  }catch(error){
+   const code=error instanceof BackofficeAiError?error.code:'CONTROL_UNAVAILABLE';
+   try{await log('FAILED',{errorCode:code,evidenceCount:evidence.length});}catch{/* Keep source-backed drafts even if diagnostic auditing is unavailable. */}
+   const message=code==='PROVIDER_TIMEOUT'?'A IA excedeu o tempo de resposta. Os campos extraídos e rascunhos estão preservados; tente novamente.':error instanceof Error&&error.message.startsWith('Preços Azure')?error.message:'Não foi possível concluir a interpretação com fontes válidas. Os campos extraídos estão preservados. Confira as evidências e tente novamente; aprovação financeira continua separada.';
+   return {state:'FAILED',message,checkedAt};
+  }
   finally{this.active.delete(key);}
  }
 }
@@ -60,6 +65,11 @@ export function assistantAiEvidence(plan:any):AiEvidence[]{
    for(const [code,value] of [['ICMS',tax.icmsAmount],['PIS',tax.pisAmount],['COFINS',tax.cofinsAmount]])if(typeof value==='string'&&/^\d+[.]\d{2}$/.test(value))evidence.push({id:'subsidy-tax-'+index+'-'+code,fieldKey:'invoice-tax:'+item.source+':'+code,label:item.label+' · '+code,value,source});
   }
   for(const band of financial.aclCancellation??[])if(['PEAK','OFF_PEAK'].includes(band.period)&&band.balance==='0.00')evidence.push({id:'acl-cancellation-'+band.period,label:'Energia ACL e desconto · '+(band.period==='PEAK'?'ponta':'fora ponta'),value:`Lançamento positivo R$ ${band.charge}; desconto negativo R$ ${band.credit}; saldo R$ 0,00. O par não é nova despesa e não é base de ICMS adicional da distribuidora. ${band.icmsState==='ZERO_NET'?'ICMS explicitamente conciliado com saldo zero.':'Não há ICMS mostrado nessas linhas; isso não declara isenção geral.'} A nota do fornecedor é uma fonte separada e conserva seu próprio tratamento tributário.`,source:'Conciliação monetária OCR por posto · '+band.sources.join(' · ')});
+ }
+ for(const doc of plan.prefilled?.relatedDocuments??[])evidence.push({id:'related-'+evidence.length,label:'Arquivo relacionado: '+doc.name,value:doc.message,source:doc.source});
+ if(plan.prefilled?.library){
+  const library=plan.prefilled.library;
+  for(const item of library.items??[])evidence.push({id:'library-'+evidence.length,label:'Referência tarifária cadastrada · '+item.label+' · '+item.band,value:item.value+' '+item.measure,source:'Biblioteca tarifária · versão '+library.version+' · vigência '+library.start+' a '+library.end+' · '+library.source+'. Referência para conferência; não comprova valor pago nem aprovação do parâmetro.'});
  }
  return evidence;
 }

@@ -14,7 +14,7 @@ import { apiRequest } from '@/app/lib/api/client';
 type Customer = { id: string; company_name: string };
 type Unit = { id: string; customer_id: string; name?: string; consumer_unit_number: string };
 type Document = CatalogDocument & {intake_state?:string;processing_status:string};
-const types = [['INVOICE_DISTRIBUTOR','Fatura da distribuidora'],['INVOICE_SUPPLIER','Fatura do fornecedor'],['CONTRACT_ENERGY','Contrato de energia'],['CONTRACT_MANAGEMENT','Contrato de gestão'],['CCEE_SETTLEMENT','Liquidação CCEE'],['CCEE_CHARGES','Encargos CCEE'],['TAX_DOCUMENT','Documento fiscal'],['COMPLIANCE_REPORT','Relatório de conformidade'],['OTHER','Evidências / outros (inclui Excel e CSV)']];
+const types = [['INVOICE_DISTRIBUTOR','Fatura da distribuidora'],['INVOICE_SUPPLIER','Fatura do fornecedor'],['CONTRACT_ENERGY','Contrato de energia'],['CONTRACT_CUSD','CUSD — Uso do Sistema de Distribuição'],['CONTRACT_CCER','CCER — Compra de Energia Regulada'],['CONTRACT_MANAGEMENT','Contrato de gestão'],['CCEE_SETTLEMENT','Liquidação CCEE'],['CCEE_CHARGES','Encargos CCEE'],['TAX_DOCUMENT','Documento fiscal'],['COMPLIANCE_REPORT','Relatório de conformidade'],['OTHER','Evidências / outros (inclui Excel e CSV)']];
 const uploadPermission = '8f3ff5eb-157a-468a-91af-6f89d92e23a7';
 const viewPermission = '8f105b02-4443-49de-b188-847e0284e7ed';
 function DocumentsContent() {
