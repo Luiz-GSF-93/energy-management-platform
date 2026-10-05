@@ -17,6 +17,17 @@ function run(f:ReturnType<typeof fixture>,findings:any[]=[]){const operational=o
 const acl=(f:ReturnType<typeof fixture>)=>run(f).scenarios.find(s=>s.scenario==='ACL')!;
 const blocked=(f:ReturnType<typeof fixture>)=>{expect(acl(f).status).toBe('BLOCKED');expect(acl(f).subtotal).toBeNull();expect(acl(f).supplier).toBeNull();};
 describe('operational composition with real base/tax resolution',()=>{
+ function mixed(){
+  const f=fixture(),tariff=f.parameters.find(p=>p.id==='tariff-acl'),line=f.tariffs.lines.find((l:any)=>l.parameterId===tariff.id);
+  Object.assign(tariff,{treatment:'GROSS',embedded_tax_codes:['ICMS']});Object.assign(line,{treatment:'GROSS',embeddedTaxCodes:['ICMS']});
+  const omit=['ACLSUPPLIER_MINIMUM','ACLSUPPLIER_EXTRA','ACLMONTHLY_CCEE'];f.parameters=f.parameters.filter(p=>!omit.includes(p.id));
+  for(const p of f.parameters.filter(p=>p.scenario==='ACL'&&p.kind==='TAX'))p.tax_basis.items=p.tax_basis.items.filter((i:any)=>!omit.includes(i.parameterId));
+  const icms=f.parameters.find(p=>p.id==='ACLICMS');Object.assign(icms,{treatment:'INSIDE',amount_text:'18'});icms.tax_basis.items.find((i:any)=>i.parameterId===tariff.id).operation='EXCLUDE';
+  Object.assign(f.supplier,{regularAmount:'11772.43',minimumAmount:'0.00',extraAmount:'0.00',totalAmount:'11772.43',extraSources:[]});f.costs.status='NO_COSTS_DECLARED';f.costs.groups=[];
+  return f;
+ }
+ it('adds supplier ICMS once while preserving distributor embedded ICMS',()=>{const f=mixed(),before=JSON.stringify(f);expect(acl(f)).toMatchObject({status:'AVAILABLE',distributor:'100.00',supplier:'11772.43',taxes:'2584.19',subtotal:'14456.62'});expect(JSON.stringify(f)).toBe(before);expect(acl(f).entries.filter(e=>e.group==='TAX')).toHaveLength(1);});
+ it.each(['INCLUDE','missing','stale'])('blocks incorrect exclusion of embedded distributor ICMS: %s',mode=>{const f=mixed(),icms=f.parameters.find(p=>p.id==='ACLICMS'),ref=icms.tax_basis.items.find((i:any)=>i.parameterId==='tariff-acl');if(mode==='missing')icms.tax_basis.items=icms.tax_basis.items.filter((i:any)=>i!==ref);else if(mode==='stale')ref.revision=99;else ref.operation=mode;blocked(f);});
  it('sums each component once and excludes regular NF and tax bases',()=>{const r=run(fixture());expect(r.scenarios.find(s=>s.scenario==='ACL')).toMatchObject({status:'AVAILABLE',distributor:'100.00',supplier:'1250.00',additional:'100.00',taxes:'145.00',subtotal:'1595.00'});expect(r.scenarios.find(s=>s.scenario==='ACR')).toMatchObject({status:'AVAILABLE',subtotal:'275.00',supplier:'0.00'});});
  it('ignores invoice evidence as a second expense',()=>{const f=fixture();f.supplier.invoiceAmount='1200.00';expect(acl(f).subtotal).toBe('1595.00');});
  it('uses inside tax correctly without adding the base twice',()=>{const f=fixture();f.parameters.find(p=>p.id==='ACLICMS').treatment='INSIDE';expect(acl(f).subtotal).toBe('1611.11');});
