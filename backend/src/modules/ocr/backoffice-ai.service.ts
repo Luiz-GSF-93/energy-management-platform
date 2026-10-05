@@ -51,6 +51,10 @@ export function assistantAiEvidence(plan:any):AiEvidence[]{
  for(const c of plan.configurations??[])evidence.push({id:'configuration-'+evidence.length,label:c.label,value:c.state,source:'Vigências e diagnóstico atuais'});
  evidence.push({id:'records',label:'Registros mensais',value:`Dados mensais: ${plan.records.measurements.status}; custos mensais: ${plan.records.costs.status}. Validação não é aprovação financeira.`,source:'Registros atuais da unidade e competência'});
  evidence.push(...financialAiEvidence(plan.financialContext));
+ for(const op of plan.operations??[]){
+  const financial=op.invoiceAdjustments;if(financial?.state!=='RECONCILED')continue;
+  for(const band of financial.aclCancellation??[])if(['PEAK','OFF_PEAK'].includes(band.period)&&band.balance==='0.00')evidence.push({id:'acl-cancellation-'+band.period,label:'Energia ACL e desconto · '+(band.period==='PEAK'?'ponta':'fora ponta'),value:`Lançamento positivo R$ ${band.charge}; desconto negativo R$ ${band.credit}; saldo R$ 0,00. O par não é nova despesa e não é base de ICMS adicional da distribuidora. ${band.icmsState==='ZERO_NET'?'ICMS explicitamente conciliado com saldo zero.':'Não há ICMS mostrado nessas linhas; isso não declara isenção geral.'} A nota do fornecedor é uma fonte separada e conserva seu próprio tratamento tributário.`,source:'Conciliação monetária OCR por posto · '+band.sources.join(' · ')});
+ }
  return evidence;
 }
 
