@@ -79,13 +79,13 @@ export function assistantAiEvidence(plan:any):AiEvidence[]{
 export function financialAiEvidence(context:any):AiEvidence[]{
  if(!context)return [];
  const result:AiEvidence[]=[];
- const decimal=(value:unknown)=>typeof value==='string'&&/^-?\d{1,18}(\.\d{1,8})?$/.test(value);
+ const decimal=(value:unknown)=>typeof value==='string'&&/^-?\d{1,18}(\.\d{1,12})?$/.test(value);
  const text=(value:unknown)=>typeof value==='string'?value.slice(0,200):'Não identificado';
  const supplier=context.supplier;
- if(supplier&&['READY','PENDING'].includes(supplier.status)){
+ if(supplier&&['READY','PENDING','BLOCKED'].includes(supplier.status)){
   const source=`Motor ${text(supplier.formulaVersion)} · contrato ${text(supplier.contract?.number)} · vigência ${text(supplier.contract?.start)} a ${text(supplier.contract?.end)} · estado ${supplier.status}. Não comprova aprovação financeira.`;
   for(const [key,label] of [['consumedMwh','Consumo contratual MWh'],['billedMwh','Volume faturável MWh'],['pricePerMwh','Preço contratual por MWh'],['totalAmount','Custo contratual calculado'],['invoiceAmount','Valor da fatura do fornecedor'],['invoiceDifference','Diferença calculada entre contrato e fatura']] as const){
-   if(decimal(supplier[key]))result.push({id:'supplier-'+key,label,value:supplier[key],source});
+   if(decimal(supplier[key])&&(supplier.status!=='BLOCKED'||key==='pricePerMwh'&&supplier.contract&&supplier.rule&&supplier.priceSource))result.push({id:'supplier-'+key,label,value:supplier[key],source:source+' · '+text(supplier.priceSource)+' · tributos: '+text(supplier.taxTreatment)});
   }
  }
  const fees=context.managementFees;

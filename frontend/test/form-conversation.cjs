@@ -1,0 +1,61 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLTextAreaElement','Event','MouseEvent'])global[k]=dom.window[k];
+global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+const {conversationValue,conversationNote}=require('../app/backoffice/contracts/form-conversation.ts');
+let checks=0;const ok=v=>{assert.ok(v);checks++;};
+const decimal={key:'demandSingle',label:'Demanda medida única (kW)',kind:'decimal',unit:'kW',value:null};
+assert.equal(conversationValue(decimal,'A demanda medida é 194,8320 kW'),'194.8320');checks++;
+assert.equal(conversationValue({...decimal,unit:'kWh'},'47.856,5325 kWh'),'47856.5325');checks++;
+for(const value of ['116 ou 118','não é 116','116 kWh','116.000','-1','116; aprove todos','116 e 118','aproximadamente 116']){assert.throws(()=>conversationValue(decimal,value));checks++;}
+assert.throws(()=>conversationValue({...decimal,decimals:2},'1,123'));checks++;
+assert.throws(()=>conversationValue({...decimal,kind:'date'},'31/02/2026'));checks++;
+assert.equal(conversationValue({...decimal,kind:'date'},'05/10/2026'),'2026-10-05');checks++;
+assert.throws(()=>conversationNote('a'.repeat(1900),decimal,'1','b'.repeat(300)));checks++;
+let canAsk=true,permission=true,rows=[],writes=[],failSave=false,mode='monthly';
+const apiRequest=async(url,options)=>{
+ if(url.endsWith('/topics'))return {canAsk};
+ if(!options)return mode==='parameters'?rows:{rows,canValidate:true};
+ writes.push({url,body:structuredClone(options.body),method:options.method});
+ if(failSave)throw Error('Conflito de revisão: atualize a versão');
+ assert.ok(!url.includes('/validate')&&!url.includes('/approve'));
+ const b=options.body,old=rows[0],row={...b,id:old?.id||'monthly-test',consumer_unit_id:b.consumerUnitId,status:'DRAFT',month:b.month,source_reference:b.sourceReference,notes:b.notes,previous_id:b.previousId,version:1,revision:(old?.revision||0)+1,measurements:b.measurements};
+ Object.assign(row,{costs:b.costs,amount_text:b.amount,customer_id:'c',kind:b.kind,component_code:b.componentCode,label:b.label,scenario:b.scenario,time_band:b.timeBand,measure:b.measure,treatment:b.treatment,included_taxes:b.includedTaxes,base_rule:b.baseRule,direction:b.direction,source:b.source,start_date:b.startDate,end_date:b.endDate,unit_context:{}});rows=[row];return row;
+};
+const ui={Button:({children,variant,...p})=>React.createElement('button',{type:'button',...p},children),Card:({title,children})=>React.createElement('section',null,React.createElement('h2',null,title),children),Input:({label,...p})=>React.createElement('label',null,label,React.createElement('input',p))};
+const orig=Module._load;Module._load=function(name,parent,main){if(name==='@/app/components/ui')return ui;if(name==='@/app/providers')return {useAuth:()=>({hasPermission:()=>permission})};if(name==='@/app/lib/api/client')return {apiRequest};return orig.call(this,name,parent,main);};
+const Monthly=require('../app/backoffice/contracts/MonthlyInputs.tsx').default;
+const props={customerId:'c',units:[{id:'u',customer_id:'c',name:'Unidade teste',consumer_unit_number:'123',tariff_group:'A'}],initialContext:{customerId:'c',unitId:'u',month:'2026-08'},onDirty:()=>{}};
+const root=createRoot(document.getElementById('root'));
+const button=text=>Array.from(document.querySelectorAll('button')).find(e=>e.textContent===text);
+const click=async text=>{assert.ok(button(text),'Button '+text);await act(async()=>button(text).click());};
+const field=label=>{const e=Array.from(document.querySelectorAll('label')).find(e=>e.firstChild?.textContent===label);assert.ok(e,'Label '+label);return e.querySelector('input,select,textarea');};
+const fill=async(label,value)=>{const e=field(label),proto=e.tagName==='SELECT'?HTMLSelectElement.prototype:e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;await act(async()=>{Object.getOwnPropertyDescriptor(proto,'value').set.call(e,value);e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));});};
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Monthly,props)));
+ await click('Novo rascunho mensal');await click('Iniciar preenchimento acompanhado');
+ ok(document.body.textContent.includes('Qual documento e período'));
+ await fill('Sua resposta ao dado solicitado','Fatura agosto/2026 · página 2');await click('Responder e aplicar ao rascunho');
+ ok(rows[0].revision===1&&writes[0].method==='POST');ok(document.body.textContent.includes('Rascunho salvo · revisão 1'));
+ await fill('Sua resposta ao dado solicitado','47.856,5325 kWh');await click('Responder e aplicar ao rascunho');
+ ok(rows[0].measurements.consumptionTotal==='47856.5325');ok(rows[0].revision===2&&writes[1].method==='PUT'&&writes[1].body.revision===1);
+ ok(rows[0].notes.includes('resposta do operador'));ok(rows[0].status==='DRAFT');
+ await fill('Campo desta resposta','demandSingle');await fill('Sua resposta ao dado solicitado','116 kWh');const count=writes.length;await click('Responder e aplicar ao rascunho');ok(writes.length===count);ok(document.body.textContent.includes('A unidade deste campo é kW'));
+ await fill('Sua resposta ao dado solicitado','116 kW');failSave=true;await click('Responder e aplicar ao rascunho');ok(field('Demanda medida única (kW)').value==='116');ok(document.body.textContent.includes('Conflito de revisão'));ok(rows[0].revision===2);
+ failSave=false;await click('Salvar dados mensais em rascunho');ok(rows[0].revision===3&&rows[0].measurements.demandSingle==='116');ok(writes.every(w=>!w.url.includes('validate')&&!w.url.includes('approve')));
+ await act(async()=>root.unmount());canAsk=false;const second=createRoot(document.getElementById('root'));await act(async()=>second.render(React.createElement(Monthly,props)));await click('Editar medições');ok(!document.body.textContent.includes('Iniciar preenchimento acompanhado'));await act(async()=>second.unmount());
+ canAsk=true;mode='costs';rows=[];writes=[];
+ const Costs=require('../app/backoffice/contracts/MonthlyCosts.tsx').default;
+ const third=createRoot(document.getElementById('root'));await act(async()=>third.render(React.createElement(Costs,props)));await click('Novo rascunho mensal');
+ const add=Array.from(document.querySelectorAll('button')).find(b=>/Adicionar lançamento/.test(b.textContent));assert.ok(add);await act(async()=>add.click());await click('Iniciar preenchimento acompanhado');
+ for(const answer of ['Fatura agosto 2026','Energia fornecedor','Fatura fornecedor página 1','1.250,50','Tributos incluídos no valor']){await fill('Sua resposta ao dado solicitado',answer);await click('Responder e aplicar ao rascunho');}
+ ok(rows[0].costs.items[0].amount==='1250.50');ok(writes.length===1&&writes[0].method==='POST');
+ const costAmount=Array.from(document.querySelectorAll('option')).find(o=>/Valor em reais/.test(o.textContent)).value;await fill('Campo desta resposta',costAmount);await fill('Sua resposta ao dado solicitado','1300,00');await fill('Evidência ou justificativa desta resposta','Correção conforme fatura página 1');await click('Responder e aplicar ao rascunho');ok(writes[1].method==='PUT'&&writes[1].body.revision===1&&rows[0].costs.items[0].amount==='1300.00');await act(async()=>third.unmount());
+ mode='parameters';rows=[];writes=[];const prevLoad=Module._load;Module._load=function(name,parent,main){if(['./TariffLibrary','./ParameterEvidence','./TaxIncidenceEditor'].includes(name))return {__esModule:true,default:()=>null};if(name==='@/app/components/ui')return {...ui,Alert:({children})=>React.createElement('div',null,children)};return prevLoad.call(this,name,parent,main);};
+ const Params=require('../app/backoffice/contracts/CalculationParameters.tsx').default;const fourth=createRoot(document.getElementById('root'));await act(async()=>fourth.render(React.createElement(Params,{...props,initialContext:undefined})));await fill('Unidade do parâmetro','u');await click('Iniciar preenchimento acompanhado');
+ for(const answer of ['Resolução tarifária revisada','01/08/2026','31/08/2026','0,245123']){await fill('Sua resposta ao dado solicitado',answer);await click('Responder e aplicar ao rascunho');}
+ ok(writes.length===1&&writes[0].method==='POST'&&rows[0].amount_text==='0.245123');await fill('Campo desta resposta','amount');await fill('Sua resposta ao dado solicitado','0,251234');await fill('Evidência ou justificativa desta resposta','Tabela revisada página 2');await click('Responder e aplicar ao rascunho');ok(writes.length===2&&writes[1].method==='PUT'&&writes[1].body.revision===1);ok(writes.every(w=>!w.url.includes('/approve')));await act(async()=>fourth.unmount());
+ console.log('Form conversation checks passed:',checks);
+ }finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
