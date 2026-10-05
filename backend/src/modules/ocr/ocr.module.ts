@@ -1,3 +1,8 @@
+import {BotEnergyKnowledgeIndexService} from './bot-energy-knowledge-index.service';
+import {OcrMachineDraftService} from './ocr-machine-draft.service';
+import {BotEnergyRagService} from './bot-energy-rag.service';
+import {AzureKnowledgeEmbeddingsConnector,knowledgeEmbeddingConfig} from './azure-knowledge-embeddings.connector';
+import {BotEnergyBudgetService} from './bot-energy-budget.service';
 import {TariffLibraryService} from '../contracts/services/tariff-library.service';
 import {OcrResolutionService} from './ocr-resolution.service';
 import {MonthlyInputsService} from '../contracts/services/monthly-inputs.service';
@@ -33,6 +38,8 @@ import {OcrTusdIntegrationController} from './ocr-tusd-integration.controller';
 import {OcrCdeReviewService} from './ocr-cde-review.service';
 import {OcrCdeReviewController} from './ocr-cde-review.controller';
 import {Module} from '@nestjs/common';
+import {BackofficeAiService} from './backoffice-ai.service';
+import {AzureBackofficeAiConnector,backofficeAiConfig} from './azure-backoffice-ai.connector';
 import {CommonModule} from '../../common/common.module';
 import {LicensesModule} from '../licenses/licenses.module';
 import {AzureInvoiceConnector,azureConfig} from './azure-invoice.connector';
@@ -43,5 +50,5 @@ import {OcrIdentityService} from './ocr-identity.service';
 import {OcrQueueService} from './ocr-queue.service';
 import {OcrWorker} from './ocr.worker';
 import {OcrController} from './ocr.controller';
-@Module({imports:[CommonModule,LicensesModule],providers:[OcrResolutionService,MonthlyInputsService,MonthlyCostsService,TariffLibraryService,OcrAutofillService,BotEnergyService,OcrAssistantProgressService,OcrAssistantService,OcrReactiveIntegrationService,OcrDemandTaxIntegrationService,OcrSplitDemandIntegrationService,OcrCipIntegrationService,CalculationParametersService,OcrCdeTaxIntegrationService,OcrCdeReviewService,OcrCdeIntegrationService,OcrTusdIntegrationService,CalculationPreparationService,OcrCalculationContextService,{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrDemandIntegrationService,OcrMonthlyIntegrationService,OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService,OcrIdentityReviewService],controllers:[BotEnergyController,OcrAssistantController,OcrReactiveIntegrationController,OcrDemandTaxIntegrationController,OcrSplitDemandIntegrationController,OcrCipIntegrationController,OcrCdeTaxIntegrationController,OcrCdeReviewController,OcrCdeIntegrationController,OcrTusdIntegrationController,OcrCalculationContextController,OcrDemandIntegrationController,OcrController,OcrMonthlyIntegrationController],exports:[OcrQueueService,OcrAssistantService]})
+@Module({imports:[CommonModule,LicensesModule],providers:[BotEnergyKnowledgeIndexService,OcrMachineDraftService,BotEnergyRagService,{provide:AzureKnowledgeEmbeddingsConnector,useFactory:()=>new AzureKnowledgeEmbeddingsConnector(knowledgeEmbeddingConfig(process.env))},BotEnergyBudgetService,BackofficeAiService,{provide:AzureBackofficeAiConnector,useFactory:()=>new AzureBackofficeAiConnector(backofficeAiConfig(process.env))},OcrResolutionService,MonthlyInputsService,MonthlyCostsService,TariffLibraryService,OcrAutofillService,BotEnergyService,OcrAssistantProgressService,OcrAssistantService,OcrReactiveIntegrationService,OcrDemandTaxIntegrationService,OcrSplitDemandIntegrationService,OcrCipIntegrationService,CalculationParametersService,OcrCdeTaxIntegrationService,OcrCdeReviewService,OcrCdeIntegrationService,OcrTusdIntegrationService,CalculationPreparationService,OcrCalculationContextService,{provide:AzureInvoiceConnector,useFactory:()=>new AzureInvoiceConnector(azureConfig(process.env))},OcrDemandIntegrationService,OcrMonthlyIntegrationService,OcrQueueService,OcrWorker,OcrReviewService,OcrDemandReviewService,OcrIdentityService,OcrIdentityReviewService],controllers:[BotEnergyController,OcrAssistantController,OcrReactiveIntegrationController,OcrDemandTaxIntegrationController,OcrSplitDemandIntegrationController,OcrCipIntegrationController,OcrCdeTaxIntegrationController,OcrCdeReviewController,OcrCdeIntegrationController,OcrTusdIntegrationController,OcrCalculationContextController,OcrDemandIntegrationController,OcrController,OcrMonthlyIntegrationController],exports:[OcrQueueService,OcrAssistantService]})
 export class OcrModule {}

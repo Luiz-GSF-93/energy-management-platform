@@ -20,6 +20,22 @@ function fixture(){
  return {service,tenant,source,diagnosis,query,licenses,queue,review,operations,body};
 }
 describe('OCR assistant safety and partial execution',()=>{
+ it('automatically saves only eligible drafts and never confirms extracted fields or publishes',async()=>{
+  const f=fixture();f.operations[1].preview.mockResolvedValue({token:'pending',state:'REVIEWS_PENDING',canCreate:false,message:'Needs review'});
+  const result=await f.service.prepareAutomatic('doc',f.tenant);
+  expect(result.mode).toBe('AUTOMATIC_DRAFT');expect(result.canPublish).toBe(false);
+  expect(result.receipts.map(r=>r.state)).toEqual(['SAVED_DRAFT']);
+  expect(f.operations[0].create).toHaveBeenCalledTimes(1);expect(f.operations[1].create).not.toHaveBeenCalled();
+  expect(f.review.list).toHaveBeenCalled();
+ });
+ it('denies automatic preparation to a read-only role and does not retry an uncertain write',async()=>{
+  const f=fixture();await expect(f.service.prepareAutomatic('doc',{...f.tenant,role:'consulta'})).rejects.toThrow();
+  expect(f.operations[0].create).not.toHaveBeenCalled();
+  f.operations[0].create.mockRejectedValueOnce(Error('Response lost'));
+  const result=await f.service.prepareAutomatic('doc',f.tenant);
+  expect(result.complete).toBe(false);expect(result.receipts[0].state).toBe('VERIFY_REQUIRED');
+  expect(f.operations[0].create).toHaveBeenCalledTimes(1);expect(f.operations[1].create).not.toHaveBeenCalled();
+ });
  it('reuses tax-family reads only within one inspection and never caches write previews',async()=>{
   const f=fixture();(f.service as any).operations.mockRestore();const preview=()=>jest.fn(async()=>({token:'token',declarations:['ICMS','PIS','COFINS'].map(code=>({code,state:'READY',canCreate:true,canCreateRevision:true,message:'Ready'}))}));
   const cde=preview(),demand=preview();(f.service as any).cdeTax={preview:cde};(f.service as any).demandTax={preview:demand};
