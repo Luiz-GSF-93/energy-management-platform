@@ -35,7 +35,7 @@ export class BotEnergyService {
  }
  async topics(t:TenantContext){
   await this.authorize(t);
-  return {name:'bot-energy',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:this.ai?.available(t)===true,topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
+  return {name:'bot-energy',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
  }
  async answer(t:TenantContext,body:unknown,document?:string):Promise<SupportAnswer>{
   await this.authorize(t);
@@ -56,7 +56,7 @@ export class BotEnergyService {
    const current=await this.progress?.current(document,t);
    return {...base,mode:'LIVE_STATUS',status:'SUPPORTED',answer:current?.message||(current?.state==='RUNNING'?'A preparação está em andamento.':current?.state==='READY'?'A preparação foi concluída. Confira as fontes e valide os preenchimentos; aprovação financeira é uma etapa separada.':'Não há preparação ativa registrada nesta sessão. Abra a auditoria da fatura.'),items:current?[{label:'Estado da preparação nesta sessão',value:current.state,source:'Execução atual do backend'},{label:'Etapas concluídas',value:current.completed.join(', ')||'Nenhuma etapa concluída ainda',source:'Execução atual do backend'}]:[],sources:[]};
   }
-  if(!topic&&inputQuestion&&this.ai?.available(t)){
+  if(!topic&&inputQuestion&&this.ai&&await this.ai.available(t)){
    if(!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
    const evidence:AiEvidence[]=botEnergyTopics.map((r,i)=>({id:'rule-'+i,label:r.question,value:r.answer,source:r.reference}));
    let actions:CompletionAction[]=[];let regulatorySources:{id:string;label:string;reference:string;url:string}[]=[];
@@ -73,7 +73,7 @@ export class BotEnergyService {
     const completion=completionAnswer(await this.resolution.inspect(document,t));actions=completion.actions;
     evidence.push(...completion.items.map((item,i)=>({id:'completion-'+i,...item})));
    }
-   const generated=await this.ai.interpret(t,inputQuestion,evidence,document);
+   const generated=await this.ai.interpret(t,inputQuestion,evidence,document,'BOT_ENERGY');
    if(generated.state==='READY')return {...base,mode:'AZURE_GENERATIVE',status:'SUPPORTED',interpretationState:generated.state,answer:generated.answer!,actions,items:(generated.evidence??[]).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[...regulatorySources.filter(s=>generated.evidence?.some(e=>e.id===s.id)),{label:'Interpretação Azure OpenAI · '+generated.model,reference:generated.promptVersion+' · interpretação para revisão; fontes atuais recuperadas pelo backend',url:document?'/backoffice/ocr-audit':'/backoffice/documents'}]};
    return {...base,mode:'AZURE_GENERATIVE',status:generated.state==='NO_EVIDENCE'?'NO_EVIDENCE':'UNAVAILABLE',interpretationState:generated.state,answer:generated.message,items:[],sources:[]};
   }

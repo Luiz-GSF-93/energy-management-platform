@@ -5,7 +5,7 @@ export const KNOWLEDGE_EMBEDDING_MODEL='text-embedding-3-small';
 export const KNOWLEDGE_EMBEDDING_VERSION='1';
 
 export function knowledgeEmbeddingConfig(env:NodeJS.ProcessEnv):BackofficeAiConfig{
- return {enabled:env.BOT_ENERGY_RAG_ENABLED==='true',organizations:(env.BOT_ENERGY_AI_ORGANIZATIONS??'').split(',').map(v=>v.trim()).filter(Boolean),endpoint:env.AZURE_OPENAI_ENDPOINT,key:env.AZURE_OPENAI_API_KEY,deployment:env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT};
+ return {licenseMode:env.BOT_ENERGY_LICENSE_MODE==='true',enabled:env.BOT_ENERGY_RAG_ENABLED==='true',organizations:(env.BOT_ENERGY_AI_ORGANIZATIONS??'').split(',').map(v=>v.trim()).filter(Boolean),endpoint:env.AZURE_OPENAI_ENDPOINT,key:env.AZURE_OPENAI_API_KEY,deployment:env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT};
 }
 
 // Internal transport only. Caller must authorize the tenant and reserve its consumption

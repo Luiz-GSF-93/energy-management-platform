@@ -49,7 +49,7 @@ export class BotEnergyKnowledgeIndexService {
   const pending=chunks.filter(c=>!done.has(c.ordinal));
   for(let offset=0;offset<pending.length;offset+=8){
    const batch=pending.slice(offset,offset+8),input=batch.map(c=>c.content);
-   const reservation=await this.budget.reserve(t.organizationId,t.userId,randomUUID(),'embeddings',{inputTokens:Buffer.byteLength(JSON.stringify(input)),outputTokens:0});
+   const reservation=await this.budget.reserve(t.organizationId,t.userId,randomUUID(),'embeddings',{inputTokens:Buffer.byteLength(JSON.stringify(input)),outputTokens:0},'INDEXACAO');
    const vectors=await this.embeddings.embed(t.organizationId,input);
    await this.budget.settle(reservation,{inputTokens:vectors.inputTokens,outputTokens:0});
    const written=await client.from('bot_energy_knowledge_chunks').insert(batch.map((c,i)=>({...c,version_id:versionId,embedding_model:vectors.model,embedding_version:vectors.version,embedding:JSON.stringify(vectors.vectors[i])})));

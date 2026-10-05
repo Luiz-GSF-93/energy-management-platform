@@ -1,3 +1,4 @@
+import {BotEnergyLicenseService} from './bot-energy-license.service';
 import {BotEnergyBudgetService} from './bot-energy-budget.service';
 import {Injectable,Optional} from '@nestjs/common';
 import {createHash,randomUUID} from 'node:crypto';
@@ -11,9 +12,9 @@ export type AiReview={state:'READY'|'NOT_CONFIGURED'|'NOT_AUTHORIZED'|'FAILED'|'
 export class BackofficeAiService {
  private readonly active=new Set<string>();
  private readonly recent=new Map<string,number[]>();
- constructor(private connector:AzureBackofficeAiConnector,private audit:AuditService,@Optional() private budget?:BotEnergyBudgetService){}
- available(t:TenantContext){return !!t.organizationId&&!!t.userId&&(t.scope as string)!=='global'&&(['operacional','gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions.includes(P.INTELLIGENCE_AI_USE)&&this.connector.available(t.organizationId);}
- async interpret(t:TenantContext,question:string,evidence:AiEvidence[],document?:string):Promise<AiReview>{
+ constructor(private connector:AzureBackofficeAiConnector,private audit:AuditService,@Optional() private budget?:BotEnergyBudgetService,@Optional() private licenses?:BotEnergyLicenseService){}
+ async available(t:TenantContext){return !!t.organizationId&&!!t.userId&&(t.scope as string)!=='global'&&(['operacional','gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions.includes(P.INTELLIGENCE_AI_USE)&&this.connector.available(t.organizationId)&&(process.env.BOT_ENERGY_LICENSE_MODE!=='true'||!!this.licenses&&await this.licenses.available(t.organizationId));}
+ async interpret(t:TenantContext,question:string,evidence:AiEvidence[],document?:string,module:'OCR'|'BOT_ENERGY'|'CHAT'|'AUDITORIA'|'ANALISES'='OCR'):Promise<AiReview>{
   const checkedAt=new Date().toISOString();
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation'||!t.permissions.includes(P.INTELLIGENCE_AI_USE))return {state:'NOT_AUTHORIZED',message:'Interpretação generativa disponível somente para o backoffice autorizado.',checkedAt};
   if(!this.connector.available(t.organizationId))return {state:'NOT_CONFIGURED',message:'Azure OpenAI aguardando configuração do recurso e modelo. A leitura OCR e os preenchimentos pelas regras existentes continuam disponíveis.',checkedAt};
@@ -27,7 +28,8 @@ export class BackofficeAiService {
   try{
    // Fail closed before transmission if the existing durable audit cannot record intent.
    if(!this.budget)throw new Error('BUDGET_UNAVAILABLE');
-   const reservation=await this.budget.reserve(t.organizationId,t.userId,requestId,'conversation',{inputTokens:60000,outputTokens:2200});
+   if(process.env.BOT_ENERGY_LICENSE_MODE==='true'&&(!this.licenses||!await this.licenses.available(t.organizationId)))return {state:'NOT_AUTHORIZED',message:'Bot-Energy + RAG não incluído em licença vigente ou cota indisponível.',checkedAt};
+   const reservation=await this.budget.reserve(t.organizationId,t.userId,requestId,'conversation',{inputTokens:60000,outputTokens:2200},module);
    await log('REQUESTED');
    const result=await this.connector.interpret(t.organizationId,question,evidence);
    await this.budget.settle(reservation,result.usage);

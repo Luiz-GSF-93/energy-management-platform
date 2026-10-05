@@ -1,3 +1,4 @@
+import {BotEnergyLicenseService} from './bot-energy-license.service';
 import {Injectable,ForbiddenException,ServiceUnavailableException} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -9,9 +10,10 @@ import {KnowledgeChunk,KnowledgeQuery,knowledgeEvidence,selectKnowledge} from '.
 
 @Injectable()
 export class BotEnergyRagService {
- constructor(private db:SupabaseService,private embeddings:AzureKnowledgeEmbeddingsConnector,private budget:BotEnergyBudgetService){}
+ constructor(private db:SupabaseService,private embeddings:AzureKnowledgeEmbeddingsConnector,private budget:BotEnergyBudgetService,private licenses:BotEnergyLicenseService){}
  async retrieve(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>){
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation'))throw new ForbiddenException('Base disponível ao backoffice autorizado.');
+  if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('Bot-Energy + RAG exige licença vigente.');
   if(!question.trim()||question.length>500)throw new Error('INVALID_RAG_QUESTION');
   const query={...period,embeddingModel:KNOWLEDGE_EMBEDDING_MODEL,embeddingVersion:KNOWLEDGE_EMBEDDING_VERSION};
   selectKnowledge([],query); // Validate period before any paid call.
@@ -21,7 +23,7 @@ export class BotEnergyRagService {
   const ready=await client.from('bot_energy_knowledge_versions').select('id').eq('status','REVIEWED').limit(1);
   if(ready.error)throw new ServiceUnavailableException('Banco de conhecimento indisponível.');
   if(!ready.data?.length)return {state:'NO_EVIDENCE',evidence:[],sources:[]};
-  const reservation=await this.budget.reserve(t.organizationId,t.userId,randomUUID(),'embeddings',{inputTokens:Buffer.byteLength(question),outputTokens:0});
+  const reservation=await this.budget.reserve(t.organizationId,t.userId,randomUUID(),'embeddings',{inputTokens:Buffer.byteLength(question),outputTokens:0},'RAG');
   const embedded=await this.embeddings.embed(t.organizationId,[question]);
   await this.budget.settle(reservation,{inputTokens:embedded.inputTokens,outputTokens:0});
   const {data,error}=await client.rpc('search_bot_energy_knowledge',{p_embedding:JSON.stringify(embedded.vectors[0]),p_period_start:period.periodStart,p_period_end:period.periodEnd,p_market:period.market,p_embedding_model:query.embeddingModel,p_embedding_version:query.embeddingVersion});

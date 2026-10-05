@@ -2,10 +2,10 @@ import {createHash} from 'node:crypto';
 
 export type AiEvidence = {id:string;label:string;value:string;source:string;fieldKey?:string};
 export type AiInterpretation = {supported:boolean;answer:string;citations:string[];fields:{key:string;value:string;evidenceId:string}[];doubts:{question:string;evidenceIds:string[]}[]};
-export type BackofficeAiConfig = {enabled:boolean;organizations:string[];endpoint?:string;deployment?:string;key?:string};
+export type BackofficeAiConfig = {enabled:boolean;organizations:string[];licenseMode?:boolean;endpoint?:string;deployment?:string;key?:string};
 export const AI_PROMPT_VERSION='backoffice-evidence-v1';
 export function backofficeAiConfig(env:NodeJS.ProcessEnv):BackofficeAiConfig {
- return {enabled:env.BOT_ENERGY_AI_ENABLED==='true',organizations:(env.BOT_ENERGY_AI_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean),endpoint:env.AZURE_OPENAI_ENDPOINT,deployment:env.AZURE_OPENAI_DEPLOYMENT,key:env.AZURE_OPENAI_API_KEY};
+ return {licenseMode:env.BOT_ENERGY_LICENSE_MODE==='true',enabled:env.BOT_ENERGY_AI_ENABLED==='true',organizations:(env.BOT_ENERGY_AI_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean),endpoint:env.AZURE_OPENAI_ENDPOINT,deployment:env.AZURE_OPENAI_DEPLOYMENT,key:env.AZURE_OPENAI_API_KEY};
 }
 export class BackofficeAiError extends Error {constructor(public readonly code:string){super(code);}}
 const object=(properties:Record<string,unknown>)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -31,7 +31,7 @@ export class AzureBackofficeAiConnector {
  constructor(private readonly config:BackofficeAiConfig,private readonly transport:typeof fetch=fetch){}
  available(org:string){try{this.endpoint(org);return true;}catch{return false;}}
  private endpoint(org:string){
-  if(!this.config.enabled||!this.config.organizations.includes(org)||!this.config.key||!this.config.deployment||!/^[-a-zA-Z0-9_.]{1,100}$/.test(this.config.deployment))throw new BackofficeAiError('NOT_CONFIGURED');
+  if(!this.config.enabled||(!this.config.licenseMode&&!this.config.organizations.includes(org))||!this.config.key||!this.config.deployment||!/^[-a-zA-Z0-9_.]{1,100}$/.test(this.config.deployment))throw new BackofficeAiError('NOT_CONFIGURED');
   let u:URL;try{u=new URL(this.config.endpoint??'');}catch{throw new BackofficeAiError('INVALID_CONFIGURATION');}
   if(u.protocol!=='https:'||!/^[-a-z0-9]+\.openai\.azure\.com$/.test(u.hostname)||u.port||u.username||u.password||u.search||u.hash||!['/','/openai/v1/','/openai/v1'].includes(u.pathname))throw new BackofficeAiError('INVALID_CONFIGURATION');
   return new URL('/openai/v1/chat/completions',u);
