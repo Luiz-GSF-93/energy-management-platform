@@ -43,7 +43,12 @@ export function reviewedComponentSubtotal(unit:any,month:string,parameters:any[]
    if(candidates.length!==1){block('Tarifa '+p.label+': memória ausente ou duplicada.');continue;}
    const codes=p.embedded_tax_codes??[],lc=l.embeddedTaxCodes;
    if(!['NET','GROSS'].includes(p.treatment)||p.treatment!==l.treatment||!Array.isArray(codes)||!Array.isArray(lc)||new Set(codes).size!==codes.length||new Set(lc).size!==lc.length||codes.length!==lc.length||codes.some((c:any)=>typeof c!=='string'||!/^(ICMS|PIS|COFINS|IOF|OTHER_[A-Z0-9_]+)$/.test(c)||!lc.includes(c))||p.treatment==='NET'&&codes.length||p.treatment==='GROSS'&&!codes.length){block('Tarifa '+p.label+': concilie tratamento e códigos de tributos embutidos.');continue;}
-   for(const code of codes){const configured=xp.filter(t=>t.component_code===code);if(configured.length!==1||configured[0].treatment!=='INCLUDED')block('Tarifa '+p.label+': o tributo embutido '+code+' precisa de uma declaração aprovada de já incluído.');}
+   for(const code of codes){
+    const configured=xp.filter(t=>t.component_code===code),tax=configured[0];
+    const calculated=tax&&['INSIDE','OUTSIDE'].includes(tax.treatment)?taxLines.filter(t=>t.id===tax.id&&t.revision===tax.revision&&t.treatment===tax.treatment):[];
+    const excluded=calculated.length===1&&calculated[0].references.filter(r=>r.id===p.id&&r.revision===p.revision).length===1&&calculated[0].references.some(r=>r.id===p.id&&r.revision===p.revision&&r.operation==='EXCLUDE');
+    if(configured.length!==1||tax.treatment!=='INCLUDED'&&!excluded)block('Tarifa '+p.label+': declare o tributo embutido '+code+' como já incluído ou exclua explicitamente esta revisão da base do tributo a acrescentar.');
+   }
    out.embeddedTaxCodes=[...new Set([...out.embeddedTaxCodes!,...codes])].sort();
    if(!l.source?.trim()){block('Tarifa '+p.label+': fonte ausente.');continue;}
    try{tariffSum+=cents(l.amount);out.entries.push({id:p.id,revision:p.revision,kind:p.kind,label:l.label,amount:l.amount,source:l.source,treatment:l.treatment,embeddedTaxCodes:[...l.embeddedTaxCodes]});}catch{block('Tarifa '+p.label+': valor inválido.');}
