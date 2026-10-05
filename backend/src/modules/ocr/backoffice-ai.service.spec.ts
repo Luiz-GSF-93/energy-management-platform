@@ -33,3 +33,8 @@ describe('Backoffice generative authorization and audit',()=>{
   expect(financialAiEvidence({supplier:{status:'BLOCKED',totalAmount:'100.00'},managementFees:{status:'BLOCKED',fixedUnit:'20.00'},distributor:{scenarios:[{scenario:'ACL',status:'AVAILABLE',subtotal:'NaN'}]}})).toEqual([]);
  });
 });
+
+describe('subsidy tax evidence for AI',()=>{it('provides grounded fields on both rows and omits absent ICMS',()=>{
+ const plan:any={unitName:'Unit',month:'2026-08',counts:{blockers:0,reviews:0},records:{measurements:{status:'VALIDATED'},costs:{status:'VALIDATED'}},operations:[{invoiceAdjustments:{state:'RECONCILED',items:[{source:'row1',label:'Subvenção com ICMS',taxEvidence:{ruleVersion:'cpfl-paulista-a@1.2.0',icms:'WITH_ICMS',icmsAmount:'2126.68',pisAmount:'99.79',cofinsAmount:'467.94'}},{source:'row2',label:'Subvenção sem ICMS',taxEvidence:{ruleVersion:'cpfl-paulista-a@1.2.0',icms:'WITHOUT_ICMS',icmsAmount:null,pisAmount:'22.10',cofinsAmount:'103.62'}}]}}]};
+ const e=assistantAiEvidence(plan);expect(e.filter(e=>e.id.startsWith('subsidy-tax-'))).toHaveLength(5);expect(e.find(e=>e.fieldKey==='invoice-tax:row2:PIS')?.value).toBe('22.10');expect(e.find(e=>e.fieldKey==='invoice-tax:row2:ICMS')).toBeUndefined();expect(e.find(e=>e.id==='subsidy-classification-1')?.source).toContain('não acrescentar novamente');plan.operations[0].invoiceAdjustments.state='REVIEW_REQUIRED';expect(assistantAiEvidence(plan).some(e=>e.id.startsWith('subsidy-'))).toBe(false);
+});});

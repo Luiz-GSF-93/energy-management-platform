@@ -74,17 +74,21 @@ export class OcrCipIntegrationService{
   const expectedContext=Object.fromEntries(['distributor','tariff_group','tariff_subgroup','tariff_modality','state','free_market'].map(k=>[k,x.c.unit[k]??null]));
   if(Object.entries(expectedContext).some(([k,v])=>old.unit_context?.[k]!==v)||old.costs?.noCosts!==false||!Array.isArray(old.costs.items))throw new ConflictException('Revise o contexto da unidade e a composição dos custos.');
   const items=old.costs.items.map((i:any)=>({...i}));
-  const cip=items.filter((i:any)=>i.id===x.itemId);
-  if(!x.elektro&&(cip.length!==1||cip[0].amount!==candidate.cip||cip[0].category!=='CHARGE'||cip[0].effect!=='COST'||cip[0].scenario!=='ACL'||cip[0].taxTreatment!=='INCLUDED'||cip[0].source!==x.reference+' · '+candidate.cipSource))throw new ConflictException('A CIP atual precisa corresponder à operação documentada, sem duplicação.');
+  const cipSources=[x.reference+' · '+candidate.cipSource,'OCR · documento '+document+' · SHA-256 '+x.c.source.doc.file_hash+' · '+candidate.cipSource];
+  const cip=items.filter((i:any)=>['CHARGE','OTHER'].includes(i.category)&&i.scenario==='ACL'&&cipSources.includes(i.source));
+  if(!x.elektro&&(cip.length!==1||cip[0].amount!==candidate.cip||!['CHARGE','OTHER'].includes(cip[0].category)||cip[0].effect!=='COST'||cip[0].scenario!=='ACL'||cip[0].taxTreatment!=='INCLUDED'||!cipSources.includes(cip[0].source)))throw new ConflictException('A CIP atual precisa corresponder à operação documentada, sem duplicação.');
+  // A copied legacy CIP may be OTHER; normalize only the exact verified OCR row in this new revision.
+  if(!x.elektro)cip[0].category='CHARGE';
   const proposed=candidate.items.map(i=>({id:identifier(t.organizationId,document,'adjustment:'+i.source),label:i.label,category:'DISTRIBUTOR_ADJUSTMENT',scenario:'ACL',effect:i.effect,amount:i.amount,source:(x.elektro?'OCR Elektro · ajuste · documento ':'OCR CPFL · ajuste · documento ')+document+' · SHA-256 '+x.c.source.doc.file_hash+' · '+i.source,taxTreatment:'INCLUDED'}));
   if(items.some((i:any)=>i.category==='DISTRIBUTOR_ADJUSTMENT'&&!proposed.some(p=>p.id===i.id)))throw new ConflictException('Há ajustes da distribuidora de outra origem. Concilie antes de integrar.');
   let added=0;
   for(const p of proposed){const existing=items.filter((i:any)=>i.id===p.id);if(existing.length>1||existing.length===1&&Object.entries(p).some(([k,v])=>existing[0][k]!==v))throw new ConflictException('Um ajuste existente difere da operação OCR. Preserve a divergência e revise a fonte.');if(!existing.length){items.push(p);added++;}}
   if(!added)return {inputId:old.id,alreadyCreated:true};
-  const changes={costs:{noCosts:false,items},correction_reason:body.reason.trim(),updated_by:t.userId};
+  const taxEvidenceNote=candidate.items.filter(i=>i.taxEvidence).map(i=>i.source+' · '+JSON.stringify(i.taxEvidence)).join('\n');
+  const changes={costs:{noCosts:false,items},correction_reason:body.reason.trim(),updated_by:t.userId,...(taxEvidenceNote?{notes:(old.notes||'')+'\nTributos da subvenção já presentes no valor final; não acrescentar novamente.\n'+taxEvidenceNote}:{})};
   const client=this.db.getClient();let result;
   if(old.status==='DRAFT')result=await client.from('calculation_monthly_costs').update(changes).eq('organization_id',t.organizationId).eq('id',old.id).eq('revision',old.revision).eq('status','DRAFT').select('id');
-  else result=await client.from('calculation_monthly_costs').insert({...changes,organization_id:t.organizationId,customer_id:old.customer_id,consumer_unit_id:old.consumer_unit_id,month:old.month,previous_id:old.id,status:'DRAFT',origin:'MANUAL',source_reference:old.source_reference,notes:'Revisão dos ajustes da fatura CPFL, total '+candidate.total+'. Valores anteriores preservados na versão '+old.version+'. Job OCR '+x.c.source.jobId+'.',unit_context:expectedContext,created_by:t.userId}).select('id');
+  else result=await client.from('calculation_monthly_costs').insert({...changes,organization_id:t.organizationId,customer_id:old.customer_id,consumer_unit_id:old.consumer_unit_id,month:old.month,previous_id:old.id,status:'DRAFT',origin:'MANUAL',source_reference:old.source_reference,notes:'Revisão dos ajustes da fatura CPFL, total '+candidate.total+'. Valores anteriores preservados na versão '+old.version+'. Job OCR '+x.c.source.jobId+'.'+(taxEvidenceNote?'\nTributos da subvenção incluídos, sem novo acréscimo.\n'+taxEvidenceNote:''),unit_context:expectedContext,created_by:t.userId}).select('id');
   if(['23505','P3602'].includes(result.error?.code))throw new ConflictException('Outra revisão foi criada. Atualize; nenhum custo validado foi substituído.');
   this.fail(result.error);if(result.data?.length!==1)throw new ConflictException('Os custos mudaram. Atualize o histórico.');
   return {inputId:result.data[0].id,alreadyCreated:false};

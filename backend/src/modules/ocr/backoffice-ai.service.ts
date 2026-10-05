@@ -53,6 +53,12 @@ export function assistantAiEvidence(plan:any):AiEvidence[]{
  evidence.push(...financialAiEvidence(plan.financialContext));
  for(const op of plan.operations??[]){
   const financial=op.invoiceAdjustments;if(financial?.state!=='RECONCILED')continue;
+  for(const [index,item] of (financial.items??[]).entries()){
+   const tax=item.taxEvidence;if(!tax||!['WITH_ICMS','WITHOUT_ICMS'].includes(tax.icms))continue;
+   const source=tax.ruleVersion+' · operação OCR '+item.source+' · valor final da fatura, tributos já incluídos; não acrescentar novamente.';
+   evidence.push({id:'subsidy-classification-'+index,label:item.label,value:tax.icms==='WITH_ICMS'?'Subvenção TUSD com ICMS; PIS e Cofins também presentes.':'Subvenção TUSD sem ICMS nesta linha; PIS e Cofins presentes. Ausência de ICMS não elimina PIS/Cofins.',source});
+   for(const [code,value] of [['ICMS',tax.icmsAmount],['PIS',tax.pisAmount],['COFINS',tax.cofinsAmount]])if(typeof value==='string'&&/^\d+[.]\d{2}$/.test(value))evidence.push({id:'subsidy-tax-'+index+'-'+code,fieldKey:'invoice-tax:'+item.source+':'+code,label:item.label+' · '+code,value,source});
+  }
   for(const band of financial.aclCancellation??[])if(['PEAK','OFF_PEAK'].includes(band.period)&&band.balance==='0.00')evidence.push({id:'acl-cancellation-'+band.period,label:'Energia ACL e desconto · '+(band.period==='PEAK'?'ponta':'fora ponta'),value:`Lançamento positivo R$ ${band.charge}; desconto negativo R$ ${band.credit}; saldo R$ 0,00. O par não é nova despesa e não é base de ICMS adicional da distribuidora. ${band.icmsState==='ZERO_NET'?'ICMS explicitamente conciliado com saldo zero.':'Não há ICMS mostrado nessas linhas; isso não declara isenção geral.'} A nota do fornecedor é uma fonte separada e conserva seu próprio tratamento tributário.`,source:'Conciliação monetária OCR por posto · '+band.sources.join(' · ')});
  }
  return evidence;

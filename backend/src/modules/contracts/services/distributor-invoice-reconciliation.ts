@@ -13,7 +13,8 @@ export function reconcileDistributorInvoice(evidence:InvoiceFinancialEvidence[],
  for(const item of f.items){const source=prefix+' · ajuste · documento '+doc.documentId+' · SHA-256 '+doc.fileHash+' · '+item.source;const matches=adjustments.filter((l:any)=>l.source===source&&l.effect===item.effect&&l.amount===item.amount&&l.taxTreatment==='INCLUDED');if(matches.length!==1)throw Error('Um ajuste da distribuidora difere da fonte OCR atual. Revise sua versão.');}
  if(!absentCip){
  const cipSource=prefix+' · CIP · documento '+doc.documentId+' · SHA-256 '+doc.fileHash+' · '+f.cipSource;
- const cips=lines.filter((l:any)=>l.source===cipSource&&l.category==='CHARGE'&&l.effect==='COST'&&l.amount===f.cip&&l.taxTreatment==='INCLUDED');
+ const cipSources=[cipSource,...(!elektro?['OCR · documento '+doc.documentId+' · SHA-256 '+doc.fileHash+' · '+f.cipSource]:[])];
+ const cips=lines.filter((l:any)=>cipSources.includes(l.source)&&l.category==='CHARGE'&&l.effect==='COST'&&l.amount===f.cip&&l.taxTreatment==='INCLUDED');
  if(cips.length!==1)throw Error('Concilie uma única CIP com a fatura da distribuidora.');
  const entry=entries.filter(e=>e.id==='document:monthly:'+cips[0].id);
  if(entry.length!==1||entry[0].group!=='ADDITIONAL')throw Error('A CIP está ausente ou possui outra base de cálculo. Revise para não duplicar.');

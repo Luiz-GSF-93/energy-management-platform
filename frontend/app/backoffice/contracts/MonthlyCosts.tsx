@@ -35,7 +35,7 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext,au
  }
  async function integrateInvoice(row:Row){
   if(busy||absenceDirty)return;setBusy(true);setError('');setMessage('');try{
-   const docs=Array.from(new Set(row.costs.items.filter(i=>i.category==='CHARGE'&&i.scenario==='ACL').map(i=>i.source.match(/^OCR CPFL · CIP · documento ([a-f0-9-]{36}) · SHA-256 [a-f0-9]{64} · /i)?.[1]).filter(Boolean)));
+   const docs=Array.from(new Set(row.costs.items.filter(i=>['CHARGE','OTHER'].includes(i.category)&&i.scenario==='ACL').map(i=>i.source.match(/^OCR(?: CPFL · CIP)? · documento ([a-f0-9-]{36}) · SHA-256 [a-f0-9]{64} · /i)?.[1]).filter(Boolean)));
    if(docs.length!==1)throw new Error('Identifique uma única origem OCR da CIP nesta competência.');
    const path='/api/v1/documents/'+encodeURIComponent(docs[0]! as string)+'/ocr/cip-integration';
    const preview=await apiRequest<{token:string}>(path);
