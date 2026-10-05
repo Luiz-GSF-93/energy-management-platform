@@ -23,21 +23,21 @@ function EnergyMap({organizationId}:{organizationId:string}) {
  useEffect(()=>{
   const abort=new AbortController();setLoading(true);setError('');setSelected(null);setHistory([]);
   const timer=setTimeout(async()=>{try{
-   const a=await apiRequest<{enabled:boolean;organizationId:string}>('/energy-map/access',{signal:abort.signal,cache:'no-store'});
+   const a=await apiRequest<{enabled:boolean;organizationId:string}>('/api/v1/energy-map/access',{signal:abort.signal,cache:'no-store'});
    if(abort.signal.aborted)return;if(a.organizationId!==organizationId)throw new Error('Atualize a organização selecionada.');setAccess(a);
    if(!a.enabled)return;
    const q=new URLSearchParams({offset:String(offset),limit:'200'});Object.entries(filters).forEach(([k,v])=>{if(v)q.set(k,v);});
-   const result=await apiRequest<MapResponse>('/energy-map/units?'+q,{signal:abort.signal,cache:'no-store'});
+   const result=await apiRequest<MapResponse>('/api/v1/energy-map/units?'+q,{signal:abort.signal,cache:'no-store'});
    if(abort.signal.aborted)return;if(result.organizationId!==organizationId||result.rows.some(u=>u.organizationId!==organizationId))throw new Error('Atualize a organização selecionada.');setData(result);
   }catch(e){if(!abort.signal.aborted){setData(null);setAccess(null);setError(e instanceof Error?e.message:'Consulta indisponível.');}}
   finally{if(!abort.signal.aborted)setLoading(false);}},250);
   return()=>{clearTimeout(timer);abort.abort();};
  },[organizationId,filters,offset,refresh]);
- useEffect(()=>{if(!selected)return;const a=new AbortController();setHistory([]);apiRequest<History[]>('/energy-map/units/'+encodeURIComponent(selected.id)+'/history',{signal:a.signal,cache:'no-store'}).then(h=>{if(!a.signal.aborted)setHistory(h);}).catch(()=>{});return()=>a.abort();},[selected]);
+ useEffect(()=>{if(!selected)return;const a=new AbortController();setHistory([]);apiRequest<History[]>('/api/v1/energy-map/units/'+encodeURIComponent(selected.id)+'/history',{signal:a.signal,cache:'no-store'}).then(h=>{if(!a.signal.aborted)setHistory(h);}).catch(()=>{});return()=>a.abort();},[selected]);
  function filter(key:keyof typeof filters,value:string){setOffset(0);setFilters(f=>({...f,[key]:value}));}
  function openEdit(u:MapUnit){setSaveError('');setEditing(u);setRequestId(crypto.randomUUID());dialog.current?.showModal();}
  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!editing||busy)return;const form=new FormData(e.currentTarget);setBusy(true);setSaveError('');const a=new AbortController();saveAbort.current=a;
-  try{await apiRequest('/energy-map/units/'+encodeURIComponent(editing.id)+'/location',{method:'PUT',signal:a.signal,cache:'no-store',body:{latitude:Number(form.get('latitude')),longitude:Number(form.get('longitude')),precision:form.get('precision'),reason:form.get('reason'),checkedAddress:form.get('checkedAddress')==='on',addressHash:editing.addressHash,revision:editing.revision,requestId}});
+  try{await apiRequest('/api/v1/energy-map/units/'+encodeURIComponent(editing.id)+'/location',{method:'PUT',signal:a.signal,cache:'no-store',body:{latitude:Number(form.get('latitude')),longitude:Number(form.get('longitude')),precision:form.get('precision'),reason:form.get('reason'),checkedAddress:form.get('checkedAddress')==='on',addressHash:editing.addressHash,revision:editing.revision,requestId}});
    if(!alive.current||a.signal.aborted)return;dialog.current?.close();setEditing(null);setRefresh(v=>v+1);
   }catch(e){if(alive.current&&!a.signal.aborted)setSaveError(e instanceof Error?e.message:'Não foi possível salvar.');}finally{if(alive.current&&!a.signal.aborted)setBusy(false);}
  }
