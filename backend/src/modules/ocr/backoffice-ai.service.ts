@@ -67,6 +67,10 @@ export function assistantAiEvidence(plan:any):AiEvidence[]{
   for(const band of financial.aclCancellation??[])if(['PEAK','OFF_PEAK'].includes(band.period)&&band.balance==='0.00')evidence.push({id:'acl-cancellation-'+band.period,label:'Energia ACL e desconto · '+(band.period==='PEAK'?'ponta':'fora ponta'),value:`Lançamento positivo R$ ${band.charge}; desconto negativo R$ ${band.credit}; saldo R$ 0,00. O par não é nova despesa e não é base de ICMS adicional da distribuidora. ${band.icmsState==='ZERO_NET'?'ICMS explicitamente conciliado com saldo zero.':'Não há ICMS mostrado nessas linhas; isso não declara isenção geral.'} A nota do fornecedor é uma fonte separada e conserva seu próprio tratamento tributário.`,source:'Conciliação monetária OCR por posto · '+band.sources.join(' · ')});
  }
  for(const doc of plan.prefilled?.relatedDocuments??[])evidence.push({id:'related-'+evidence.length,label:'Arquivo relacionado: '+doc.name,value:doc.message,source:doc.source});
+ for(const [i,tariff] of (plan.prefilled?.tariffs??[]).entries()){
+  if(typeof tariff.source!=='string'||!tariff.source||typeof tariff.rateMwh!=='string'||!/^\d{1,18}(\.\d{1,12})?$/.test(tariff.rateMwh))continue;
+  evidence.push({id:'prefilled-tariff-'+i,label:String(tariff.component)+' · '+String(tariff.band)+' · proposta OCR R$/MWh',value:tariff.rateMwh,source:tariff.source+' · '+String(tariff.reason??'Conferir a fonte')+' · Proposta de preenchimento; não comprova parâmetro aprovado nem valor pago.'});
+ }
  if(plan.prefilled?.library){
   const library=plan.prefilled.library;
   for(const item of library.items??[])evidence.push({id:'library-'+evidence.length,label:'Referência tarifária cadastrada · '+item.label+' · '+item.band,value:item.value+' '+item.measure,source:'Biblioteca tarifária · versão '+library.version+' · vigência '+library.start+' a '+library.end+' · '+library.source+'. Referência para conferência; não comprova valor pago nem aprovação do parâmetro.'});

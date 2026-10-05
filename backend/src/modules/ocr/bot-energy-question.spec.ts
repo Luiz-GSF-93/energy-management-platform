@@ -1,7 +1,8 @@
 import {questionMonth,questionEvidence,questionIntent,questionRegulation} from './bot-energy-question';
-import {financialAiEvidence} from './backoffice-ai.service';
+import {financialAiEvidence,assistantAiEvidence} from './backoffice-ai.service';
 import {validateInterpretation} from './azure-backoffice-ai.connector';
 describe('Questions about unit results and official sources',()=>{
+ it('includes only sourced exact OCR tariff proposals and keeps their review status',()=>{const e=assistantAiEvidence({unitName:'U',month:'2026-08',counts:{blockers:1,reviews:0},records:{measurements:{status:'DRAFT'},costs:{status:'DRAFT'}},prefilled:{tariffs:[{component:'TUSD_ENERGY',band:'PEAK',rateMwh:'375.9493',source:'table 3 row 1',reason:'Tributos incluídos'},{component:'TUSD_ENERGY',band:'OFF_PEAK',rateMwh:null,source:'table 3 row 2'}]}});const tariffs=e.filter(x=>x.id.startsWith('prefilled-tariff'));expect(tariffs).toHaveLength(1);expect(tariffs[0].value).toBe('375.9493');expect(tariffs[0].source).toContain('não comprova parâmetro aprovado');});
  it('requires reviewed evidence for rules without blocking questions about measured demand',()=>{expect(questionRegulation('Qual regra de GD, TUSD e demanda?')).toBe(true);expect(questionRegulation('Qual a demanda medida em agosto de 2026?')).toBe(false);});
  it.each(['2026-08','08/2026','agosto de 2026','agosto 2026'])('recognizes the requested month in %s',text=>expect(questionMonth('Qual economia em '+text+'?')).toBe('2026-08'));
  it('does not guess among multiple months or a yearless month',()=>{expect(questionMonth('Compare 2026-08 e 2026-09')).toBeNull();expect(questionMonth('qual economia de agosto?')).toBeNull();});
