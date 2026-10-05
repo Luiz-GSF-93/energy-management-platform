@@ -17,7 +17,7 @@ export default function MapCanvas({rows,organizationId,selected,onSelect}:{rows:
   try {
    m=new mapboxgl.Map({container:container.current,accessToken:token,style:'mapbox://styles/mapbox/light-v11',center:[-51,-15],zoom:3.2,attributionControl:true,cooperativeGestures:true});
    map.current=m;m.addControl(new mapboxgl.NavigationControl(),'top-right');
-   m.on('error',()=>{if(alive)setError('Mapa base indisponível. A lista continua disponível; tente recarregar o mapa.');});
+   m.on('error',e=>{if(!alive)return;const status=(e.error as Error & {status?:number}).status;setError(status===401?'Mapbox não autorizou o token (401). Confira o token público configurado.':status===403?'Mapbox recusou este domínio ou as permissões do token (403). Confira a configuração do token.':'Mapa base indisponível. A lista continua disponível; tente recarregar o mapa.');});
    m.on('load',()=>{
     if(!alive)return;
     m.addSource('units',{type:'geojson',data:mapGeoJson(latest.current.rows,organizationId),cluster:true,clusterMaxZoom:14,clusterRadius:45});
