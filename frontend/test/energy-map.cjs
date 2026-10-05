@@ -10,6 +10,7 @@ let context={scope:'organization',currentOrganization:{id:'o1'}},saved=null,fail
 const unit=(org='o1')=>({id:'u-'+org,organizationId:org,customerId:'c-'+org,customerName:org==='o1'?'<img src=x onerror=alert(1)> Cliente Um':'Cliente Dois',name:'Unidade '+org,number:'123',address:'Rua verificada',city:'Ribeirão Preto',state:'SP',distributor:'CPFL',market:'ACL',status:'ACTIVE',locationStatus:'PENDING',precision:null,latitude:null,longitude:null,addressHash:'a'.repeat(32),revision:0});
 const result=org=>({organizationId:org,enabled:true,canManage:true,rows:[unit(org)],total:1,customers:1,confirmed:0,pending:1,stale:0,offset:0,limit:200});
 const apiRequest=async(url,o={})=>{
+ assert.ok(url.startsWith('/api/v1/energy-map/'),'map requests use the deployed API prefix');
  const org=context.currentOrganization.id;
  if(url.endsWith('/access'))return {organizationId:org,enabled:true};
  if(url.includes('/history'))return [];
