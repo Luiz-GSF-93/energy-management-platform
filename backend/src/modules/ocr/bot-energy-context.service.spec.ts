@@ -1,0 +1,22 @@
+import {BotEnergyContextService,resolveBotCustomer} from './bot-energy-context.service';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+const permissions=[P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW,P.ORGANIZATION_CUSTOMERS_VIEW,P.ORGANIZATION_CONSUMER_UNITS_VIEW];
+function fixture(){
+ const scoped:string[][]=[];
+ const rows:any={customers:[{id:'client',company_name:'BALSAMO PEANUT COMPANY LTDA'}],consumer_units:[{id:'unit',customer_id:'client',name:'Filial'}],documents_with_intake:[{id:'doc',customer_id:'client',consumer_unit_id:'unit',reference_month:'2026-08-01'}]};
+ const client={from:jest.fn((name:string)=>{const q:any={};for(const method of ['select','is','order'])q[method]=()=>q;q.eq=(key:string,value:string)=>{if(key==='organization_id')scoped.push([name,value]);return q;};q.limit=async()=>({data:rows[name],error:null});return q;})};
+ const t:any={organizationId:'tenant-a',userId:'actor',scope:'organization',role:'operacional',permissions};
+ return {rows,scoped,client,t,service:new BotEnergyContextService({getClient:()=>client} as any)};
+}
+describe('Bot-Energy context isolation',()=>{
+ it('resolves a uniquely named customer, but never an ambiguous customer',()=>{const c=[{id:'a',company_name:'Balsamo Peanut Ltda'}];expect(resolveBotCustomer('Qual tarifa da Balsamo?',c)).toBe('a');expect(resolveBotCustomer('Tarifa da Balsamo',c.concat({id:'b',company_name:'Balsamo Comercial'}))).toBeNull();expect(resolveBotCustomer('Qual regra de GD?',c)).toBeNull();});
+ it('scopes every query and selects a unique invoice',async()=>{const f=fixture();expect((await f.service.select(f.t,'Qual tarifa da Balsamo?')).document?.id).toBe('doc');expect(f.scoped).toEqual([['customers','tenant-a'],['consumer_units','tenant-a'],['documents_with_intake','tenant-a']]);});
+ it('does not choose among duplicate invoices or different units',async()=>{const f=fixture();f.rows.documents_with_intake.push({...f.rows.documents_with_intake[0],id:'duplicate'});expect((await f.service.select(f.t,'Balsamo')).document).toBeNull();});
+ it('does not substitute another month when the requested period is absent',async()=>{const f=fixture();expect((await f.service.select(f.t,'Balsamo 2026-07')).document).toBeNull();});
+ it('removes documents whose unit does not belong to their customer',async()=>{const f=fixture();f.rows.documents_with_intake[0].customer_id='other';expect((await f.service.list(f.t)).documents).toEqual([]);});
+ it.each(['cliente','admin_platform'])('rejects role %s before reading',async role=>{const f=fixture();f.t.role=role;await expect(f.service.list(f.t)).rejects.toThrow('Consulta por cliente');expect(f.client.from).not.toHaveBeenCalled();});
+ it('does not return silently truncated data',async()=>{const f=fixture();f.rows.customers=Array.from({length:1001},()=>f.rows.customers[0]);await expect(f.service.list(f.t)).rejects.toThrow('contexto completo');});
+ it('uses only the existing authorized published reader and does not equate savings with waste',async()=>{const f=fixture();const financial={published:jest.fn(async()=>({period:{from:'2026-08',to:'2026-08'},publicationCount:1,disclosure:'Somente publicados.',rows:[{id:'publication',customerName:'Cliente',month:'2026-08',version:2,payloadHash:'verified',publishedAt:'date',amounts:{acr:'100.00',aclAfterFees:'80.00',savingsAfterFees:'20.00',totalFees:'5.00'}}]}))};const service=new BotEnergyContextService({getClient:()=>f.client} as any,financial as any);const evidence=await service.portfolio(f.t,'Economia dos clientes em 2026-08');expect(financial.published).toHaveBeenCalledWith({from:'2026-08',to:'2026-08'},f.t);expect(evidence[0].value).toContain('não comprova desperdício');expect(evidence[1].source).toContain('hash verified');expect(f.client.from).not.toHaveBeenCalled();});
+ it('does not read portfolio without customer permissions',async()=>{const f=fixture();f.t.permissions=[];const financial={published:jest.fn()};expect(await new BotEnergyContextService({} as any,financial as any).portfolio(f.t,'clientes')).toEqual([]);expect(financial.published).not.toHaveBeenCalled();});
+ it('propagates financial integrity failures instead of guessing totals',async()=>{const f=fixture();const financial={published:jest.fn(async()=>{throw new Error('Publicação mudou');})};await expect(new BotEnergyContextService({} as any,financial as any).portfolio(f.t,'clientes')).rejects.toThrow('Publicação mudou');});
+});

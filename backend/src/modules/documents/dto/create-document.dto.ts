@@ -11,7 +11,7 @@ export class CreateDocumentDto {
   fileName!: string;
   @IsIn(['application/pdf', 'image/jpeg', 'image/png','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
   fileType!: string;
-  @IsIn(['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','CONTRACT_ENERGY','CONTRACT_MANAGEMENT','CCEE_SETTLEMENT','CCEE_CHARGES','TAX_DOCUMENT','COMPLIANCE_REPORT','OTHER'])
+  @IsIn(['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','CONTRACT_ENERGY','CONTRACT_CUSD','CONTRACT_CCER','CONTRACT_MANAGEMENT','CCEE_SETTLEMENT','CCEE_CHARGES','TAX_DOCUMENT','COMPLIANCE_REPORT','OTHER'])
   documentType!: string;
   @IsDateString({ strict: true }) @Matches(/^\d{4}-\d{2}-01$/)
   referenceMonth!: string;

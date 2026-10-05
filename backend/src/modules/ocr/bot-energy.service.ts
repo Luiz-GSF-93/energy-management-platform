@@ -1,3 +1,4 @@
+import {BotEnergyContextService} from './bot-energy-context.service';
 import {BotEnergyRagService} from './bot-energy-rag.service';
 import {BadRequestException, ForbiddenException, Injectable,Optional} from '@nestjs/common';
 import {AiEvidence} from './azure-backoffice-ai.connector';
@@ -25,14 +26,15 @@ const contextualTopics = [
  {key:'records',question:'Quais registros e vigências foram encontrados?'},
 ] as const;
 type Item = {label:string;value:string;source:string};
-type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[];actions?:CompletionAction[];interpretationState?:string};
+type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[];actions?:CompletionAction[];interpretationState?:string;contextDocumentId?:string};
 @Injectable()
 export class BotEnergyService {
- constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService,@Optional() private readonly ai?:BackofficeAiService,@Optional() private readonly progress?:OcrAssistantProgressService,@Optional() private readonly rag?:BotEnergyRagService){}
+ constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService,@Optional() private readonly ai?:BackofficeAiService,@Optional() private readonly progress?:OcrAssistantProgressService,@Optional() private readonly rag?:BotEnergyRagService,@Optional() private readonly contexts?:BotEnergyContextService){}
  private async authorize(t:TenantContext){
   if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('O bot-energy está disponível somente no backoffice autorizado.');
   await this.assistant.authorize(t);
  }
+ async context(t:TenantContext){await this.authorize(t);if(!this.contexts)throw new BadRequestException('Seleção de contexto indisponível.');return this.contexts.list(t);}
  async topics(t:TenantContext){
   await this.authorize(t);
   return {name:'bot-energy',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
@@ -47,7 +49,7 @@ export class BotEnergyService {
   const topic=topics.find(v=>b.topic===v.key||typeof b.question==='string'&&normalized(b.question)===normalized(v.question));
   const base={name:'bot-energy',mode:'CONTROLLED_SUPPORT',checkedAt:new Date().toISOString(),canApprove:false,canPublish:false};
   const inputQuestion=typeof b.question==='string'?b.question:'';
-  const denied=/ignore|ignorar|publique|senha|chave privada|token|outra organizacao|todos os clientes|execute|executar|apague|deletar/.test(normalized(inputQuestion));
+  const denied=/ignore|ignorar|publique|senha|chave privada|token|outra organizacao|execute|executar|apague|deletar/.test(normalized(inputQuestion));
   if(denied)return {...base,status:'NO_EVIDENCE',answer:'Posso explicar regras e registros autorizados do backoffice. Não executo comandos nem altero permissões, validações ou aprovações por uma conversa.',items:[],sources:[]};
   if(topic?.key==='status'||/\b(status|andamento|processando|preenchendo|terminou)\b/.test(normalized(inputQuestion))){
    if(!topic&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
@@ -56,26 +58,38 @@ export class BotEnergyService {
    const current=await this.progress?.current(document,t);
    return {...base,mode:'LIVE_STATUS',status:'SUPPORTED',answer:current?.message||(current?.state==='RUNNING'?'A preparação está em andamento.':current?.state==='READY'?'A preparação foi concluída. Confira as fontes e valide os preenchimentos; aprovação financeira é uma etapa separada.':'Não há preparação ativa registrada nesta sessão. Abra a auditoria da fatura.'),items:current?[{label:'Estado da preparação nesta sessão',value:current.state,source:'Execução atual do backend'},{label:'Etapas concluídas',value:current.completed.join(', ')||'Nenhuma etapa concluída ainda',source:'Execução atual do backend'}]:[],sources:[]};
   }
+  if(!topic&&inputQuestion&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
+  if(!document&&!topic&&inputQuestion&&this.contexts&&[P.ORGANIZATION_CUSTOMERS_VIEW,P.ORGANIZATION_CONSUMER_UNITS_VIEW].every(p=>t.permissions.includes(p))){
+   const selected=await this.contexts.select(t,inputQuestion);
+   if(selected.document)document=selected.document.id;
+   else if(selected.customerId)return {...base,status:'CONTEXT_REQUIRED',answer:'Encontrei o cliente na organização ativa. Selecione abaixo a unidade, competência e fatura para consultar os valores com suas fontes; não vou escolher entre arquivos ou unidades divergentes.',items:[],sources:[{label:'Escolher fatura do cliente',reference:'Contexto documental autorizado',url:'/backoffice/ocr-audit'}]};
+  }
   if(!topic&&inputQuestion&&this.ai&&await this.ai.available(t)){
    if(!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
    const evidence:AiEvidence[]=botEnergyTopics.map((r,i)=>({id:'rule-'+i,label:r.question,value:r.answer,source:r.reference}));
-   let actions:CompletionAction[]=[];let regulatorySources:{id:string;label:string;reference:string;url:string}[]=[];
+   if(!document&&this.contexts&&/\b(cliente|clientes|economia|desperdicio|custo|custos|tarifa|tarifas)\b/.test(normalized(inputQuestion)))evidence.push(...await this.contexts.portfolio(t,inputQuestion));
+   let actions:CompletionAction[]=[];let regulatoryState='NO_EVIDENCE';let regulatorySources:{id:string;label:string;reference:string;url:string}[]=[];
    if(document){
     if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Fatura inválida.');
     const plan=await this.assistant.inspect(document,t);evidence.push(...assistantAiEvidence(plan));
-    if(this.rag){
-     const end=new Date(Date.UTC(Number(plan.month.slice(0,4)),Number(plan.month.slice(5,7)),0)).toISOString().slice(0,10);
-     const retrieval=await this.rag.retrieve(t,inputQuestion,{periodStart:plan.month+'-01',periodEnd:end,market:'COMMON'});
-     if(retrieval.state==='VERSION_CONFLICT')return {...base,status:'NO_EVIDENCE',answer:'Há transição ou conflito de vigência normativa nesta competência. Informe a data do fato para conferir a versão aplicável.',items:[],sources:[]};
-     evidence.push(...retrieval.evidence);
-     regulatorySources=retrieval.sources.map(s=>({id:s.id,label:s.title+' · '+s.section,reference:'Versão '+s.version+' · vigência '+s.validFrom+' até '+(s.validTo??'sem término cadastrado'),url:s.url}));
-    }
     const completion=completionAnswer(await this.resolution.inspect(document,t));actions=completion.actions;
     evidence.push(...completion.items.map((item,i)=>({id:'completion-'+i,...item})));
    }
+   if(this.rag){
+    const today=new Date().toISOString().slice(0,10);
+    const dateEvidence=evidence.find(e=>e.id==='context')?.value.match(/20\d{2}-(?:0[1-9]|1[0-2])/)?.[0];
+    const start=dateEvidence?dateEvidence+'-01':today;
+    const end=dateEvidence?new Date(Date.UTC(Number(dateEvidence.slice(0,4)),Number(dateEvidence.slice(5,7)),0)).toISOString().slice(0,10):today;
+    const market=/\b(gd|geracao distribuida)\b/.test(normalized(inputQuestion))?'GD':/\b(acl|mercado livre)\b/.test(normalized(inputQuestion))?'ACL':'COMMON';
+    const retrieval=await this.rag.retrieve(t,inputQuestion,{periodStart:start,periodEnd:end,market});regulatoryState=retrieval.state;
+    if(retrieval.state==='VERSION_CONFLICT')return {...base,status:'NO_EVIDENCE',answer:'Há transição ou conflito de vigência normativa nesta competência. Informe a data do fato para conferir a versão aplicável.',items:[],sources:[]};
+    evidence.push(...retrieval.evidence);
+    regulatorySources=retrieval.sources.map(s=>({id:s.id,label:s.title+' · '+s.section,reference:'Versão '+s.version+' · vigência '+s.validFrom+' até '+(s.validTo??'sem término cadastrado'),url:s.url}));
+    if(retrieval.state!=='READY')evidence.push({id:'library-availability',label:'Disponibilidade da biblioteca oficial',value:'Não há trechos oficiais revisados aplicáveis à consulta. Não afirmar regra de GD nem recomendar tarifa oficial sem evidência; solicitar revisão da biblioteca.',source:'Consulta atual ao catálogo regulatório, estado '+retrieval.state});
+   }
    const generated=await this.ai.interpret(t,inputQuestion,evidence,document,'BOT_ENERGY');
-   if(generated.state==='READY')return {...base,mode:'AZURE_GENERATIVE',status:'SUPPORTED',interpretationState:generated.state,answer:generated.answer!,actions,items:(generated.evidence??[]).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[...regulatorySources.filter(s=>generated.evidence?.some(e=>e.id===s.id)),{label:'Interpretação Azure OpenAI · '+generated.model,reference:generated.promptVersion+' · interpretação para revisão; fontes atuais recuperadas pelo backend',url:document?'/backoffice/ocr-audit':'/backoffice/documents'}]};
-   return {...base,mode:'AZURE_GENERATIVE',status:generated.state==='NO_EVIDENCE'?'NO_EVIDENCE':'UNAVAILABLE',interpretationState:generated.state,answer:generated.message,items:[],sources:[]};
+   if(generated.state==='READY')return {...base,mode:'AZURE_GENERATIVE',status:'SUPPORTED',contextDocumentId:document,interpretationState:generated.state,answer:generated.answer!+(regulatoryState==='NO_EVIDENCE'?'\n\nBiblioteca oficial: nenhum trecho revisado aplicável disponível; regras regulatórias e preços oficiais ainda exigem revisão da fonte.':''),actions,items:(generated.evidence??[]).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[...regulatorySources.filter(s=>generated.evidence?.some(e=>e.id===s.id)),{label:'Interpretação Azure OpenAI · '+generated.model,reference:generated.promptVersion+' · interpretação para revisão; fontes atuais recuperadas pelo backend',url:document?'/backoffice/ocr-audit':'/backoffice/documents'}]};
+   return {...base,mode:'AZURE_GENERATIVE',status:generated.state==='NO_EVIDENCE'?'NO_EVIDENCE':'UNAVAILABLE',interpretationState:generated.state,contextDocumentId:document,answer:generated.message,actions,items:evidence.filter(e=>e.id.startsWith('completion-')||e.id==='context').map(e=>({label:e.label,value:e.value,source:e.source})),sources:document?[{label:'Abrir preenchimentos e fontes desta fatura',reference:'Conferência e validação conforme perfil',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=preparation'}]:[]};
   }
   const rules=topic&&botEnergyTopics.find(v=>v.key===topic.key);
   if(rules)return {...base,status:'SUPPORTED',answer:rules.answer,items:[] as Item[],sources:rules.key==='regulation'?regulatoryReferences:[{label:'Regra implementada · versão 1',reference:rules.reference,url:'/backoffice/documents'}]};

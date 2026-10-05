@@ -11,6 +11,12 @@ export class DocumentCatalogDto {
  @IsString() @Length(20,1000) reason!:string;
  @IsBoolean() checkedDocument!:boolean;
 }
+export class DocumentTypeCorrectionDto {
+ @IsInt() @Min(1) revision!:number;
+ @IsIn(['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','CONTRACT_ENERGY','CONTRACT_CUSD','CONTRACT_CCER','CONTRACT_MANAGEMENT','CCEE_SETTLEMENT','CCEE_CHARGES','TAX_DOCUMENT','COMPLIANCE_REPORT','OTHER']) documentType!:string;
+ @IsString() @Length(20,1000) reason!:string;
+ @IsBoolean() checkedDocument!:boolean;
+}
 export class DocumentFavoriteDto {@IsBoolean() favorite!:boolean;}
 @Injectable()
 export class DocumentCatalogService {
@@ -29,5 +35,6 @@ export class DocumentCatalogService {
  }
  async history(id:string,t:TenantContext){await this.allowed(t);const c=await this.db.getClient().from('document_catalog').select('*').eq('organization_id',t.organizationId).eq('document_id',id).maybeSingle();this.check(c.error);if(!c.data)throw new NotFoundException('Documento indisponível.');const versions=await this.all(()=>this.db.getClient().from('document_catalog').select('*').eq('organization_id',t.organizationId).eq('series_id',c.data.series_id).order('version'));const events=await this.all(()=>this.db.getClient().from('document_catalog_events').select('*').eq('organization_id',t.organizationId).eq('document_id',id).order('revision'));return {versions,events};}
  async save(id:string,input:DocumentCatalogDto,t:TenantContext){await this.allowed(t,true);const d=await validateWriteDto(DocumentCatalogDto,input);if(!d.checkedDocument)throw new BadRequestException('Confira o documento antes de classificar.');if(['APPROVED','RELEASED'].includes(d.tag)&&!(['gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation'))throw new ForbiddenException('Aprovação documental exige gestor ou administrador.');const r=await this.db.getClient().rpc('save_document_catalog',{p_org:t.organizationId,p_actor:t.userId,p_document:id,p_revision:d.revision,p_tag:d.tag,p_reason:d.reason.trim(),p_checked:d.checkedDocument});this.check(r.error);return r.data;}
+ async correctType(id:string,input:DocumentTypeCorrectionDto,t:TenantContext){await this.allowed(t,true);const d=await validateWriteDto(DocumentTypeCorrectionDto,input);if(!d.checkedDocument||d.reason.trim().length<20)throw new BadRequestException('Confira o tipo do arquivo e informe uma justificativa de pelo menos 20 caracteres.');const r=await this.db.getClient().rpc('correct_document_type',{p_org:t.organizationId,p_actor:t.userId,p_document:id,p_revision:d.revision,p_type:d.documentType,p_reason:d.reason.trim(),p_checked:d.checkedDocument});this.check(r.error);return r.data;}
  async favorite(id:string,input:DocumentFavoriteDto,t:TenantContext){await this.allowed(t);const d=await validateWriteDto(DocumentFavoriteDto,input),r=await this.db.getClient().rpc('favorite_document',{p_org:t.organizationId,p_actor:t.userId,p_document:id,p_favorite:d.favorite});this.check(r.error);return {favorite:d.favorite};}
 }
