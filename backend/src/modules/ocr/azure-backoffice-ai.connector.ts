@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 export type AiEvidence = {id:string;label:string;value:string;source:string;fieldKey?:string};
 export type AiInterpretation = {supported:boolean;answer:string;citations:string[];fields:{key:string;value:string;evidenceId:string}[];doubts:{question:string;evidenceIds:string[]}[]};
 export type BackofficeAiConfig = {enabled:boolean;organizations:string[];licenseMode?:boolean;endpoint?:string;deployment?:string;key?:string};
-export const AI_PROMPT_VERSION='backoffice-evidence-v1';
+export const AI_PROMPT_VERSION='backoffice-evidence-v2';
 export function backofficeAiConfig(env:NodeJS.ProcessEnv):BackofficeAiConfig {
  return {licenseMode:env.BOT_ENERGY_LICENSE_MODE==='true',enabled:env.BOT_ENERGY_AI_ENABLED==='true',organizations:(env.BOT_ENERGY_AI_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean),endpoint:env.AZURE_OPENAI_ENDPOINT,deployment:env.AZURE_OPENAI_DEPLOYMENT,key:env.AZURE_OPENAI_API_KEY};
 }
@@ -24,7 +24,15 @@ export function validateInterpretation(raw:unknown,evidence:AiEvidence[]):AiInte
  // Reject generated numbers absent from the cited material. This is not semantic proof;
  // narrative interpretation is always labelled for human review and never drives writes.
  const corpus=v.citations.map(id=>JSON.stringify(byId.get(id))).join(' ');
- if(v.supported&&(v.answer.match(/\d+(?:[.,]\d+)*/g)??[]).some(n=>!corpus.includes(n)))throw new BackofficeAiError('UNGROUNDED_NUMBER');
+ const forms=(n:string)=>{
+  const canonical=(s:string)=>{const [a,b='']=s.split('.');return a.replace(/^0+(?=\d)/,'')+(b.replace(/0+$/,'')?'.'+b.replace(/0+$/,''):'');};
+  if(/^\d{1,3}(?:\.\d{3})+,\d+$/.test(n))return [canonical(n.replace(/\./g,'').replace(',','.'))];
+  if(/^\d{1,3}(?:,\d{3})+\.\d+$/.test(n))return [canonical(n.replace(/,/g,''))];
+  if(/^\d+(?:[.,]\d+)?$/.test(n))return [canonical(n.replace(',','.'))];
+  return [n];
+ };
+ const numbers=new Set((corpus.match(/\d+(?:[.,]\d+)*/g)??[]).flatMap(forms));
+ if(v.supported&&(v.answer.match(/\d+(?:[.,]\d+)*/g)??[]).some(n=>!forms(n).some(s=>numbers.has(s))))throw new BackofficeAiError('UNGROUNDED_NUMBER');
  return v;
 }
 export class AzureBackofficeAiConnector {

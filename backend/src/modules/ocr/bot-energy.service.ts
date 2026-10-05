@@ -10,6 +10,7 @@ import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {retrieveTopics,regulatoryReferences} from './bot-energy-retrieval';
 import {OcrResolutionService} from './ocr-resolution.service';
 import {completionAnswer,CompletionAction} from './bot-energy-completion';
+import {questionEvidence,questionIntent,questionMonth,questionMonths} from './bot-energy-question';
 
 export const botEnergyTopics = [
  {key:'regulation',question:'Como conferir as regras regulatórias da fatura?',answer:'Confira distribuidora, enquadramento e vigência na tabela oficial correspondente. As tarifas de energia e demanda têm unidades diferentes. PIS e Cofins variam por mês; use a alíquota identificada na fatura e confirme a base de incidência. As referências oficiais abaixo apoiam a revisão, mas não comprovam por si só a correção desta fatura ou contrato.',reference:'Base regulatória controlada v1 · fontes oficiais consultadas em 03/10/2026'},
@@ -52,13 +53,19 @@ export class BotEnergyService {
   const denied=/ignore|ignorar|publique|senha|chave privada|token|outra organizacao|execute|executar|apague|deletar/.test(normalized(inputQuestion));
   if(denied)return {...base,status:'NO_EVIDENCE',answer:'Posso explicar regras e registros autorizados do backoffice. Não executo comandos nem altero permissões, validações ou aprovações por uma conversa.',items:[],sources:[]};
   if(topic?.key==='status'||/\b(status|andamento|processando|preenchendo|terminou)\b/.test(normalized(inputQuestion))){
-   if(!topic&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
+  if(!topic&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
    if(!document)return {...base,status:'CONTEXT_REQUIRED',answer:'Abra a fatura em Auditoria OCR para consultar o status da preparação nesta sessão.',items:[],sources:[]};
    if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Fatura inválida.');
    const current=await this.progress?.current(document,t);
    return {...base,mode:'LIVE_STATUS',status:'SUPPORTED',answer:current?.message||(current?.state==='RUNNING'?'A preparação está em andamento.':current?.state==='READY'?'A preparação foi concluída. Confira as fontes e valide os preenchimentos; aprovação financeira é uma etapa separada.':'Não há preparação ativa registrada nesta sessão. Abra a auditoria da fatura.'),items:current?[{label:'Estado da preparação nesta sessão',value:current.state,source:'Execução atual do backend'},{label:'Etapas concluídas',value:current.completed.join(', ')||'Nenhuma etapa concluída ainda',source:'Execução atual do backend'}]:[],sources:[]};
   }
   if(!topic&&inputQuestion&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
+  if(!topic&&questionMonths(inputQuestion).length>1)return {...base,status:'CONTEXT_REQUIRED',answer:'Consulte uma competência por vez e selecione a fatura da unidade para conferir os resultados de cada mês.',items:[],sources:[]};
+  if(document&&!topic&&inputQuestion&&this.contexts&&[P.ORGANIZATION_CUSTOMERS_VIEW,P.ORGANIZATION_CONSUMER_UNITS_VIEW].every(p=>t.permissions.includes(p))){
+   const selected=await this.contexts.forQuestion(t,document,inputQuestion);
+   if(!selected)return {...base,status:'CONTEXT_REQUIRED',answer:'A competência solicitada não tem uma única fatura vinculada à unidade selecionada. Escolha o arquivo correto; não vou responder com valores de outro mês.',items:[],sources:[]};
+   document=selected.id;
+  }
   if(!document&&!topic&&inputQuestion&&this.contexts&&[P.ORGANIZATION_CUSTOMERS_VIEW,P.ORGANIZATION_CONSUMER_UNITS_VIEW].every(p=>t.permissions.includes(p))){
    const selected=await this.contexts.select(t,inputQuestion);
    if(selected.document)document=selected.document.id;
@@ -72,8 +79,16 @@ export class BotEnergyService {
    if(document){
     if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Fatura inválida.');
     const plan=await this.assistant.inspect(document,t);evidence.push(...assistantAiEvidence(plan));
+    const requestedMonth=questionMonth(inputQuestion),selectedMonth=evidence.find(e=>e.id==='context')?.value.match(/20\d{2}-(?:0[1-9]|1[0-2])/)?.[0];
+    if(requestedMonth&&selectedMonth!==requestedMonth)return {...base,status:'CONTEXT_REQUIRED',answer:'A competência solicitada não corresponde à fatura autorizada. Selecione o arquivo correto antes de consultar os valores.',items:[],sources:[]};
     const completion=completionAnswer(await this.resolution.inspect(document,t));actions=completion.actions;
     evidence.push(...completion.items.map((item,i)=>({id:'completion-'+i,...item})));
+    const intent=questionIntent(inputQuestion);
+    if(this.contexts&&['economy','waste'].includes(intent))evidence.push(...await this.contexts.unitResults(t,document,inputQuestion));
+    if(intent==='supplier'&&/tarifa|pre[cç]o|valor por|mwh|kwh/i.test(inputQuestion)){
+     const price=evidence.find(e=>e.id==='supplier-pricePerMwh');
+     if(price)return {...base,mode:'CONTROLLED_DATA',status:'SUPPORTED',contextDocumentId:document,answer:`Preço contratual do fornecedor: ${price.value} R$/MWh. Fonte: ${price.source}. Este preço foi conferido pelo motor para a competência; não equivale à tarifa total paga com encargos, tributos e honorários. Confira as condições do fornecedor e os bloqueios da apuração antes de validar.`,items:evidence.filter(e=>e.id.startsWith('supplier-')).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[{label:'Conferir condições do fornecedor',reference:'Contrato e competência autorizados',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=supply'}],actions};
+    }
    }
    if(this.rag){
     const today=new Date().toISOString().slice(0,10);
@@ -87,7 +102,7 @@ export class BotEnergyService {
     regulatorySources=retrieval.sources.map(s=>({id:s.id,label:s.title+' · '+s.section,reference:'Versão '+s.version+' · vigência '+s.validFrom+' até '+(s.validTo??'sem término cadastrado'),url:s.url}));
     if(retrieval.state!=='READY')evidence.push({id:'library-availability',label:'Disponibilidade da biblioteca oficial',value:'Não há trechos oficiais revisados aplicáveis à consulta. Não afirmar regra de GD nem recomendar tarifa oficial sem evidência; solicitar revisão da biblioteca.',source:'Consulta atual ao catálogo regulatório, estado '+retrieval.state});
    }
-   const generated=await this.ai.interpret(t,inputQuestion,evidence,document,'BOT_ENERGY');
+   const generated=await this.ai.interpret(t,inputQuestion,questionEvidence(inputQuestion,evidence),document,'BOT_ENERGY');
    if(generated.state==='READY')return {...base,mode:'AZURE_GENERATIVE',status:'SUPPORTED',contextDocumentId:document,interpretationState:generated.state,answer:generated.answer!+(regulatoryState==='NO_EVIDENCE'?'\n\nBiblioteca oficial: nenhum trecho revisado aplicável disponível; regras regulatórias e preços oficiais ainda exigem revisão da fonte.':''),actions,items:(generated.evidence??[]).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[...regulatorySources.filter(s=>generated.evidence?.some(e=>e.id===s.id)),{label:'Interpretação Azure OpenAI · '+generated.model,reference:generated.promptVersion+' · interpretação para revisão; fontes atuais recuperadas pelo backend',url:document?'/backoffice/ocr-audit':'/backoffice/documents'}]};
    return {...base,mode:'AZURE_GENERATIVE',status:generated.state==='NO_EVIDENCE'?'NO_EVIDENCE':'UNAVAILABLE',interpretationState:generated.state,contextDocumentId:document,answer:generated.message,actions,items:evidence.filter(e=>e.id.startsWith('completion-')||e.id==='context').map(e=>({label:e.label,value:e.value,source:e.source})),sources:document?[{label:'Abrir preenchimentos e fontes desta fatura',reference:'Conferência e validação conforme perfil',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=preparation'}]:[]};
   }
