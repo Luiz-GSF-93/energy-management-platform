@@ -1,0 +1,50 @@
+ADESÃO ACL — FASE 1, COMANDOS TRANSACIONAIS DE TRABALHO
+06/10/2026 — Continuação autorizada
+
+Implementado:
+- START/PAUSE/RESUME em RPC privada, com bloqueio transacional, revisão otimista,
+  requestId idempotente e relógio exclusivo do PostgreSQL.
+- Uma sessão por operador em toda a organização e uma por etapa. Operadores
+  diferentes podem trabalhar em etapas diferentes do mesmo processo.
+- Pausa exige motivo; Outros exige justificativa. Atividade de outro operador,
+  etapa concluída e comando em revisão desatualizada são bloqueados.
+- Lease de 90 segundos. Interrupção encerra pelo último heartbeat confirmado;
+  lacuna não vira trabalho. A reconciliação confirma no banco mesmo quando
+  o comando original resulta em conflito HTTP 409.
+- Heartbeat altera somente a sessão privada; não reescreve o estado/histórico,
+  não incrementa revisão nem cria milhares de eventos de desempenho.
+- Autoridade, licença, vínculo, unidade e sessão da plataforma revalidados
+  também em heartbeats. Papel malformado ou vínculo ambíguo bloqueia trabalho.
+- Navegador não envia instantes, ator, organização, duração ou evidência livre.
+- Interface com controles, motivo de pausa, tempo confirmado, atualização
+  explícita após interrupção e repetição do mesmo requestId após falha de rede.
+- Heartbeats somente enquanto a seção está aberta e a página visível; falha
+  interrompe confirmação e exige atualização, sem retomada automática.
+
+Verificação local:
+- 69 verificações SQL do cronômetro (incluindo 20 heartbeats consecutivos),
+  isolamento, revogação, exclusividade, idempotência, interrupção e grants.
+- 30 testes Jest: domínio, serviço e fronteira do portal.
+- 74 verificações SQL anteriores do cadastro permanecem no conjunto de regressão.
+
+Verificação remota na branch feat/acl-admission-core:
+- Regressão do cadastro e cronômetro, 30 testes Jest e build Nest aprovados.
+- TypeScript integral e build de produção Next aprovados.
+- Nenhuma edição em migração já aplicada em produção; a migração de cronômetro
+  é aditiva e depende da migração anterior do cadastro ACL.
+
+Limites e gates:
+- Feature flag permanece desligada. Migrações não aplicadas em produção.
+- COMPLETE/SKIP/CLOSE/PUBLISH ainda não são rotas habilitadas: evidências e
+  aprovações precisam de adapter próprio, não basta texto livre ou UUID.
+- Reabertura versionada, encerramento/publicação e desempenho permanecem na
+  Fase 1. Não considerar a fase concluída nem ativar piloto com este checkpoint.
+- PGlite valida SQL real e sequências; não comprova disputas entre conexões
+  PostgreSQL independentes. Esse teste continua obrigatório antes do piloto.
+- Sem worker de expiração global nesta entrega; o banco reconcilia na próxima
+  operação autorizada. Até lá a interface pode mostrar sessão desatualizada,
+  mas o intervalo sem confirmação jamais é creditado pela reconciliação.
+- O domínio puro anterior é referência de regras; o adapter de produção grava
+  heartbeat separado para evitar crescimento do histórico. Sem escrita direta
+  em tabelas por service_role, authenticated ou anon.
+- Nenhuma consulta CCEE, assinatura ou envio de mensagens foi introduzido.

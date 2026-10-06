@@ -4,7 +4,7 @@ import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 import { validateWriteDto } from '../../common/validation/validate-write-dto';
-import { CreateAclAdmissionDto } from './acl-admission.dto';
+import { AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto } from './acl-admission.dto';
 export const ACL_VIEW = '2c933fdf-0bbf-406a-915c-03e7921e54d8';
 export const ACL_MANAGE = '820dc44f-15a0-4c2a-871e-2c1d2d443d9e';
 export const ACL_APPROVE = '26cadaa7-2eea-4080-91f6-1f26f87ca809';
@@ -74,6 +74,34 @@ export class AclAdmissionService {
     const row = await this.rpc('acl_create', { ...this.params(t), p_request: dto.requestId, p_customer: dto.customerId, p_unit: dto.unitId });
     if (row?.organizationId !== t.organizationId || row?.customerId !== dto.customerId || row?.unitId !== dto.unitId) throw new InternalServerErrorException('Escopo da adesão inválido.');
     return row;
+  }
+  async work(id: string, input: unknown, t: TenantContext) {
+    if (!UUID.test(id)) throw new BadRequestException('Identificador de adesão inválido.');
+    const dto = await validateWriteDto(AclWorkCommandDto, input as AclWorkCommandDto);
+    if (dto.action !== 'PAUSE' && (dto.pauseReason != null || dto.reason != null) ||
+        dto.action === 'PAUSE' && (!dto.pauseReason || dto.pauseReason === 'OTHER' && (!dto.reason || dto.reason.trim().length < 10))) {
+      throw new BadRequestException('Confira o motivo da pausa; Outros exige uma justificativa.');
+    }
+    await this.allowed(t, true);
+    const result = await this.rpc('acl_work_command', { ...this.params(t), p_id: id, p_request: dto.requestId,
+      p_revision: dto.expectedRevision, p_stage: dto.stageKey, p_action: dto.action, p_pause: dto.pauseReason ?? null, p_reason: dto.reason ?? null });
+    if (result?.ok === false && ['CONFLICT','LOCKED'].includes(result.code)) {
+      // The database already committed stale-lease reconciliation. Do not retry
+      // a changed revision or silently overwrite another operator's activity.
+      throw new ConflictException('A atividade mudou ou foi interrompida. Atualize o processo antes de continuar.');
+    }
+    if (result?.ok !== true || result.admission?.id !== id || result.admission?.organizationId !== t.organizationId) {
+      throw new InternalServerErrorException('Estado da atividade indisponível.');
+    }
+    return result.admission;
+  }
+  async heartbeat(id: string, input: unknown, t: TenantContext) {
+    if (!UUID.test(id)) throw new BadRequestException('Identificador de adesão inválido.');
+    const dto = await validateWriteDto(AclHeartbeatDto, input as AclHeartbeatDto); await this.allowed(t, true);
+    const result = await this.rpc('acl_work_heartbeat', { ...this.params(t), p_id: id, p_stage: dto.stageKey });
+    if (result?.ok === false && result.code === 'LOCKED') throw new ConflictException('Sessão interrompida. Atualize e retome a atividade.');
+    if (result?.ok !== true || typeof result.confirmedAt !== 'string' || !Number.isInteger(result.revision)) throw new InternalServerErrorException('Confirmação da atividade indisponível.');
+    return { confirmedAt: result.confirmedAt, revision: result.revision };
   }
   async portal(q: unknown, t: TenantContext) {
     const after = aclCursor(q); this.scope(t);

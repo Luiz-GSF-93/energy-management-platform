@@ -14,6 +14,34 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('rejects browser time, actor and completion fields on work commands',async()=>{
+  const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:1,stageKey:'registration',action:'START'};
+  for(const extra of [{now:1},{elapsedMs:90000},{actorId:'other'},{evidenceRef:'unverified'},{organizationId:'o2'}])await expect(h.service.work(id,{...body,...extra},tenant)).rejects.toThrow();
+  await expect(h.service.work(id,{...body,action:'COMPLETE'},tenant)).rejects.toThrow();
+  await expect(h.service.work(id,{...body,action:'PAUSE',pauseReason:'OTHER',reason:'curto'},tenant)).rejects.toThrow();
+  expect(h.rpc).not.toHaveBeenCalled();
+ });
+ it('passes only server context to the atomic work RPC and checks returned scope',async()=>{
+  const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:2,stageKey:'registration',action:'PAUSE',pauseReason:'AWAITING_CUSTOMER'};
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:false}}:{data:{ok:true,admission:{id,organizationId:'o1'}}});
+  expect((await h.service.work(id,body,tenant)).id).toBe(id);
+  expect(h.rpc).toHaveBeenLastCalledWith('acl_work_command',expect.objectContaining({p_org:'o1',p_actor:tenant.userId,p_id:id,p_request:body.requestId,p_revision:2,p_pause:'AWAITING_CUSTOMER',p_reason:null}));
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:false}}:{data:{ok:true,admission:{id,organizationId:'o2'}}});
+  await expect(h.service.work(id,body,tenant)).rejects.toThrow('indisponível');
+ });
+ it('maps committed lease reconciliation to conflict without automatic retry',async()=>{
+  const h=harness(),id=randomUUID();
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:false}}:{data:{ok:false,code:'CONFLICT',admission:{revision:3}}});
+  await expect(h.service.work(id,{requestId:randomUUID(),expectedRevision:2,stageKey:'registration',action:'RESUME'},tenant)).rejects.toThrow('interrompida');
+  expect(h.rpc.mock.calls.filter(v=>v[0]==='acl_work_command')).toHaveLength(1);
+ });
+ it('limits heartbeat DTOs and returns only server confirmation metadata',async()=>{
+  const h=harness(),id=randomUUID();
+  await expect(h.service.heartbeat(id,{stageKey:'registration',confirmedAt:'2099-01-01'},tenant)).rejects.toThrow();
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:false}}:{data:{ok:true,confirmedAt:'2026-10-06T20:00:00Z',revision:2,internal:'hidden'}});
+  expect(await h.service.heartbeat(id,{stageKey:'registration'},tenant)).toEqual({confirmedAt:'2026-10-06T20:00:00Z',revision:2});
+  await expect(h.service.heartbeat(id,{stageKey:'registration'},{...tenant,role:'consulta'})).rejects.toThrow('backoffice');
+ });
  it('keeps rollout disabled by default and never calls a write RPC when disabled',async()=>{
   const h=harness(false);expect((await h.service.access(tenant)).enabled).toBe(false);
   await expect(h.service.create({requestId:randomUUID(),customerId:'c1',unitId:'u1'},tenant)).rejects.toThrow('não habilitada');

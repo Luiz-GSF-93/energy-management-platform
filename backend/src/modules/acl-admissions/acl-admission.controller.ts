@@ -10,6 +10,8 @@ export class AclAdmissionController {
   @Get() @Header('Cache-Control', 'private, no-store') list(@Query() q: Record<string, unknown>, @Tenant() t: TenantContext) { return this.service.list(q, t); }
   @Get(':id') @Header('Cache-Control', 'private, no-store') one(@Param('id') id: string, @Tenant() t: TenantContext) { return this.service.one(id, t); }
   @Post() @Header('Cache-Control', 'private, no-store') create(@Body() b: unknown, @Tenant() t: TenantContext) { return this.service.create(b, t); }
+  @Post(':id/work') @Header('Cache-Control', 'private, no-store') work(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.work(id, b, t); }
+  @Post(':id/heartbeat') @Header('Cache-Control', 'private, no-store') heartbeat(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.heartbeat(id, b, t); }
 }
 @Controller('portal/acl-admissions')
 export class AclAdmissionPortalController {
