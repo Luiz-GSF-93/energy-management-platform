@@ -38,6 +38,7 @@ export const backofficeNavigation:
     {href:'/backoffice/operation/agenda',label:'Agenda',permission:'cb949e2a-e01d-4cf0-8c69-6ca74fe4d627',scope:'organization',group:'operation'},
     {href:'/backoffice/reports/operational',label:'Operacional',permissionsAll:['3ebadd32-6f30-459e-8ed3-0d2843d89946','60f9690a-145b-4dba-b23f-9f945baca296'],scope:'organization',group:'reports'},
     {href:'/backoffice/reports/executive',label:'Executivo',permissionsAll:['3ebadd32-6f30-459e-8ed3-0d2843d89946','60f9690a-145b-4dba-b23f-9f945baca296'],scope:'organization',group:'reports'},
+    {href:'/backoffice/reports/configuration',label:'Configurações',permissionsAll:['3ebadd32-6f30-459e-8ed3-0d2843d89946','9541a7bb-c20a-4c4d-9f4c-2185262c8e9c','60f9690a-145b-4dba-b23f-9f945baca296','51da7cca-8196-4135-84ce-f989be5ee594'],scope:'organization',group:'reports'},
     {href:'/backoffice/operation/requests',label:'Solicitações',permission:'1479c0b7-9608-4e95-bd83-7e6899255a78',scope:'organization',group:'operation'},
     {href:'/backoffice/operation/events',label:'Eventos',permission:'489e6387-d5fc-4cb0-81f9-d7a76269dca5',scope:'organization',group:'operation'},
     {href:'/backoffice/operation/pld',label:'PLD',permission:'966188be-1b54-4594-bcd1-596ba5ac8fde',scope:'organization',group:'operation'},
