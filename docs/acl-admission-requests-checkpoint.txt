@@ -1,0 +1,32 @@
+ADESÃO ACL — SOLICITAÇÕES, PRAZOS E PORTAL — 06/10/2026
+
+Entrega: solicitações vinculadas ao processo e etapa, prazo na Agenda e mensagem
+na área própria de solicitações do portal, em uma única transação. Repetições
+mantêm os mesmos registros; falha do portal desfaz pedido e agenda juntos.
+Texto público separado da justificativa interna. Cliente e unidade derivados
+somente do processo autorizado. Respostas e anexos usam a troca privada existente;
+anexos recebidos são versionados em Documentos, sujeitos à classificação/revisão.
+Não executa OCR nem aprova/conclui etapas a partir do recebimento.
+Não envia e-mail, SMS ou WhatsApp nem comprova assinatura ou ciência jurídica.
+
+Consulta paginada inclui estado operacional, prazo e quantidade de respostas.
+Prazo compartilhado e contexto ficam preservados: cancelar pedido e agenda e
+criar correção explícita. O encerramento da adesão bloqueia pedidos/prazos abertos.
+Processo pausado não é retomado pelo cliente. Solicitações não alteram cronômetro,
+revisão das etapas ou apuração financeira.
+
+Segurança: exige ACL + Documentos + Solicitações + Agenda, licenças atuais,
+vínculos da mesma organização e sessão explícita de operação de plataforma.
+RPCs revalidam escopo/permissões no banco, inclusive repetições após revogação.
+Tabela privada com RLS; navegador e service_role sem INSERT/UPDATE/DELETE direto.
+Sem ampliação de papéis, permissões de usuários ou publicação de resumo final.
+
+Liberação: migration 20261006_acl_admission_requests.sql após registry/timer,
+evidence/closure/history/invoice_history e operações/client_evidence existentes.
+Feature ACL_ADMISSION_REQUEST_ORGANIZATIONS vazia por padrão. Habilitar somente
+org_default após migração e deploy; ACL_ADMISSION_ORGANIZATIONS continua necessária.
+Rollback: retirar a organização da flag; preservar registros, mensagens e auditoria.
+
+Ainda posteriores: checklists especializados completos, motor de comparação ACR/ACL
+e cenários versionados, Bot-Energy, assinatura externa, adapters CCEE/canais,
+lembretes recorrentes e homologação real do encerramento/portal.

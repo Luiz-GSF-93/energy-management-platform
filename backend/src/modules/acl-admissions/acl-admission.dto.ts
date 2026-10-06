@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, Equals, IsArray, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, Equals, IsISO8601, IsArray, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Min } from 'class-validator';
 export class CreateAclAdmissionDto {
   @IsUUID() requestId!: string;
   @IsString() @Length(1, 100) @Matches(/^[A-Za-z0-9_-]+$/) customerId!: string;
@@ -41,4 +41,18 @@ export class AclReopenDto {
   @IsInt() @Min(1) expectedRevision!: number;
   @IsString() @Length(20,1000) reason!: string;
   @Equals(true) checkedDocument!: boolean;
+}
+
+export class AclRequestDto {
+ @IsUUID() requestId!: string;
+ @IsInt() @Min(1) expectedRevision!: number;
+ @IsIn(stages) stageKey!: string;
+ @IsString() @Length(3,160) subject!: string;
+ @IsString() @Length(10,5000) body!: string;
+ @IsISO8601({strict:true}) dueAt!: string;
+ @IsString() @Length(1,100) responsibleId!: string;
+ @IsIn(['LOW','NORMAL','HIGH','URGENT']) priority!: string;
+ @IsIn(['INVOICE','DOCUMENT','INFORMATION']) requestType!: string;
+ @IsString() @Length(10,500) reason!: string;
+ @Equals(true) checked!: boolean;
 }

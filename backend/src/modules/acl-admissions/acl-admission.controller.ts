@@ -11,6 +11,8 @@ export class AclAdmissionController {
   @Get() @Header('Cache-Control', 'private, no-store') list(@Query() q: Record<string, unknown>, @Tenant() t: TenantContext) { return this.service.list(q, t); }
   @Get(':id') @Header('Cache-Control', 'private, no-store') one(@Param('id') id: string, @Tenant() t: TenantContext) { return this.service.one(id, t); }
   @Post() @Header('Cache-Control', 'private, no-store') create(@Body() b: unknown, @Tenant() t: TenantContext) { return this.service.create(b, t); }
+  @Get(':id/requests') @Header('Cache-Control','private, no-store') requests(@Param('id') id:string,@Query() q:Record<string,unknown>,@Tenant() t:TenantContext){return this.service.requests(id,q,t);}
+  @Post(':id/requests') @Header('Cache-Control','private, no-store') createRequest(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.createRequest(id,b,t);}
   @Post(':id/work') @Header('Cache-Control', 'private, no-store') work(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.work(id, b, t); }
   @Post(':id/heartbeat') @Header('Cache-Control', 'private, no-store') heartbeat(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.heartbeat(id, b, t); }
   @Get(':id/evidence') @Header('Cache-Control', 'private, no-store') evidence(@Param('id') id: string, @Query() q: Record<string,unknown>, @Tenant() t: TenantContext) { return this.service.evidenceList(id,q,t); }
