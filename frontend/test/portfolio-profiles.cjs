@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>');
+for(const k of ['window','document','HTMLElement','Event'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+require.extensions['.css']=mod=>mod.exports={__esModule:true,default:new Proxy({},{get:(_,k)=>k})};
+const {portfolioProfiles,profileLabel}=require('../app/backoffice/energy-map/profile-data.ts');
+const Profiles=require('../app/backoffice/energy-map/PortfolioProfiles.tsx').default;
+let checks=0;const eq=(a,b)=>{assert.deepEqual(a,b);checks++;};
+const row=(id,customerId='c',organizationId='org',market='ACR',hasGd=true,hasBess=true)=>({id,customerId,organizationId,market,hasGd,hasBess});
+const data=[row('u1'),row('u1'),row('u2'),row('u3','c2','org','ACL',true,false),{...row('u4','c3','org','UNKNOWN',null,null),hasBess:undefined},row('u1','c','other'),{...row('no-unit'),hasUnit:false}];
+const tenant=portfolioProfiles(data,'org');eq(tenant.map(p=>p.units),[2,1,1]);eq(tenant[0].customers,1);eq(tenant[0].filters,{market:'ACR',gd:'YES',bess:'YES'});eq(tenant.reduce((n,p)=>n+p.units,0),4);
+eq(profileLabel(tenant[0].filters),'ACR + GD + BESS');eq(tenant.find(p=>p.filters.market==='ACL').filters.bess,'NO');eq(tenant.find(p=>p.filters.market==='UNKNOWN').filters,{market:'UNKNOWN',gd:'UNKNOWN',bess:'UNKNOWN'});
+const platform=portfolioProfiles(data);eq(platform[0].units,3);eq(platform[0].customers,2);eq(portfolioProfiles(data,'absent'),[]);
+const independent=portfolioProfiles([row('a','c','org','ACL',false,true),row('b','c','org','ACL',null,true)]);eq(independent.length,2);
+const root=createRoot(document.getElementById('root'));let selected;
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Profiles,{rows:data,organizationId:'org',active:{market:'',gd:'',bess:''},onFilter:v=>selected=v})));
+ const button=Array.from(document.querySelectorAll('button')).find(b=>b.getAttribute('aria-label')==='Filtrar perfil ACR + GD + BESS');assert.ok(button);eq(button.textContent.includes('2 unidades · 1 cliente'),true);eq(document.querySelectorAll('.profileGrid button').length,3);
+ await act(async()=>button.click());eq(selected,{market:'ACR',gd:'YES',bess:'YES'});
+ await act(async()=>root.render(React.createElement(Profiles,{rows:data,organizationId:'org',active:selected,onFilter:v=>selected=v})));
+ eq(document.querySelector('[aria-pressed="true"]').getAttribute('aria-label'),'Filtrar perfil ACR + GD + BESS');
+ const clear=Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Limpar filtros de perfil');await act(async()=>clear.click());eq(selected,{market:'',gd:'',bess:''});
+ await act(async()=>root.render(React.createElement(Profiles,{rows:[],active:selected,onFilter:()=>{}})));eq(document.body.textContent.includes('Nenhuma unidade nesta página'),true);
+ console.log('Portfolio profile checks passed:',checks);
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
