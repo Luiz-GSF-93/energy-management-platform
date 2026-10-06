@@ -19,9 +19,9 @@ export class ReportsService {
  }
  private async header(customerId:string,unitId:string,t:TenantContext){
   const c=await this.client().from('customers').select('id,company_name,contact_name,contact_email,status').eq('organization_id',t.organizationId).eq('id',customerId).is('deleted_at',null).maybeSingle();this.fail(c.error);
-  const u=await this.client().from('consumer_units').select('id,customer_id,name,code,address,city,state,distributor,status').eq('organization_id',t.organizationId).eq('customer_id',customerId).eq('id',unitId).maybeSingle();this.fail(u.error);
+  const u=await this.client().from('consumer_units').select('id,customer_id,name,consumer_unit_number,address,city,state,distributor,status').eq('organization_id',t.organizationId).eq('customer_id',customerId).eq('id',unitId).maybeSingle();this.fail(u.error);
   if(!c.data||!u.data||c.data.status!=='ACTIVE'||u.data.status!=='ACTIVE')throw new NotFoundException('Cliente ou unidade ativos indisponíveis nesta organização.');
-  return {organizationId:t.organizationId,organizationName:t.organizationName??t.organizationId,customerId,customerName:c.data.company_name,unitId,unitName:u.data.name,unitCode:u.data.code,address:u.data.address,city:u.data.city,state:u.data.state,distributor:u.data.distributor,contactName:c.data.contact_name,contactEmail:c.data.contact_email};
+  return {organizationId:t.organizationId,organizationName:t.organizationName??t.organizationId,customerId,customerName:c.data.company_name,unitId,unitName:u.data.name,unitCode:u.data.consumer_unit_number,address:u.data.address,city:u.data.city,state:u.data.state,distributor:u.data.distributor,contactName:c.data.contact_name,contactEmail:c.data.contact_email};
  }
  async create(input:unknown,t:TenantContext){
   await this.access(t,true);const d=await validateWriteDto<CreateReportDto>(CreateReportDto,input as CreateReportDto);
