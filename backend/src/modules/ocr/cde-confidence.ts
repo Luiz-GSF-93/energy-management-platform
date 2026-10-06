@@ -14,7 +14,7 @@ export function cdeConfidenceDiagnostics(raw:any,row:CpflOperation|undefined){
  const numeric=values.filter(v=>!['description','unit'].includes(v.key));
  const numericConfidence=numeric.every(v=>v.confidence!==null)?Math.min(...numeric.map(v=>v.confidence!)):null;
  const words=descriptionWords(raw,row?.fields.description);
- return {fields:values,numericConfidence,descriptionWords:words,reviewFields:values.filter(v=>v.state!=='HIGH_CONFIDENCE').map(v=>v.label),message:'Confiança OCR mede a leitura, não comprova a correção do valor. Conferência humana e aprovação são registros separados.'};
+ return {fields:values,numericConfidence,descriptionWords:words,reviewFields:values.filter(v=>v.state!=='HIGH_CONFIDENCE').map(v=>v.label),message:'Confiança OCR mede a leitura, não comprova a correção do valor. Conferência pelo Expert e aprovação são registros separados.'};
 }
 function descriptionWords(raw:any,f:ElectricalField|undefined):{text:string;confidence:number;page:number;offset:number}[]{
  if(!f||f.issues.some(i=>!['MISSING_CONFIDENCE','CONFIDENCE_BELOW_45','CONFIDENCE_REQUIRES_REVIEW'].includes(i)))return [];

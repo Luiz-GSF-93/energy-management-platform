@@ -1,4 +1,5 @@
 'use client';
+import CustomerContacts,{CustomerContact} from './CustomerContacts';
 import RegistrationEditor from './RegistrationEditor';
 import RegistrationList from './RegistrationList';
 import styles from './setup.module.css';
@@ -13,17 +14,18 @@ import {validTaxId,normalizeTaxId} from '@/app/lib/tax-id';
 type Customer={id:string;company_name:string;document:string;status?:string};
 type Unit={id:string;name:string;consumer_unit_number:string};
 function Setup(){
+ const [newContacts,setNewContacts]=useState<CustomerContact[]>([]);
  const [listRevision,setListRevision]=useState(0);
  const dialog=useRef<HTMLDialogElement>(null),unitsList=useRef<HTMLDetailsElement>(null);
  const [creating,setCreating]=useState<'customer'|'unit'|null>(null),[formError,setFormError]=useState('');
  useEffect(()=>{if(creating&&!dialog.current?.open)dialog.current?.showModal();},[creating]);
- function openRegistration(kind:'customer'|'unit'){setFormError('');setCreating(kind);}
+ function openRegistration(kind:'customer'|'unit'){setFormError('');setNewContacts([]);setCreating(kind);}
  const [editing,setEditing]=useState<{kind:'customers'|'consumer-units';id:string;readOnly?:boolean}|null>(null);
  const {hasPermission}=useAuth();const [customers,setCustomers]=useState<Customer[]>([]),[units,setUnits]=useState<Unit[]>([]),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const canView=hasPermission('cbb2e904-0718-4eec-9396-dba899118cdd'),viewUnits=hasPermission('b142bd7b-05a3-45ee-befd-e593066c2775');
  useEffect(()=>{let cancelled=false;if(!canView)return;apiRequest<Customer[]>('/api/v1/customers').then(c=>{if(!cancelled)setCustomers(c);}).catch(e=>{if(!cancelled)setError(e.message);});return()=>{cancelled=true;};},[canView,viewUnits]);
  async function save(e:FormEvent<HTMLFormElement>,unit:boolean){e.preventDefault();if(busy)return;const form=e.currentTarget;const f=new FormData(form);const body=Object.fromEntries(Array.from(f.entries()).map(([k,v])=>[k,String(v).trim()]).filter(([,v])=>v!==''));if(!unit){if(!validTaxId(body.document||'')){setFormError('CPF ou CNPJ inválido. Confira o número.');return;}body.document=normalizeTaxId(body.document);}setBusy(true);setFormError('');setMessage('');
- try{if(unit){const classification=Object.fromEntries(['freeMarket','hasGd','hasBess'].map(key=>[key,f.get(key)==='true'?true:f.get(key)==='false'?false:null]));const row=await apiRequest<Unit>('/api/v1/consumer-units',{method:'POST',body:{...body,...classification}});setUnits(old=>[...old,row]);if(unitsList.current)unitsList.current.open=true;}else{const row=await apiRequest<Customer>('/api/v1/customers',{method:'POST',body});setCustomers(old=>[...old,row]);}setListRevision(v=>v+1);form.reset();dialog.current?.close();setCreating(null);setMessage(unit?'Unidade cadastrada. Você já pode selecionar seus documentos.':'Cliente cadastrado. Cadastre agora a unidade consumidora.');}
+ try{if(unit){const row=await apiRequest<Unit>('/api/v1/consumer-units',{method:'POST',body});setUnits(old=>[...old,row]);if(unitsList.current)unitsList.current.open=true;}else{const row=await apiRequest<Customer>('/api/v1/customers',{method:'POST',body:{...body,report_contacts:newContacts}});setCustomers(old=>[...old,row]);}setListRevision(v=>v+1);form.reset();dialog.current?.close();setCreating(null);setMessage(unit?'Unidade cadastrada. Você já pode selecionar seus documentos.':'Cliente cadastrado. Cadastre agora a unidade consumidora.');}
  catch(ex){setFormError(ex instanceof Error?ex.message:'Não foi possível cadastrar.');}finally{setBusy(false);}}
  if(!canView)return <p>Acesso não autorizado.</p>;
  return <section className="backoffice-page"><h1>Clientes e unidades</h1><p>Cadastre os vínculos necessários aos documentos da organização ativa.</p>{error?<Alert variant="error">{error}</Alert>:null}{message?<Alert>{message}</Alert>:null}
@@ -38,10 +40,10 @@ function Setup(){
  <div className={styles.header}><h2 id="registration-title">{creating==='unit'?'Cadastrar unidade':'Cadastrar cliente'}</h2><Button type="button" variant="secondary" disabled={busy} onClick={()=>dialog.current?.close()}>Fechar</Button></div>
  {formError?<Alert variant="error">{formError}</Alert>:null}
  {creating==='customer'&&hasPermission('ac18624a-9fc7-49a1-9680-9a4cf47ec492')?<><form onSubmit={e=>void save(e,false)} className="organizations-create__form">
- <CustomerIdentity disabled={busy}/><Input label="Contato" name="contact_name" disabled={busy}/><Input label="E-mail" name="contact_email" type="email" disabled={busy}/><Input label="Telefone" name="contact_phone" disabled={busy}/><Button type="submit" disabled={busy}>Cadastrar cliente</Button></form></>:null}
+ <CustomerIdentity disabled={busy}/><Input label="Contato" name="contact_name" disabled={busy}/><Input label="E-mail" name="contact_email" type="email" disabled={busy}/><Input label="Telefone" name="contact_phone" disabled={busy}/><CustomerContacts value={newContacts} onChange={setNewContacts} disabled={busy}/><Button type="submit" disabled={busy}>Cadastrar cliente</Button></form></>:null}
  {creating==='unit'&&hasPermission('05613764-311a-4e71-ac99-475ad1dfe87a')?<><form onSubmit={e=>void save(e,true)} className="organizations-create__form"><label>Cliente<select className="ds-input" name="customerId" required disabled={busy}><option value="">Selecione</option>{customers.map(c=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></label>
  <Input label="Nome da unidade" name="name" maxLength={255} required disabled={busy}/><Input label="Número da unidade / instalação" name="code" maxLength={20} required disabled={busy}/><Input label="Distribuidora" name="distributor" maxLength={50} required disabled={busy}/><Input label="Grupo tarifário" name="tariffGroup" maxLength={10} required disabled={busy}/>
  <label>Modalidade tarifária<select className="ds-input" name="tariffModality" disabled={busy}><option value="">Não informada</option><option value="BLUE">Azul</option><option value="GREEN">Verde</option><option value="WHITE">Branca</option><option value="CONVENTIONAL">Convencional</option></select></label>
- <Input label="Endereço" name="address" maxLength={1000} disabled={busy}/><Input label="Cidade" name="city" maxLength={255} disabled={busy}/><Input label="Estado" name="state" maxLength={50} disabled={busy}/><p>Configure independentemente o ambiente, a GD e o BESS desta unidade.</p>{[["freeMarket","Ambiente de contratação"],["hasGd","Geração Distribuída (GD)"],["hasBess","Armazenamento em baterias (BESS)"]].map(([key,label])=><label key={key}>{label}<select className="ds-input" name={key} defaultValue="" disabled={busy}><option value="">Não informado</option><option value="true">{key==="freeMarket"?"ACL — Mercado Livre":"Sim"}</option><option value="false">{key==="freeMarket"?"ACR — Mercado Regulado":"Não"}</option></select></label>)}<Button type="submit" disabled={busy||!customers.length}>Cadastrar unidade</Button></form></>:null} </dialog></section>;
+ <Input label="Endereço" name="address" maxLength={1000} disabled={busy}/><Input label="Cidade" name="city" maxLength={255} disabled={busy}/><Input label="Estado" name="state" maxLength={50} disabled={busy}/><Button type="submit" disabled={busy||!customers.length}>Cadastrar unidade</Button></form></>:null} </dialog></section>;
 }
 export default function Page(){const {context}=useAuth();const id=context&&context.scope!=='global'?context.currentOrganization.id:'';return <ProtectedRoute><BackofficeShell>{id?<Setup key={id}/>:<p>Selecione uma organização para operar.</p>}</BackofficeShell></ProtectedRoute>;}
