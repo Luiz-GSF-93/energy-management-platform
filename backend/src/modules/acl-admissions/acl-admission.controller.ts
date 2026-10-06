@@ -12,6 +12,11 @@ export class AclAdmissionController {
   @Post() @Header('Cache-Control', 'private, no-store') create(@Body() b: unknown, @Tenant() t: TenantContext) { return this.service.create(b, t); }
   @Post(':id/work') @Header('Cache-Control', 'private, no-store') work(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.work(id, b, t); }
   @Post(':id/heartbeat') @Header('Cache-Control', 'private, no-store') heartbeat(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.heartbeat(id, b, t); }
+  @Get(':id/evidence') @Header('Cache-Control', 'private, no-store') evidence(@Param('id') id: string, @Query() q: Record<string,unknown>, @Tenant() t: TenantContext) { return this.service.evidenceList(id,q,t); }
+  @Get(':id/evidence-sources') @Header('Cache-Control', 'private, no-store') sources(@Param('id') id: string, @Query() q: Record<string,unknown>, @Tenant() t: TenantContext) { return this.service.evidenceList(id,q,t,true); }
+  @Post(':id/evidence') @Header('Cache-Control', 'private, no-store') evidenceCommand(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.evidenceCommand(id,b,t); }
+  @Get(':id/closure') @Header('Cache-Control', 'private, no-store') closure(@Param('id') id: string, @Tenant() t: TenantContext) { return this.service.closureRead(id,t); }
+  @Post(':id/closure') @Header('Cache-Control', 'private, no-store') closureCommand(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.closureCommand(id,b,t); }
 }
 @Controller('portal/acl-admissions')
 export class AclAdmissionPortalController {

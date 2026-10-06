@@ -1,0 +1,58 @@
+ADESÃO ACL — EVIDÊNCIAS, ENCERRAMENTO E PUBLICAÇÃO — 06/10/2026
+
+Entrega desta revisão
+Evidências privadas vinculadas à mesma organização, cliente e unidade, com hash
+do arquivo, versão documental e revisão do catálogo. A submissão, a aprovação e
+a utilização validam novamente essas fontes. Alterações exigem nova conferência.
+Classificação do catálogo não comprova assinatura e não aprova uma etapa ACL.
+
+Operadores autorizados registram evidências em suas atividades. Aprovação exige
+ACL_APPROVE, ACL_MANAGE e Documentos, além de perfil gestor/admin_org ou sessão
+explícita de operação da plataforma. Licenças e vínculos atuais são revalidados
+no banco em cada operação, inclusive nas repetições idempotentes.
+
+Faturas: exatamente 12 competências mensais distintas, consecutivas e no primeiro
+dia do mês, do tipo INVOICE_DISTRIBUTOR. Contratos: energia e gestão. Conferência
+manual explícita; OCR bruto não é aprovação e assinatura externa não é inferida.
+Modalidade e data de suprimento vêm de fatos específicos das evidências aprovadas.
+Dispensa tem evidência e aprovação própria, tempo zero e regras condicionais;
+custódia e registro de contratos exigem modalidade varejista confirmada.
+
+Conclusão depende das pré-condições de cada etapa, da atividade do operador e
+de aprovação documental válida. O tempo é encerrado pelo relógio do servidor,
+sem aceitar tempo, escopo ou identidade enviados pelo navegador.
+
+Encerramento explícito exige as 12 etapas concluídas/dispensadas, nenhuma sessão
+aberta e revalidação de todas as evidências utilizadas. Preserva desempenho v1,
+tempos, sessões, nomes registrados nos eventos e nas revisões, versões e hashes.
+Integridade: SHA-256 sobre UTF-8 da representação PostgreSQL body::text de JSONB;
+hashFormat postgres-jsonb-text-utf8-sha256. Não equivale a JSON.stringify nem ao
+canonicalizador do modelo puro. A versão, o processo fechado e o resumo são
+imutáveis. Não altera automaticamente a unidade para ACL.
+
+Publicação separada exige revisão explícita do resumo e o hash da versão fechada.
+Insere resumo/jornal próprios sem sobrescrever o processo fechado. O status pode
+ser Concluído antes da publicação; a conclusão pública aparece apenas depois dela.
+No portal: unidade, status e resumo (modalidade, data confirmada, conclusão e data
+de publicação). Sem etapas, evidências, sessões ou responsáveis internos.
+
+Validação automatizada
+SQL real em bancos PGlite descartáveis, sem registros de produção:
+registro 74, cronômetro 69, evidências 61, encerramento/publicação 34 verificações.
+O teste de encerramento executa as 12 etapas via RPCs reais, antes de fechar e
+publicar. O teste isolado de dispensa usa pré-condições de laboratório, declaradas
+no próprio teste. Esses bancos não comprovam concorrência PostgreSQL multi-sessão.
+Jest: 37 testes de domínio, autorização/DTOs, projeções e fronteira do portal.
+Build Nest, TypeScript frontend e build Next precisam passar no commit entregue.
+
+Situação de implantação
+PR 258 segue draft. ACL_ADMISSION_ORGANIZATIONS continua vazio por padrão. Esta
+revisão não executa migrações em produção, concede permissões a papéis, habilita
+organizações, contrata serviços, envia mensagens ou usa credenciais de provedores.
+
+Pendências para fechar a fase 1 e liberar piloto
+Reabertura como novo processo relacionado preservando o histórico fechado;
+consulta do desempenho por responsável e comparações; validação concorrente em
+PostgreSQL e validação autenticada da interface; plano de aplicação das migrações
+e piloto controlado em organização autorizada. Não habilitar a feature antes disso.
+Fases 2–4: documentos/solicitações/agenda, simulação e adaptadores/provedores.

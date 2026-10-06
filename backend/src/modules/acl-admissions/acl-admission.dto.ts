@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, Equals, IsArray, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Min } from 'class-validator';
 export class CreateAclAdmissionDto {
   @IsUUID() requestId!: string;
   @IsString() @Length(1, 100) @Matches(/^[A-Za-z0-9_-]+$/) customerId!: string;
@@ -15,4 +15,24 @@ export class AclWorkCommandDto {
 }
 export class AclHeartbeatDto {
   @IsIn(stages) stageKey!: string;
+}
+export class AclEvidenceCommandDto {
+  @IsUUID() requestId!: string;
+  @IsInt() @Min(1) expectedRevision!: number;
+  @IsIn(['SUBMIT','APPROVE','REJECT','COMPLETE','SKIP']) action!: string;
+  @Equals(true) checkedDocument!: boolean;
+  @IsOptional() @IsIn(stages) stageKey?: string;
+  @IsOptional() @IsUUID() evidenceId?: string;
+  @IsOptional() @IsIn(['COMPLETE','SKIP']) kind?: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ArrayUnique() @IsString({each:true}) @Length(1,100,{each:true}) @Matches(/^[A-Za-z0-9_-]+$/,{each:true}) documentIds?: string[];
+  @IsOptional() @IsString() @Length(20,2000) note?: string;
+  @IsOptional() @IsObject() facts?: Record<string,unknown>;
+}
+export class AclClosureCommandDto {
+  @IsUUID() requestId!: string;
+  @IsInt() @Min(1) expectedRevision!: number;
+  @IsIn(['CLOSE','PUBLISH']) action!: string;
+  @Equals(true) checkedDocument!: boolean;
+  @IsOptional() @IsString() @Length(10,1000) conclusion?: string;
+  @IsOptional() @IsString() @Matches(/^[a-f0-9]{64}$/) performanceHash?: string;
 }

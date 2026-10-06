@@ -14,6 +14,58 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('requires approval and explicit closure review and rejects spoofed publication data',async()=>{
+  const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:5,action:'CLOSE',checkedDocument:true};
+  for(const invalid of [{checkedDocument:false},{modality:'RETAIL'},{supplyDate:'2026-12-01'},{state:{status:'COMPLETED'}},{performanceHash:'a'.repeat(64)}])await expect(h.service.closureCommand(id,{...body,...invalid},tenant)).rejects.toThrow();
+  await expect(h.service.closureCommand(id,body,{...tenant,role:'operacional',permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']})).rejects.toThrow('aprovação');
+  expect(h.rpc.mock.calls.some(c=>c[0]==='acl_closure_command')).toBe(false);
+ });
+ it('binds publication to the reviewed hash, uses live scope and rejects foreign performance',async()=>{
+  const h=harness(),id=randomUUID(),hash='a'.repeat(64),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const body={requestId:randomUUID(),expectedRevision:50,action:'PUBLISH',checkedDocument:true,performanceHash:hash,conclusion:'Adesão concluída e suprimento confirmado.'};
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,admission:{id,organizationId:'o1'},closure:{performance:{body:{organizationId:'o1',admissionId:id}}}}});
+  expect((await h.service.closureCommand(id,body,t)).admission.id).toBe(id);
+  expect(h.rpc).toHaveBeenLastCalledWith('acl_closure_command',expect.objectContaining({p_org:'o1',p_actor:t.userId,p_hash:hash,p_conclusion:body.conclusion,p_revision:50,p_checked:true}));
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{performance:{body:{organizationId:'o2',admissionId:id}}}});
+  await expect(h.service.closureRead(id,t)).rejects.toThrow('Escopo');
+ });
+ it('surfaces committed closure conflicts without repeating a command automatically',async()=>{
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:false,code:'DEPENDENCIES'}});
+  await expect(h.service.closureCommand(id,{requestId:randomUUID(),expectedRevision:8,action:'CLOSE',checkedDocument:true},t)).rejects.toThrow('Conclua');
+  expect(h.rpc.mock.calls.filter(c=>c[0]==='acl_closure_command')).toHaveLength(1);
+ });
+ it('protects evidence access with document entitlement and prevents operator approval',async()=>{
+  const h=harness(),id=randomUUID();
+  await expect(h.service.evidenceList(id,{},tenant)).rejects.toThrow('documentos');
+  await expect(h.service.evidenceList(id,{}, {...tenant,role:'consulta'})).rejects.toThrow('backoffice');
+  const operator={...tenant,role:'operacional',permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed','26cadaa7-2eea-4080-91f6-1f26f87ca809']};
+  expect((await h.service.access(operator)).canApprove).toBe(false);
+  await expect(h.service.evidenceCommand(id,{requestId:randomUUID(),expectedRevision:1,action:'APPROVE',evidenceId:randomUUID(),note:'Conferência dos documentos e aplicabilidade.',checkedDocument:true},operator)).rejects.toThrow('aprovação');
+  expect(h.rpc.mock.calls.some(c=>c[0]==='acl_evidence_command')).toBe(false);
+ });
+ it('rejects forged evidence snapshots, unchecked review and invalid command fields',async()=>{
+  const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:1,action:'SUBMIT',stageKey:'registration',kind:'COMPLETE',documentIds:['doc-1'],facts:{},note:'Conferência dos documentos e aplicabilidade.',checkedDocument:true};
+  for(const invalid of [{fileHash:'a'.repeat(64)},{actorName:'Expert'},{checkedDocument:false},{facts:{elapsedMs:9999}},{evidenceId:randomUUID()},{documentIds:['doc-1','doc-1']}])await expect(h.service.evidenceCommand(id,{...body,...invalid},tenant)).rejects.toThrow();
+  await expect(h.service.evidenceCommand(id,{...body,stageKey:'supply',facts:{supplyDate:'2026-02-30'}},tenant)).rejects.toThrow('válida');
+  expect(h.rpc).not.toHaveBeenCalled();
+ });
+ it('uses the authenticated scope for evidence commands and rejects mismatched responses',async()=>{
+  const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const body={requestId:randomUUID(),expectedRevision:3,action:'COMPLETE',evidenceId,checkedDocument:true};
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,admission:{id,organizationId:'o1'},evidenceId}});
+  expect((await h.service.evidenceCommand(id,body,t)).evidenceId).toBe(evidenceId);
+  expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','document_management');
+  expect(h.rpc).toHaveBeenLastCalledWith('acl_evidence_command',expect.objectContaining({p_org:'o1',p_actor:tenant.userId,p_id:id,p_evidence:evidenceId,p_facts:null,p_documents:null,p_checked:true}));
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,admission:{id,organizationId:'o2'},evidenceId}});
+  await expect(h.service.evidenceCommand(id,body,t)).rejects.toThrow('indisponível');
+ });
+ it('returns dependency conflicts without silently changing the expected revision',async()=>{
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:false,code:'DEPENDENCIES'}});
+  await expect(h.service.evidenceCommand(id,{requestId:randomUUID(),expectedRevision:2,action:'COMPLETE',evidenceId:randomUUID(),checkedDocument:true},t)).rejects.toThrow('pré-condições');
+  expect(h.rpc.mock.calls.filter(c=>c[0]==='acl_evidence_command')).toHaveLength(1);
+ });
  it('rejects browser time, actor and completion fields on work commands',async()=>{
   const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:1,stageKey:'registration',action:'START'};
   for(const extra of [{now:1},{elapsedMs:90000},{actorId:'other'},{evidenceRef:'unverified'},{organizationId:'o2'}])await expect(h.service.work(id,{...body,...extra},tenant)).rejects.toThrow();
