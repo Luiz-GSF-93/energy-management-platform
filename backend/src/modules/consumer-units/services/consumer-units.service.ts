@@ -25,6 +25,7 @@ export class ConsumerUnitsService {
       tariffSubgroup: 'tariff_subgroup',
       consumptionClass: 'consumption_class',
       freeMarket: 'free_market',
+      hasGd: 'has_gd', hasBess: 'has_bess',
       lastDemandAdjustmentDate: 'last_demand_adjustment_date',
       customerId: 'customer_id', name: 'name', code: 'consumer_unit_number',
       distributor: 'distributor', tariffGroup: 'tariff_group', tariffModality: 'tariff_modality',

@@ -1,0 +1,56 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+const db=new PGlite();let checks=0;
+const permissions=['b142bd7b-05a3-45ee-befd-e593066c2775','cbb2e904-0718-4eec-9396-dba899118cdd','0f2e539d-03f9-4168-bc8c-55ac3a371628'];
+const check=v=>{assert.ok(v);checks++;};
+const deny=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+try {
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamp);INSERT INTO organizations VALUES('o1',NULL),('o2',NULL);
+ CREATE TABLE customers(id text PRIMARY KEY,organization_id text,company_name text,trade_name text,economic_group text,deleted_at timestamp);
+ INSERT INTO customers VALUES('c1','o1','Cliente Um',NULL,'Grupo Um',NULL),('c2','o2','Cliente Dois',NULL,NULL,NULL);
+ CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,name text,consumer_unit_number text,address text,city text,state text,distributor text,status text,free_market boolean);
+ INSERT INTO consumer_units VALUES('u1','o1','c1','Unidade Um','123','Rua um','Ribeirão Preto','SP','CPFL','ACTIVE',true),('u2','o2','c2','Unidade Dois','456','Rua dois','Rio','RJ','Light','ACTIVE',false);
+ CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date);
+ INSERT INTO licenses VALUES('o1',true,'ACTIVE','2026-01-01',NULL),('o2',true,'ACTIVE','2026-01-01',NULL);
+ CREATE TABLE roles(id text PRIMARY KEY,organization_id text,name text,scope text,permissions jsonb);
+ CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text);
+ CREATE TABLE platform_organization_sessions(organization_id text,user_id uuid,expires_at timestamptz,revoked_at timestamptz);
+ CREATE FUNCTION assert_license_platform_actor(uuid) RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Not platform' USING ERRCODE='42501';END $$;`);
+ await db.query("INSERT INTO roles VALUES('r1','o1','gestor','organization',$1),('r2','o2','gestor','organization',$1),('rc','o1','consulta','organization',$1)",[JSON.stringify(permissions)]);
+ await db.exec("INSERT INTO organization_members VALUES('o1','a1','r1','active'),('o2','a2','r2','active'),('o1','client','rc','active');");
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20260927_f1_84_registration_edits.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261005_f9_energy_map.sql',import.meta.url),'utf8'));
+ const read=async(org='o1',actor='a1',query={})=>(await db.query('SELECT read_energy_map_units($1,$2,$3) AS v',[org,actor,JSON.stringify(query)])).rows[0].v;
+ const save=async(body,org='o1',actor='a1',unit='u1')=>(await db.query('SELECT save_energy_map_location($1,$2,$3,$4) AS v',[org,actor,unit,JSON.stringify(body)])).rows[0].v;
+
+ await db.exec("ALTER TABLE organizations ADD COLUMN name text;UPDATE organizations SET name=id;CREATE TABLE user_roles(user_id text,role_id text);INSERT INTO roles VALUES('rp',NULL,'admin_platform','global','[\"9a679254-bb1a-4353-9d17-cc2bd9eb5abd\"]');INSERT INTO user_roles VALUES('00000000-0000-4000-8000-000000000001','rp');");
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261005_f10_energy_map_platform.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261005_f12_energy_map_gd.sql',import.meta.url),'utf8'));
+ const globalRead=async(q={})=>(await db.query('SELECT read_platform_energy_map($1,$2) v',['00000000-0000-4000-8000-000000000001',JSON.stringify(q)])).rows[0].v;
+ const edit=async(changes,version,request=randomUUID(),unit='u1')=>(await db.query('SELECT edit_registration($1,$2,$3,$4,$5,$6,$7,$8) v',['o1','consumer_units',unit,'a1','Conferido no contrato da unidade',version,request,JSON.stringify(changes)])).rows[0].v;
+ let row=(await read()).rows[0];check(row.hasGd===null&&row.hasBess===null);
+ check((await read('o1','a1',{gd:'UNKNOWN',bess:'UNKNOWN'})).total===1);
+ const request=randomUUID();await edit({free_market:false,has_gd:true},0,request);
+ check((await read('o1','a1',{market:'ACR',gd:'YES'})).total===1);
+ await edit({free_market:false,has_gd:true},0,request);check((await db.query('SELECT count(*) n FROM registration_edits')).rows[0].n===1);
+ await deny(()=>edit({has_bess:true},0),'40001');
+ await edit({free_market:true},1);check((await read('o1','a1',{market:'ACL',gd:'YES'})).total===1);
+ await edit({free_market:false,has_bess:true},2);
+ check((await read('o1','a1',{market:'ACR',gd:'YES',bess:'YES'})).total===1);
+ check((await globalRead({market:'ACR',gd:'YES',bess:'YES'})).total===1);
+ check((await read('o1','a1',{gd:'NO'})).total===0);
+ await deny(()=>edit({has_gd:'true'},3),'22023');await deny(()=>edit({has_bess:1},3),'22023');
+ await deny(()=>edit({organization_id:'o2'},3),'22023');await deny(()=>edit({has_gd:true},0,randomUUID(),'u2'),'P3840');
+ await edit({has_gd:false,has_bess:null},3);check((await read('o1','a1',{gd:'NO',bess:'UNKNOWN'})).total===1);
+ const audit=(await db.query('SELECT before_record,after_record FROM registration_edits ORDER BY created_at DESC LIMIT 1')).rows[0];check(audit.before_record.has_gd===true&&audit.after_record.has_gd===false&&audit.after_record.has_bess===null);
+ await deny(()=>db.exec("UPDATE registration_edits SET reason='forged'"),'23514');
+ await db.exec("CREATE FUNCTION reject_classification_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit failed' USING ERRCODE='P9999';END $$;CREATE TRIGGER reject_classification_audit BEFORE INSERT ON registration_edits FOR EACH ROW EXECUTE FUNCTION reject_classification_audit();");
+ await deny(()=>edit({has_bess:true},4),'P9999');check((await read()).rows[0].hasBess===null);
+ await db.exec('DROP TRIGGER reject_classification_audit ON registration_edits');
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await deny(()=>edit({has_bess:true},4),'42501');await deny(()=>read(),'42501');await db.exec('RESET ROLE');}
+ await deny(()=>read('o1','a2'),'42501');check((await read('o2','a2',{gd:'YES'})).total===0);
+ console.log(JSON.stringify({ok:true,checks}));
+}finally{await db.close();}

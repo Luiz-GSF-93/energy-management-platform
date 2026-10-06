@@ -1,6 +1,8 @@
 import { IsString, IsOptional, IsUUID, IsNumber, MaxLength, Matches, Min, IsIn, ValidateIf, IsBoolean, IsDateString } from 'class-validator';
 
 class ElectricalFieldsDto {
+ @IsOptional() @IsBoolean() hasGd?: boolean | null;
+ @IsOptional() @IsBoolean() hasBess?: boolean | null;
  @IsOptional() @IsIn(['A1','A2','A3','A3a','A4','AS','B1','B2','B3','B4']) tariffSubgroup?: string | null;
  @IsOptional() @IsIn(['INDUSTRIAL','COMMERCIAL','RURAL','PUBLIC_AUTHORITY','PUBLIC_SERVICE','RESIDENTIAL']) consumptionClass?: string | null;
  @IsOptional() @IsBoolean() freeMarket?: boolean | null;
