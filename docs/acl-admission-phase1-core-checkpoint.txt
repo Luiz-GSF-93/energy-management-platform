@@ -1,0 +1,59 @@
+ADESÃO ACL — FASE 1, PRIMEIRO CHECKPOINT DE CÓDIGO
+06/10/2026
+
+Autorização: usuário aprovou a arquitetura e o início das implantações.
+O portal mostrará somente status por unidade e resumo após conclusão/publicação.
+
+Entregue neste checkpoint:
+- Máquina de estados com 12 atividades e encerramento separado.
+- Iniciar/pausar/retomar/concluir; pausa com motivo e Outros com justificativa.
+- Cronômetro baseado no instante do servidor, separando espera de tempo ativo.
+- Uma atividade ativa por operador dentro do processo; etapas diferentes
+  permitem operadores diferentes. Lease de 90 segundos: reconciliação para
+  o último heartbeat confirmado, com evento de interrupção e retomada explícita.
+- Revisão otimista, requestId idempotente e preservação do estado de entrada.
+- Evidência obrigatória para conclusão; dispensa apenas em etapas condicionais
+  e com autorização de aprovação, justificativa e referência de evidência.
+- Encerramento produz snapshot de desempenho e SHA-256 canônico; publicação
+  exige autorização de aprovação, integridade e resumo separado.
+- Projeção do portal usa lista explícita de campos: unitId, status e summary.
+  Vinculação por organização/cliente/unidade; sem cronômetros, checklist,
+  histórico, operadores ou trâmites internos no payload público.
+- 14 testes de domínio, incluindo concorrência, retry, desconexão, pausa,
+  isolamento do escopo e minimização da projeção do cliente.
+
+Verificação executada:
+- Jest: 14/14 passaram localmente e na branch baseada em origin/main e855d2e.
+- TypeScript estrito do domínio: passou localmente.
+- Compilação completa do backend (nest build): passou na branch remota.
+
+Limite importante:
+Este checkpoint é a fundação do domínio, ainda sem controller, módulo registrado,
+escrita em banco ou tela. Não há nova funcionalidade disponível em produção.
+Operator é um conjunto de fatos confiáveis que o adapter de autorização deve
+obter do backend; nunca aceitar esse objeto ou timestamps como DTO do navegador.
+Os testes do domínio não substituem testes de RLS, licenças ou autenticação.
+
+Próximos blocos da MESMA Fase 1:
+1. Persistência privada, migrações aditivas e comandos RPC transacionais.
+2. Revalidar TenantGuard, RBAC, vínculo cliente/unidade, licença e sessão
+   explícita de operação de plataforma em todos os caminhos.
+3. Evidências/dispensas verificadas no banco; referência textual sozinha não
+   prova documento aprovado. Caminhos varejo/agente próprio versionados.
+4. Garantir uma sessão por operador entre processos com constraint no banco;
+   na fundação atual a regra é limitada a um processo.
+5. Gravar interrupções por lease em transação independente antes do comando
+   otimista, para que um erro/retry não apague o evento de reconciliação.
+6. Grants/RLS, snapshots sem UPDATE/DELETE, testes diretos de RPC e dois tenants.
+7. API do backoffice, sidebar, candidatos, diagrama e cronômetro; portal com
+   endpoint próprio e projeção mínima vinculada ao cliente autenticado.
+8. Testes de integração e regressão, revisão, piloto e deploy desta fase.
+
+Matriz de implantação aprovada:
+Fase 1 — Núcleo, persistência segura, fluxo, cronômetro, auditoria e portal mínimo.
+Fase 2 — Documentos, solicitações, prazos, agenda e assinatura quando habilitada.
+Fase 3 — Simulação no motor existente e interpretação pelo Bot-Energy.
+Fase 4 — Integrações CCEE/canais e automações, ativadas por provedor liberado.
+
+Nenhuma mensagem, pagamento, documento de cliente ou consulta externa foi
+enviada pelo novo módulo neste checkpoint. Permissões existentes preservadas.

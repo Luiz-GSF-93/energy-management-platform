@@ -1,0 +1,388 @@
+ENERGYOS — ADESÃO ACL
+Fase 0: diagnóstico, arquitetura e critérios de aceite
+Data: 06/10/2026 | Versão: 3 | Estado: arquitetura aprovada; Fase 1 iniciada
+Revisão 3: aprovação do usuário para iniciar as implantações em quatro fases.
+Revisão 2: seção Adesão ACL do Portal do Cliente limitada a status e resumo final.
+
+1. OBJETIVO E LIMITE DESTA ENTREGA
+
+Gerir a migração de uma unidade cadastrada do ACR para o ACL, com atividades
+independentes, documentos, solicitações ao cliente, prazos, cronômetro,
+simulação econômica, validações e relatório de desempenho imutável.
+
+Esta entrega documenta a arquitetura. O usuário aprovou a estrutura e o início
+da Fase 1 após a revisão do escopo do portal. A aprovação não é evidência de
+implantação em produção nem de conclusão das quatro fases.
+O prompt mestre, seção 48, determina: "Depois disso, implemente somente a
+FASE 0. Ao finalizar, aguarde validação. Não avance automaticamente para a
+próxima fase." A aprovação do usuário libera o início da Fase 1.
+
+Fontes do diagnóstico:
+- Requisitos do usuário em Texto colado.txt, anexo de 06/10/2026.
+- work/prompt-mestre-atual.txt, em especial seção 48.
+- Referência remota origin/main atualizada por git fetch: e855d2e, merge PR #257.
+- Cópia local de serviços TenantGuard, OperationsService, DocumentsService,
+  permissões e módulos; a cópia local não substitui a referência remota atual.
+- Estado de provedores informado e conferido nos checkpoints anteriores.
+
+2. AJUSTES NECESSÁRIOS NA PROPOSTA
+
+2.1 Modalidade
+R$ 15 mil de conta mensal pode ser uma sugestão comercial configurável, mas
+não determina elegibilidade nem modalidade regulatória. A CCEE informa que
+consumidores com demanda igual ou superior a 500 kW podem se associar e que
+os de carga individual inferior a 500 kW exigem representação varejista.
+Guardar carga/demanda, tensão, fonte, vigência e validação pelo Consultor.
+Casos especiais exigem revisão, não classificação automática pela fatura.
+O catálogo regulatório deve ser versionado; não perpetuar uma regra sem data.
+
+2.2 Caminhos diferentes
+O fluxo varejista e a adesão como agente próprio não são idênticos. Conta
+custódia, boleto de adesão e documentação de agente próprio só serão exigidos
+quando aplicáveis. Não gerar boleto, conta ou exigência financeira fictícios.
+A medição depende do caso e do procedimento vigente. "Não aplicável" exige
+motivo, evidência e aprovação; não equivale a execução concluída.
+
+2.3 Economia estimada
+Atualização autorizada em 06/10/2026: usar as mesmas tarifas de referência para
+simular os 12 meses do histórico. Preservar competência, fonte, unidade, precisão
+e tratamento tributário; valores simulados não substituem custos efetivamente
+pagos. A prévia inicial de demanda medida não presume demanda faturável.
+TE, TUSD e demanda permitem uma comparação parcial. Não são, isoladamente,
+prova da economia líquida total. Simulação exibirá o escopo, impostos,
+encargos, perdas, custos CCEE, gestão, investimentos e outros custos incluídos
+ou pendentes. Dado ausente não vira zero. Não prometer economia garantida.
+
+2.4 Lista de empresas
+Interpretar "sair da lista ao iniciar/concluir" como sair das CANDIDATAS.
+Preservar listas EM ANDAMENTO e CONCLUÍDAS e seus históricos. O vínculo é
+por unidade; outras unidades do mesmo cliente continuam elegíveis.
+
+2.5 Assinatura e canais
+Upload/aceite no portal não será denominado assinatura digital validada sem
+provedor, trilha e mecanismo jurídico definidos. Até lá: assinatura pendente
+ou documento assinado recebido, sujeito à conferência do Consultor.
+SMS servirá somente para aviso genérico; não transportará faturas, valores,
+CPF, documentação ou relatórios. Para relatório, o aviso depende da aceitação
+do e-mail pelo provedor. Outros lembretes seguem política própria autorizada.
+Preparação de notificações não equivale a envio nem entrega ao destinatário.
+
+3. NAVEGAÇÃO E EXPERIÊNCIA
+
+Sidebar: Adesão ACL, visível somente com autorização efetiva no backend.
+Rotas propostas:
+- /backoffice/acl-admissions: candidatas, em andamento e concluídas.
+- /backoffice/acl-admissions/[id]: fluxo, documentos, solicitações e auditoria.
+- /backoffice/acl-admissions/[id]/performance: versões do desempenho.
+- Mesmo Portal do Cliente: seção Adesão ACL limitada ao status por unidade e,
+  após conclusão, resumo de adesão aprovado e publicado pelo backoffice.
+  Não exibir etapas, cronômetros, checklists, notas, auditoria ou trâmites internos.
+  Solicitações de documentos e respostas permanecem na área própria de
+  solicitações do portal; não compõem a seção Adesão ACL.
+
+Inserir adesão: selecionar cliente e unidade cadastrados e ativos do escopo
+autorizado; validar ACR, elegibilidade e ausência de processo aberto duplicado.
+GD e BESS continuam características independentes. Migrar ACR para ACL não
+apaga GD/BESS nem altera automaticamente o cadastro ou relatórios passados.
+
+Cabeçalho: cliente, unidade, organização ativa, modalidade, responsável,
+versão, data prevista e estado. Diagrama com estados legíveis e legenda.
+Cronômetro da atividade em foco no canto, com Iniciar/Pausar/Retomar/Concluir.
+Cards: progresso, tempo ativo, tempo aguardando, pendências e próximos prazos.
+Mostrar o horário local; armazenar instantes UTC e timezone da organização.
+
+4. FLUXO E REQUISITOS DE CADA ETAPA
+
+Cada etapa admite trabalho independente quando seus dados estão disponíveis.
+Conclusão exige pré-condições; conclusão de uma etapa não dispara as demais.
+
+01 Cadastro: vínculos cliente/unidade, responsável e documentos iniciais.
+02 Histórico de consumo e demanda: interpretar os últimos 12 meses consecutivos
+da própria fatura, conforme atualização aprovada em 06/10/2026. Preservar página,
+versão e hash da fonte; revisão do Consultor é obrigatória. Uma fatura com histórico
+completo substitui o envio de 12 arquivos para essa etapa. Custos anteriores não
+são inferidos do gráfico. Solicitar complemento apenas para dados ausentes.
+Alternativa: 12 competências em faturas separadas,
+   prazo e recorrência; registrar competência, origem e revisão de OCR.
+   Anexo recebido é versionado em Documentos; recebimento não é validação.
+03 Viabilidade: entradas conferidas, consumo ponta/fora ponta, demanda,
+   sazonalidade e preços do fornecedor; cálculo e interpretação separados.
+04 Modalidade: varejo/agente próprio, fundamento e aprovação do Consultor.
+05 Contratação: referências aos contratos de gestão e de energia existentes,
+   comercializadora, versões e aprovações. Não duplicar Trading Hub.
+06 Denúncia: carta versionada, solicitação de assinatura, protocolo e prazo
+   conforme contrato/regra aplicável; não fixar prazo universal no código.
+07 Medição: termo, fotos, descrições de painel/TC/TP/medidor e evidências;
+   concluir com validação ou dispensar justificadamente quando aplicável.
+08.1 Conta/custódia/adesão: somente quando aplicável; documentos e boleto
+   externo comprovado, vencimento e procuração. Não executar pagamentos.
+08.2 Habilitação técnica: UC, instalação, submercado, tensão, distribuidora,
+   CUSD vigente, aditivos e unifilar, com origem e revisão.
+08.3 Registro: contratos/protocolos e comprovação; consulta API quando liberada.
+09 Validação: checklists CCEE e distribuidora conforme modalidade. CNPJ,
+   societário, representantes, procurações, estrutura/grupo econômico; carga,
+   demanda, tensão, conexão, contrato de demanda e SMF quando aplicável.
+10 Suprimento: data confirmada e evidência; publicação ao portal e evento de
+   agenda. Reclassificação cadastral explícita, auditada e sem retroatividade.
+11 Encerramento: verificar todas as etapas obrigatórias aplicáveis e gerar
+   snapshot imutável do desempenho, com versão, operadores e evidências.
+
+Documentos societários, pessoais e técnicos serão solicitados conforme
+tipo de empresa, modalidade e necessidade; não coletar RG/CPF em todos os
+casos indiscriminadamente. Documentos de representantes têm acesso restrito.
+
+5. ESTADOS, TEMPO E CONCORRÊNCIA
+
+Processo: DRAFT -> IN_PROGRESS -> READY_TO_CLOSE -> COMPLETED.
+CANCELLED exige motivo; reabertura gera revisão e mantém snapshots anteriores.
+Etapa: NOT_STARTED -> RUNNING -> PAUSED -> RUNNING -> COMPLETED.
+SKIPPED exige motivo/evidência/aprovação e não conta como trabalho executado.
+
+Pausa manual exige: AGUARDANDO_CLIENTE, ENCERRANDO_ATIVIDADE ou OUTRO.
+OUTRO exige texto. Pausa bloqueia edição da etapa no backend e na interface.
+Retomar exige nova validação de usuário, vínculo, permissão e licença.
+O cliente pode responder solicitações enquanto a atividade interna está
+pausada; isso não altera os campos de trabalho nem retoma o cronômetro.
+
+Tempo provém do relógio do servidor, não do relógio do navegador. Eventos
+de início/pausa/retomada/conclusão são append-only. Uma sessão ativa por
+operador e uma sessão de edição ativa por etapa; etapas diferentes podem
+ser realizadas em paralelo por responsáveis autorizados. Duplicar abas,
+clicar duas vezes ou repetir requestId não cria tempo nem execução duplicados.
+Perda de conexão encerra a sessão pelo último heartbeat válido com motivo
+sistêmico auditado; não acumula horas indefinidamente. Registrar lacuna como
+interrupção, sem inventar trabalho. Configurar heartbeat/lease na fase 1.
+
+Progresso = etapas obrigatórias aplicáveis concluídas / total obrigatório
+aplicável. Exibir dispensas separadamente. Somatório de horas de operadores
+não se confunde com duração de calendário ou espera do cliente.
+Atualizações usam revisão otimista e bloqueio curto transacional. Conflito
+retorna 409; tela recarrega sem substituir silenciosamente trabalho alheio.
+
+6. ARQUITETURA E REUSO
+
+Frontend Next: páginas do backoffice e portal, usando cliente HTTP existente.
+Backend Nest: módulo acl-admissions com DTOs estritos, serviço de domínio,
+comandos de transição e consultas autorizadas. Nenhuma escrita direta do
+navegador em tabelas, cronômetros, snapshots ou buckets.
+
+Reutilizar:
+- Auth/TenantGuard/contexto e sessão de operação de plataforma.
+- LicensesService: free_market_management; document_management e
+  report_generation apenas onde a capacidade correspondente for utilizada.
+- Customers/ConsumerUnits: relação e características cadastrais.
+- OperationsService: operation_records/histórico, agenda, solicitações/eventos.
+- DocumentsService: upload privado, hash, download com escopo e evidências.
+  Confirmar contrato de versionamento atual antes de conectar o novo fluxo.
+- OCR: somente resultado revisado como entrada validada; anexos brutos
+  permanecem evidências sem poder alterar cálculo automaticamente.
+- Contratos/Trading Hub: referências às versões aprovadas e fornecedores.
+- Motor financeiro existente: extensão isolada para cenário de migração;
+  não chamar apuração publicada de ACR nem criar um segundo motor divergente.
+- Infraestrutura de relatórios: aproveitar renderização/versionamento quando
+  compatível; desempenho de adesão tem fonte própria, distinta de apurações.
+
+Portas externas: CCEE, assinatura, e-mail, WhatsApp e SMS através de adapters.
+Sem credenciais/contrato de API válidos: estado PENDING_INTEGRATION, evidência
+manual auditada quando admitida; nunca sucesso simulado em produção.
+Outbox transacional liga processo, operações e futuras notificações. Worker
+idempotente com limites, leases, tentativas e fila de falhas; mesma tarefa
+não cria solicitações, agenda ou mensagens repetidas em retries.
+
+7. MODELO DE DADOS PROPOSTO (NOMES SUJEITOS À COMPATIBILIDADE)
+
+acl_admissions:
+ id, organization_id, customer_id, consumer_unit_id, status, modality,
+ assigned_actor_id, workflow_version, revision, planned_supply_date,
+ confirmed_supply_date, created_by, created_at, closed_at.
+acl_admission_stages:
+ id, organization_id, admission_id, stage_key, status, applicable,
+ assigned_actor_id, revision, validated_payload, due_at, completed_at,
+ skip_reason, approved_by. Payload validado por schema específico da etapa.
+acl_admission_work_sessions:
+ id, organization_id, stage_id, actor_id, started_at, last_heartbeat_at,
+ ended_at, interruption_reason, accrued_seconds; sem edição arbitrária.
+acl_admission_events:
+ id, organization_id, admission_id, stage_id, actor_id, event_type,
+ revision, request_id, reason, occurred_at, snapshot; histórico append-only.
+acl_admission_links:
+ id, organization_id, admission_id, stage_id, document_version_id,
+ operation_record_id, contract_version_id, evidence_status.
+acl_admission_simulations:
+ id, organization_id, admission_id, version, inputs_snapshot, engine_version,
+ regulatory_version, outputs_snapshot, scope, exclusions, hash, approved_by.
+acl_admission_performance_versions:
+ id, organization_id, admission_id, version, snapshot, hash, generated_at,
+ generated_by, previous_version_id; UPDATE/DELETE proibidos.
+acl_admission_outbox:
+ id, organization_id, admission_id, logical_key, type, scheduled_at,
+ status, attempts, lease_until, source_revision; payload mínimo e privado.
+
+Chaves estrangeiras compostas com organization_id impedem ligar objetos de
+tenants diferentes. Validação adicional garante a unidade do cliente correto.
+Índices por tenant/status/prazo e unicidade parcial de processo aberto por
+unidade. requestId único por tenant/comando; constraints de estado e tempo.
+Snapshots guardam nomes dos operadores no momento do evento e IDs, sem
+depender de nome atual para reconstruir o histórico.
+Não duplicar bytes de anexos; referenciar versão com hash e impedir remoção
+de evidências necessárias ao histórico conforme política de retenção.
+
+8. PERMISSÕES E ISOLAMENTO MULTITENANT
+
+Permissões lógicas novas: acl_admissions.view/create/update/work/approve/
+close/performance.view. Registro em migração com UUIDs reais segundo o
+catálogo existente. Não inventar UUIDs nem conceder automaticamente a todos.
+
+Administrador da organização: gestão/aprovação dentro de sua organização,
+desde que tenha as permissões e licenças exigidas.
+Gestor: processos de clientes/unidades relacionados a seu escopo, com
+aprovação e encerramento somente se habilitado explicitamente.
+Operador: leitura/trabalho nos processos relacionados e atribuídos, sem
+poder elevar privilégios, publicar ou dispensar exigências sozinho.
+Administrador da plataforma: visão global administrativa autorizada;
+mutação de adesão somente em organização selecionada com sessão explícita
+de operação da plataforma, validade e auditoria. Não usar consulta global
+como autorização de escrita, nem fornecer exportação indiscriminada de RG/CPF.
+Cliente: na seção Adesão ACL, somente status de suas unidades e resumo final
+aprovado/publicado após conclusão. Solicitações e anexos autorizados ficam na
+área própria do portal. Nenhum rascunho financeiro ou desempenho interno.
+
+Backend revalida escopo, role/permissões, vínculo ativo e entitlement em
+leitura, download, exportação, transição e execução de worker. organization_id
+vem do contexto autenticado, não do corpo enviado pela tela. Assignee ou
+UUID conhecido não basta para autorizar. Ocultar menu não é controle de acesso.
+
+Tabelas privadas com RLS e grants restritos; sem acesso direto anon ou
+authenticated às novas tabelas. RPCs transacionais restritas ao backend
+seguem padrão existente: search_path seguro, argumentos validados, escopo
+e autorização explícitos. service_role não elimina a necessidade dessas
+checagens. Worker revalida autorização da política, licença e vigência.
+
+Storage privado; URLs de leitura curtas somente após autorização atual.
+Não persistir URLs assinadas em notificações. Portal com download autenticado.
+Segredos externos somente no backend; jamais NEXT_PUBLIC para CCEE/Twilio.
+Logs mínimos sem conteúdo dos documentos ou credenciais. Upload com limites,
+verificação MIME/conteúdo e controles existentes; rejeitar extensão falsa.
+
+9. API PROPOSTA
+
+/api/v1/acl-admissions: GET lista paginada, POST cria.
+/candidates: GET clientes/unidades autorizados e elegibilidade pendente/validada.
+/:id: GET detalhes, PATCH alterações versionadas permitidas.
+/:id/stages/:stageKey/commands: POST start/pause/resume/complete/skip.
+/:id/stages/:stageKey/requests: POST solicitações via operações/outbox.
+/:id/simulations: POST cenário versionado; GET versões autorizadas.
+/:id/commands: POST approve/close/cancel/reopen com razão e revisão.
+/:id/history e /:id/performance: GET histórico e snapshots autorizados.
+Portal recebe uma projeção própria e mínima: unidade autorizada, status público
+e, somente após conclusão/publicação, resumo final aprovado (modalidade, data
+confirmada de início do suprimento e síntese da conclusão). Não retornar payload
+interno de etapas nem escondê-lo apenas na interface. Solicitações e respostas
+usam rotas próprias da área de solicitações; não reaproveitar endpoint interno
+com permissão ampla. Paginação, limites, filtros permitidos,
+requestId e expectedRevision obrigatórios em comandos mutáveis.
+
+10. SIMULAÇÃO E BOT-ENERGY
+
+Doze meses validados permitem média mensal e análise sazonal. Informar
+cobertura/incompletude; cenário parcial não é apresentado como anual validado.
+Valores decimal/exatos com unidades kWh/MWh/kW e conversão explícita.
+Preço fornecedor, flexibilidade, vigência e tipo de energia versionados.
+Calcular base comparável ACR/ACL; não remover TUSD ou demanda simplesmente
+porque há migração. ROI/payback somente com investimento e custos completos;
+caso contrário, mostrar "não calculado: dados pendentes".
+GD/BESS preservados, sem somar consumo/injeção ou economia em duplicidade.
+
+Bot-Energy explica outputs e premissas aprovados. Não decide modalidade,
+não altera cálculo, não conclui checklist e não transmite documentos a IA
+externa sem destino, autorização e minimização definidos. Linguagem do produto
+usa Expert ou Consultor conforme contexto.
+
+11. MIGRAÇÃO, RELEASE E RECUPERAÇÃO
+
+Criar branch a partir da referência principal atualizada, preservando mudanças
+existentes. Migrações aditivas, transacionais e versionadas; constraints,
+índices, RLS, grants/RPCs e catálogo de permissões testados antes do frontend.
+Não migrar todos os clientes automaticamente: processos surgem por comando
+autorizado. Nenhuma alteração em snapshots financeiros publicados.
+Feature flag inicialmente desligada, piloto em organização autorizada após
+testes. Ordem: banco, backend compatível, frontend, habilitação de piloto.
+Rollback desativa feature/worker e volta app compatível; não apaga histórico
+ou novas tabelas com dados. Checkpoint registra commits, migrações, testes,
+tenant piloto, evidências e limitações de provedores.
+
+12. TESTES E CRITÉRIOS DE ACEITE
+
+- Dois tenants: negar UUIDs de cliente/unidade/documento/operação/simulação
+  externos em GET/POST/PATCH/exportação/download/RPC/worker.
+- Mesmo tenant: cliente A não acessa cliente B; operador sem vínculo ou
+  permissão não opera etapa; cliente não acessa desempenho interno.
+- Seção Adesão ACL do portal: API retorna somente projeção mínima; antes da
+  conclusão não retorna resumo final. Após conclusão retorna apenas resumo
+  aprovado/publicado, sem etapas, tempos, notas, checklists ou auditoria.
+- ADMIN plataforma: visão global não concede escrita; sessão expirada,
+  tenant errado ou revogada bloqueiam comandos e jobs.
+- Licença/vínculo revogados interrompem execução e impedem download novo.
+- Browser direto/anon/authenticated e service_role fora do caminho autorizado
+  não conseguem alterar tempo/snapshot ou cruzar tenant pelas RPCs.
+- Relógio do navegador alterado, duas abas, requisição duplicada, concorrência,
+  conexão perdida e resposta perdida não duplicam tempo, eventos ou arquivos.
+- PAUSED bloqueia edição interna; portal aceita retorno autorizado sem retomar.
+- Conclusão exige evidências/aprovações; SKIPPED auditado não falsifica progresso.
+- Snapshot fechado não aceita UPDATE/DELETE; reabertura gera nova versão.
+- Faturas repetidas, meses faltantes e OCR não revisado não tornam base validada.
+- Valores de referência calculados manualmente confrontam motor; consumo,
+  demanda, impostos e investimentos faltantes não viram zero/economia garantida.
+- Modalidade não é determinada por R$ 15 mil; caminhos condicionais verificados.
+- Agenda/documentos/jobs idempotentes sob falhas; canal indisponível não marca
+  entregue; consentimento revogado e contato desativado bloqueiam envio.
+- Regressão de mapa, cadastro, documentos, operações, contratos e relatórios.
+- Responsividade, foco/teclado, diagrama legível e mensagens de estado claras.
+
+Esses testes são plano de verificação das fases seguintes, não resultados
+executados. Nesta fase houve leitura de requisitos/código e pesquisa oficial.
+
+13. SEQUÊNCIA DE IMPLEMENTAÇÃO COM CHECKPOINTS
+
+Fase 0: diagnóstico e arquitetura aprovados pelo usuário.
+Fase 1: núcleo seguro, sidebar, candidatas/processos, etapas, cronômetro,
+       auditoria e snapshots de desempenho; evidências manuais controladas.
+Fase 2: solicitações/portal, anexos versionados, agenda, checklists e prazos;
+       assinatura integrada somente após definição e validação do provedor.
+Fase 3: simulação no motor existente, cenários versionados e Bot-Energy.
+Fase 4: adapters CCEE/canais, notificações e início de suprimento publicado;
+       ativação separada por provedor e organização, com testes reais autorizados.
+
+Cada fase exige implementar, testar, corrigir, verificar regressão e checkpoint
+antes da próxima. O núcleo não depende da aprovação Twilio/Meta/CCEE. As
+capacidades externas ficam explicitamente pendentes até a liberação efetiva.
+
+14. RISCOS E DECISÕES AINDA NECESSÁRIAS
+
+- Checklist regulatório e prazos: validação do Consultor e fonte/vigência;
+  PDF citado no anexo não foi recuperado na pesquisa, não foi validado.
+- Provedor de assinatura: pendente; não impedir cadastro/documentação manual.
+- CCEE: credenciais/perfil/adesão à plataforma ainda pendentes de suporte;
+  não confundir habilitação de integração da Expert Energy com adesão de cliente.
+- SMS/WhatsApp: aguardar remetente/modelos/conta liberados e definir budgets;
+  relatórios recorrentes existentes não provam transporte externo entregue.
+- Cronômetro: mede atividade operacional, não produtividade individual;
+  separar esforço, espera e calendário para não gerar indicadores enganosos.
+- Recursos compartilhados: validar interfaces na main antes de implementação;
+  compatibilidade de portal, engine e documentos é gate técnico da fase 1.
+- Solicitações/assinaturas/dados pessoais: minimizar coleta, restringir acesso
+  e observar política de retenção; não disparar pedidos em massa no piloto.
+
+15. REFERÊNCIAS OFICIAIS CONSULTADAS
+
+CCEE — Como participar:
+https://sch2.ccee.org.br/en/web/consumidor/como-participar
+CCEE — Entenda o mercado livre:
+https://sch2.ccee.org.br/web/consumidor/entenda-o-mercado-livre
+CCEE — Guia rápido (documento retornado pela pesquisa):
+https://www.ccee.org.br/o/ccee/documentos/CCEE_1149617
+Decreto 5.177/2004 — texto atualizado, art. 4º (representação varejista):
+https://www2.camara.leg.br/legin/fed/decret/2004/decreto-5177-12-agosto-2004-533488-normaatualizada-pe.html
+
+O projeto não codifica o conteúdo de documento que não foi recuperado.
+A lista documental será validada por modalidade antes de virar bloqueio.

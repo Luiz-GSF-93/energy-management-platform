@@ -1,0 +1,33 @@
+ADESÃO ACL — HISTÓRICO NA PRÓPRIA FATURA — 06/10/2026
+
+Atualização expressamente solicitada: aceitar os últimos 12 meses de consumo e
+ demanda da própria fatura, em vez de exigir 12 arquivos. O modo de histórico
+único é o padrão da interface; o caminho anterior segue disponível.
+
+Leitura utiliza o OCR já preservado, da mesma organização/cliente/unidade, com
+job bem-sucedido e hash conferido. Não dispara outro provedor nem envia o PDF a
+serviço novo. A projeção CPFL Grupo A reconhece demanda sem posto horário como
+TOTAL; não inventa demanda de ponta/fora de ponta. Produz 12 meses ancorados na
+competência da fatura. Ausência, duplicidade ou ambiguidade exige conferência.
+
+Consultor confere e pode corrigir valores preparados. Submissão contém os 12
+meses ordenados, consumo ponta/fora, demanda, dias e página/fonte; aprovação é
+separada. Banco valida fonte única de distribuidora, final do período na fatura,
+dados completos, números não negativos e consecutividade, preservando as regras
+anteriores de escopo, versão, lock, revisão, eventos e encerramento imutável.
+Dados do histórico não alimentam cálculos mensais/custos automaticamente e não
+são publicados no portal. Custos anteriores não podem ser obtidos desses quadros.
+
+Cadastro: editor exibe grupo/subgrupo, modalidade e classe de consumo usando
+colunas e edição auditada já existentes. A atividade detalhada permanece na fonte
+ e na justificativa auditada; classe comercial não é modalidade ACL varejista.
+
+Migração adicional invoice_history após history. PR continua draft, flag OFF;
+validação autenticada e piloto continuam necessários antes da liberação ACL.
+Testes usam somente dados sintéticos. Leituras do piloto e a fatura real não são
+incluídas no repositório, no PR ou no preview.
+
+Validação desta revisão: 19 verificações SQL específicas, 55 testes Jest de leitura
+e serviço, regressões de evidência/fechamento/histórico (61/34/64), 25 verificações
+PostgreSQL 17 incluindo conclusão concorrente do histórico único, build Nest,
+TypeScript frontend e build Next. Laboratório descartado depois dos testes.

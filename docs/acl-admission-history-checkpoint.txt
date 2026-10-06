@@ -1,0 +1,30 @@
+ADESÃO ACL — HISTÓRICO, REABERTURA E CONCORRÊNCIA — 06/10/2026
+
+Reabertura cria processo DRAFT novo, com geração, pai e raiz, motivo e confirmação.
+Exige aprovação atual e revisão esperada. Processo encerrado, versão de desempenho
+ e resumo anteriores permanecem imutáveis. Etapas, tempos e aprovações não são
+copiados. Uma unidade tem no máximo um processo aberto e um sucessor por processo.
+No portal apenas o processo vigente aparece; uma reabertura oculta o resumo antigo
+até nova conclusão/publicação. Reabrir corrige um processo; não inicia nova migração
+em unidade ACL nem altera o enquadramento cadastral automaticamente.
+
+Consulta privada de desempenho paginada, com versões fechadas, responsáveis,
+tempo de atividade e duração de calendário. Comparação de até duas versões da
+mesma unidade. Tempo de atividade é esforço registrado e pode sobrepor sessões;
+não representa produtividade, economia financeira ou eficiência energética.
+Vínculos ambíguos e permissões malformadas são recusados nas consultas privadas
+ e no portal. Licença, escopo e permissões atuais são revalidados no banco.
+
+Validação: histórico 64 verificações em PGlite. Concorrência 21 verificações em
+PostgreSQL 17, múltiplas conexões comprovadas na fila de locks: início repetido,
+retomada concorrente, revogação durante espera, aprovação, conclusão de etapa,
+encerramento, publicação e reabertura. Laboratório Docker sem rede e sem portas,
+somente dados sintéticos; removido ao final. Regressões anteriores e builds devem
+passar no commit entregue. Nenhum dado de cliente faz parte dos testes ou do PR.
+
+PR 258 permanece draft; feature flag desabilitada por padrão. Migrações em ordem:
+registry, timer, evidence, closure, history. Produção ainda não migrada nem habilitada.
+Falta validação autenticada da interface e piloto antes da liberação. Um documento
+mensal não substitui as 12 competências revisadas exigidas na etapa de faturas.
+Fases 2–4 continuam posteriores; não há assinatura, envio ou integração externa
+habilitados por esta revisão.
