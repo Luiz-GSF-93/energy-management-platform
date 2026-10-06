@@ -1,0 +1,40 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import assert from 'node:assert/strict';
+const db=new PGlite();let checks=0;
+const check=(v)=>{assert.ok(v);checks++;};
+const deny=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);INSERT INTO organizations VALUES('o1',NULL),('o2',NULL);
+ CREATE TABLE customers(id text PRIMARY KEY,organization_id text,status text,deleted_at timestamptz);INSERT INTO customers VALUES('c1','o1','ACTIVE',NULL),('c2','o2','ACTIVE',NULL);
+ CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,status text);INSERT INTO consumer_units VALUES('u1','o1','c1','ACTIVE'),('u2','o2','c2','ACTIVE');
+ CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,report_generation boolean,free_market_management boolean);INSERT INTO licenses VALUES('o1',true,'ACTIVE','2026-01-01',NULL,true,true),('o2',true,'ACTIVE','2026-01-01',NULL,true,true);
+ CREATE TABLE roles(id text,organization_id text,name text,scope text,permissions jsonb);CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text);
+ CREATE TABLE platform_organization_sessions(organization_id text,user_id uuid,expires_at timestamptz,revoked_at timestamptz);
+ CREATE FUNCTION assert_license_platform_actor(uuid) RETURNS void LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END $$;
+ CREATE TABLE monthly_energy_settlements(organization_id text,customer_id text,consumer_unit_id text,financial_group_id uuid,status text,validation_status text,financial_hash text,version_number int,month date);`);
+ const perms=['3ebadd32-6f30-459e-8ed3-0d2843d89946','60f9690a-145b-4dba-b23f-9f945baca296','9541a7bb-c20a-4c4d-9f4c-2185262c8e9c'];
+ await db.query("INSERT INTO roles VALUES('r1','o1','gestor','organization',$1),('r2','o2','gestor','organization',$1),('rc','o1','consulta','organization',$1)",[JSON.stringify(perms)]);
+ await db.exec("INSERT INTO organization_members VALUES('o1','a1','r1','active'),('o2','a2','r2','active'),('o1','client','rc','active');");
+ const group=randomUUID(),hash='a'.repeat(64);await db.query("INSERT INTO monthly_energy_settlements VALUES('o1','c1','u1',$1,'PUBLISHED','VALIDATED',$2,2,'2026-08-01')",[group,hash]);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261006_r2_published_reports.sql',import.meta.url),'utf8'));
+ const req={kind:'OPERATIONAL',customerId:'c1',unitId:'u1',from:'2026-08',to:'2026-08',requestId:randomUUID()};
+ const body={formatVersion:'energy-report-1.0',kind:req.kind,header:{organizationId:'o1',customerId:'c1',unitId:'u1'},period:{from:req.from,to:req.to},totals:{acr:'100.00'},publications:[{id:group,customerId:'c1',month:'2026-08',version:2,payloadHash:hash}]};
+ const save=async(r=req,b=body,org='o1',actor='a1')=>(await db.query('SELECT capture_published_report($1,$2,$3,$4,$5) AS row',[org,actor,JSON.stringify(r),JSON.stringify(b),hash])).rows[0].row;
+ const read=async(id=null,org='o1',actor='a1')=>(await db.query('SELECT read_published_reports($1,$2,$3) AS row',[org,actor,id])).rows[0].row;
+ const result=await save();check(result.kind==='OPERATIONAL');check((await save()).id===result.id);check((await read()).length===1);check((await read(result.id)).payload_hash===hash);check((await read(null,'o2','a2')).length===0);
+ await deny(()=>read(result.id,'o2','a2'),'P3862');await deny(()=>read(null,'o1','a2'),'42501');await deny(()=>read(null,'o1','client'),'42501');
+ await deny(()=>save({...req,from:'2025-01',requestId:randomUUID()}),'22023');await deny(()=>save({...req,unitId:'u2',requestId:randomUUID()}),'P3862');
+ await deny(()=>save({...req,kind:'EXECUTIVE'}),'40001');await deny(()=>save({...req,requestId:randomUUID()},{...body,header:{...body.header,organizationId:'o2'}}),'22023');
+ await deny(()=>save({...req,requestId:randomUUID()},{...body,publications:[{...body.publications[0],payloadHash:'b'.repeat(64)}]}),'40001');
+ await db.exec("UPDATE monthly_energy_settlements SET status='DRAFT'");await deny(()=>save({...req,requestId:randomUUID()}),'40001');await db.exec("UPDATE monthly_energy_settlements SET status='PUBLISHED'");
+ await deny(()=>db.exec("UPDATE published_report_snapshots SET kind='EXECUTIVE'"),'23514');await deny(()=>db.exec('DELETE FROM published_report_snapshots'),'23514');
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await deny(()=>read(),'42501');await deny(()=>db.exec('SELECT * FROM published_report_snapshots'),'42501');await db.exec('RESET ROLE');}
+ await db.exec('SET ROLE service_role');await deny(()=>db.exec("INSERT INTO published_report_snapshots SELECT * FROM published_report_snapshots"),'42501');await db.exec('RESET ROLE');
+ await db.exec("UPDATE organization_members SET status='inactive' WHERE user_id='a1'");await deny(()=>read(),'42501');await db.exec("UPDATE organization_members SET status='active' WHERE user_id='a1';UPDATE licenses SET active=false WHERE organization_id='o1'");await deny(()=>read(),'42501');
+ await db.exec("UPDATE licenses SET active=true,report_generation=false WHERE organization_id='o1'");await deny(()=>read(),'42501');await db.exec("UPDATE licenses SET report_generation=true,free_market_management=false WHERE organization_id='o1'");await deny(()=>read(),'42501');
+ await db.exec("UPDATE licenses SET free_market_management=true;UPDATE customers SET status='INACTIVE' WHERE id='c1'");check((await read()).length===0);await deny(()=>read(result.id),'P3862');
+ console.log(JSON.stringify({ok:true,checks}));
+}finally{await db.close();}

@@ -51,6 +51,7 @@ interface ApiRequestOptions
   extends Omit<RequestInit, 'body'> {
   body?: unknown;
   authenticated?: boolean;
+  responseType?: 'json' | 'blob';
 }
 
 export async function apiRequest<T>(
@@ -59,6 +60,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const {
     authenticated = true,
+    responseType = 'json',
     body,
     headers,
     ...requestOptions
@@ -122,5 +124,5 @@ export async function apiRequest<T>(
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  return (responseType === 'blob' ? response.blob() : response.json()) as Promise<T>;
 }

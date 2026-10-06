@@ -1,0 +1,11 @@
+import {projectReport,reportHash} from './report.projection';
+const h={organizationId:'o',customerId:'c',unitId:'u',customerName:'Empresa',unitName:'Unidade'};
+const p={id:'g',customerId:'c',month:'2026-08',version:2,payloadHash:'a'.repeat(64),publishedAt:'2026-09-01',units:[{id:'u'}],publicationNote:'INTERNAL SECRET',reservations:['INTERNAL']};
+const primary={totals:{acr:'100.00',aclAfterFees:'90.00',savingsAfterFees:'10.00'},publicationCount:1,publications:[p],invoices:[{unitId:'u',groupId:'g',payloadHash:p.payloadHash,month:'2026-08',version:2,measurements:{measurements:{consumptionTotal:'51.877714'},source:'INTERNAL'},reservations:['INTERNAL'],warnings:[],findings:[],scenarios:[{scenario:'ACL',distributor:'40.00',supplier:'50.00',additional:'0.00',taxes:'0.00',subtotal:'90.00',entries:[{source:'INTERNAL'}]}]}],period:{from:'2026-08',to:'2026-09',unitId:'u'},coverage:{missingMonths:['2026-09']},months:[{month:'2026-08',totals:{acr:'100.00'},cumulative:'10.00',widths:{acr:'100.00'}}],unavailable:['ROI indisponível'],disclosure:'Publicado'};
+describe('recipient-safe published report',()=>{
+ it('preserves exact consumption and source version without internal narratives',()=>{const b=projectReport({primary},h,'OPERATIONAL',[],'2026-10-06');expect(b.invoices[0].consumptionKwh).toBe('51.877714');expect(JSON.stringify(b)).not.toContain('INTERNAL');expect(b.publications[0].version).toBe(2);expect(b.coverage.missingMonths).toEqual(['2026-09']);});
+ it('keeps missing measurements unavailable',()=>{const b=projectReport({primary:{...primary,invoices:[{...primary.invoices[0],measurements:null}]}},h,'EXECUTIVE',[],'2026-10-06');expect(b.invoices[0].consumptionKwh).toBeNull();expect(b.roi).toBeNull();expect(b.annualProjection).toBeNull();});
+ it('rejects source from another unit',()=>expect(()=>projectReport({primary}, {...h,unitId:'other'},'EXECUTIVE',[],'2026-10-06')).toThrow());
+ it('rejects an untraceable publication',()=>expect(()=>projectReport({primary:{...primary,publications:[{...p,publishedAt:null}]}},h,'EXECUTIVE',[],'2026-10-06')).toThrow());
+ it('hashes canonically across database JSON key ordering',()=>{expect(reportHash({b:1,a:{d:4,c:3}})).toBe(reportHash({a:{c:3,d:4},b:1}));expect(reportHash({b:1,a:2})).not.toBe(reportHash({b:2,a:2}));});
+});
