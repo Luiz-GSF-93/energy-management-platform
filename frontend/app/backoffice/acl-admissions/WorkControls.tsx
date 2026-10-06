@@ -17,7 +17,7 @@ export default function WorkControls({detail,actorId,canWork,onUpdated}:{detail:
   setConfirmedAt(null);setStopped(false);if(!canWork||!own)return;
   const abort=new AbortController();let flight=false;
   async function ping(){if(abort.signal.aborted||flight||sending.current||document.visibilityState!=='visible')return;flight=true;
-   try{const v=await apiRequest<{confirmedAt:string;revision:number}>('/acl-admissions/'+encodeURIComponent(detail.id)+'/heartbeat',{method:'POST',body:{stageKey:own!.key},signal:abort.signal});
+   try{const v=await apiRequest<{confirmedAt:string;revision:number}>('/api/v1/acl-admissions/'+encodeURIComponent(detail.id)+'/heartbeat',{method:'POST',body:{stageKey:own!.key},signal:abort.signal});
     if(!abort.signal.aborted)setConfirmedAt(v.confirmedAt);
    }catch(e){if(!abort.signal.aborted){abort.abort();setStopped(true);setError(e instanceof Error?e.message:'Não foi possível confirmar a atividade. Atualize o processo.');}}
    finally{flight=false;}}
@@ -25,14 +25,14 @@ export default function WorkControls({detail,actorId,canWork,onUpdated}:{detail:
   return()=>{abort.abort();clearInterval(interval);document.removeEventListener('visibilitychange',visible);};
  },[detail.id,own?.key,own?.active?.startedAt,actorId,canWork,confirmationCycle]);
  async function refresh(){if(sending.current)return;sending.current=true;setBusy(true);setError('');
-  try{const row=await apiRequest<WorkDetail>('/acl-admissions/'+encodeURIComponent(detail.id));if(alive.current){pending.current=null;setRetry(false);setStopped(false);setConfirmationCycle(v=>v+1);onUpdated(row);}}
+  try{const row=await apiRequest<WorkDetail>('/api/v1/acl-admissions/'+encodeURIComponent(detail.id));if(alive.current){pending.current=null;setRetry(false);setStopped(false);setConfirmationCycle(v=>v+1);onUpdated(row);}}
   catch(e){if(alive.current)setError(e instanceof Error?e.message:'Não foi possível atualizar a atividade.');}
   finally{sending.current=false;if(alive.current)setBusy(false);}}
  async function command(action:WorkBody['action'],reuse=false){if(sending.current||!canWork||!selected)return;
   const body=reuse?pending.current:{requestId:crypto.randomUUID(),expectedRevision:detail.revision,stageKey,action,
    ...(action==='PAUSE'?{pauseReason,...(pauseReason==='OTHER'?{reason:reason.trim()}: {})}:{})};if(!body)return;
   pending.current=body;sending.current=true;setBusy(true);setError('');setRetry(false);
-  try{const row=await apiRequest<WorkDetail>('/acl-admissions/'+encodeURIComponent(detail.id)+'/work',{method:'POST',body});
+  try{const row=await apiRequest<WorkDetail>('/api/v1/acl-admissions/'+encodeURIComponent(detail.id)+'/work',{method:'POST',body});
    if(alive.current){pending.current=null;setRetry(false);setReason('');onUpdated(row);}}
   catch(e){if(alive.current){setError(e instanceof Error?e.message:'Não foi possível confirmar o comando.');
    if(e instanceof ApiError&&e.status<500){pending.current=null;setStopped(e.status===409);}else setRetry(true);}}

@@ -18,7 +18,7 @@ export default function EvidenceControls({detail,actorId,canWork,canApprove,onUp
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[retry,setRetry]=useState(false),[cycle,setCycle]=useState(0);
  const alive=useRef(true),flight=useRef(false),pending=useRef<Command|null>(null);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
- const base='/acl-admissions/'+encodeURIComponent(detail.id);
+ const base='/api/v1/acl-admissions/'+encodeURIComponent(detail.id);
  useEffect(()=>{const abort=new AbortController();(async()=>{try{
   const [s,e]=await Promise.all([apiRequest<Page<Source>>(base+'/evidence-sources',{signal:abort.signal}),apiRequest<Page<Evidence>>(base+'/evidence',{signal:abort.signal})]);
   if(!abort.signal.aborted){setSources(s);setEvidences(e);}
