@@ -1,0 +1,9 @@
+ACL stage checklists — 2026-10-06
+
+Operational checklist templates v1 cover the ten remaining stages. Each future completion evidence requires the applicable template, consultant reference and date, all items with justification and a selected private source document. Conditional items allow justified non-applicability. Whole-stage dispensations retain existing manager approval and retail modality gates. Existing registration/invoice evidence remains compatible.
+
+Templates, answers and exact command payloads are immutable. Changed retries are rejected atomically. Read access follows current organization, customer, role, license and documents permissions. Checklist payloads are included in new performance/2 closure snapshots; previously closed snapshots remain untouched. Portal ACL section receives only status and published final summary. No deadline is hardcoded as a regulatory requirement; references are reviewed by the Consultant.
+
+Deployment: apply 20261006_acl_checklists.sql before backend/frontend. Existing ACL pilot flag scopes availability. External signing/CCEE/channel success is not simulated.
+
+Validation: 32 checklist SQL checks plus 36 end-to-end fixture closure/publication checks; 152 ACL/Operations Jest tests; backend build; frontend TypeScript; 21 routing UI checks and 17 checklist UI checks. No real client checklist, stage approval, public summary or external message was created by this release.

@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const {default:Editor,checklistReady}=require('../app/backoffice/acl-admissions/ChecklistEditor.tsx');
+let checks=0;const ok=v=>{assert.ok(v);checks++;};
+const spec=[{key:'required',label:'Comprovação obrigatória',optional:false},{key:'conditional',label:'Item condicional',optional:true}],version='acl-checklist-v1';
+const v={templateVersion:version,reference:'Contrato vigente e revisão técnica do Consultor.',referenceDate:'2026-10-06',items:{required:{status:'CONFIRMED',note:'Conferido na origem desta unidade.',documentId:'source'},conditional:{status:'NOT_APPLICABLE',note:'Não aplicável conforme evidência da unidade.',documentId:'source'}}};
+(async()=>{const root=createRoot(document.getElementById('root'));try{
+ ok(checklistReady(v,spec,['source'],version));ok(!checklistReady(null,spec,['source'],version));ok(!checklistReady(v,spec,['other'],version));ok(!checklistReady({...v,templateVersion:'obsolete'},spec,['source'],version));ok(!checklistReady({...v,referenceDate:'2026-02-30'},spec,['source'],version));ok(!checklistReady({...v,deadlineDate:'2026-02-30'},spec,['source'],version));ok(!checklistReady({...v,reference:'curta'},spec,['source'],version));ok(!checklistReady({...v,items:{...v.items,required:{...v.items.required,status:'NOT_APPLICABLE'}}},spec,['source'],version));ok(!checklistReady({...v,items:{...v.items,conditional:{...v.items.conditional,note:''}}},spec,['source'],version));
+ await act(async()=>root.render(React.createElement(Editor,{spec,version,documentIds:['source'],sources:[{id:'source',name:'Fonte da unidade'},{id:'foreign',name:'Fonte de outro cliente'}],disabled:false,onChange:()=>{}})));
+ const required=document.getElementById('acl-check-status-required'),optional=document.getElementById('acl-check-status-conditional');ok(!required.innerHTML.includes('NOT_APPLICABLE'));ok(optional.innerHTML.includes('NOT_APPLICABLE'));ok(required.value==='');ok(!document.getElementById('acl-check-doc-required').innerHTML.includes('foreign'));ok(document.getElementById('acl-check-doc-required').innerHTML.includes('Fonte da unidade'));ok(document.body.textContent.includes('não cria uma tarefa'));
+ await act(async()=>root.render(React.createElement(Editor,{spec,version,documentIds:['source'],sources:[],disabled:true,onChange:()=>{}})));ok(required.matches(':disabled'));ok(document.getElementById('acl-check-reference').matches(':disabled'));
+ console.log(checks+' ACL checklist UI checks passed');
+}finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

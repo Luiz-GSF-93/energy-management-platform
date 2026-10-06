@@ -170,6 +170,7 @@ export class AclAdmissionService {
     if(layout.layoutId!=='cpfl-paulista-a'||!layout.measurements)throw new ConflictException('Histórico deste layout ainda requer leitura e revisão no módulo Documentos.');
     return {documentId:document,fileHash:d.data.file_hash,classification:layout.fields.find(f=>f.name==='classification')?.value.text??null,...aclHistoryDraft(layout.measurements.history,referenceMonth)};
   }
+  async checklists(id:string,t:TenantContext){await this.evidenceAllowed(id,t);return this.rpc('acl_checklist_catalog',{...this.params(t),p_id:id});}
   async evidenceCommand(id: string, input: unknown, t: TenantContext) {
     const dto = await validateWriteDto(AclEvidenceCommandDto,input as AclEvidenceCommandDto);
     const fields: Record<string,string[]> = {SUBMIT:['stageKey','kind','documentIds','note','facts'],APPROVE:['evidenceId','note'],REJECT:['evidenceId','note'],COMPLETE:['evidenceId'],SKIP:['evidenceId']};
@@ -179,7 +180,7 @@ export class AclAdmissionService {
       throw new BadRequestException('Confira os campos e a justificativa da evidência.');
     }
     if (dto.action==='SUBMIT') {
-      const keys=Object.keys(dto.facts!),f=dto.facts!;
+      const f={...dto.facts!};delete f.checklist;const keys=Object.keys(f);
       const expected=dto.kind==='SKIP'?null:dto.stageKey==='modality'?'modality':dto.stageKey==='supply'?'supplyDate':dto.stageKey==='invoices'&&keys.length?'history':null;
       if (expected ? keys.length!==1 || keys[0]!==expected : keys.length!==0) throw new BadRequestException('Informações adicionais da evidência inválidas.');
       if(expected==='history'&&!validAclHistory(f.history,dto.documentIds!))throw new BadRequestException('Confira os 12 meses consecutivos, consumo, demanda, dias e fontes do histórico.');
