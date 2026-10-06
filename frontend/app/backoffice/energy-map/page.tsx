@@ -11,6 +11,8 @@ import {MapResponse,MapUnit,located,locationLabels,precisionLabels,gdLabel,bessL
 import styles from './map.module.css';
 import TerritorySummary from './TerritorySummary';
 import PortfolioProfiles from './PortfolioProfiles';
+import CommercialSummary from './CommercialSummary';
+import RadiusFilter from './RadiusFilter';
 import PlatformEnergyMap from './PlatformEnergyMap';
 import GeocodingReview from './GeocodingReview';
 import PublishedMapIndicators from './PublishedMapIndicators';
@@ -20,7 +22,7 @@ const states='AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO 
 
 function EnergyMap({organizationId}:{organizationId:string}) {
  const [data,setData]=useState<MapResponse|null>(null),[access,setAccess]=useState<{enabled:boolean}|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true);
- const [filters,setFilters]=useState({search:'',state:'',market:'',gd:'',bess:'',location:'',status:''}),[offset,setOffset]=useState(0),[refresh,setRefresh]=useState(0);
+ const [filters,setFilters]=useState({search:'',state:'',market:'',gd:'',bess:'',radiusLatitude:'',radiusLongitude:'',radiusKm:'',location:'',status:''}),[offset,setOffset]=useState(0),[refresh,setRefresh]=useState(0);
  const [selected,setSelected]=useState<MapUnit|null>(null),[editing,setEditing]=useState<MapUnit|null>(null),[history,setHistory]=useState<History[]>([]),[busy,setBusy]=useState(false),[saveError,setSaveError]=useState('');
  const [showMap,setShowMap]=useState(true),[requestId,setRequestId]=useState('');
  const dialog=useRef<HTMLDialogElement>(null),alive=useRef(true),saveAbort=useRef<AbortController|null>(null);
@@ -64,7 +66,7 @@ function EnergyMap({organizationId}:{organizationId:string}) {
     <select aria-label="Localização" value={filters.location} onChange={e=>filter('location',e.target.value)}><option value="">Todas as localizações</option>{Object.entries(locationLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
     <select aria-label="Status da unidade" value={filters.status} onChange={e=>filter('status',e.target.value)}><option value="">Todos os status</option>{Object.entries({ACTIVE:'Ativa',INACTIVE:'Inativa',MIGRATED:'Migrada',CHURN:'Encerrada',SEASONAL:'Sazonal'}).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
    </div>
-   {data&&!loading?<TerritorySummary rows={data.rows} organizationId={organizationId} onState={state=>filter('state',state)}/>:null}
+   <RadiusFilter active={filters} selected={selected} onApply={radius=>{setOffset(0);setFilters(f=>({...f,...radius}));}}/>{data&&!loading?(data.territory?<CommercialSummary data={data.territory} totalUnits={data.total} onState={state=>filter('state',state)}/>:<TerritorySummary rows={data.rows} organizationId={organizationId} onState={state=>filter('state',state)}/>):null}
    {data&&!loading?<PortfolioProfiles rows={data.rows} organizationId={organizationId} active={filters} onFilter={profile=>{setOffset(0);setFilters(f=>({...f,...profile}));}}/>:null}
    <div className={styles.workspace}>
     <div className={styles.mapColumn}><div className={styles.toolbar}><span><span className={styles.blueDot}/> ACL <span className={styles.liveDot}/> ACR <span className={styles.grayDot}/> Não informado <span className={styles.gdDot}/> GD <span className={styles.bessDot}/> BESS</span><button type="button" onClick={()=>setShowMap(v=>!v)}>{showMap?'Usar somente lista':'Mostrar mapa'}</button></div>
@@ -75,7 +77,7 @@ function EnergyMap({organizationId}:{organizationId:string}) {
      <div className={styles.eyebrow}>UNIDADE SELECIONADA</div><h2>{selected.name||'UC '+selected.number}</h2><p>{selected.customerName}</p><span className={styles.badge}>{locationLabels[selected.locationStatus]}</span>
      <dl><dt>Unidade consumidora</dt><dd>{selected.number}</dd><dt>Distribuidora</dt><dd>{selected.distributor}</dd><dt>Mercado</dt><dd>{selected.market==='UNKNOWN'?'Não informado':selected.market}</dd><dt>Endereço cadastral</dt><dd>{selected.address||'Não informado'}<br/>{[selected.city,selected.state].filter(Boolean).join(' / ')}</dd><dt>Geração Distribuída</dt><dd>{gdLabel(selected)}</dd><dt>Armazenamento em baterias</dt><dd>{bessLabel(selected)}</dd><dt>Grupo</dt><dd>{selected.group||'Não informado'}</dd>
       {selected.precision?<><dt>Precisão declarada</dt><dd>{precisionLabels[selected.precision]}</dd></>:null}{located(selected)?<><dt>Coordenadas</dt><dd>{selected.latitude?.toFixed(6)}, {selected.longitude?.toFixed(6)}</dd></>:null}
-     </dl>{selected.locationStatus==='STALE'?<Alert>O cadastro mudou após a conferência. Revise a localização antes de recolocá-la no mapa.</Alert>:null}
+     </dl>{typeof selected.distanceKm==='number'?<p>Distância ao centro: {selected.distanceKm.toLocaleString('pt-BR')} km (aproximada).</p>:null}{selected.locationStatus==='STALE'?<Alert>O cadastro mudou após a conferência. Revise a localização antes de recolocá-la no mapa.</Alert>:null}
      {data?.canManage?<Button onClick={()=>openEdit(selected)}><LocateFixed size={16}/>{selected.revision?'Revisar localização':'Localizar unidade'}</Button>:null}
           {data?.canManage?<GeocodingReview key={selected.id+selected.addressHash+selected.revision} unit={selected} onConfirmed={()=>setRefresh(v=>v+1)}/>:null}<PublishedMapIndicators unit={selected}/><a className={styles.link} href="/backoffice/setup">Abrir clientes e unidades <ArrowUpRight size={15}/></a>
      {history.length?<details><summary>Histórico de localização ({history.length})</summary>{history.map(h=><p key={h.revision}><strong>Versão {h.revision}</strong><br/>{new Date(h.recorded_at).toLocaleString('pt-BR')}<br/>{h.reason}</p>)}</details>:null}

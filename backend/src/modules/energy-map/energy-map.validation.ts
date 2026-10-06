@@ -20,7 +20,7 @@ export function locationInput(value:unknown){
  return {...b,reason:b.reason.trim()};
 }
 export function mapQuery(value:unknown){
- const q=record(value),keys=['search','state','city','distributor','customerId','market','gd','bess','location','status','offset','limit'];
+ const q=record(value),keys=['search','state','city','distributor','customerId','market','gd','bess','location','status','offset','limit','radiusLatitude','radiusLongitude','radiusKm'];
  if(Object.keys(q).some(k=>!keys.includes(k)))throw new BadRequestException('Filtro inválido.');
  const text=(key:string,max=100)=>{const v=q[key];if(v===undefined||v==='')return null;if(typeof v!=='string'||v.length>max||/[\x00-\x1f]/.test(v))throw new BadRequestException('Filtro inválido.');return v.trim()||null;};
  const integer=(key:string,fallback:number,max:number)=>{if(q[key]===undefined)return fallback;if(typeof q[key]!=='string'||!/^\d{1,7}$/.test(q[key] as string))throw new BadRequestException('Paginação inválida.');const n=Number(q[key]);if(n>max)throw new BadRequestException('Paginação inválida.');return n;};
@@ -29,5 +29,14 @@ export function mapQuery(value:unknown){
  const market=text('market'),location=text('location'),status=text('status');
  if(market&&!['ACL','ACR','UNKNOWN'].includes(market)||location&&!['CONFIRMED','PENDING','STALE'].includes(location)||status&&!['ACTIVE','INACTIVE','MIGRATED','CHURN','SEASONAL'].includes(status))throw new BadRequestException('Filtro inválido.');
  const limit=integer('limit',200,500);if(limit<1)throw new BadRequestException('Limite inválido.');
- return {search:text('search'),state:text('state',50),city:text('city',255),distributor:text('distributor'),customerId:text('customerId',200),market,gd,bess,location,status,offset:integer('offset',0,1000000),limit};
+ return {...mapRadius(q),search:text('search'),state:text('state',50),city:text('city',255),distributor:text('distributor'),customerId:text('customerId',200),market,gd,bess,location,status,offset:integer('offset',0,1000000),limit};
+}
+
+export function mapRadius(q:Record<string,unknown>){
+ const keys=['radiusLatitude','radiusLongitude','radiusKm'],values=keys.map(k=>q[k]);
+ if(values.every(v=>v===undefined||v===''))return {radiusLatitude:null,radiusLongitude:null,radiusKm:null};
+ if(values.some((v,i)=>typeof v!=='string'||!(i===2?/^\d{1,3}(\.\d{1,3})?$/:/^-?\d{1,3}(\.\d{1,7})?$/).test(v as string)))throw new BadRequestException('Informe centro e raio completos.');
+ const [latitude,longitude,km]=values.map(Number);
+ if(latitude< -90||latitude>90||longitude< -180||longitude>180||km<1||km>500)throw new BadRequestException('Raio entre 1 e 500 km e coordenadas válidas.');
+ return {radiusLatitude:latitude,radiusLongitude:longitude,radiusKm:km};
 }
