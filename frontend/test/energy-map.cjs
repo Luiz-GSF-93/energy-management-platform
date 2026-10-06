@@ -10,6 +10,7 @@ let context={scope:'organization',currentOrganization:{id:'o1'}},saved=null,fail
 const unit=(org='o1')=>({id:'u-'+org,organizationId:org,customerId:'c-'+org,customerName:org==='o1'?'<img src=x onerror=alert(1)> Cliente Um':'Cliente Dois',name:'Unidade '+org,number:'123',address:'Rua verificada',city:'Ribeirão Preto',state:'SP',distributor:'CPFL',market:'ACL',status:'ACTIVE',locationStatus:'PENDING',precision:null,latitude:null,longitude:null,addressHash:'a'.repeat(32),revision:0});
 const result=org=>({organizationId:org,enabled:true,canManage:true,rows:[unit(org)],total:1,customers:1,confirmed:0,pending:1,stale:0,offset:0,limit:200});
 const apiRequest=async(url,o={})=>{
+ if(url.startsWith('/api/v1/admin/energy-map?')){queries.push(url);return {scope:'global',rows:[{...unit(),organizationName:'Organização Um',hasUnit:true},{...unit('o2'),organizationName:'Organização Dois',hasUnit:true},{...unit('o2'),id:'customer:empty',customerId:'empty',customerName:'Cliente Sem Unidade',organizationName:'Organização Dois',hasUnit:false,locationStatus:'NO_UNIT'}],total:3,customers:3,organizations:2,units:2,withoutUnits:1,confirmed:0,pending:2,organizationOptions:[{id:'o1',name:'Organização Um'},{id:'o2',name:'Organização Dois'}]};}
  assert.ok(url.startsWith('/api/v1/energy-map/'),'map requests use the deployed API prefix');
  const org=context.currentOrganization.id;
  if(url.endsWith('/access'))return {organizationId:org,enabled:true};
@@ -52,6 +53,13 @@ const fill=async(name,v)=>{const e=document.querySelector('[name="'+name+'"]');a
  await act(async()=>delayFirst.resolve(result('o1')));check(!document.body.textContent.includes('Cliente Um'));
  // No detailed portfolio in global context.
  context={scope:'global'};await act(async()=>root.render(React.createElement(Page)));check(!document.body.textContent.includes('Cliente Dois')&&document.body.textContent.includes('Selecione uma organização'));
+ context={scope:'global',role:'admin_platform',user:{id:'platform'}};await act(async()=>root.render(React.createElement(Page)));await wait();
+ check(document.body.textContent.includes('Mapa energético da plataforma')&&document.body.textContent.includes('Cliente Um')&&document.body.textContent.includes('Cliente Dois')&&document.body.textContent.includes('Cliente Sem Unidade'));
+ check(!document.body.textContent.includes('Localizar unidade')&&document.querySelector('img')===null);
+ const {platformMapGeoJson}=require('../app/backoffice/energy-map/platform-map-data.ts');
+ check(platformMapGeoJson([{...unit(),hasUnit:true,latitude:-21,longitude:-47,locationStatus:'CONFIRMED'},{...unit('o2'),hasUnit:true,latitude:-22,longitude:-48,locationStatus:'CONFIRMED'},{...unit('o2'),hasUnit:false,latitude:-22,longitude:-48,locationStatus:'NO_UNIT'}]).features.length===2);
+ await click('Ver detalhes');check(document.body.textContent.includes('Para alterar cadastros'));
+ context={scope:'organization',currentOrganization:{id:'o1'}};await act(async()=>root.render(React.createElement(Page)));await wait();check(!document.body.textContent.includes('Cliente Dois')&&!document.body.textContent.includes('Cliente Sem Unidade'));
  console.log(JSON.stringify({ok:true,checks}));
  }finally{await act(async()=>root.unmount());dom.window.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

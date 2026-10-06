@@ -26,6 +26,7 @@ export const backofficeNavigation:
         PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
     },
     { href:'/backoffice/platform-costs',label:'Custos e performance',permission:'e23a5c98-8b68-4ed2-aef8-70a7166407e4',scope:'global' },
+    { href:'/backoffice/energy-map',label:'Mapa energético',permission:PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,scope:'global' },
     { href: '/backoffice/plans', label: 'Catálogo de planos', permission: 'e23a5c98-8b68-4ed2-aef8-70a7166407e4', scope: 'global' },
     { href: '/backoffice/licenses', label: 'Licença e módulos', permission: '8c5673e4-115c-4ab7-bb11-3b410eddcad3', scope: 'organization' },
     { href: '/backoffice/setup', label: 'Clientes e unidades', permission: 'cbb2e904-0718-4eec-9396-dba899118cdd', scope: 'organization' },
