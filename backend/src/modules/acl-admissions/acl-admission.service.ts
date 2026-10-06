@@ -1,5 +1,7 @@
 import {aclHistoryDraft,validAclHistory,aclInvoiceReferenceMonth} from './acl-invoice-history';
 import {fixedHistoryTariffs,simulateFixedHistory} from './acl-history-simulation';
+import {supplierProposal,supplierPreview} from './acl-supplier-preview';
+import {invoiceSubmarket} from './acl-invoice-submarket';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -154,6 +156,32 @@ export class AclAdmissionService {
     const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
     try{return {evidenceId:source.evidenceId,documents:source.documents,...simulateFixedHistory(source.history,tariffs)};}catch{throw new ConflictException('Histórico aprovado indisponível; confira a fonte atual.');}
+  }
+  async supplierPreview(id:string,input:unknown,t:TenantContext){
+    const b=input as {evidenceId:string;proposal:unknown};
+    if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='evidenceId,proposal'||!UUID.test(b.evidenceId))throw new BadRequestException('Selecione o histórico aprovado e a proposta.');
+    let proposal;try{proposal=supplierProposal(b.proposal);}catch(e){throw new BadRequestException((e as Error).message);}
+    await this.evidenceAllowed(id,t);
+    const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
+    if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
+    const location=await this.invoiceLocation(id,source.history.sourceDocumentId,source.documents,t);
+    try{return {evidenceId:source.evidenceId,documents:source.documents,location,...supplierPreview(source.history,proposal)};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
+  }
+  private async invoiceLocation(id:string,document:string,sources:any[],t:TenantContext){
+    const source=Array.isArray(sources)?sources.find(v=>v.id===document):null;
+    if(!source||typeof source.fileHash!=='string')throw new InternalServerErrorException('Versão documental indisponível.');
+    const admission=await this.one(id,t),db=this.db.getClient();
+    const d=await db.from('documents').select('id,file_hash,file_verified,document_type').eq('organization_id',t.organizationId).eq('id',document).eq('customer_id',admission.customerId).eq('consumer_unit_id',admission.unitId).maybeSingle();
+    if(d.error)throw new InternalServerErrorException('Endereço da fatura indisponível.');
+    if(!d.data||!d.data.file_verified||d.data.document_type!=='INVOICE_DISTRIBUTOR'||d.data.file_hash!==source.fileHash)throw new ConflictException('A versão da fatura mudou; confira a fonte aprovada.');
+    const job=await db.from('document_ocr_jobs').select('id,state').eq('organization_id',t.organizationId).eq('document_id',document).maybeSingle();
+    if(job.error)throw new InternalServerErrorException('Leitura da fatura indisponível.');
+    if(job.data?.state!=='SUCCEEDED')return {documentId:document,fileHash:source.fileHash,...invoiceSubmarket(null)};
+    const r=await db.from('document_ocr_results').select('raw_result,file_hash').eq('organization_id',t.organizationId).eq('document_id',document).eq('job_id',job.data.id).maybeSingle();
+    if(r.error)throw new InternalServerErrorException('Endereço da leitura indisponível.');
+    if(!r.data||r.data.file_hash!==source.fileHash)throw new ConflictException('A leitura pertence a outra versão da fatura.');
+    const fields=extractCpflPaulistaLayout(r.data.raw_result).fields.filter(f=>f.name==='serviceAddress');
+    return {documentId:document,fileHash:source.fileHash,addressSource:fields.length===1?fields[0].source:null,...invoiceSubmarket(fields.length===1?fields[0].value.text:null)};
   }
   async historyPreview(id:string,document:string,t:TenantContext){
     if(!/^[A-Za-z0-9_-]{1,100}$/.test(document))throw new BadRequestException('Documento inválido.');
