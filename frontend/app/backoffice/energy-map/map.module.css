@@ -14,3 +14,5 @@
 
 .gdDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#a855f7;margin:0 5px}
 .bessDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:transparent;border:2px solid #f59e0b;margin:0 5px}
+
+.profileGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:16px}.profileGrid button{display:flex;flex-direction:column;align-items:flex-start;gap:12px;text-align:left;padding:16px;border-radius:12px;border:1px solid var(--color-border,#ffffff24);color:inherit;background:var(--color-surface,#ffffff06);cursor:pointer;overflow-wrap:anywhere}.profileGrid strong{font-size:14px;line-height:1.5}.profileGrid span{font-size:12px;color:var(--color-text-muted,#94a3b8)}.profileGrid button:hover,.profileGrid button[aria-pressed=true]{border-color:#14b8a6}.profileGrid button[aria-pressed=true]{background:#14b8a615}.profileGrid button:focus-visible{outline:2px solid #5eead4;outline-offset:3px}@media(max-width:420px){.profileGrid{grid-template-columns:1fr}}
