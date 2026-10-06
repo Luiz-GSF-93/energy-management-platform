@@ -107,4 +107,5 @@ BEGIN
    'precision',precision,'updatedAt',updated_at) ORDER BY organization_name,customer_name,id) FROM page),'[]'::jsonb)) INTO result;
  RETURN result;
 END $$;
+NOTIFY pgrst,'reload schema';
 COMMIT;
