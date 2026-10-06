@@ -8,11 +8,11 @@ const labels={NOT_STARTED:'Adesão registrada',IN_PROGRESS:'Em andamento',CONCLU
 export default function AclAdmissionStatus(){
  const [page,setPage]=useState<Page|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{const abort=new AbortController();
-  apiRequest<Page>('/portal/acl-admissions',{signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setPage(value);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Não foi possível consultar a adesão.');});
+  apiRequest<Page>('/api/v1/portal/acl-admissions',{signal:abort.signal}).then(value=>{if(!abort.signal.aborted)setPage(value);}).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Não foi possível consultar a adesão.');});
   return()=>abort.abort();
  },[]);
  async function more(){if(!page?.nextCursor||busy)return;setBusy(true);setError('');try{
-  const value=await apiRequest<Page>('/portal/acl-admissions?after='+encodeURIComponent(page.nextCursor));
+  const value=await apiRequest<Page>('/api/v1/portal/acl-admissions?after='+encodeURIComponent(page.nextCursor));
   setPage(old=>old?{...value,rows:[...old.rows,...value.rows]}:value);
  }catch(e){setError(e instanceof Error?e.message:'Não foi possível consultar a adesão.');}finally{setBusy(false);}}
  if(page&&!page.enabled)return null;
