@@ -64,7 +64,7 @@ function EnergyMap({organizationId}:{organizationId:string}) {
    </div>
    {data&&!loading?<TerritorySummary rows={data.rows} organizationId={organizationId} onState={state=>filter('state',state)}/>:null}
    <div className={styles.workspace}>
-    <div className={styles.mapColumn}><div className={styles.toolbar}><span><span className={styles.blueDot}/> ACL <span className={styles.liveDot}/> ACR <span className={styles.grayDot}/> Não informado <span className={styles.gdDot}/> GD <span className={styles.bessDot}/> BESS <span className={styles.gdDot}/> GD <span className={styles.bessDot}/> BESS</span><button type="button" onClick={()=>setShowMap(v=>!v)}>{showMap?'Usar somente lista':'Mostrar mapa'}</button></div>
+    <div className={styles.mapColumn}><div className={styles.toolbar}><span><span className={styles.blueDot}/> ACL <span className={styles.liveDot}/> ACR <span className={styles.grayDot}/> Não informado <span className={styles.gdDot}/> GD <span className={styles.bessDot}/> BESS</span><button type="button" onClick={()=>setShowMap(v=>!v)}>{showMap?'Usar somente lista':'Mostrar mapa'}</button></div>
      {showMap&&data?<Canvas rows={data.rows} organizationId={organizationId} selected={selected} onSelect={id=>setSelected(data.rows.find(u=>u.id===id)??null)}/>:null}
      <div className={styles.coverage}><MapPin size={15}/><span>{data?.rows.filter(located).length??0} pontos nesta página. Apenas localizações conferidas aparecem no mapa; precisão aproximada é indicada nos detalhes.</span></div>
     </div>
