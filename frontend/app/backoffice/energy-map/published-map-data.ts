@@ -24,3 +24,8 @@ export function publishedAlerts(p:MapPublication['primary']){
  return alerts;
 }
 export function publishedMoney(v:string){const [whole,fraction]=v.split('.');return 'R$ '+whole.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+fraction;}
+
+// The backend already aggregates exact published cents; use its signed percentage unchanged.
+export function economyScore(p:MapPublication['primary']){
+ return {method:'PUBLISHED_ECONOMY_AFTER_FEES_V1',percent:p.totals?.savingsPercent??null,from:p.period.from,to:p.period.to,coverage:p.coverage,sources:p.unitRows.map(r=>({groupId:r.id,month:r.month,version:r.version,payloadHash:r.payloadHash}))};
+}

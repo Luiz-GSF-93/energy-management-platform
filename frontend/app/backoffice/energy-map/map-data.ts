@@ -1,6 +1,7 @@
+import type {TerritoryCounts} from './commercial-map-data';
 export type MapUnit = {
  id:string;organizationId:string;customerId:string;customerName:string;group:string|null;
- hasGd?:boolean|null;hasBess?:boolean|null;
+ hasGd?:boolean|null;hasBess?:boolean|null;distanceKm?:number|null;
  name:string|null;number:string;address:string|null;city:string|null;state:string|null;
  distributor:string;status:string;market:'ACL'|'ACR'|'UNKNOWN';addressHash:string;revision:number;
  locationStatus:'CONFIRMED'|'PENDING'|'STALE';latitude:number|null;longitude:number|null;
@@ -8,7 +9,7 @@ export type MapUnit = {
 };
 export type MapResponse = {
  organizationId:string;canManage:boolean;enabled:boolean;rows:MapUnit[];total:number;customers:number;
- confirmed:number;pending:number;stale:number;offset:number;limit:number;
+ confirmed:number;pending:number;stale:number;offset:number;limit:number;territory?:TerritoryCounts;
 };
 export const locationLabels={CONFIRMED:'Conferida',PENDING:'Sem localização',STALE:'Revisar endereço'};
 export const precisionLabels={ADDRESS:'Endereço / imóvel',STREET:'Rua (aproximada)',POSTCODE:'CEP (aproximada)',CITY:'Cidade (aproximada)'};

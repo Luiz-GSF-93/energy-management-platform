@@ -1,6 +1,7 @@
+import type {TerritoryCounts} from './commercial-map-data';
 import {MapUnit,located,mapGeoJson} from './map-data';
 export type PlatformMapRow=Omit<MapUnit,'locationStatus'> & {hasUnit:boolean;organizationName:string;locationStatus:MapUnit['locationStatus']|'NO_UNIT'};
-export type PlatformMapResponse={scope:'global';rows:PlatformMapRow[];total:number;customers:number;organizations:number;units:number;withoutUnits:number;confirmed:number;pending:number;offset:number;limit:number;organizationOptions:{id:string;name:string}[]};
+export type PlatformMapResponse={scope:'global';territory?:TerritoryCounts;rows:PlatformMapRow[];total:number;customers:number;organizations:number;units:number;withoutUnits:number;confirmed:number;pending:number;offset:number;limit:number;organizationOptions:{id:string;name:string}[]};
 export function platformLocated(row:PlatformMapRow){return row.hasUnit&&row.locationStatus!=='NO_UNIT'&&located(row as MapUnit);}
 export function platformMapGeoJson(rows:PlatformMapRow[]){
  return {type:'FeatureCollection' as const,features:rows.filter(platformLocated).flatMap(row=>mapGeoJson([row as MapUnit],row.organizationId).features)};

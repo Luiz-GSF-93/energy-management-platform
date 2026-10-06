@@ -22,6 +22,7 @@ const apiRequest=async(url,o={})=>{
 const original=Module._load;Module._load=function(name,parent,main){
  if(name==='@/app/lib/api/client')return {apiRequest};
  if(name==='@/app/providers')return {useAuth:()=>({context})};
+ if(name==='@/app/providers/AuthProvider')return {useAuth:()=>({context,hasPermission:()=>false})};
  if(name==='@/app/components/ui')return {Button:({children,variant,...p})=>React.createElement('button',{type:'button',...p},children),Card:({children})=>React.createElement('section',null,children),Alert:({children})=>React.createElement('div',{role:'alert'},children),Input:({label,...p})=>React.createElement('label',null,label,React.createElement('input',p))};
  if(name==='@/app/components/ProtectedRoute'||name==='@/app/components/BackofficeShell')return {default:({children})=>children,__esModule:true};
  if(name==='next/dynamic')return {default:()=>()=>React.createElement('div',{'data-map':'true'},'Mapa em teste'),__esModule:true};
