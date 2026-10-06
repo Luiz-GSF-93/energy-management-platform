@@ -1,4 +1,4 @@
-import {aclHistoryDraft,validAclHistory} from './acl-invoice-history';
+import {aclHistoryDraft,validAclHistory,aclInvoiceReferenceMonth} from './acl-invoice-history';
 import {fixedHistoryTariffs,simulateFixedHistory} from './acl-history-simulation';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
@@ -137,14 +137,15 @@ export class AclAdmissionService {
     await this.evidenceAllowed(id,t);const admission=await this.one(id,t),db=this.db.getClient();
     const d=await db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,reference_month,file_hash,file_verified,document_type').eq('organization_id',t.organizationId).eq('id',document).eq('customer_id',admission.customerId).eq('consumer_unit_id',admission.unitId).maybeSingle();
     if(d.error)throw new InternalServerErrorException('Fonte documental indisponível.');
-    if(!d.data||!d.data.file_verified||d.data.document_type!=='INVOICE_DISTRIBUTOR'||!/^20[0-9]{2}-(0[1-9]|1[0-2])-01$/.test(d.data.reference_month))throw new NotFoundException('Fatura desta unidade indisponível.');
+    const referenceMonth=aclInvoiceReferenceMonth(d.data?.reference_month);
+    if(!d.data||!d.data.file_verified||d.data.document_type!=='INVOICE_DISTRIBUTOR'||!referenceMonth)throw new NotFoundException('Fatura desta unidade indisponível.');
     const job=await db.from('document_ocr_jobs').select('id,state').eq('organization_id',t.organizationId).eq('document_id',document).maybeSingle();
     if(job.error||job.data?.state!=='SUCCEEDED')throw new ConflictException('Processe a fatura em Documentos antes de interpretar o histórico.');
     const result=await db.from('document_ocr_results').select('raw_result,file_hash').eq('organization_id',t.organizationId).eq('document_id',document).eq('job_id',job.data.id).maybeSingle();
     if(result.error||!result.data||result.data.file_hash!==d.data.file_hash)throw new ConflictException('A fonte da leitura mudou; processe a versão atual.');
     const layout=extractCpflPaulistaLayout(result.data.raw_result);
     if(layout.layoutId!=='cpfl-paulista-a'||!layout.measurements)throw new ConflictException('Histórico deste layout ainda requer leitura e revisão no módulo Documentos.');
-    return {documentId:document,fileHash:d.data.file_hash,classification:layout.fields.find(f=>f.name==='classification')?.value.text??null,...aclHistoryDraft(layout.measurements.history,d.data.reference_month.slice(0,7))};
+    return {documentId:document,fileHash:d.data.file_hash,classification:layout.fields.find(f=>f.name==='classification')?.value.text??null,...aclHistoryDraft(layout.measurements.history,referenceMonth)};
   }
   async evidenceCommand(id: string, input: unknown, t: TenantContext) {
     const dto = await validateWriteDto(AclEvidenceCommandDto,input as AclEvidenceCommandDto);

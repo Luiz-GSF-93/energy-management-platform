@@ -45,6 +45,7 @@ describe('ACL registry API authorization and projection',()=>{
   (h.service as any).db={getClient:()=>({from})};jest.spyOn(h.service as any,'evidenceAllowed').mockResolvedValue(undefined);jest.spyOn(h.service,'one').mockResolvedValue({customerId:'c1',unitId:'u1'} as any);
   await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('fonte');
   for(const q of queries)expect(q.eq).toHaveBeenCalledWith('organization_id','o1');expect(queries[0].eq).toHaveBeenCalledWith('customer_id','c1');expect(queries[0].eq).toHaveBeenCalledWith('consumer_unit_id','u1');expect(queries[2].eq).toHaveBeenCalledWith('job_id','job');
+  data.documents.reference_month='2026-08-01T00:00:00';await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('fonte');
   hash='original';await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('layout');
   data.documents=null;await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('unidade');
  });
