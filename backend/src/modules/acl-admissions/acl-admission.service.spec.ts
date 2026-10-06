@@ -14,6 +14,22 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('simulates only server-approved history under current tenant, document license and Verde A4 context',async()=>{
+  const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const history={sourceDocumentId:'invoice',rows:Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'10',offPeakKwh:'100',demandKw:'200',days:30,page:2,source:'table'}))};
+  const body={evidenceId,tariffs:{peakBrlKwh:'1',offPeakBrlKwh:'0.5',demandBrlKw:'10',referenceMonth:'2026-08',source:'Fatura revisada, tarifas brutas.',checked:true}};
+  const unit={tariff_group:'A',tariff_subgroup:'A4',tariff_modality:'GREEN'},seen:any[]=[];
+  const query:any={select:()=>query,eq:(k:string,v:unknown)=>{seen.push([k,v]);return query;},maybeSingle:async()=>({data:unit})};
+  (h.service as any).db={getClient:()=>({rpc:h.rpc,from:(name:string)=>{expect(name).toBe('consumer_units');return query;}})};
+  h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:name==='acl_read'?[{id,organizationId:'o1',customerId:'c1',unitId:'u1'}]:{evidenceId,history,documents:[{id:'invoice',version:1,fileHash:'a'.repeat(64)}]}}));
+  await expect(h.service.historySimulation(id,body,tenant)).rejects.toThrow('documentos');
+  await expect(h.service.historySimulation(id,body,{...t,role:'consulta'})).rejects.toThrow('backoffice');
+  for(const extra of [{rows:history.rows},{organizationId:'o2'},{evidenceId:'invalid'}])await expect(h.service.historySimulation(id,{...body,...extra},t)).rejects.toThrow();
+  expect((await h.service.historySimulation(id,body,t)).annualSubtotal).toBe('24720.00');
+  expect(seen).toEqual(expect.arrayContaining([['organization_id','o1'],['customer_id','c1'],['id','u1']]));
+  expect(h.rpc).toHaveBeenLastCalledWith('acl_history_simulation_source',expect.objectContaining({p_org:'o1',p_id:id,p_evidence:evidenceId,p_actor:t.userId}));
+  unit.tariff_modality='BLUE';await expect(h.service.historySimulation(id,body,t)).rejects.toThrow('Verde A4');
+ });
  it('accepts a reviewed single-invoice history and rejects forged cost/scope fields',async()=>{
   const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
   const rows=Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'10',offPeakKwh:'100',demandKw:'200',days:30,page:2,source:'tables[0]'}));

@@ -16,6 +16,7 @@ export class AclAdmissionController {
   @Get(':id/evidence') @Header('Cache-Control', 'private, no-store') evidence(@Param('id') id: string, @Query() q: Record<string,unknown>, @Tenant() t: TenantContext) { return this.service.evidenceList(id,q,t); }
   @Get(':id/evidence-sources') @Header('Cache-Control', 'private, no-store') sources(@Param('id') id: string, @Query() q: Record<string,unknown>, @Tenant() t: TenantContext) { return this.service.evidenceList(id,q,t,true); }
   @Get(':id/history-preview/:document') @Header('Cache-Control','private, no-store') historyPreview(@Param('id') id:string,@Param('document') document:string,@Tenant() t:TenantContext){return this.service.historyPreview(id,document,t);}
+  @Post(':id/history-simulation') @Header('Cache-Control','private, no-store') historySimulation(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.historySimulation(id,b,t);}
   @Post(':id/evidence') @Header('Cache-Control', 'private, no-store') evidenceCommand(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.evidenceCommand(id,b,t); }
   @Get(':id/closure') @Header('Cache-Control', 'private, no-store') closure(@Param('id') id: string, @Tenant() t: TenantContext) { return this.service.closureRead(id,t); }
   @Post(':id/closure') @Header('Cache-Control', 'private, no-store') closureCommand(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.closureCommand(id,b,t); }

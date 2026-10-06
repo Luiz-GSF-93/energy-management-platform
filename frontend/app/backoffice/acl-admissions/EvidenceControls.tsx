@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, apiRequest } from '@/app/lib/api/client';
 import { Alert, Button } from '@/app/components/ui';
 import type { WorkDetail } from './WorkControls';
+import HistorySimulation from './HistorySimulation';
 type Page<T>={rows:T[];nextCursor:string|null};
 type Source={id:string;name:string;type:string;month:string|null;version:number};
 type Evidence={id:string;stageKey:string;kind:'COMPLETE'|'SKIP';note:string;actorName:string;facts?:{history?:{rows:HistoryRow[]}};documents:{id:string;version:number;type:string;month:string}[];review:null|{decision:string;reason:string;actorName:string}};
@@ -63,6 +64,7 @@ export default function EvidenceControls({detail,actorId,canWork,canApprove,onUp
  {chosen?<article><p>{chosen.note}</p><p>Registrada por {chosen.actorName}. {chosen.documents.length} documento(s) versionado(s).</p>{chosen.facts?.history?<table><caption>Histórico vinculado à evidência</caption><thead><tr><th>Mês</th><th>Ponta kWh</th><th>Fora de ponta kWh</th><th>Demanda kW</th><th>Fonte</th></tr></thead><tbody>{chosen.facts.history.rows.map(r=><tr key={r.month}><td>{r.month}</td><td>{r.peakKwh}</td><td>{r.offPeakKwh}</td><td>{r.demandKw}</td><td>Página {r.page} · {r.source}</td></tr>)}</tbody></table>:null}{chosen.review?<p>Revisão de {chosen.review.actorName}: {chosen.review.reason}</p>:null}</article>:null}
  {chosen&&!chosen.review&&canApprove&&open?<><Button disabled={disabled||!checked||note.trim().length<20} onClick={()=>decide('APPROVE')}>Aprovar evidência</Button><Button variant="secondary" disabled={disabled||!checked||note.trim().length<20} onClick={()=>decide('REJECT')}>Rejeitar evidência</Button></>:null}
  {chosen?.review?.decision==='APPROVED'&&open?<Button disabled={disabled||!checked||(chosen.kind==='SKIP'? !canApprove||chosenStage?.status!=='NOT_STARTED':!canWork||chosenStage?.status!=='RUNNING'||chosenStage?.active?.actorId!==actorId)} onClick={()=>decide(chosen.kind)}>{chosen.kind==='SKIP'?'Confirmar dispensa':'Concluir etapa'}</Button>:null}
+ {chosen?.stageKey==='invoices'&&chosen.review?.decision==='APPROVED'&&chosen.facts?.history?<HistorySimulation key={detail.id+chosen.id+detail.revision} admissionId={detail.id} evidenceId={chosen.id}/>:null}
  {evidences.nextCursor?<Button variant="secondary" disabled={disabled} onClick={()=>void more('evidences')}>Mais evidências</Button>:null}
  {retry?<Button disabled={busy} onClick={()=>void send(pending.current!)}>Repetir a mesma operação</Button>:null}
  <Button variant="secondary" disabled={busy} onClick={()=>void refresh()}>Atualizar evidências e processo</Button>

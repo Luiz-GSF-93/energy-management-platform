@@ -44,6 +44,10 @@ A medição depende do caso e do procedimento vigente. "Não aplicável" exige
 motivo, evidência e aprovação; não equivale a execução concluída.
 
 2.3 Economia estimada
+Atualização autorizada em 06/10/2026: usar as mesmas tarifas de referência para
+simular os 12 meses do histórico. Preservar competência, fonte, unidade, precisão
+e tratamento tributário; valores simulados não substituem custos efetivamente
+pagos. A prévia inicial de demanda medida não presume demanda faturável.
 TE, TUSD e demanda permitem uma comparação parcial. Não são, isoladamente,
 prova da economia líquida total. Simulação exibirá o escopo, impostos,
 encargos, perdas, custos CCEE, gestão, investimentos e outros custos incluídos

@@ -1,4 +1,5 @@
 import {aclHistoryDraft,validAclHistory} from './acl-invoice-history';
+import {fixedHistoryTariffs,simulateFixedHistory} from './acl-history-simulation';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -118,6 +119,18 @@ export class AclAdmissionService {
     const after = aclCursor(q,sources); await this.evidenceAllowed(id,t);
     return this.page(await this.rpc(sources?'acl_evidence_sources':'acl_evidence_read',{
       ...this.params(t),p_id:id,p_after: sources ? after || '' : after }), 'id');
+  }
+  async historySimulation(id:string,input:unknown,t:TenantContext){
+    const b=input as {evidenceId:string;tariffs:unknown};
+    if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='evidenceId,tariffs'||!UUID.test(b.evidenceId))throw new BadRequestException('Selecione o histórico aprovado e as tarifas.');
+    let tariffs;try{tariffs=fixedHistoryTariffs(b.tariffs);}catch(e){throw new BadRequestException((e as Error).message);}
+    await this.evidenceAllowed(id,t);const admission=await this.one(id,t);
+    const unit=await this.db.getClient().from('consumer_units').select('tariff_group,tariff_subgroup,tariff_modality').eq('organization_id',t.organizationId).eq('customer_id',admission.customerId).eq('id',admission.unitId).maybeSingle();
+    if(unit.error)throw new InternalServerErrorException('Enquadramento indisponível.');
+    if(unit.data?.tariff_group!=='A'||unit.data?.tariff_subgroup!=='A4'||unit.data?.tariff_modality!=='GREEN')throw new BadRequestException('Esta simulação exige enquadramento Verde A4 conferido.');
+    const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
+    if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
+    try{return {evidenceId:source.evidenceId,documents:source.documents,...simulateFixedHistory(source.history,tariffs)};}catch{throw new ConflictException('Histórico aprovado indisponível; confira a fonte atual.');}
   }
   async historyPreview(id:string,document:string,t:TenantContext){
     if(!/^[A-Za-z0-9_-]{1,100}$/.test(document))throw new BadRequestException('Documento inválido.');

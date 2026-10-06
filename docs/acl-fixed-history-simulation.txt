@@ -1,0 +1,41 @@
+ENERGYOS — Simulação do histórico com tarifas fixas
+06/10/2026 — escopo autorizado pelo usuário
+
+Um único conjunto de tarifas da fatura de referência pode ser aplicado aos 12
+meses de consumo e demanda do histórico aprovado. Competência, fonte, unidades
+e tratamento tributário informado são mostrados e confirmados pelo Consultor.
+Esta primeira prévia usa tarifas informadas, sem aprovação automática de OCR.
+
+Energia ponta e fora de ponta: kWh × tarifa em R$/kWh.
+Demanda medida: kW × tarifa em R$/kW, explicitamente uma hipótese parcial.
+Não transforma demanda medida em faturável, não presume demanda contratada
+nem calcula ultrapassagem ou parcelas utilizada/não utilizada.
+Reutiliza tariffProduct do motor existente, com coeficientes inteiros, produtos
+exatos e HALF_UP por linha. Subtotal mensal e anual somam centavos arredondados.
+Mesmas tarifas em todos os meses; não aplica supostas vigências anteriores.
+
+O resultado é SIMULADO, parcial e interno. Não é histórico de custos pagos,
+economia líquida, ROI, cobrança, apuração publicada nem fechamento financeiro.
+GD/créditos, BESS, reativos, bandeiras, CIP, CCEE, fornecedor, gestão e investimento
+permanecem fora desta prévia. Não acrescenta tributos novamente.
+
+Backend: POST privado/no-store history-simulation, enquadramento atual Verde A4.
+Exige licença, permissões e vínculo atuais, fonte de histórico aprovada no banco.
+RPC revalida hash, versão e revisão cadastral dos documentos na transação, sem
+aceitar organização, medições ou aprovação fornecidas pelo navegador.
+Interface limpa resultados ao mudar tarifas, evidência ou revisão do processo;
+requisições abortadas não podem restaurar resultados antigos.
+Não envia mensagens, não chama provedores e não publica valores no portal.
+
+Migração history_simulation depois de invoice_history. Revisão amplia também o
+limite CHECK de facts da tabela para 12000 bytes, igual ao RPC, para comportar
+o histórico completo dentro de seu esquema estrito.
+PR draft e flag OFF até validação autenticada do piloto. Etapas seguintes e
+comparação completa ACR/ACL continuam pendentes; esta prévia não as substitui.
+
+Validação: 55 testes Jest em três suites (simulação, serviço, histórico), 28
+verificações PGlite de segurança/fonte/tamanho, 19 regressões do histórico,
+29 verificações em PostgreSQL 17 incluindo concorrência e fonte da simulação.
+Build Nest, tsc frontend e build Next passaram. Laboratório sem rede nem portas
+expostas, com dados sintéticos, removido após os testes. Nenhuma fatura real
+foi incluída no código, nos testes ou no preview.

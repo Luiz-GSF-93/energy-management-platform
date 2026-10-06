@@ -13,6 +13,7 @@ const check=v=>{assert.ok(v);checks++;};const delay=ms=>new Promise(r=>setTimeou
 await sql('CREATE DATABASE acl_lab','postgres');
 const f=await aclFixture(adapter),{db,actor,peer,client,call,migrate,create,work,evidence,doc}=f;
 await migrate('20261006_acl_admission_closure.sql');await migrate('20261006_acl_admission_history.sql');
+await migrate('20261006_acl_history_simulation.sql');
 let row=await create();
 // The holder opens a contention window. Assert both independently connected
 // commands are actually queued before it commits; do not infer concurrency.
@@ -83,4 +84,9 @@ row=(await evidence(row.id,row.revision,'APPROVE',{evidence:ev.evidenceId,note,a
 const historyRequest=randomUUID();results=await race([()=>evidence(row.id,row.revision,'COMPLETE',{evidence:ev.evidenceId,request:historyRequest}),()=>evidence(row.id,row.revision,'COMPLETE',{evidence:ev.evidenceId,request:historyRequest})]);
 check(results.every(r=>r.ok)&&results.filter(r=>r.replayed).length===1);row=results[0].admission;
 check(row.stages.find(r=>r.key==='invoices').status==='COMPLETED');
+const simulation=()=>call('acl_history_simulation_source',['o1',actor,'r1',false,row.id,ev.evidenceId]);
+check((await simulation()).history.rows.length===12);
+await assert.rejects(()=>call('acl_history_simulation_source',['o2',actor,'r1',false,row.id,ev.evidenceId]));checks++;
+await sql("UPDATE documents SET file_hash=repeat('f',64) WHERE id='history-single'");await assert.rejects(simulation);checks++;
+check((await db.query("SELECT NOT has_function_privilege('authenticated','acl_history_simulation_source(text,text,text,boolean,uuid,uuid)','EXECUTE') AS denied")).rows[0].denied);
 console.log(JSON.stringify({ok:true,checks,engine:'PostgreSQL 17',isolated:true}));

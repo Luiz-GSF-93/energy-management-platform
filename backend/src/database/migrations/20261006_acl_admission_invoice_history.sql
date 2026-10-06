@@ -1,4 +1,6 @@
 BEGIN;
+ALTER TABLE public.acl_admission_evidence DROP CONSTRAINT acl_admission_evidence_facts_check;
+ALTER TABLE public.acl_admission_evidence ADD CONSTRAINT acl_admission_evidence_facts_check CHECK(jsonb_typeof(facts)='object' AND octet_length(facts::text)<=12000);
 CREATE FUNCTION public.acl_validate_invoice_history(f jsonb,documents text[],anchor date)
 RETURNS void LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE h jsonb;row jsonb;previous date;current_month date;key text;

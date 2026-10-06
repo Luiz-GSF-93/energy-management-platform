@@ -1,0 +1,11 @@
+import {fixedHistoryTariffs,simulateFixedHistory} from './acl-history-simulation';
+const history=()=>({sourceDocumentId:'invoice',rows:Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'1',offPeakKwh:'2',demandKw:'3',days:30,page:2,source:'table'}))});
+const tariffs=()=>({peakBrlKwh:'0.005',offPeakBrlKwh:'0.0025',demandBrlKw:'0.001666667',referenceMonth:'2026-08',source:'Fatura de referência, tarifas com tributos incluídos.',checked:true});
+describe('Fixed history simulation',()=>{
+ it('uses the same tariffs for twelve months with exact products and line rounding',()=>{const r=simulateFixedHistory(history(),tariffs());expect(r.rows).toHaveLength(12);expect(r.rows[0]).toMatchObject({peak:'0.01',offPeak:'0.01',measuredDemandEstimate:'0.01',subtotal:'0.03'});expect(r.annualSubtotal).toBe('0.36');expect(r.rows[0].exact.measuredDemandEstimate).toBe('0.005000001000000');expect(r.paidCostHistory).toBe(false);expect(r.partial).toBe(true);});
+ it('preserves real zero and measured quantities without converting to contracted demand',()=>{const h=history();h.rows[0].demandKw='0';const r=simulateFixedHistory(h,{...tariffs(),peakBrlKwh:'0'});expect(r.rows[0].peak).toBe('0.00');expect(r.rows[0].measuredDemandKw).toBe('0');expect(r.rows[0].measuredDemandEstimate).toBe('0.00');expect(r.warnings.join(' ')).toContain('não equivale a demanda faturável');});
+ it.each(['','-1','1e3','NaN','1,23',1,'0.1234567890'])('rejects invalid energy rate %s',v=>expect(()=>fixedHistoryTariffs({...tariffs(),peakBrlKwh:v})).toThrow());
+ it('preserves nine-place invoice energy tariffs',()=>{const r=simulateFixedHistory(history(),{...tariffs(),peakBrlKwh:'0.005000001'});expect(r.rows[0].exact.peak).toBe('0.005000001000000');});
+ it.each([{checked:false},{source:''},{referenceMonth:'2026-13'},{organizationId:'foreign'},{total:'100'},{demandBrlKw:'0.1234567890'}])('rejects unreviewed or spoofed tariff assumptions %s',v=>expect(()=>fixedHistoryTariffs({...tariffs(),...v})).toThrow());
+ it('rejects partial histories and forged historic costs',()=>{const h=history();h.rows.pop();expect(()=>simulateFixedHistory(h,tariffs())).toThrow();const other=history();Object.assign(other.rows[0],{cost:'100'});expect(()=>simulateFixedHistory(other,tariffs())).toThrow();});
+});
