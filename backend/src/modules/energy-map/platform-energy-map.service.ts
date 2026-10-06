@@ -7,7 +7,7 @@ import {mapQuery,mapId} from './energy-map.validation';
 
 export function platformMapQuery(value:Record<string,unknown>){
  const {organizationId,location,...rest}=value;
- if(Object.keys(rest).some(k=>!['search','state','market','offset','limit'].includes(k)))throw new BadRequestException('Filtro inválido.');
+ if(Object.keys(rest).some(k=>!['search','state','market','gd','bess','offset','limit'].includes(k)))throw new BadRequestException('Filtro inválido.');
  const query=mapQuery({...rest,...(location==='NO_UNIT'?{}:{location})});
  return {...query,location:location==='NO_UNIT'?'NO_UNIT':query.location,organizationId:organizationId===undefined||organizationId===''?null:mapId(organizationId)};
 }

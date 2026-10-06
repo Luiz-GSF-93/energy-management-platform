@@ -25,7 +25,7 @@ export default function PlatformMapCanvas({rows,selected,onSelect}:{rows:MapUnit
     m.addLayer({id:'density',type:'heatmap',source:'density-units',layout:{visibility:'none'},paint:{'heatmap-weight':1,'heatmap-radius':['interpolate',['linear'],['zoom'],3,18,12,35],'heatmap-intensity':1,'heatmap-opacity':0.7,'heatmap-color':['interpolate',['linear'],['heatmap-density'],0,'rgba(13,148,136,0)',0.25,'#67e8f9',0.5,'#14b8a6',0.75,'#facc15',1,'#f97316']}});
     m.addLayer({id:'clusters',type:'circle',source:'units',filter:['has','point_count'],paint:{'circle-color':'#0b625c','circle-radius':['step',['get','point_count'],20,20,27,100,34],'circle-stroke-width':3,'circle-stroke-color':'#fff'}});
     m.addLayer({id:'counts',type:'symbol',source:'units',filter:['has','point_count'],layout:{'text-field':['get','point_count_abbreviated'],'text-font':['DIN Offc Pro Medium','Arial Unicode MS Bold'],'text-size':13},paint:{'text-color':'#fff'}});
-    m.addLayer({id:'points',type:'circle',source:'units',filter:['!', ['has','point_count']],paint:{'circle-color':['match',['get','market'],'ACL','#2563eb','ACR','#0d9488','#64748b'],'circle-radius':['case',['get','approximate'],7,9],'circle-stroke-width':3,'circle-stroke-color':'#fff'}});
+    m.addLayer({id:'points',type:'circle',source:'units',filter:['!', ['has','point_count']],paint:{'circle-color':['case',['get','gd'],'#a855f7',['match',['get','market'],'ACL','#2563eb','ACR','#0d9488','#64748b']],'circle-radius':['case',['get','approximate'],7,9],'circle-stroke-width':3,'circle-stroke-color':['case',['get','bess'],'#f59e0b','#fff']}});
     m.on('click','points',e=>{const f=e.features?.[0] as unknown as {properties?:{id?:unknown}}|undefined;const id=f?.properties?.id;if(typeof id==='string')latest.current.onSelect(id);});
     m.on('click','clusters',e=>{const f=e.features?.[0] as unknown as {geometry:{type:string;coordinates:[number,number]};properties?:{cluster_id?:number}}|undefined;if(f?.geometry.type!=='Point'||typeof f.properties?.cluster_id!=='number')return;
      const center=f.geometry.coordinates;
@@ -48,3 +48,4 @@ export default function PlatformMapCanvas({rows,selected,onSelect}:{rows:MapUnit
   <button type="button" className={styles.fit} onClick={fit} disabled={!ready}>Enquadrar unidades</button>
  </div>{density&&!rows.some(located)?<p role="status">Confirme localizações para visualizar a concentração de unidades.</p>:null}</>;
 }
+

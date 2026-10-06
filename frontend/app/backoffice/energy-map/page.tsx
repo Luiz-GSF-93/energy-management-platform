@@ -7,7 +7,7 @@ import ProtectedRoute from '@/app/components/ProtectedRoute';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
-import {MapResponse,MapUnit,located,locationLabels,precisionLabels} from './map-data';
+import {MapResponse,MapUnit,located,locationLabels,precisionLabels,gdLabel,bessLabel} from './map-data';
 import styles from './map.module.css';
 import TerritorySummary from './TerritorySummary';
 import PlatformEnergyMap from './PlatformEnergyMap';
@@ -18,7 +18,7 @@ const states='AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO 
 
 function EnergyMap({organizationId}:{organizationId:string}) {
  const [data,setData]=useState<MapResponse|null>(null),[access,setAccess]=useState<{enabled:boolean}|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true);
- const [filters,setFilters]=useState({search:'',state:'',market:'',location:'',status:''}),[offset,setOffset]=useState(0),[refresh,setRefresh]=useState(0);
+ const [filters,setFilters]=useState({search:'',state:'',market:'',gd:'',bess:'',location:'',status:''}),[offset,setOffset]=useState(0),[refresh,setRefresh]=useState(0);
  const [selected,setSelected]=useState<MapUnit|null>(null),[editing,setEditing]=useState<MapUnit|null>(null),[history,setHistory]=useState<History[]>([]),[busy,setBusy]=useState(false),[saveError,setSaveError]=useState('');
  const [showMap,setShowMap]=useState(true),[requestId,setRequestId]=useState('');
  const dialog=useRef<HTMLDialogElement>(null),alive=useRef(true),saveAbort=useRef<AbortController|null>(null);
@@ -57,27 +57,29 @@ function EnergyMap({organizationId}:{organizationId:string}) {
    <div className={styles.filters}><label className={styles.search}><Search size={17}/><input aria-label="Pesquisar carteira" placeholder="Cliente, unidade, cidade ou distribuidora" value={filters.search} maxLength={100} onChange={e=>filter('search',e.target.value)}/></label>
     <select aria-label="Estado" value={filters.state} onChange={e=>filter('state',e.target.value)}><option value="">Todos os estados</option>{states.map(s=><option key={s}>{s}</option>)}</select>
     <select aria-label="Mercado" value={filters.market} onChange={e=>filter('market',e.target.value)}><option value="">Todos os mercados</option><option value="ACL">Mercado livre · ACL</option><option value="ACR">Regulado · ACR</option><option value="UNKNOWN">Mercado não informado</option></select>
+    <select aria-label="GD" value={filters.gd} onChange={e=>filter('gd',e.target.value)}><option value="">GD · todas</option><option value="YES">Com GD</option><option value="NO">Sem GD (conferido)</option><option value="UNKNOWN">GD não informado</option></select>
+    <select aria-label="BESS" value={filters.bess} onChange={e=>filter('bess',e.target.value)}><option value="">BESS · todas</option><option value="YES">Com BESS</option><option value="NO">Sem BESS (conferido)</option><option value="UNKNOWN">BESS não informado</option></select>
     <select aria-label="Localização" value={filters.location} onChange={e=>filter('location',e.target.value)}><option value="">Todas as localizações</option>{Object.entries(locationLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
     <select aria-label="Status da unidade" value={filters.status} onChange={e=>filter('status',e.target.value)}><option value="">Todos os status</option>{Object.entries({ACTIVE:'Ativa',INACTIVE:'Inativa',MIGRATED:'Migrada',CHURN:'Encerrada',SEASONAL:'Sazonal'}).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
    </div>
    {data&&!loading?<TerritorySummary rows={data.rows} organizationId={organizationId} onState={state=>filter('state',state)}/>:null}
    <div className={styles.workspace}>
-    <div className={styles.mapColumn}><div className={styles.toolbar}><span><span className={styles.blueDot}/> ACL <span className={styles.liveDot}/> ACR <span className={styles.grayDot}/> Não informado</span><button type="button" onClick={()=>setShowMap(v=>!v)}>{showMap?'Usar somente lista':'Mostrar mapa'}</button></div>
+    <div className={styles.mapColumn}><div className={styles.toolbar}><span><span className={styles.blueDot}/> ACL <span className={styles.liveDot}/> ACR <span className={styles.grayDot}/> Não informado <span className={styles.gdDot}/> GD <span className={styles.bessDot}/> BESS <span className={styles.gdDot}/> GD <span className={styles.bessDot}/> BESS</span><button type="button" onClick={()=>setShowMap(v=>!v)}>{showMap?'Usar somente lista':'Mostrar mapa'}</button></div>
      {showMap&&data?<Canvas rows={data.rows} organizationId={organizationId} selected={selected} onSelect={id=>setSelected(data.rows.find(u=>u.id===id)??null)}/>:null}
      <div className={styles.coverage}><MapPin size={15}/><span>{data?.rows.filter(located).length??0} pontos nesta página. Apenas localizações conferidas aparecem no mapa; precisão aproximada é indicada nos detalhes.</span></div>
     </div>
     <aside className={styles.details} aria-label="Detalhes da unidade">{selected?<>
      <div className={styles.eyebrow}>UNIDADE SELECIONADA</div><h2>{selected.name||'UC '+selected.number}</h2><p>{selected.customerName}</p><span className={styles.badge}>{locationLabels[selected.locationStatus]}</span>
-     <dl><dt>Unidade consumidora</dt><dd>{selected.number}</dd><dt>Distribuidora</dt><dd>{selected.distributor}</dd><dt>Mercado</dt><dd>{selected.market==='UNKNOWN'?'Não informado':selected.market}</dd><dt>Endereço cadastral</dt><dd>{selected.address||'Não informado'}<br/>{[selected.city,selected.state].filter(Boolean).join(' / ')}</dd><dt>Grupo</dt><dd>{selected.group||'Não informado'}</dd>
+     <dl><dt>Unidade consumidora</dt><dd>{selected.number}</dd><dt>Distribuidora</dt><dd>{selected.distributor}</dd><dt>Mercado</dt><dd>{selected.market==='UNKNOWN'?'Não informado':selected.market}</dd><dt>Endereço cadastral</dt><dd>{selected.address||'Não informado'}<br/>{[selected.city,selected.state].filter(Boolean).join(' / ')}</dd><dt>Geração Distribuída</dt><dd>{gdLabel(selected)}</dd><dt>Armazenamento em baterias</dt><dd>{bessLabel(selected)}</dd><dt>Grupo</dt><dd>{selected.group||'Não informado'}</dd>
       {selected.precision?<><dt>Precisão declarada</dt><dd>{precisionLabels[selected.precision]}</dd></>:null}{located(selected)?<><dt>Coordenadas</dt><dd>{selected.latitude?.toFixed(6)}, {selected.longitude?.toFixed(6)}</dd></>:null}
      </dl>{selected.locationStatus==='STALE'?<Alert>O cadastro mudou após a conferência. Revise a localização antes de recolocá-la no mapa.</Alert>:null}
      {data?.canManage?<Button onClick={()=>openEdit(selected)}><LocateFixed size={16}/>{selected.revision?'Revisar localização':'Localizar unidade'}</Button>:null}
-     {data?.canManage?<GeocodingReview key={selected.id+selected.addressHash+selected.revision} unit={selected} onConfirmed={()=>setRefresh(v=>v+1)}/>:null}<a className={styles.link} href="/backoffice/setup">Abrir clientes e unidades <ArrowUpRight size={15}/></a>
+          {data?.canManage?<GeocodingReview key={selected.id+selected.addressHash+selected.revision} unit={selected} onConfirmed={()=>setRefresh(v=>v+1)}/>:null}<a className={styles.link} href="/backoffice/setup">Abrir clientes e unidades <ArrowUpRight size={15}/></a>
      {history.length?<details><summary>Histórico de localização ({history.length})</summary>{history.map(h=><p key={h.revision}><strong>Versão {h.revision}</strong><br/>{new Date(h.recorded_at).toLocaleString('pt-BR')}<br/>{h.reason}</p>)}</details>:null}
     </>:<div className={styles.emptyDetail}><MapPinned size={36}/><h2>Explore sua carteira</h2><p>Escolha uma unidade no mapa ou na lista para ver seus detalhes e conferir a localização.</p></div>}</aside>
    </div>
    <div className={styles.listHeader}><h2>Unidades da carteira</h2><span>{loading?'Atualizando…':data?`${data.total?offset+1:0}–${Math.min(offset+data.rows.length,data.total)} de ${data.total}`:'Consulta indisponível'}</span></div>
-   <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Cliente / unidade</th><th>Cidade</th><th>Distribuidora</th><th>Mercado</th><th>Localização</th><th>Detalhes</th></tr></thead><tbody>{data?.rows.map(u=><tr key={u.id} data-selected={selected?.id===u.id}><td><strong>{u.customerName}</strong><small>{u.name||'Unidade consumidora'} · {u.number}</small></td><td>{u.city||'Não informada'}{u.state?' / '+u.state:''}</td><td>{u.distributor}</td><td>{u.market==='UNKNOWN'?'Não informado':u.market}</td><td><span className={styles.badge} data-status={u.locationStatus}>{locationLabels[u.locationStatus]}</span></td><td><button type="button" className={styles.rowButton} onClick={()=>setSelected(u)} aria-label={'Ver detalhes de '+u.number}>Ver unidade <ArrowUpRight size={15}/></button></td></tr>)}</tbody></table></div>
+   <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Cliente / unidade</th><th>Cidade</th><th>Distribuidora</th><th>Mercado</th><th>Localização</th><th>Detalhes</th></tr></thead><tbody>{data?.rows.map(u=><tr key={u.id} data-selected={selected?.id===u.id}><td><strong>{u.customerName}</strong><small>{u.name||'Unidade consumidora'} · {u.number}</small></td><td>{u.city||'Não informada'}{u.state?' / '+u.state:''}</td><td>{u.distributor}</td><td>{u.market==='UNKNOWN'?'Não informado':u.market}<small>{gdLabel(u)}</small><small>{bessLabel(u)}</small></td><td><span className={styles.badge} data-status={u.locationStatus}>{locationLabels[u.locationStatus]}</span></td><td><button type="button" className={styles.rowButton} onClick={()=>setSelected(u)} aria-label={'Ver detalhes de '+u.number}>Ver unidade <ArrowUpRight size={15}/></button></td></tr>)}</tbody></table></div>
    {!loading&&data&&!data.rows.length?<div className={styles.emptyList}><MapPin size={28}/><h3>Nenhuma unidade nesta seleção</h3><p>Revise os filtros ou cadastre uma unidade em Clientes e unidades.</p></div>:null}
    <div className={styles.pagination}><span>O mapa acompanha as unidades desta página · até 200 por consulta.</span><Button variant="secondary" disabled={loading||offset===0} onClick={()=>setOffset(v=>Math.max(0,v-200))}>Anterior</Button><Button variant="secondary" disabled={loading||!data||offset+data.rows.length>=data.total} onClick={()=>setOffset(v=>v+200)}>Próxima</Button></div>
   </>:loading?<p role="status">Consultando acesso ao mapa…</p>:null}
@@ -85,3 +87,5 @@ function EnergyMap({organizationId}:{organizationId:string}) {
  </section>;
 }
 export default function Page(){const {context}=useAuth();return <ProtectedRoute><BackofficeShell>{context?.scope==='organization'?<EnergyMap key={context.currentOrganization.id} organizationId={context.currentOrganization.id}/>:context?.scope==='global'&&context.role==='admin_platform'?<PlatformEnergyMap key={'platform-'+context.user.id}/>:<section className="backoffice-page"><h1>Mapa energético</h1><p>Selecione uma organização para explorar a carteira autorizada.</p></section>}</BackofficeShell></ProtectedRoute>;}
+
+
