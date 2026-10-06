@@ -7,7 +7,7 @@ import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 import { validateWriteDto } from '../../common/validation/validate-write-dto';
-import { AclReopenDto, AclClosureCommandDto, AclEvidenceCommandDto, AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto } from './acl-admission.dto';
+import { AclReopenDto, AclClosureCommandDto, AclEvidenceCommandDto, AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto, AclRequestDto } from './acl-admission.dto';
 export const ACL_VIEW = '2c933fdf-0bbf-406a-915c-03e7921e54d8';
 export const ACL_MANAGE = '820dc44f-15a0-4c2a-871e-2c1d2d443d9e';
 export const ACL_APPROVE = '26cadaa7-2eea-4080-91f6-1f26f87ca809';
@@ -30,9 +30,10 @@ export class AclAdmissionService {
   }
   private fail(e: any) {
     if (!e) return;
-    if (e.code === '42501') throw new ForbiddenException('Adesão exige vínculo, permissão e licença vigentes.');
-    if (e.code === 'P4102') throw new NotFoundException('Cliente, unidade ou adesão indisponíveis neste escopo.');
-    if (['23505', '40001'].includes(e.code)) throw new ConflictException('A unidade já possui adesão ou a requisição mudou. Atualize a lista.');
+    if(e.code==='P4103')throw new BadRequestException('Conclua ou cancele as solicitações e os prazos vinculados antes de encerrar a adesão.');
+    if (['42501','P2031'].includes(e.code)) throw new ForbiddenException('Adesão exige vínculo, permissão e licença vigentes.');
+    if (['P4102','P2033'].includes(e.code)) throw new NotFoundException('Cliente, unidade ou adesão indisponíveis neste escopo.');
+    if (['23505', '40001','P2032'].includes(e.code)) throw new ConflictException('A unidade já possui adesão ou a requisição mudou. Atualize a lista.');
     if (['22023', '23514', '22P02'].includes(e.code)) throw new BadRequestException('Confira o cadastro, ACR e elegibilidade da unidade.');
     throw new InternalServerErrorException('Não foi possível consultar a adesão ACL.');
   }
@@ -50,12 +51,34 @@ export class AclAdmissionService {
     if (!this.enabled(t.organizationId)) return { enabled: false, canWork: false, canApprove: false };
     const actor = await this.rpc('acl_assert_actor', { ...this.params(t), p_write: write, p_customer: null });
     if (actor?.organizationId !== t.organizationId || actor?.actorId !== t.userId || typeof actor.canWork !== 'boolean' || typeof actor.canApprove !== 'boolean') throw new InternalServerErrorException('Escopo da adesão indisponível.');
-    return { enabled: true, canWork: actor.canWork, canApprove: actor.canApprove && (t.accessMode === 'platform_operation' || ['admin_org','gestor'].includes(t.role)) };
+    const requestEnabled=(this.config.get<string>('ACL_ADMISSION_REQUEST_ORGANIZATIONS')||'').split(',').map(v=>v.trim()).includes(t.organizationId);
+    const canReadRequests=requestEnabled&&(t.accessMode==='platform_operation'||['8f105b02-4443-49de-b188-847e0284e7ed','1479c0b7-9608-4e95-bd83-7e6899255a78','cb949e2a-e01d-4cf0-8c69-6ca74fe4d627'].every(p=>t.permissions?.includes(p)));
+    const canRequest=canReadRequests&&actor.canWork&&(t.accessMode==='platform_operation'||['d1f1b3be-a842-41e7-aeb1-45fefeb2f4c1','6da45eb4-810c-4e40-9933-d9cda66a8841'].every(p=>t.permissions?.includes(p)));
+    return { enabled: true, canWork: actor.canWork, canApprove: actor.canApprove && (t.accessMode === 'platform_operation' || ['admin_org','gestor'].includes(t.role)),canReadRequests,canRequest };
   }
   private async allowed(t: TenantContext, write = false) { if (!(await this.access(t, write)).enabled) throw new ForbiddenException('Adesão ACL ainda não habilitada nesta organização.'); }
   private page(value: unknown, key: string) {
     if (!Array.isArray(value) || value.length > 51 || value.some(v => !v || typeof v[key] !== 'string')) throw new InternalServerErrorException('Lista de adesões inválida.');
     const rows = value.slice(0, 50); return { rows, nextCursor: value.length === 51 ? rows[49][key] as string : null };
+  }
+  private async requestAllowed(id: string,t: TenantContext,write=false) {
+    if(!UUID.test(id))throw new BadRequestException('Adesão inválida.');
+    await this.allowed(t,write);
+    if(!(this.config.get<string>('ACL_ADMISSION_REQUEST_ORGANIZATIONS')||'').split(',').map(v=>v.trim()).includes(t.organizationId))throw new ForbiddenException('Solicitações ACL ainda não habilitadas nesta organização.');
+    const required=['8f105b02-4443-49de-b188-847e0284e7ed','1479c0b7-9608-4e95-bd83-7e6899255a78','cb949e2a-e01d-4cf0-8c69-6ca74fe4d627',...(write?['d1f1b3be-a842-41e7-aeb1-45fefeb2f4c1','6da45eb4-810c-4e40-9933-d9cda66a8841']:[])];
+    if(t.accessMode!=='platform_operation'&&!required.every(p=>t.permissions?.includes(p)))throw new ForbiddenException('Solicitações ACL exigem Documentos, Solicitações e Agenda.');
+    await this.licenses.requireEntitlement(t.organizationId,'document_management');
+  }
+  async requests(id:string,q:unknown,t:TenantContext) {
+    const after=aclCursor(q);await this.requestAllowed(id,t);
+    return this.page(await this.rpc('acl_request_read',{...this.params(t),p_id:id,p_after:after}),'id');
+  }
+  async createRequest(id:string,input:unknown,t:TenantContext) {
+    const d=await validateWriteDto(AclRequestDto,input as AclRequestDto);await this.requestAllowed(id,t,true);
+    const {requestId,expectedRevision,...data}=d;
+    const result=await this.rpc('acl_request_create',{...this.params(t),p_id:id,p_request:requestId,p_revision:expectedRevision,p_data:data});
+    if(!result||!['id','requestRecordId','agendaRecordId','messageId'].every(k=>UUID.test(result[k])))throw new InternalServerErrorException('Confirmação da solicitação indisponível.');
+    return result;
   }
   async candidates(q: unknown, t: TenantContext) {
     const after = aclCursor(q, true); await this.allowed(t);
