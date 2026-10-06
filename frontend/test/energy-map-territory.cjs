@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,f);
+const {territorySummary}=require('../app/backoffice/energy-map/territory-data.ts');
+const u=(id,org='a',extra={})=>({id,organizationId:org,customerId:'same',state:'SP',locationStatus:'CONFIRMED',latitude:-21,longitude:-47,...extra});
+let checks=0;const check=(a,b)=>{assert.deepEqual(a,b);checks++;};
+check(territorySummary([u('1'),u('2'),u('1')],'a').regions,[{state:'SP',customers:1,units:2,confirmed:2}]);
+check(territorySummary([u('1'),u('2','b')],'a').regions[0].units,1);
+check(territorySummary([u('1'),u('2','b')]).regions[0].customers,2);
+check(territorySummary([u('1','a',{hasUnit:false}),u('2','a',{state:null})]).omitted,1);
+check(territorySummary([u('1','a',{locationStatus:'STALE'}),u('2','a',{latitude:NaN}),u('3','a',{locationStatus:'PENDING'}),u('4','a',{precision:'CITY'})]).regions[0].confirmed,1);
+check(territorySummary([u('1','a',{state:' sp '}),u('2','a',{state:'MG'}),u('3','a',{state:'XX'})]).regions.map(r=>r.state),['MG','SP']);
+check(territorySummary([]),{regions:[],omitted:0});
+console.log(JSON.stringify({checks,passed:true}));
