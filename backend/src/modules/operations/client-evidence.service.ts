@@ -30,7 +30,7 @@ export class ClientEvidenceService {
  }
  private async record(id:string,t:TenantContext,kind?:string,write=false){
   await this.allowed(t);if(!/^[a-f0-9-]{36}$/i.test(id))throw new BadRequestException('Registro inválido.');
-  if(kind){const k=operationKind(kind);if(!t.permissions.includes(P.DOCUMENTS_VIEW)||(write&&!t.permissions.includes(operationPermissions[k][1])))throw new ForbiddenException('Exige documentos e permissão da área.');const r=await this.operations.one(id,k,t);if(!r.customer_id||!r.consumer_unit_id)throw new BadRequestException('Vincule cliente e unidade antes de trocar evidências.');return r;}
+  if(kind){const k=operationKind(kind);if(!t.permissions.includes(P.DOCUMENTS_VIEW)||(write&&!t.permissions.includes(operationPermissions[k][1])))throw new ForbiddenException('Exige documentos e permissão da área.');const r=await this.operations.one(id,k,t,write);if(!r.customer_id||!r.consumer_unit_id)throw new BadRequestException('Vincule cliente e unidade antes de trocar evidências.');return r;}
   const customer=await this.customer(t);const r=await this.client().from('operation_records').select('id,kind,operation_number,requested_by_name,created_at,effective_date,customer_id,consumer_unit_id,status').eq('organization_id',t.organizationId).eq('customer_id',customer).eq('id',id).maybeSingle();this.check(r.error);if(!r.data)throw new NotFoundException('Registro indisponível.');
   const shared=await this.client().from('operation_client_messages').select('id').eq('organization_id',t.organizationId).eq('record_id',id).eq('customer_id',customer).eq('consumer_unit_id',r.data.consumer_unit_id).eq('direction','OUTBOUND').limit(1);this.check(shared.error);if(!shared.data?.length)throw new NotFoundException('Registro não compartilhado.');return r.data;
  }
@@ -44,4 +44,3 @@ export class ClientEvidenceService {
  const result=await this.documents.upload({customerId:r.customer_id,consumerUnitId:r.consumer_unit_id,documentType,referenceMonth:reference,description:'Evidência da operação '+String(r.operation_number??r.id),...(previousDocumentId?{previousDocumentId}:{})},file,t.organizationId,t.userId);await this.record(id,t,kind,true);return {id:result.id,name:result.original_filename};}
  async download(id:string,document:string,t:TenantContext,kind?:string){const thread=await this.thread(id,t,kind);if(!thread.documents.some((d:any)=>d.id===document))throw new NotFoundException('Arquivo não compartilhado neste registro.');return this.documents.download(document,t.organizationId);}
 }
-
