@@ -8,5 +8,6 @@ import {PlatformEnergyMapService} from './platform-energy-map.service';
 import {EnergyMapGeocodingService} from './geocoding.service';
 import {EnergyMapGeocodingController} from './geocoding.controller';
 import {MapboxGeocodingProvider} from './geocoding.provider';
-@Module({imports:[LicensesModule],providers:[SupabaseService,EnergyMapService,PlatformEnergyMapService,EnergyMapGeocodingService,MapboxGeocodingProvider],controllers:[EnergyMapController,PlatformEnergyMapController,EnergyMapGeocodingController]})
+import {EnergyMapGeocodingWorker} from './geocoding.worker';
+@Module({imports:[LicensesModule],providers:[SupabaseService,EnergyMapService,PlatformEnergyMapService,EnergyMapGeocodingService,MapboxGeocodingProvider,EnergyMapGeocodingWorker],controllers:[EnergyMapController,PlatformEnergyMapController,EnergyMapGeocodingController]})
 export class EnergyMapModule {}
