@@ -1,0 +1,15 @@
+.workspace { min-width: 0; }
+.workspace :global(.form-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 18px; margin: 18px 0; align-items: start; }
+.workspace label { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; font-size: .95rem; }
+.workspace input:not([type='checkbox']), .workspace select { display: block; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md, 8px); background: var(--color-surface-raised); color: var(--color-text); font: inherit; }
+.workspace input:focus-visible, .workspace select:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.workspace input:disabled, .workspace select:disabled { opacity: .55; }
+.workspace label:has(input[type='checkbox']) { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; }
+.workspace input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--color-primary); flex: 0 0 auto; }
+.workspace fieldset { min-width: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md, 8px); }
+.workspace legend { padding: 0 6px; font-weight: 600; }
+.workspace h3 { display: flex; align-items: center; gap: 8px; margin: 24px 0 12px; }
+.workspace p { line-height: 1.6; overflow-wrap: anywhere; }
+.workspace li { overflow-wrap: anywhere; margin: 6px 0; }
+.workspace summary { cursor: pointer; padding: 12px 0; }
+@media (max-width: 600px) { .workspace :global(.form-grid) { grid-template-columns: 1fr; gap: 12px; } }
