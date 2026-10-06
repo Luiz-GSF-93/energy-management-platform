@@ -1,3 +1,7 @@
+/** Month-start date or timestamp serialized by the document registry. */
+export function aclInvoiceReferenceMonth(value:unknown):string|null {
+ return typeof value==='string' && /^20[0-9]{2}-(0[1-9]|1[0-2])-01(?:T00:00:00(?:\.0+)?(?:Z|\+00:00)?)?$/.test(value) ? value.slice(0,7) : null;
+}
 import type { HistoryReading } from '../ocr/cpfl-measurements';
 export type AclHistoryRow={month:string;peakKwh:string;offPeakKwh:string;demandKw:string;days:number;page:number;source:string};
 const decimal=/^(0|[1-9][0-9]{0,11})(\.[0-9]{1,6})?$/;

@@ -23,7 +23,7 @@ import {
 } from '@/app/lib/navigation';
 import { useAuth } from '@/app/providers';
 
-const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
+const roleLabels: Record<string,string> = {admin_platform:'Administrador da plataforma',admin_org:'Administrador da organizaÃ§Ã£o',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
 const navigationIcons:Record<string,typeof BarChart3>={dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,'energy-map':MapPinned,'trading-hub':TrendingUp,'platform-costs':TrendingUp,licenses:ShieldCheck,setup:ContactRound,'acl-admissions':FileSignature,contracts:FileSignature,documents:Files,'ocr-audit':ScanEye,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
 
 export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;onToggle?:()=>void}={}) {
@@ -72,7 +72,7 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
       );
     } catch {
       setSwitchError(
-        'Não foi possível trocar de organização.',
+        'NÃ£o foi possÃ­vel trocar de organizaÃ§Ã£o.',
       );
     } finally {
       setSwitching(false);
@@ -98,6 +98,7 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
           ? 'global'
           : 'organization'
         : undefined,
+      context?.scope==='organization' && context.accessMode==='platform_operation',
     );
   const navigationItems=allNavigationItems.filter(item=>!item.group);
   const operationItems=allNavigationItems.filter(item=>item.group==='operation');
@@ -126,10 +127,10 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
       </header>
 
       {organizationContext ? <div className="backoffice-context" title={organizationContext.currentOrganization.name||organizationContext.currentOrganization.id}>
-        <p>Organização ativa</p><strong>{organizationContext.currentOrganization.name || organizationContext.currentOrganization.id}</strong>
+        <p>OrganizaÃ§Ã£o ativa</p><strong>{organizationContext.currentOrganization.name || organizationContext.currentOrganization.id}</strong>
         {organizationContext.accessMode === 'platform_operation' ? <>
-          <p>Operação pelo administrador da plataforma</p>
-          <Button variant="secondary" onClick={() => { void leaveOrganization().then(() => router.replace('/backoffice/organizations')); }}>Voltar à plataforma</Button>
+          <p>OperaÃ§Ã£o pelo administrador da plataforma</p>
+          <Button variant="secondary" onClick={() => { void leaveOrganization().then(() => router.replace('/backoffice/organizations')); }}>Voltar Ã  plataforma</Button>
         </> : null}
       </div> : null}
       {organizationContext &&
@@ -139,7 +140,7 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
             className="backoffice-context__label"
             htmlFor="organization-context"
           >
-            Organização ativa
+            OrganizaÃ§Ã£o ativa
           </label>
 
           <select
@@ -159,7 +160,7 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
                   key={organization.id}
                   value={organization.id}
                 >
-                  {`Organização ${organization.id.slice(0, 8)} — ${organization.role}`}
+                  {`OrganizaÃ§Ã£o ${organization.id.slice(0, 8)} â€” ${organization.role}`}
                 </option>
               ),
             )}
@@ -175,7 +176,7 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
 
       <nav
         className="backoffice-nav"
-        aria-label="Administração"
+        aria-label="AdministraÃ§Ã£o"
       >
         {activeIndex>=0?<span className="backoffice-nav__indicator" aria-hidden="true" style={{transform:`translateY(${activeIndex*56}px)`}}/>:null}
         {navigationItems.map((item,index) => {const Icon=navigationIcons[item.href.split('/').pop()||'']||LayoutGrid;return (
@@ -198,9 +199,9 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
         );})}
       </nav>
 
-      {operationItems.length?<section className="operation-menu"><button className="backoffice-nav__link operation-menu__toggle" type="button" onClick={()=>setOperationOpen(v=>!v)} aria-expanded={operationOpen} aria-controls="operation-submenu" aria-label="Operação" title={collapsed?'Operação':undefined}><CalendarDays size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">Operação</span>{!collapsed?<ChevronDown size={16}/>:null}</button>{operationOpen?<nav id="operation-submenu" className="backoffice-nav operation-submenu" aria-label="Operação">{operationIndex>=0?<span className="backoffice-nav__indicator" aria-hidden="true" style={{transform:`translateY(${operationIndex*56}px)`}}/>:null}{operationItems.map((item,index)=>{const Icon=navigationIcons[item.href.split('/').pop()||'']||LayoutGrid;return <Link key={item.href} href={item.href} aria-label={item.label} aria-current={index===operationIndex?'page':undefined} title={collapsed?item.label:undefined} className={`backoffice-nav__link${index===operationIndex?' backoffice-nav__link--active':''}`}><Icon size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">{item.label}</span></Link>;})}</nav>:null}</section>:null}
+      {operationItems.length?<section className="operation-menu"><button className="backoffice-nav__link operation-menu__toggle" type="button" onClick={()=>setOperationOpen(v=>!v)} aria-expanded={operationOpen} aria-controls="operation-submenu" aria-label="OperaÃ§Ã£o" title={collapsed?'OperaÃ§Ã£o':undefined}><CalendarDays size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">OperaÃ§Ã£o</span>{!collapsed?<ChevronDown size={16}/>:null}</button>{operationOpen?<nav id="operation-submenu" className="backoffice-nav operation-submenu" aria-label="OperaÃ§Ã£o">{operationIndex>=0?<span className="backoffice-nav__indicator" aria-hidden="true" style={{transform:`translateY(${operationIndex*56}px)`}}/>:null}{operationItems.map((item,index)=>{const Icon=navigationIcons[item.href.split('/').pop()||'']||LayoutGrid;return <Link key={item.href} href={item.href} aria-label={item.label} aria-current={index===operationIndex?'page':undefined} title={collapsed?item.label:undefined} className={`backoffice-nav__link${index===operationIndex?' backoffice-nav__link--active':''}`}><Icon size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">{item.label}</span></Link>;})}</nav>:null}</section>:null}
 
-      {reportItems.length?<section className="operation-menu"><button className="backoffice-nav__link operation-menu__toggle" type="button" onClick={()=>setReportsOpen(v=>!v)} aria-expanded={reportsOpen} aria-controls="reports-submenu" aria-label="Relatórios" title={collapsed?'Relatórios':undefined}><Files size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">Relatórios</span>{!collapsed?<ChevronDown size={16}/>:null}</button>{reportsOpen?<nav id="reports-submenu" className="backoffice-nav operation-submenu" aria-label="Relatórios">{reportItems.map(item=><Link key={item.href} href={item.href} aria-label={item.label} aria-current={pathname===item.href?'page':undefined} title={collapsed?item.label:undefined} className={`backoffice-nav__link${pathname===item.href?' backoffice-nav__link--active':''}`}><BarChart3 size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">{item.label}</span></Link>)}</nav>:null}</section>:null}
+      {reportItems.length?<section className="operation-menu"><button className="backoffice-nav__link operation-menu__toggle" type="button" onClick={()=>setReportsOpen(v=>!v)} aria-expanded={reportsOpen} aria-controls="reports-submenu" aria-label="RelatÃ³rios" title={collapsed?'RelatÃ³rios':undefined}><Files size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">RelatÃ³rios</span>{!collapsed?<ChevronDown size={16}/>:null}</button>{reportsOpen?<nav id="reports-submenu" className="backoffice-nav operation-submenu" aria-label="RelatÃ³rios">{reportItems.map(item=><Link key={item.href} href={item.href} aria-label={item.label} aria-current={pathname===item.href?'page':undefined} title={collapsed?item.label:undefined} className={`backoffice-nav__link${pathname===item.href?' backoffice-nav__link--active':''}`}><BarChart3 size={20} className="backoffice-nav__icon"/><span className="backoffice-nav__label">{item.label}</span></Link>)}</nav>:null}</section>:null}
 
       <footer className="backoffice-sidebar__footer">
         <Button
