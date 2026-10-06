@@ -1,0 +1,6 @@
+ACL linked requests: Operations access checkpoint (2026-10-06)
+
+Requests and agenda linked to ACL admissions retain ACL customer binding, current membership, role and license checks through generic Operations lists, notifications, history and Evidence routes. Evidence uploads require write access before uploading. SQL save/transition/outbound-message wrappers revalidate linked admission access before idempotent replay. Original implementations are inaccessible to service_role; inbound portal behavior is preserved. Generic unrelated operations retain their existing permissions.
+
+Deploy migration 20261006_acl_operation_access.sql before this API release. No real client requests, messages or financial/stage changes were made during verification.
+Validation: 63 SQL checks; 152 Jest tests across ACL and Operations; backend build; git diff --check.
