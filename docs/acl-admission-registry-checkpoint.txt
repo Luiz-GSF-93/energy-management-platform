@@ -1,0 +1,63 @@
+ADESÃO ACL — FASE 1, CADASTRO E CONSULTAS PRIVADAS
+06/10/2026 — Continuação autorizada pelo usuário
+
+Implementado:
+- Migração aditiva: registro de adesões, histórico imutável, sessões de
+  trabalho privadas, versões de desempenho e resumos públicos separados.
+- FKs compostas organização/cliente/unidade, sem vínculos entre tenants.
+- Índices exclusivos para uma sessão ativa por operador entre processos e
+  uma sessão ativa por etapa. Nenhuma RPC de escrita de cronômetro exposta.
+- Catálogo ACL view/manage/approve; nenhuma concessão automática a papéis.
+- RPCs privadas para autorização, unidades elegíveis, criação idempotente,
+  consulta paginada de processos e projeção do portal por vínculo exclusivo.
+- Licença vigente e única, organização disponível, role atual, vínculo
+  ativo e sessão explícita de operação da plataforma revalidados no banco.
+- Candidatas: unidade ativa, cliente ativo, ACR confirmado, subgrupo A e
+  sem adesão registrada. Não inferir elegibilidade a partir de dados ausentes.
+- API Nest registrada; DTOs não aceitam organização, ator, cronômetro ou
+  estado enviado pelo navegador. Respostas privadas sem cache.
+- Sidebar Adesão ACL condicionado às permissões; tela para registrar,
+  consultar, paginar e visualizar as etapas, ainda sem comandos de trabalho.
+- Mesmo Portal do Cliente: somente unidade/status e resumo explicitamente
+  publicado após conclusão; nenhum payload do processo interno é retornado.
+- GET mínimo incluído na proteção do portal; endpoints internos, detalhes
+  e métodos de escrita continuam bloqueados para consulta externa.
+
+Rollout:
+ACL_ADMISSION_ORGANIZATIONS precisa conter explicitamente o ID da organização.
+Sem essa variável, o módulo fica indisponível e a seção do cliente fica oculta.
+Antes do piloto: aplicar a migração validada e conceder permissões apropriadas
+por um administrador autorizado. Não conceder ACL manage/approve ao cliente.
+A consulta externa usa o vínculo exclusivo e permissão de relatórios vigente
+do portal existente; não aceita customerId enviado pelo navegador.
+
+Verificação local:
+- 74 verificações PGlite sobre o SQL real, dois tenants, isolamento de vínculos,
+  permissões/revogações, licenças, sessão de plataforma, imutabilidade,
+  candidatas, replay, chaves compostas e exclusividade de sessões.
+- 24 testes de domínio/API e 2 testes adicionais da fronteira do portal.
+- O TypeScript local integral do frontend encontrou dependência mapbox-gl
+  ausente na cópia local; a validação da branch remota é a referência do release.
+
+Verificação na branch remota feat/acl-admission-core:
+- 74 verificações do banco e 26 testes Jest (3 suítes) aprovados.
+- Build integral do backend (Nest) aprovado.
+- TypeScript integral do frontend e build de produção Next aprovados.
+- git diff --check sem erros de whitespace.
+
+Estado: trabalho em andamento na PR #258. Nenhuma migração ou grant aplicado
+em produção. Ainda não habilitar o piloto e não considerar a Fase 1 concluída.
+
+Restante da Fase 1:
+- Evidências e aprovações verificadas por organização/cliente/unidade/etapa.
+- Comandos de cronômetro/start/pause/resume/complete/skip e encerramento em
+  transação, reconciliando leases e impedindo alteração de tempo no banco.
+- Heartbeats persistidos de modo escalável, sem copiar o histórico completo
+  em cada ping ou inflar o snapshot de desempenho com eventos de liveness.
+- API/UI dos comandos, publicação aprovada do resumo e versão de desempenho.
+- Definir reabertura versionada sem alterar processos concluídos ou apagar
+  histórico; o cadastro atual aceita uma adesão por unidade.
+- Testes de concorrência real, regressão completa, revisão, piloto e deploy.
+
+Não há assinatura, envio de notificações ou consulta CCEE pelo novo módulo.
+Essas capacidades permanecem nas fases posteriores e exigem provedor habilitado.

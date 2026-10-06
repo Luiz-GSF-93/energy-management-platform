@@ -1,3 +1,4 @@
+import {AclAdmissionsModule} from './modules/acl-admissions/acl-admissions.module';
 import {ReportsModule} from './modules/reports/reports.module';
 import {EnergyMapModule} from './modules/energy-map/energy-map.module';
 import {TradingHubModule} from './modules/trading-hub/trading-hub.module';
@@ -46,6 +47,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     TradingHubModule,
     EnergyMapModule,
     ReportsModule,
+    AclAdmissionsModule,
   ],
   controllers: [AppController],
   providers: [
