@@ -17,7 +17,8 @@ describe('ACL registry API authorization and projection',()=>{
  it('previews supplier terms only against a currently authorized and approved server history',async()=>{
   const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
   const history={sourceDocumentId:'invoice',rows:Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'10',offPeakKwh:'100',demandKw:'200',days:30,page:2,source:'table'}))};
-  const body={evidenceId,proposal:{supplier:'Fornecedor teste',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',losses:'PENDING',taxes:'PENDING',source:'Parâmetros informados para uma simulação interna.',checked:true}};
+  const body={evidenceId,proposal:{supplier:'Fornecedor teste',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350',distribution:null,losses:'PENDING',taxes:'PENDING',source:'Parâmetros informados para uma simulação interna.',checked:true}};
+  jest.spyOn(h.service as any,'invoiceLocation').mockResolvedValue({uf:'SP',code:'SE_CO',reviewRequired:true});
   h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{evidenceId,history,documents:[{id:'invoice',version:1,fileHash:'a'.repeat(64)}]}}));
   await expect(h.service.supplierPreview(id,body,tenant)).rejects.toThrow('documentos');
   await expect(h.service.supplierPreview(id,body,{...t,role:'cliente'})).rejects.toThrow('backoffice');
@@ -28,6 +29,16 @@ describe('ACL registry API authorization and projection',()=>{
   expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','document_management');
   h.rpc.mockResolvedValue({error:{code:'42501'}});await expect(h.service.supplierPreview(id,body,t)).rejects.toThrow('vínculo');
   h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{evidenceId:randomUUID(),history}}));await expect(h.service.supplierPreview(id,body,t)).rejects.toThrow('Fonte');
+ });
+ it('reads invoice address only under admission tenant/customer/unit and current approved/OCR hashes',async()=>{
+  const h=harness(),id=randomUUID(),queries:any[]=[];let hash='changed';
+  const data:any={documents:{id:'invoice',file_verified:true,document_type:'INVOICE_DISTRIBUTOR',file_hash:'original'},document_ocr_jobs:{id:'job',state:'SUCCEEDED'}};
+  const from=jest.fn(table=>{const q:any={select:()=>q,eq:jest.fn(()=>q),maybeSingle:async()=>({data:table==='document_ocr_results'?{file_hash:hash,raw_result:{}}:data[table]})};queries.push(q);return q;});
+  (h.service as any).db={getClient:()=>({from})};jest.spyOn(h.service,'one').mockResolvedValue({customerId:'c1',unitId:'u1'} as any);
+  await expect((h.service as any).invoiceLocation(id,'invoice',[{id:'invoice',fileHash:'original'}],tenant)).rejects.toThrow('outra versão');
+  for(const q of queries)expect(q.eq).toHaveBeenCalledWith('organization_id','o1');expect(queries[0].eq).toHaveBeenCalledWith('customer_id','c1');expect(queries[0].eq).toHaveBeenCalledWith('consumer_unit_id','u1');expect(queries[2].eq).toHaveBeenCalledWith('job_id','job');
+  hash='original';expect(await (h.service as any).invoiceLocation(id,'invoice',[{id:'invoice',fileHash:'original'}],tenant)).toMatchObject({documentId:'invoice',code:null,status:'PENDING'});
+  data.documents.file_hash='new';await expect((h.service as any).invoiceLocation(id,'invoice',[{id:'invoice',fileHash:'original'}],tenant)).rejects.toThrow('fatura mudou');
  });
  it('simulates only server-approved history under current tenant, document license and Verde A4 context',async()=>{
   const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
