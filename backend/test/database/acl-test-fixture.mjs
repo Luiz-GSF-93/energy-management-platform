@@ -20,7 +20,7 @@ export async function aclFixture(database=null){
  await db.query("INSERT INTO roles VALUES('r1','o1','gestor','organization',$1),('r2','o2','gestor','organization',$1),('client','o1','consulta','organization',$2)",[JSON.stringify(perms),JSON.stringify(['3ebadd32-6f30-459e-8ed3-0d2843d89946'])]);
  await db.query("INSERT INTO organization_members VALUES('o1',$1,'r1','ACTIVE','internal',NULL,'Consultor 1'),('o1',$2,'r1','ACTIVE','internal',NULL,'Consultor 2'),('o1',$3,'client','ACTIVE','external','c1','Cliente')",[actor,peer,client]);
  const migrate=async name=>db.exec(readFileSync(new URL('../../src/database/migrations/'+name,import.meta.url),'utf8'));
- for(const name of ['20261006_acl_admission_registry.sql','20261006_acl_admission_timer.sql','20261006_acl_admission_evidence.sql'])await migrate(name);
+ for(const name of ['20261006_acl_admission_registry.sql','20261006_acl_admission_timer.sql','20261006_acl_admission_evidence.sql','20261006_acl_admission_invoice_history.sql'])await migrate(name);
  const call=async(name,args)=>(await db.query(`SELECT ${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) AS value`,args)).rows[0].value;
  const create=()=>call('acl_create',['o1',actor,'r1',false,randomUUID(),'c1','u1']);
  const work=(id,revision,stage,action,who=actor)=>call('acl_work_command',['o1',who,'r1',false,id,randomUUID(),revision,stage,action,null,null]);

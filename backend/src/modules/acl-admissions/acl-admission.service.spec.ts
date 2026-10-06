@@ -14,6 +14,25 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('accepts a reviewed single-invoice history and rejects forged cost/scope fields',async()=>{
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const rows=Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'10',offPeakKwh:'100',demandKw:'200',days:30,page:2,source:'tables[0]'}));
+  const body={requestId:randomUUID(),expectedRevision:1,action:'SUBMIT',stageKey:'invoices',kind:'COMPLETE',documentIds:['invoice'],facts:{history:{sourceDocumentId:'invoice',rows}},note:'Histórico conferido pelo Consultor com fontes.',checkedDocument:true};
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,evidenceId:randomUUID(),admission:{id,organizationId:'o1'}}});
+  await h.service.evidenceCommand(id,body,t);expect(h.rpc).toHaveBeenLastCalledWith('acl_evidence_command',expect.objectContaining({p_documents:['invoice'],p_facts:body.facts,p_org:'o1'}));
+  for(const change of [{sourceDocumentId:'other'},{rows:rows.slice(1)},{rows:rows.map((r,i)=>i? r:{...r,cost:'10'})}])await expect(h.service.evidenceCommand(id,{...body,facts:{history:{...body.facts.history,...change}}},t)).rejects.toThrow('histórico');
+ });
+ it('scopes OCR history reads to the admission unit and refuses mismatched source hashes',async()=>{
+  const h=harness(),id=randomUUID(),queries:any[]=[];let hash='changed';
+  const data:any={documents:{id:'invoice',reference_month:'2026-08-01',document_type:'INVOICE_DISTRIBUTOR',file_verified:true,file_hash:'original'},document_ocr_jobs:{id:'job',state:'SUCCEEDED'}};
+  const from=jest.fn(table=>{const q:any={table,select:jest.fn(()=>q),eq:jest.fn(()=>q),maybeSingle:jest.fn(async()=>({data:table==='document_ocr_results'?{file_hash:hash,raw_result:{}}:data[table]}))};queries.push(q);return q;});
+  (h.service as any).db={getClient:()=>({from})};jest.spyOn(h.service as any,'evidenceAllowed').mockResolvedValue(undefined);jest.spyOn(h.service,'one').mockResolvedValue({customerId:'c1',unitId:'u1'} as any);
+  await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('fonte');
+  for(const q of queries)expect(q.eq).toHaveBeenCalledWith('organization_id','o1');expect(queries[0].eq).toHaveBeenCalledWith('customer_id','c1');expect(queries[0].eq).toHaveBeenCalledWith('consumer_unit_id','u1');expect(queries[2].eq).toHaveBeenCalledWith('job_id','job');
+  hash='original';await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('layout');
+  data.documents=null;await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('unidade');
+ });
+
  it('authorizes reopening and rejects body-supplied history, scope and approvals',async()=>{
   const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:5,reason:'Correção revisada pelo Consultor responsável.',checkedDocument:true};
   for(const extra of [{generation:2},{previousId:id},{organizationId:'o2'},{checkedDocument:false},{state:{}}])await expect(h.service.reopen(id,{...body,...extra},tenant)).rejects.toThrow();

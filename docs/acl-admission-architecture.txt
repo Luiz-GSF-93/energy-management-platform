@@ -93,7 +93,12 @@ Cada etapa admite trabalho independente quando seus dados estão disponíveis.
 Conclusão exige pré-condições; conclusão de uma etapa não dispara as demais.
 
 01 Cadastro: vínculos cliente/unidade, responsável e documentos iniciais.
-02 Faturas: solicitar 12 competências recentes consecutivas pelo portal,
+02 Histórico de consumo e demanda: interpretar os últimos 12 meses consecutivos
+da própria fatura, conforme atualização aprovada em 06/10/2026. Preservar página,
+versão e hash da fonte; revisão do Consultor é obrigatória. Uma fatura com histórico
+completo substitui o envio de 12 arquivos para essa etapa. Custos anteriores não
+são inferidos do gráfico. Solicitar complemento apenas para dados ausentes.
+Alternativa: 12 competências em faturas separadas,
    prazo e recorrência; registrar competência, origem e revisão de OCR.
    Anexo recebido é versionado em Documentos; recebimento não é validação.
 03 Viabilidade: entradas conferidas, consumo ponta/fora ponta, demanda,

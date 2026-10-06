@@ -1,3 +1,5 @@
+import {aclHistoryDraft,validAclHistory} from './acl-invoice-history';
+import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
@@ -117,18 +119,33 @@ export class AclAdmissionService {
     return this.page(await this.rpc(sources?'acl_evidence_sources':'acl_evidence_read',{
       ...this.params(t),p_id:id,p_after: sources ? after || '' : after }), 'id');
   }
+  async historyPreview(id:string,document:string,t:TenantContext){
+    if(!/^[A-Za-z0-9_-]{1,100}$/.test(document))throw new BadRequestException('Documento inválido.');
+    await this.evidenceAllowed(id,t);const admission=await this.one(id,t),db=this.db.getClient();
+    const d=await db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,reference_month,file_hash,file_verified,document_type').eq('organization_id',t.organizationId).eq('id',document).eq('customer_id',admission.customerId).eq('consumer_unit_id',admission.unitId).maybeSingle();
+    if(d.error)throw new InternalServerErrorException('Fonte documental indisponível.');
+    if(!d.data||!d.data.file_verified||d.data.document_type!=='INVOICE_DISTRIBUTOR'||!/^20[0-9]{2}-(0[1-9]|1[0-2])-01$/.test(d.data.reference_month))throw new NotFoundException('Fatura desta unidade indisponível.');
+    const job=await db.from('document_ocr_jobs').select('id,state').eq('organization_id',t.organizationId).eq('document_id',document).maybeSingle();
+    if(job.error||job.data?.state!=='SUCCEEDED')throw new ConflictException('Processe a fatura em Documentos antes de interpretar o histórico.');
+    const result=await db.from('document_ocr_results').select('raw_result,file_hash').eq('organization_id',t.organizationId).eq('document_id',document).eq('job_id',job.data.id).maybeSingle();
+    if(result.error||!result.data||result.data.file_hash!==d.data.file_hash)throw new ConflictException('A fonte da leitura mudou; processe a versão atual.');
+    const layout=extractCpflPaulistaLayout(result.data.raw_result);
+    if(layout.layoutId!=='cpfl-paulista-a'||!layout.measurements)throw new ConflictException('Histórico deste layout ainda requer leitura e revisão no módulo Documentos.');
+    return {documentId:document,fileHash:d.data.file_hash,classification:layout.fields.find(f=>f.name==='classification')?.value.text??null,...aclHistoryDraft(layout.measurements.history,d.data.reference_month.slice(0,7))};
+  }
   async evidenceCommand(id: string, input: unknown, t: TenantContext) {
     const dto = await validateWriteDto(AclEvidenceCommandDto,input as AclEvidenceCommandDto);
     const fields: Record<string,string[]> = {SUBMIT:['stageKey','kind','documentIds','note','facts'],APPROVE:['evidenceId','note'],REJECT:['evidenceId','note'],COMPLETE:['evidenceId'],SKIP:['evidenceId']};
     const optional=['stageKey','kind','documentIds','note','facts','evidenceId'] as const;
     if (optional.some(k=>fields[dto.action].includes(k)?dto[k]==null:dto[k]!==undefined) || dto.note && dto.note.trim().length<20 ||
-        ['APPROVE','REJECT'].includes(dto.action) && dto.note!.length>1000 || dto.facts && JSON.stringify(dto.facts).length>4000) {
+        ['APPROVE','REJECT'].includes(dto.action) && dto.note!.length>1000 || dto.facts && JSON.stringify(dto.facts).length>12000) {
       throw new BadRequestException('Confira os campos e a justificativa da evidência.');
     }
     if (dto.action==='SUBMIT') {
       const keys=Object.keys(dto.facts!),f=dto.facts!;
-      const expected=dto.kind==='SKIP'?null:dto.stageKey==='modality'?'modality':dto.stageKey==='supply'?'supplyDate':null;
+      const expected=dto.kind==='SKIP'?null:dto.stageKey==='modality'?'modality':dto.stageKey==='supply'?'supplyDate':dto.stageKey==='invoices'&&keys.length?'history':null;
       if (expected ? keys.length!==1 || keys[0]!==expected : keys.length!==0) throw new BadRequestException('Informações adicionais da evidência inválidas.');
+      if(expected==='history'&&!validAclHistory(f.history,dto.documentIds!))throw new BadRequestException('Confira os 12 meses consecutivos, consumo, demanda, dias e fontes do histórico.');
       if (expected==='modality' && !['RETAIL','OWN_AGENT'].includes(f.modality as string)) throw new BadRequestException('Informe a modalidade conferida pelo Consultor.');
       if (expected==='supplyDate') {
         const value=f.supplyDate,date=typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)?new Date(value+'T00:00:00Z'):null;

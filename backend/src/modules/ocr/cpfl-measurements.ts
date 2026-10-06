@@ -36,8 +36,9 @@ export function extractCpflMeasurements(raw:any,anchor:string|null){
   const ends=head.filter(c=>/^N DIAS FAT$/.test(norm(c.content))).sort((a,b)=>a.columnIndex-b.columnIndex);
   if(!ends.length)return;
   let start=0;
-  for(const end of ends){const limit=end.columnIndex;const headings=head.filter(c=>c.columnIndex>=start&&c.columnIndex<limit);const label=headings.map(c=>norm(c.content)).join(' ');const period=classifyElectricalLine(label).period;
+  for(const end of ends){const limit=end.columnIndex;const headings=head.filter(c=>c.columnIndex>=start&&c.columnIndex<limit);const label=headings.map(c=>norm(c.content)).filter(Boolean).join(' '); let period:string=classifyElectricalLine(label).period;
    const metric=/\bCONSUMO\b/.test(label)&&/\bKWH\b/.test(label)?'CONSUMPTION':/\bDEMANDA\b/.test(label)&&/\bKW\b/.test(label)?'DEMAND':null;
+   if(metric==='DEMAND'&&/^DEMANDA KW$/.test(label))period='TOTAL';
    if(!metric||period==='UNSPECIFIED'||headings.some(c=>c.columnIndex+(c.columnSpan??1)>limit)||(end.columnSpan??1)!==1){issues.push('HISTORY_HEADERS_AMBIGUOUS');start=limit+1;continue;}
    for(const ri of rows){if(history.length>=200){issues.push('HISTORY_LIMIT_REACHED');break;}
     const segment=cells.filter(c=>c.rowIndex===ri&&c.columnIndex>=start&&c.columnIndex<limit&&str(c.content).trim()).sort((a,b)=>a.columnIndex-b.columnIndex);

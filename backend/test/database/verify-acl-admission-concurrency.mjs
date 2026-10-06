@@ -68,4 +68,19 @@ const reopen=who=>call('acl_reopen',['o1',who,'r1',false,row.id,randomUUID(),row
 results=await race([()=>reopen(actor),()=>reopen(peer)]);check(results.filter(r=>r.ok).length===1&&results.some(r=>r.code==='LOCKED'));
 check(Number(await sql("SELECT count(*) FROM acl_admissions WHERE status<>'COMPLETED'"))===1);
 const portal=await call('acl_portal',['o1',client,'client',null]);check(portal.length===1&&portal[0].status==='IN_PROGRESS'&&!portal[0].summary);
+// Reopened process: one invoice replaces twelve documents only with reviewed history.
+row=results.find(r=>r.ok).admission;
+const registrationSource=await doc('history-registration');
+row=(await work(row.id,row.revision,'registration','START')).admission;
+let ev=await evidence(row.id,row.revision,'SUBMIT',{stage:'registration',documents:[registrationSource],facts:{},kind:'COMPLETE',note});row=ev.admission;
+row=(await evidence(row.id,row.revision,'APPROVE',{evidence:ev.evidenceId,note,actor:peer})).admission;
+row=(await evidence(row.id,row.revision,'COMPLETE',{evidence:ev.evidenceId})).admission;
+const historySource=await doc('history-single','INVOICE_DISTRIBUTOR','2026-08-01');
+const historyRows=Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'100',offPeakKwh:'1000',demandKw:'250',days:30,page:2,source:'tables[0]'}));
+row=(await work(row.id,row.revision,'invoices','START')).admission;
+ev=await evidence(row.id,row.revision,'SUBMIT',{stage:'invoices',documents:[historySource],facts:{history:{sourceDocumentId:historySource,rows:historyRows}},kind:'COMPLETE',note});check(ev.ok);row=ev.admission;
+row=(await evidence(row.id,row.revision,'APPROVE',{evidence:ev.evidenceId,note,actor:peer})).admission;
+const historyRequest=randomUUID();results=await race([()=>evidence(row.id,row.revision,'COMPLETE',{evidence:ev.evidenceId,request:historyRequest}),()=>evidence(row.id,row.revision,'COMPLETE',{evidence:ev.evidenceId,request:historyRequest})]);
+check(results.every(r=>r.ok)&&results.filter(r=>r.replayed).length===1);row=results[0].admission;
+check(row.stages.find(r=>r.key==='invoices').status==='COMPLETED');
 console.log(JSON.stringify({ok:true,checks,engine:'PostgreSQL 17',isolated:true}));
