@@ -1,0 +1,4 @@
+ACL commercial preview - 2026-10-06
+Read-only seasonal supplier preview from currently approved invoice history. Prices in BRL/MWh use the shared exact tariff motor; monthly fixed fee is distinct and variable fee remains pending until a fully comparable reviewed ACR/ACL baseline exists. No zero assumptions for unknown losses/taxes, no automatic GD netting, savings, ROI or customer publication. This is a temporary preview, not a stored/approved feasibility study.
+Tests: 174 Jest tests, backend build, frontend TypeScript, 17 checklist UI checks and diff check passed. No schema or environment change.
+Remaining Phase 3: reviewed full-cost comparison, explicit investment/ROI basis, immutable scenario storage and approval. Phase 4: real provider evidence/activation remains pending external integrations.

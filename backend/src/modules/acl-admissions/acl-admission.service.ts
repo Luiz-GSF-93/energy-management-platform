@@ -1,5 +1,6 @@
 import {aclHistoryDraft,validAclHistory,aclInvoiceReferenceMonth} from './acl-invoice-history';
 import {fixedHistoryTariffs,simulateFixedHistory} from './acl-history-simulation';
+import {supplierProposal,supplierPreview} from './acl-supplier-preview';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -154,6 +155,15 @@ export class AclAdmissionService {
     const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
     try{return {evidenceId:source.evidenceId,documents:source.documents,...simulateFixedHistory(source.history,tariffs)};}catch{throw new ConflictException('Histórico aprovado indisponível; confira a fonte atual.');}
+  }
+  async supplierPreview(id:string,input:unknown,t:TenantContext){
+    const b=input as {evidenceId:string;proposal:unknown};
+    if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).sort().join(',')!=='evidenceId,proposal'||!UUID.test(b.evidenceId))throw new BadRequestException('Selecione o histórico aprovado e a proposta.');
+    let proposal;try{proposal=supplierProposal(b.proposal);}catch(e){throw new BadRequestException((e as Error).message);}
+    await this.evidenceAllowed(id,t);
+    const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
+    if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
+    try{return {evidenceId:source.evidenceId,documents:source.documents,...supplierPreview(source.history,proposal)};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
   }
   async historyPreview(id:string,document:string,t:TenantContext){
     if(!/^[A-Za-z0-9_-]{1,100}$/.test(document))throw new BadRequestException('Documento inválido.');
