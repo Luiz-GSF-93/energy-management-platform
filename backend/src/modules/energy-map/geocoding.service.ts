@@ -3,7 +3,7 @@ import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {EnergyMapService} from './energy-map.service';
-import {MapboxGeocodingProvider,GeocodeFailure,geocodeAddress} from './geocoding.provider';
+import {MapboxGeocodingProvider} from './geocoding.provider';
 import {MAP_MANAGE,mapId} from './energy-map.validation';
 
 @Injectable()
@@ -17,11 +17,7 @@ export class EnergyMapGeocodingService {
  async locate(id:string,input:unknown,t:TenantContext){await this.access(t,true);mapId(id);
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==1||typeof (input as any).addressHash!=='string'||!/^[a-f0-9]{32}$/.test((input as any).addressHash))throw new BadRequestException('Atualize o endereço da unidade.');
   if(!this.configured(t.organizationId))throw new ServiceUnavailableException('Consulta automática ainda não configurada.');
-  const claim=await this.rpc('claim_energy_map_geocoding',{p_org:t.organizationId,p_actor:t.userId,p_unit:id,p_hash:(input as any).addressHash,p_daily:10,p_monthly:100});
-  if(claim.dispatch){let candidates:any[]=[],error:string|null=null;
-   try{geocodeAddress(claim.address);candidates=await this.provider.locate(claim.address);}catch(e){error=e instanceof GeocodeFailure?e.code:'PROVIDER_UNAVAILABLE';}
-   await this.rpc('finish_energy_map_geocoding',{p_org:t.organizationId,p_actor:t.userId,p_job:claim.jobId,p_lease:claim.leaseId,p_candidates:candidates,p_error:error});
-  }
+  await this.rpc('enqueue_energy_map_geocoding',{p_org:t.organizationId,p_actor:t.userId,p_unit:id,p_hash:(input as any).addressHash,p_daily:10,p_monthly:100});
   return this.read(id,t);
  }
  async confirm(id:string,input:unknown,t:TenantContext){await this.access(t,true);mapId(id);
