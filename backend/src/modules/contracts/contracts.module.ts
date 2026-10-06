@@ -36,6 +36,6 @@ import { LicensesModule } from '../licenses/licenses.module';
   imports: [LicensesModule,ConsumerUnitsModule],
   controllers: [ClientPortalController,FinancialSettlementsController,TariffLibraryController,SpotReconciliationController,FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
   providers: [FinancialSettlementsService,TariffLibraryService,SpotReconciliationService,FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
-  exports: [ContractsService],
+  exports: [ContractsService,FinancialSettlementsService],
 })
 export class ContractsModule {}
