@@ -4,7 +4,7 @@ import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 import { validateWriteDto } from '../../common/validation/validate-write-dto';
-import { AclClosureCommandDto, AclEvidenceCommandDto, AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto } from './acl-admission.dto';
+import { AclReopenDto, AclClosureCommandDto, AclEvidenceCommandDto, AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto } from './acl-admission.dto';
 export const ACL_VIEW = '2c933fdf-0bbf-406a-915c-03e7921e54d8';
 export const ACL_MANAGE = '820dc44f-15a0-4c2a-871e-2c1d2d443d9e';
 export const ACL_APPROVE = '26cadaa7-2eea-4080-91f6-1f26f87ca809';
@@ -141,6 +141,24 @@ export class AclAdmissionService {
     if (result?.ok===false && ['CONFLICT','LOCKED','DEPENDENCIES'].includes(result.code)) throw new ConflictException(result.code==='DEPENDENCIES'?'Conclua as pré-condições da etapa antes de continuar.':'A evidência ou atividade mudou. Atualize o processo.');
     if (result?.ok!==true || result.admission?.id!==id || result.admission?.organizationId!==t.organizationId || !UUID.test(result.evidenceId)) throw new InternalServerErrorException('Registro da evidência indisponível.');
     return {admission:result.admission,evidenceId:result.evidenceId};
+  }
+  async reopen(id: string, input: unknown, t: TenantContext) {
+    const dto=await validateWriteDto(AclReopenDto,input as AclReopenDto);
+    if(dto.reason.trim().length<20) throw new BadRequestException('Justifique a reabertura.');
+    await this.evidenceAllowed(id,t,true,true);
+    const result=await this.rpc('acl_reopen',{...this.params(t),p_id:id,p_request:dto.requestId,p_revision:dto.expectedRevision,p_reason:dto.reason,p_checked:dto.checkedDocument});
+    if(result?.ok===false && ['CONFLICT','LOCKED'].includes(result.code)) throw new ConflictException('A adesão mudou ou já possui reabertura. Atualize o processo.');
+    if(result?.ok!==true || result.admission?.organizationId!==t.organizationId || result.admission?.previousId!==id || !UUID.test(result.admission?.id)) throw new InternalServerErrorException('Reabertura indisponível.');
+    return result.admission;
+  }
+  async performance(q: unknown, t: TenantContext) {
+    if(!q || typeof q!=='object' || Array.isArray(q) || Object.keys(q).some(k=>!['after','unitId'].includes(k))) throw new BadRequestException('Filtro de desempenho inválido.');
+    const filters=q as {after?:unknown;unitId?:unknown};const after=aclCursor(filters.after===undefined?{}:{after:filters.after});
+    if(filters.unitId!==undefined && (typeof filters.unitId!=='string' || !/^[A-Za-z0-9_-]{1,100}$/.test(filters.unitId))) throw new BadRequestException('Unidade inválida.');
+    await this.allowed(t);
+    if(t.accessMode!=='platform_operation' && !t.permissions?.includes('8f105b02-4443-49de-b188-847e0284e7ed')) throw new ForbiddenException('Desempenho exige acesso a documentos.');
+    await this.licenses.requireEntitlement(t.organizationId,'document_management');
+    return this.page(await this.rpc('acl_performance_read',{...this.params(t),p_after:after,p_unit:filters.unitId??null}),'id');
   }
   async closureRead(id: string, t: TenantContext) {
     await this.evidenceAllowed(id,t);

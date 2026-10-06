@@ -36,3 +36,9 @@ export class AclClosureCommandDto {
   @IsOptional() @IsString() @Length(10,1000) conclusion?: string;
   @IsOptional() @IsString() @Matches(/^[a-f0-9]{64}$/) performanceHash?: string;
 }
+export class AclReopenDto {
+  @IsUUID() requestId!: string;
+  @IsInt() @Min(1) expectedRevision!: number;
+  @IsString() @Length(20,1000) reason!: string;
+  @Equals(true) checkedDocument!: boolean;
+}

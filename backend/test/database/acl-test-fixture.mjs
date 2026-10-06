@@ -2,8 +2,8 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { randomUUID,createHash } from 'node:crypto';
-export async function aclFixture(){
- const db=new PGlite(),actor=randomUUID(),peer=randomUUID(),client=randomUUID();
+export async function aclFixture(database=null){
+ const db=database??new PGlite(),actor=randomUUID(),peer=randomUUID(),client=randomUUID();
  const perms=['2c933fdf-0bbf-406a-915c-03e7921e54d8','820dc44f-15a0-4c2a-871e-2c1d2d443d9e','26cadaa7-2eea-4080-91f6-1f26f87ca809','cbb2e904-0718-4eec-9396-dba899118cdd','8f105b02-4443-49de-b188-847e0284e7ed'];
  await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
  CREATE TABLE permissions(id uuid PRIMARY KEY,code text UNIQUE,name text,module text,resource text,action text);

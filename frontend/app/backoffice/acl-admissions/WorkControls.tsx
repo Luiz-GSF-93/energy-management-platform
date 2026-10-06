@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, apiRequest } from '@/app/lib/api/client';
 import { Alert, Button } from '@/app/components/ui';
-export type WorkDetail={id:string;status:string;revision:number;stages:{key:string;status:string;elapsedMs:number;active?:{actorId:string;actorName:string;startedAt:number}}[]};
+export type WorkDetail={id:string;status:string;revision:number;generation?:number;previousId?:string;stages:{key:string;status:string;elapsedMs:number;active?:{actorId:string;actorName:string;startedAt:number}}[]};
 type WorkBody={requestId:string;expectedRevision:number;stageKey:string;action:'START'|'PAUSE'|'RESUME';pauseReason?:string;reason?:string};
 const names:Record<string,string>={registration:'Cadastro',invoices:'Faturas',feasibility:'Viabilidade',modality:'Modalidade',contracts:'Contratação',termination:'Denúncia',metering:'Medição',custody:'Conta e adesão',technical:'Habilitação técnica','contract-registration':'Registro de contratos',validation:'Validação',supply:'Início do suprimento'};
 const states:Record<string,string>={NOT_STARTED:'Não iniciada',RUNNING:'Em atividade',PAUSED:'Pausada',COMPLETED:'Concluída',SKIPPED:'Dispensada'};

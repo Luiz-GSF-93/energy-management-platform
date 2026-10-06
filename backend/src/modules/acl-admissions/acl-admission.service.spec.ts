@@ -14,6 +14,21 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('authorizes reopening and rejects body-supplied history, scope and approvals',async()=>{
+  const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:5,reason:'Correção revisada pelo Consultor responsável.',checkedDocument:true};
+  for(const extra of [{generation:2},{previousId:id},{organizationId:'o2'},{checkedDocument:false},{state:{}}])await expect(h.service.reopen(id,{...body,...extra},tenant)).rejects.toThrow();
+  const t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  await expect(h.service.reopen(id,body,{...t,role:'operacional'})).rejects.toThrow('aprovação');
+  h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,admission:{id:randomUUID(),previousId:id,organizationId:'o1'}}});
+  expect((await h.service.reopen(id,body,t)).previousId).toBe(id);expect(h.rpc).toHaveBeenLastCalledWith('acl_reopen',expect.objectContaining({p_org:'o1',p_id:id,p_reason:body.reason,p_actor:t.userId}));
+ });
+ it('restricts performance queries to authorized context and bounds its filters',async()=>{
+  const h=harness(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  for(const q of [{organizationId:'o2'},{actorId:'other'},{unitId:['u1']},{after:'bad'}])await expect(h.service.performance(q,t)).rejects.toThrow();
+  await expect(h.service.performance({},tenant)).rejects.toThrow('documentos');await expect(h.service.performance({}, {...t,role:'consulta'})).rejects.toThrow('backoffice');
+  await h.service.performance({unitId:'u1'},t);expect(h.rpc).toHaveBeenLastCalledWith('acl_performance_read',expect.objectContaining({p_org:'o1',p_unit:'u1',p_after:null}));
+  expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','document_management');
+ });
  it('requires approval and explicit closure review and rejects spoofed publication data',async()=>{
   const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:5,action:'CLOSE',checkedDocument:true};
   for(const invalid of [{checkedDocument:false},{modality:'RETAIL'},{supplyDate:'2026-12-01'},{state:{status:'COMPLETED'}},{performanceHash:'a'.repeat(64)}])await expect(h.service.closureCommand(id,{...body,...invalid},tenant)).rejects.toThrow();
