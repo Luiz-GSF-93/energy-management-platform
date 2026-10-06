@@ -9,6 +9,7 @@ import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
 import {MapResponse,MapUnit,located,locationLabels,precisionLabels} from './map-data';
 import styles from './map.module.css';
+import TerritorySummary from './TerritorySummary';
 import PlatformEnergyMap from './PlatformEnergyMap';
 import GeocodingReview from './GeocodingReview';
 const Canvas=dynamic(()=>import('./MapCanvas'),{ssr:false,loading:()=> <div className={styles.mapFrame}><div className={styles.mapNotice}>Preparando mapa…</div></div>});
@@ -59,6 +60,7 @@ function EnergyMap({organizationId}:{organizationId:string}) {
     <select aria-label="Localização" value={filters.location} onChange={e=>filter('location',e.target.value)}><option value="">Todas as localizações</option>{Object.entries(locationLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
     <select aria-label="Status da unidade" value={filters.status} onChange={e=>filter('status',e.target.value)}><option value="">Todos os status</option>{Object.entries({ACTIVE:'Ativa',INACTIVE:'Inativa',MIGRATED:'Migrada',CHURN:'Encerrada',SEASONAL:'Sazonal'}).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
    </div>
+   {data&&!loading?<TerritorySummary rows={data.rows} organizationId={organizationId} onState={state=>filter('state',state)}/>:null}
    <div className={styles.workspace}>
     <div className={styles.mapColumn}><div className={styles.toolbar}><span><span className={styles.blueDot}/> ACL <span className={styles.liveDot}/> ACR <span className={styles.grayDot}/> Não informado</span><button type="button" onClick={()=>setShowMap(v=>!v)}>{showMap?'Usar somente lista':'Mostrar mapa'}</button></div>
      {showMap&&data?<Canvas rows={data.rows} organizationId={organizationId} selected={selected} onSelect={id=>setSelected(data.rows.find(u=>u.id===id)??null)}/>:null}
