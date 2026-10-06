@@ -8,7 +8,7 @@ export function supplierCostMemory(ledger:CostLedger):SupplierCostMemory{
  const result:SupplierCostMemory={formulaVersion:'supplier-invoice-1.0',version:ledger.version,status:'BLOCKED',costs:null,credits:null,balance:null,baseInvoice:null,extraPurchases:null,entries:[],blockers:[...subtotal.blockers],warnings:[
   'Custo efetivo informado conforme faturas conferidas e validadas. Não deriva do volume contratual, preço de referência ou consumo medido.',
   'Saldo fornecedor = faturas regulares + compras extras − créditos. Compras extras devem ser lançadas somente quando não estiverem incluídas na fatura regular.',
-  'Registre a identificação do documento e a justificativa de rateio por unidade na fonte. A conferência humana deve evitar documentos duplicados; não há conciliação automática nesta etapa.',
+  'Registre a identificação do documento e a justificativa de rateio por unidade na fonte. A conferência pelo Expert deve evitar documentos duplicados; não há conciliação automática nesta etapa.',
   'Tributos excluídos impedem o saldo final. Não calcula diferenças contratuais, penalidades, exposição CCEE ou economia.'
  ]};
  if(!entries.some(e=>e.category==='SUPPLIER_INVOICE'&&e.effect==='COST'))result.blockers.push('Registre e valide a fatura regular do fornecedor. Compra extra isolada não comprova o custo completo do fornecedor.');

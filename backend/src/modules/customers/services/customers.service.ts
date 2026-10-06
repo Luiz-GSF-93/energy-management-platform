@@ -1,3 +1,4 @@
+import {customerContacts} from './customer-contacts';
 import {searchRegistrations} from '../../../common/registration-search';
 import {editEnvelope,saveRegistration,registrationHistory} from '../../../common/registration-edit';
 import { Injectable, BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
@@ -54,6 +55,7 @@ export class CustomersService {
     createCustomerDto = await validateWriteDto(CreateCustomerDto, createCustomerDto);
     if(!validTaxId(createCustomerDto.document))throw new BadRequestException('CPF ou CNPJ inválido. Confira os dígitos verificadores.');
     createCustomerDto.document=normalizeTaxId(createCustomerDto.document);
+    if(createCustomerDto.report_contacts!==undefined)createCustomerDto.report_contacts=customerContacts(createCustomerDto.report_contacts);
     const { data, error } = await this.supabaseService
       .getClient()
       .from('customers')
@@ -73,13 +75,14 @@ export class CustomersService {
   }
   async update(id:string,organizationId:string,input:any,actor:string){
     const body=editEnvelope(input,actor),changes={...body.changes};
-    const allowed=["company_name","trade_name","document","contact_name","contact_email","contact_phone","economic_group","status","exclusive_user_ids"];
+    const allowed=["company_name","trade_name","document","contact_name","contact_email","contact_phone","economic_group","status","exclusive_user_ids","report_contacts"];
     if(Object.keys(changes).some(k=>!allowed.includes(k)))throw new BadRequestException('Campo não editável.');
     for(const [key,value] of Object.entries(changes)){
-      if(key==='exclusive_user_ids')continue;
+      if(key==='exclusive_user_ids'||key==='report_contacts')continue;
       if(value!==null&&(typeof value!=='string'||value.length>(key==='contact_phone'?20:255)))throw new BadRequestException('Campo inválido: '+key);
       if(typeof value==='string')changes[key]=value.trim();
     }
+    if('report_contacts' in changes)changes.report_contacts=customerContacts(changes.report_contacts);
     if('company_name' in changes&&!changes.company_name)throw new BadRequestException('Razão social obrigatória.');
     if('document' in changes){if(typeof changes.document!=='string'||!validTaxId(changes.document))throw new BadRequestException('CPF ou CNPJ inválido.');changes.document=normalizeTaxId(changes.document);}
     if('contact_email' in changes&&changes.contact_email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(changes.contact_email))throw new BadRequestException('E-mail inválido.');

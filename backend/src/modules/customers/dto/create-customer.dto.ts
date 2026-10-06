@@ -1,6 +1,10 @@
-import { IsString, IsEmail, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsUUID, IsArray } from 'class-validator';
 
 export class CreateCustomerDto {
+  @IsOptional()
+  @IsArray()
+  report_contacts?: unknown[];
+
   @IsString()
   company_name!: string;
 

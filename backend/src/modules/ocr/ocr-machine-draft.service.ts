@@ -21,6 +21,6 @@ export class OcrMachineDraftService {
   if(!fields.length)return {state:'NO_FIELDS',count:0,message:'Sem novos campos comprovados para preencher.'};
   const {data,error}=await this.db.getClient().rpc('save_bot_energy_ocr_draft',{p_organization:t.organizationId,p_actor:t.userId,p_document:plan.documentId,p_basis:plan.basis,p_fields:fields});
   if(error||data!==true)throw new ServiceUnavailableException('Não foi possível salvar o preenchimento automático. Atualize para conferir os registros.');
-  return {state:'FILLED_DRAFT',count:fields.length,message:'Campos preenchidos e salvos em rascunho. Dúvidas permanecem destacadas junto aos valores; confirmação humana e aprovação financeira seguem identificadas.'};
+  return {state:'FILLED_DRAFT',count:fields.length,message:'Campos preenchidos e salvos em rascunho. Dúvidas permanecem destacadas junto aos valores; confirmação pelo Expert e aprovação financeira seguem identificadas.'};
  }
 }
