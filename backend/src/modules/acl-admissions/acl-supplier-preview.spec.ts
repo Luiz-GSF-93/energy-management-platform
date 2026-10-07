@@ -18,4 +18,23 @@ describe('Supplier seasonal preview',()=>{
  it('included/excluded tax and loss declarations change pending items without inventing uplifts',()=>{const a=supplierPreview(history(),{...proposal(),losses:'EXCLUDED',taxes:'INCLUDED'});expect(a.pending.join(' ')).toContain('Quantificar perdas');expect(a.pending.join(' ')).not.toContain('Confirmar se tributos');expect(a.energySubtotal).toBe('2657.16');expect(a.partial).toBe(true);});
  it.each([{checked:false},{months:13},{months:1.5},{months:0},{startMonth:'2026-13'},{supplier:''},{source:'curta'},{energyBrlMwh:'1e3'},{energyBrlMwh:220},{fixedMonthlyBrl:'990,00'},{savingsPercent:'100.1'},{losses:'0'},{taxes:null},{organizationId:'foreign'},{savings:'1000'}])('rejects invalid, unreviewed or forged parameters %s',change=>expect(()=>supplierProposal({...proposal(),...change})).toThrow());
  it('rejects incomplete and forged histories',()=>{const h=history();h.rows.pop();expect(()=>supplierPreview(h,proposal())).toThrow();const other=history();Object.assign(other.rows[0],{cost:'10'});expect(()=>supplierPreview(other,proposal())).toThrow();});
+ it('prices explicit 2.5% losses and 18% ICMS inside exactly, without changing TUSD or extra charges',()=>{
+  const d={peakBrlKwh:'1',offPeakBrlKwh:'0.1',demandBrlKw:'10',discountPercent:'50',source:'Tarifas-base já tributadas, sem desconto.',checked:true};
+  const basis={baseBrlMwh:'220',lossPercent:'2.5',icmsPercent:'18',method:'LOSS_UPLIFT_ICMS_INSIDE',checked:true};
+  const r=supplierPreview(history(),{...proposal(),energyBrlMwh:'275',losses:'INCLUDED',taxes:'INCLUDED',distribution:d,energyBasis:basis});
+  const old=supplierPreview(history(),{...proposal(),energyBrlMwh:'275',losses:'INCLUDED',taxes:'INCLUDED',distribution:d});
+  expect(r.formulaVersion).toBe('acl-supplier-preview/3');expect(r.rows[0].energy).toBe('275.83');expect(r.energySubtotal).toBe(old.energySubtotal);expect(r.rows[0].tusd).toEqual(old.rows[0].tusd);expect(r.estimatedAdditionalSubtotal).toBe('4200.00');expect(r.proposal.energyBasis).toEqual(basis);expect(r.savings).toBeNull();
+ });
+ it('rounds the rational monthly energy line only once even when the effective tariff repeats',()=>{
+  const h=history();h.rows.forEach(v=>{v.peakKwh='0';v.offPeakKwh='500051';});
+  const r=supplierPreview(h,{...proposal(),energyBrlMwh:'0.000009999',losses:'INCLUDED',taxes:'INCLUDED',energyBasis:{baseBrlMwh:'0.000009199',lossPercent:'0',icmsPercent:'8',method:'LOSS_UPLIFT_ICMS_INSIDE',checked:true}});
+  // Rounded effective rate would produce 0.005 -> 0.01; exact fraction stays below 0.005.
+  expect(r.rows[0].energy).toBe('0.00');expect(r.rows[0].exactEnergy).toBeNull();expect(r.rows[0]).toHaveProperty('energyRational');
+ });
+ it.each([{icmsPercent:'100'},{icmsPercent:'-18'},{lossPercent:'101'},{lossPercent:2.5},{method:'ICMS_OUTSIDE'},{checked:false},{baseBrlMwh:'1e3'},{extra:'forged'}])('rejects invalid structured energy premises %s',change=>expect(()=>supplierProposal({...proposal(),energyBrlMwh:'275',losses:'INCLUDED',taxes:'INCLUDED',energyBasis:{baseBrlMwh:'220',lossPercent:'2.5',icmsPercent:'18',method:'LOSS_UPLIFT_ICMS_INSIDE',checked:true,...change}})).toThrow());
+ it('rejects forged effective prices and ambiguous included/excluded declarations',()=>{
+  const b={baseBrlMwh:'220',lossPercent:'2.5',icmsPercent:'18',method:'LOSS_UPLIFT_ICMS_INSIDE',checked:true};
+  for(const change of [{energyBrlMwh:'220'},{losses:'EXCLUDED'},{taxes:'PENDING'}])expect(()=>supplierProposal({...proposal(),energyBrlMwh:'275',losses:'INCLUDED',taxes:'INCLUDED',energyBasis:b,...change})).toThrow();
+  expect(()=>supplierProposal({...proposal(),energyBasis:null})).toThrow();
+ });
 });
