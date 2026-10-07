@@ -7,5 +7,6 @@ import {LicensesModule} from '../licenses/licenses.module';
 import {ReportPolicyController} from './report-policy.controller';
 import {ReportPolicyService} from './report-policy.service';
 import {ReportPreparationWorker} from './report-preparation.worker';
-@Module({imports:[ContractsModule,LicensesModule],controllers:[ReportsController,ReportPolicyController],providers:[ReportsService,ReportPolicyService,ReportPreparationWorker,SupabaseService],exports:[ReportsService]})
+import {ReportDeliveryWorker} from './report-delivery.worker';
+@Module({imports:[ContractsModule,LicensesModule],controllers:[ReportsController,ReportPolicyController],providers:[ReportsService,ReportPolicyService,ReportPreparationWorker,ReportDeliveryWorker,SupabaseService],exports:[ReportsService]})
 export class ReportsModule {}
