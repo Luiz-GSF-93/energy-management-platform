@@ -6,7 +6,7 @@ resultados com o motor decimal atual, o histórico aprovado e o endereço OCR j�
 autorizado. Não aceita resultados, tenant, cliente ou unidade do navegador.
 
 Versões imutáveis acl-economic-study/1 preservam histórico, documento/hash/versão,
-fórmula acl-supplier-preview/2, premissas, memória mensal, estimativas e pendências.
+fórmula acl-supplier-preview/2 (preço informado) ou /3 (premissas estruturadas), memória mensal, estimativas e pendências.
 Hash SHA-256 do texto JSONB UTF-8. Fonte revalidada sob bloqueio no commit.
 SAVE exige Viabilidade RUNNING pelo autor. REVIEW/REJECT exige aprovador distinto
 do autor, fonte vigente para REVIEW, hash conferido e parecer explícito.
@@ -19,7 +19,7 @@ para service_role. Gateways revalidam vínculo, RBAC, licenças, organização,
 cliente/unidade e acesso documental. Nenhum estudo vai à projeção do portal.
 Nenhuma alteração automática de classificação, contrato, suprimento ou etapa.
 
-Permanecem pendentes para o piloto: proposta/documentação e perdas/tributos,
+Permanecem pendentes para o piloto: proposta/documentação e escopo dos demais tributos,
 demanda faturável, GD/créditos, encargos/CCEE, custos de migração, comparativo
 completo ACR/ACL, investimento/metodologia para ROI/payback. Valores desconhecidos
 ficam null, não zero. Fonte TUSD e custo adicional são premissas, não direitos
@@ -33,3 +33,24 @@ dependem da habilitação e validação dos provedores e evidências reais.
 Validação: 51 verificações SQL em PGlite descartável; 128 Jest; backend build;
 frontend TypeScript; 16 verificações de UI de estudos, 21 de rotas e 36 SQL de
 fechamento/checklists. Nenhum dado sintético é criado na produção.
+
+Premissas estruturadas de energia — 2026-10-06
+energyBasis opcional: baseBrlMwh, lossPercent, icmsPercent,
+method=LOSS_UPLIFT_ICMS_INSIDE e checked=true. Sem esse campo, o motor /2 e suas
+versões anteriores preservam a semântica de preço informado. Não se infere uma
+base retrospectivamente a partir do texto da fonte de versões antigas.
+
+Com energyBasis, o motor /3 usa a fração preço-base × (1 + perdas/100) /
+(1 − ICMS/100). O preço efetivo exibido tem 9 casas; cada linha mensal usa a
+fração exata e arredonda HALF_UP apenas em centavos. Numerador/denominador são
+preservados na memória mensal. Zero exige declaração explícita; ICMS 100%,
+valores fora de limite e preço efetivo divergente são recusados. As declarações
+losses/taxes INCLUDED referem-se às parcelas explicitamente calculadas.
+
+A opção de formulário começa desligada; ao ativar, 2,5%/18% são premissas
+editáveis a conferir, não regras universais nem benefício tributário validado.
+TUSD, fora ponta integral, desconto ponta/demanda, custo adicional e honorários
+não recebem esses percentuais. Outros tributos e custos devem constar no escopo
+da fonte; não se conclui que todos os custos estejam cobertos pelo ICMS.
+Migração additive 20261006_acl_energy_basis.sql substitui apenas o gateway,
+preservando permissões, hashes e conteúdo de versões já registradas.
