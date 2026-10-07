@@ -1,0 +1,25 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLTextAreaElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+require.extensions['.css']=m=>m.exports={};
+let calls=[],fail=false,updated=null;const detail={id:'process',revision:12,status:'IN_PROGRESS',stages:[{key:'feasibility',status:'RUNNING',active:{actorId:'author'}}]};
+const result={formulaVersion:'acl-supplier-preview/2',energySubtotal:'100.00',knownComponentsSubtotal:null,pending:['Comparativo completo pendente'],warnings:['Demanda medida é estimativa'],location:{label:'Sudeste/Centro-Oeste',address:'Endereço sintético'},rows:[{month:'2026-11',sourceMonth:'2025-11',referenceKwh:'100',measuredDemandKw:'20',energy:'22.00',knownComponentsSubtotal:null}],proposal:{supplier:'Fornecedor sintético',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990.00',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350.00',losses:'PENDING',taxes:'PENDING',source:'Premissas internas para teste.',distribution:null}};
+const study={id:'study',version:1,hash:'a'.repeat(64),createdBy:'author',actorName:'Consultor autor',createdAt:'2026-10-06T12:00:00Z',review:null,body:{source:{evidenceId:'evidence',documents:[{id:'doc',fileHash:'b'.repeat(64),version:1}]},result}};
+const api=async(p,o)=>{calls.push([p,o]);if(o?.method==='POST'){if(fail)throw Error('Network interruption');return {admission:{...detail,revision:13},studyId:'study'};}if(p.endsWith('/simulations'))return {rows:[study],nextCursor:null};return detail;};
+const original=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:api,ApiError:class extends Error{}};if(n==='@/app/components/ui')return {Button:({children,variant,...props})=>React.createElement('button',props,children),Alert:({children})=>React.createElement('p',{role:'alert'},children)};return original.call(this,n,p,m);};
+const Versions=require('../app/backoffice/acl-admissions/StudyVersions.tsx').default,Preview=require('../app/backoffice/acl-admissions/SupplierPreview.tsx').default;
+const root=createRoot(document.getElementById('root'));let checks=0;const ok=v=>{assert.ok(v);checks++;},button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text);
+const render=(actorId='reviewer',canApprove=true,d=detail)=>root.render(React.createElement(Versions,{detail:d,actorId,canApprove,onUpdated:v=>updated=v}));
+(async()=>{try{
+ await act(async()=>render('author'));ok(!button('Conferir versão 1'));ok(document.body.textContent.includes('Economia, custo ACL completo, honorário variável, ROI e payback: pendentes.'));ok(document.body.textContent.includes(study.hash));
+ await act(async()=>render('reviewer',false));ok(!button('Conferir versão 1'));
+ await act(async()=>render('reviewer',true,{...detail,stages:[{key:'feasibility',status:'PAUSED'}]}));ok(!button('Conferir versão 1'));
+ await act(async()=>render());await act(async()=>button('Conferir versão 1').click());ok(button('Confirmar revisão das premissas').disabled);
+ await act(async()=>{const ta=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(ta,'Conferi as premissas e todas as pendências desta versão.');ta.dispatchEvent(new Event('input',{bubbles:true}));});await act(async()=>document.querySelector('input[type=checkbox]').click());ok(!button('Confirmar revisão das premissas').disabled);
+ fail=true;await act(async()=>button('Confirmar revisão das premissas').click());ok(button('Repetir a mesma revisão'));ok(document.querySelector('textarea').matches(':disabled'));const first=calls.filter(([,o])=>o?.method==='POST').at(-1)[1].body;
+ fail=false;await act(async()=>button('Repetir a mesma revisão').click());const second=calls.filter(([,o])=>o?.method==='POST').at(-1)[1].body;ok(JSON.stringify(first)===JSON.stringify(second));ok(first.action==='REVIEW'&&first.hash===study.hash&&first.expectedRevision===12&&!('organizationId' in first));ok(updated.revision===13);ok(!document.querySelector('textarea'));
+ await act(async()=>root.render(React.createElement(Preview,{admissionId:'process',evidenceId:'evidence',detail,canSave:false,onUpdated:()=>{}})));ok(document.body.textContent.includes('prévia parcial'));ok(!button('Registrar versão do estudo parcial'));ok(document.querySelector('input[type=number][min="50"]').value==='50');
+ console.log(checks+' ACL economic study UI checks passed');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

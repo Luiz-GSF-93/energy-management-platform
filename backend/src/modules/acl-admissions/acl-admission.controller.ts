@@ -21,6 +21,9 @@ export class AclAdmissionController {
   @Get(':id/history-preview/:document') @Header('Cache-Control','private, no-store') historyPreview(@Param('id') id:string,@Param('document') document:string,@Tenant() t:TenantContext){return this.service.historyPreview(id,document,t);}
   @Post(':id/history-simulation') @Header('Cache-Control','private, no-store') historySimulation(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.historySimulation(id,b,t);}
   @Post(':id/supplier-preview') @Header('Cache-Control','private, no-store') supplierPreview(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.supplierPreview(id,b,t);}
+  @Get(':id/simulations') @Header('Cache-Control','private, no-store') studies(@Param('id') id:string,@Query() q:unknown,@Tenant() t:TenantContext){return this.service.studies(id,q,t);}
+  @Post(':id/simulations') @Header('Cache-Control','private, no-store') saveStudy(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.saveStudy(id,b,t);}
+  @Post(':id/simulations/review') @Header('Cache-Control','private, no-store') reviewStudy(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.reviewStudy(id,b,t);}
   @Post(':id/evidence') @Header('Cache-Control', 'private, no-store') evidenceCommand(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.evidenceCommand(id,b,t); }
   @Get(':id/closure') @Header('Cache-Control', 'private, no-store') closure(@Param('id') id: string, @Tenant() t: TenantContext) { return this.service.closureRead(id,t); }
   @Post(':id/closure') @Header('Cache-Control', 'private, no-store') closureCommand(@Param('id') id: string, @Body() b: unknown, @Tenant() t: TenantContext) { return this.service.closureCommand(id,b,t); }

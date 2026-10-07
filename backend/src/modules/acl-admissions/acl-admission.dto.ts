@@ -16,6 +16,22 @@ export class AclWorkCommandDto {
 export class AclHeartbeatDto {
   @IsIn(stages) stageKey!: string;
 }
+export class AclStudySaveDto {
+ @IsUUID() requestId!: string;
+ @IsInt() @Min(1) expectedRevision!: number;
+ @IsUUID() evidenceId!: string;
+ @IsObject() proposal!: Record<string,unknown>;
+ @Equals(true) checkedDocument!: boolean;
+}
+export class AclStudyReviewDto {
+ @IsUUID() requestId!: string;
+ @IsInt() @Min(1) expectedRevision!: number;
+ @IsUUID() studyId!: string;
+ @IsIn(['REVIEW','REJECT']) action!: string;
+ @IsString() @Matches(/^[a-f0-9]{64}$/) hash!: string;
+ @IsString() @Length(20,1000) reason!: string;
+ @Equals(true) checkedDocument!: boolean;
+}
 export class AclEvidenceCommandDto {
   @IsUUID() requestId!: string;
   @IsInt() @Min(1) expectedRevision!: number;

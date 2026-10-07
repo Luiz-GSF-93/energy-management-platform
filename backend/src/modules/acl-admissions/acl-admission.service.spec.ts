@@ -14,6 +14,27 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('stores only server-generated economic snapshots and bounds write fields',async()=>{
+  const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const proposal={supplier:'Fornecedor teste',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350',distribution:null,losses:'PENDING',taxes:'PENDING',source:'Fonte da proposta para simulação interna.',checked:true};
+  const body={requestId:randomUUID(),expectedRevision:11,evidenceId,proposal,checkedDocument:true};
+  const result={evidenceId,documents:[],formulaVersion:'acl-supplier-preview/2',partial:true,savings:null,warnings:[]};
+  jest.spyOn(h.service,'supplierPreview').mockResolvedValue(result as any);
+  h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:name==='acl_history_simulation_source'?{evidenceId,history:{},documents:[]}:{ok:true,studyId:randomUUID(),admission:{id,organizationId:'o1'}}}));
+  for(const extra of [{result:{savings:'100'}},{organizationId:'o2'},{body:{}},{checkedDocument:false},{expectedRevision:0}])await expect(h.service.saveStudy(id,{...body,...extra},t)).rejects.toThrow();
+  await expect(h.service.saveStudy(id,body,tenant)).rejects.toThrow('documentos');
+  const saved=await h.service.saveStudy(id,body,t);expect(saved.admission.id).toBe(id);
+  expect(h.rpc).toHaveBeenLastCalledWith('acl_economic_study_command',expect.objectContaining({p_org:'o1',p_actor:t.userId,p_id:id,p_revision:11,p_action:'SAVE',p_snapshot:{schemaVersion:'acl-economic-study/1',source:{evidenceId,history:{},documents:[]},result}}));
+ });
+ it('requires scoped independent-premise review and refuses economic approval actions',async()=>{
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']},body={requestId:randomUUID(),expectedRevision:12,studyId:randomUUID(),action:'REVIEW',hash:'a'.repeat(64),reason:'Premissas e pendências conferidas nesta versão.',checkedDocument:true};
+  await expect(h.service.reviewStudy(id,body,{...t,role:'operacional'})).rejects.toThrow('aprovação');
+  for(const extra of [{action:'APPROVE'},{action:'PUBLISH'},{hash:'bad'},{checkedDocument:false},{reason:'short'},{snapshot:{}},{organizationId:'o2'}])await expect(h.service.reviewStudy(id,{...body,...extra},t)).rejects.toThrow();
+  h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{ok:true,studyId:body.studyId,admission:{id,organizationId:'o1'}}}));
+  await h.service.reviewStudy(id,body,t);expect(h.rpc).toHaveBeenLastCalledWith('acl_economic_study_command',expect.objectContaining({p_action:'REVIEW',p_hash:body.hash,p_study:body.studyId,p_org:'o1'}));
+  h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{ok:false,code:'CONFLICT'}}));await expect(h.service.reviewStudy(id,body,t)).rejects.toThrow('mudou');
+  for(const q of [{organizationId:'o2'},{after:'bad'},{version:1}])await expect(h.service.studies(id,q,t)).rejects.toThrow();
+ });
  it('previews supplier terms only against a currently authorized and approved server history',async()=>{
   const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
   const history={sourceDocumentId:'invoice',rows:Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'10',offPeakKwh:'100',demandKw:'200',days:30,page:2,source:'table'}))};

@@ -9,7 +9,7 @@ import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
 import { validateWriteDto } from '../../common/validation/validate-write-dto';
-import { AclReopenDto, AclClosureCommandDto, AclEvidenceCommandDto, AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto, AclRequestDto } from './acl-admission.dto';
+import { AclStudySaveDto, AclStudyReviewDto, AclReopenDto, AclClosureCommandDto, AclEvidenceCommandDto, AclHeartbeatDto, AclWorkCommandDto, CreateAclAdmissionDto, AclRequestDto } from './acl-admission.dto';
 export const ACL_VIEW = '2c933fdf-0bbf-406a-915c-03e7921e54d8';
 export const ACL_MANAGE = '820dc44f-15a0-4c2a-871e-2c1d2d443d9e';
 export const ACL_APPROVE = '26cadaa7-2eea-4080-91f6-1f26f87ca809';
@@ -166,6 +166,30 @@ export class AclAdmissionService {
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
     const location=await this.invoiceLocation(id,source.history.sourceDocumentId,source.documents,t);
     try{return {evidenceId:source.evidenceId,documents:source.documents,location,...supplierPreview(source.history,proposal)};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
+  }
+  async studies(id:string,q:unknown,t:TenantContext){
+    const after=aclCursor(q);await this.evidenceAllowed(id,t);
+    return this.page(await this.rpc('acl_economic_study_read',{...this.params(t),p_id:id,p_after:after}),'id');
+  }
+  async saveStudy(id:string,input:unknown,t:TenantContext){
+    const d=await validateWriteDto(AclStudySaveDto,input as AclStudySaveDto);
+    await this.evidenceAllowed(id,t,true);
+    // The browser sends premises only. All results and source proofs are generated here.
+    const result=await this.supplierPreview(id,{evidenceId:d.evidenceId,proposal:d.proposal},t);
+    const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:d.evidenceId});
+    const snapshot={schemaVersion:'acl-economic-study/1',source,result:{...result,warnings:result.warnings.map(w=>w.startsWith('Prévia interna sem persistência')?'Versão interna imutável de um estudo parcial. A revisão confirma apenas premissas; não publica no portal, contrata, altera apurações ou confirma o início do suprimento.':w)}};
+    return this.studyResult(await this.rpc('acl_economic_study_command',{...this.params(t),p_id:id,p_request:d.requestId,p_revision:d.expectedRevision,p_action:'SAVE',p_checked:d.checkedDocument,p_snapshot:snapshot}),id,t);
+  }
+  async reviewStudy(id:string,input:unknown,t:TenantContext){
+    const d=await validateWriteDto(AclStudyReviewDto,input as AclStudyReviewDto);
+    if(d.reason.trim().length<20)throw new BadRequestException('Justifique a revisão das premissas.');
+    await this.evidenceAllowed(id,t,true,true);
+    return this.studyResult(await this.rpc('acl_economic_study_command',{...this.params(t),p_id:id,p_request:d.requestId,p_revision:d.expectedRevision,p_action:d.action,p_checked:d.checkedDocument,p_study:d.studyId,p_reason:d.reason,p_hash:d.hash}),id,t);
+  }
+  private studyResult(result:any,id:string,t:TenantContext){
+    if(result?.ok===false&&['CONFLICT','LOCKED'].includes(result.code))throw new ConflictException('O cenário ou a atividade mudou. Atualize o processo e confira a viabilidade em andamento.');
+    if(result?.ok!==true||result.admission?.id!==id||result.admission?.organizationId!==t.organizationId||!UUID.test(result.studyId))throw new InternalServerErrorException('Versão do estudo indisponível.');
+    return {admission:result.admission,studyId:result.studyId};
   }
   private async invoiceLocation(id:string,document:string,sources:any[],t:TenantContext){
     const source=Array.isArray(sources)?sources.find(v=>v.id===document):null;
