@@ -1,7 +1,7 @@
 import {feeCents,feeMoney} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import type {CpflOperation} from '../ocr/cpfl-paulista-layout';
-const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\b(TE|TUSD)(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\d{2,4}\b/g,'$1').trim();
 const off=(s:string)=>/\b(?:FPONTA|F PONTA|FORA PONTA|FORA DE PONTA)\b/.test(norm(s));
 export const decimal=(v:unknown):bigint=>{if(typeof v!=='string'||!/^(0|[1-9][0-9]{0,11})(\.[0-9]{1,9})?$/.test(v))throw Error('Quantidade ou preço indisponível.');const [a,b='']=v.split('.');return BigInt(a)*1000000000n+BigInt(b.padEnd(9,'0'));};
 export const quantity=(v:bigint)=>{const s=v.toString().padStart(10,'0');return s.slice(0,-9)+'.'+s.slice(-9);};
@@ -11,12 +11,14 @@ export type EnergyReference={state:'AVAILABLE'|'BLOCKED';month:string|null;peak?
 /** Only energy TE and its own GD credit. TUSD, bands, fees and demand are excluded. */
 export function energyReference(operations:CpflOperation[],month:string|null):EnergyReference{
  const blocked=(reason:string):EnergyReference=>({state:'BLOCKED',month,reason});
- const te=operations.filter(o=>o.component==='TE'&&o.role==='CHARGE');
+ const injected=(o:CpflOperation)=>/^ENERGIA (?:ATV|ATIVA) (?:INJ|INJETADA)\b/.test(norm(o.fields.description?.text??''));
+ const te=operations.filter(o=>o.component==='TE'&&o.role==='CHARGE'&&!injected(o));
  const peak=te.filter(o=>o.period==='PEAK'),outside=te.filter(o=>o.period==='OFF_PEAK'||off(o.fields.description?.text??''));
- const gd=operations.filter(o=>o.role==='CREDIT'&&/^ENERGIA (?:ATV|ATIVA) (?:INJ|INJETADA)\b/.test(norm(o.fields.description?.text??''))&&/\bTE\b/.test(norm(o.fields.description?.text??'')));
+ const gd=operations.filter(o=>injected(o)&&/\bTE\b/.test(norm(o.fields.description?.text??'')));
  if(!month||peak.length!==1||outside.length!==1||gd.length>1)return blocked('Fonte TE ponta/fora ponta ou crédito GD ambígua.');
  try{const line=(o:CpflOperation):Line=>{const f=o.fields,a=f.amount?.decimal,q=f.quantity?.decimal,g=f.grossRate?.decimal;
  if(!a||!q||!g||[f.description,f.unit,f.amount,f.quantity,f.grossRate].some(v=>!v?.pages.length||!v.spans.length||v.issues.some(i=>!['MISSING_CONFIDENCE','CONFIDENCE_REQUIRES_REVIEW'].includes(i)))||o.issues.some(i=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN'].includes(i))||f.unit?.text.trim().toLowerCase()!=='kwh'||!f.amount?.pages.length)throw Error('Linha TE não conciliada.');
+ if(injected(o)?!a.startsWith('-'):a.startsWith('-'))throw Error('Sinal de crédito/débito TE inválido.');
  const abs=a.startsWith('-')?a.slice(1):a,delta=feeCents(tariffProduct(q,g).rounded)-feeCents(abs);if(delta>1n||delta< -1n)throw Error('Valor TE não concilia com quantidade e tarifa.');
  const n=f.aneelRate?.pages.length&&f.aneelRate.spans.length&&!f.aneelRate.issues.some(i=>!['MISSING_CONFIDENCE','CONFIDENCE_REQUIRES_REVIEW'].includes(i))?f.aneelRate.decimal:null;if(n&&decimal(n)>decimal(g))throw Error('Tarifa sem tributos maior que tarifa final.');
  return {amount:abs,quantity:q,grossRate:g,netRate:n,source:o.source,pages:f.amount.pages};};
