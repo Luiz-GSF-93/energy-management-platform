@@ -1,4 +1,7 @@
-import {Controller,Get} from '@nestjs/common';
+import {Body,Controller,Get,Patch,Req,UsePipes,ValidationPipe} from '@nestjs/common';
+import {RequestWithAuthenticatedUser} from '../../common/interfaces/authenticated-user.interface';
+import {IntegrationRenewalService} from './integration-renewal.service';
+import {IntegrationRenewalDto} from './integration-renewal.dto';
 import {PlatformScope} from '../../common/decorators/platform-scope.decorator';
 import {RequirePermission} from '../../common/decorators/require-permission.decorator';
 import {Tenant} from '../../common/decorators/tenant.decorator';
@@ -11,6 +14,14 @@ export class PlatformDashboardController {
  constructor(private readonly dashboard:DashboardService){}
  @Get() @RequirePermission([P.PLATFORM_ORGANIZATIONS_VIEW])
  get(){return this.dashboard.platform();}
+}
+@Controller('admin/dashboard/whatsapp-renewal')
+@PlatformScope()
+@UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
+export class IntegrationRenewalController {
+ constructor(private readonly renewal:IntegrationRenewalService){}
+ @Get() @RequirePermission([P.PLATFORM_ORGANIZATIONS_VIEW]) get(){return this.renewal.get();}
+ @Patch() @RequirePermission([P.PLATFORM_ORGANIZATIONS_UPDATE]) save(@Body() dto:IntegrationRenewalDto,@Req() req:RequestWithAuthenticatedUser){return this.renewal.save(dto,req.authenticatedUser.userId);}
 }
 @Controller('dashboard')
 export class OrganizationDashboardController {
