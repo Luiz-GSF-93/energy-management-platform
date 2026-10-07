@@ -13,6 +13,7 @@ import { OcrModule } from './modules/ocr/ocr.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import {CceeModule} from './modules/ccee/ccee.module';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -53,6 +54,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     ReportsModule,
     AclAdmissionsModule,
     EnergyPricesModule,
+    CceeModule,
     WhatsappDeliveryModule,
     SmsDeliveryModule,
     CustomerNoticesModule,
