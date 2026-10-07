@@ -12,3 +12,5 @@ describe('specific energy price',()=>{
 });
 
  it('recognizes signed CPFL GD TE with appended month even when generic role is CHARGE',()=>{const f=(v:string)=>({text:v,decimal:v,pages:[1],spans:[{offset:0,length:1}],issues:[],confidence:1});const op=(d:string,q:string,a:string,period:string):any=>({component:'TE',role:'CHARGE',period,source:d,issues:[],fields:{description:f(d),quantity:f(q),grossRate:f('1'),aneelRate:f('0.5'),amount:f(a),unit:f('kWh')}});const p=op('TE Ponta','100','100.00','PEAK'),o=op('TE Fora Ponta','900','900.00','OFF_PEAK'),g=op('Energia Atv Inj TEAGO26','400','-400.00','UNSPECIFIED'),t=op('Energia Atv Inj TUSDAGO26','400','-400.00','UNSPECIFIED');expect(energyReference([p,o,g,t],'2026-08')).toMatchObject({state:'AVAILABLE',gd:{amount:'400.00',netRate:'0.5'}});g.fields.amount=f('400.00');expect(energyReference([p,o,g],'2026-08').state).toBe('BLOCKED');});
+
+ it('preserves nine-place GD estimates until cent rounding',()=>{const r=study();r.gdHistory.rows[0].gdKwh='400.123456789';const b=baselineFromStudy(r);expect(b.months?.[0].grossTe).toBe('599.88');expect(b.months?.[0].netTe).toBe('299.94');});
