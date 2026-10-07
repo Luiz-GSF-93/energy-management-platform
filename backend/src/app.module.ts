@@ -1,3 +1,4 @@
+import {EnergyPricesModule} from './modules/energy-prices/energy-prices.module';
 import {AclAdmissionsModule} from './modules/acl-admissions/acl-admissions.module';
 import {ReportsModule} from './modules/reports/reports.module';
 import {EnergyMapModule} from './modules/energy-map/energy-map.module';
@@ -48,6 +49,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     EnergyMapModule,
     ReportsModule,
     AclAdmissionsModule,
+    EnergyPricesModule,
   ],
   controllers: [AppController],
   providers: [

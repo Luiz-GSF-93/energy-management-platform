@@ -1,3 +1,4 @@
+import {energyReference} from '../energy-prices/energy-price-score';
 import {AclFinancialReviewDto} from './acl-admission.dto';
 import {financialComparison,financialDraft} from './acl-financial-comparison';
 import {invoiceTariffDraft,scenarioDraft} from './acl-scenario-draft';
@@ -229,7 +230,7 @@ export class AclAdmissionService {
     if(r.error)throw new InternalServerErrorException('Endereço da leitura indisponível.');
     if(!r.data||r.data.file_hash!==source.fileHash)throw new ConflictException('A leitura pertence a outra versão da fatura.');
     const layout=extractCpflPaulistaLayout(r.data.raw_result),fields=layout.fields.filter(f=>f.name==='serviceAddress');
-    return {documentId:document,fileHash:source.fileHash,invoiceReference:invoiceCostReference(layout,document,aclInvoiceReferenceMonth(d.data.reference_month)),tariffDraft:invoiceTariffDraft(layout,document,aclInvoiceReferenceMonth(d.data.reference_month)),addressSource:fields.length===1?fields[0].source:null,...invoiceSubmarket(fields.length===1?fields[0].value.text:null)};
+    return {documentId:document,fileHash:source.fileHash,invoiceReference:invoiceCostReference(layout,document,aclInvoiceReferenceMonth(d.data.reference_month)),tariffDraft:invoiceTariffDraft(layout,document,aclInvoiceReferenceMonth(d.data.reference_month)),energyReference:energyReference(layout.operations,aclInvoiceReferenceMonth(d.data.reference_month)),addressSource:fields.length===1?fields[0].source:null,...invoiceSubmarket(fields.length===1?fields[0].value.text:null)};
   }
   async historyPreview(id:string,document:string,t:TenantContext){
     if(!/^[A-Za-z0-9_-]{1,100}$/.test(document))throw new BadRequestException('Documento inválido.');
