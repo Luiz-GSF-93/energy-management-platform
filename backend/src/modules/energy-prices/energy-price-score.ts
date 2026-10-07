@@ -25,6 +25,8 @@ export function energyReference(operations:CpflOperation[],month:string|null):En
  return {state:'AVAILABLE',reviewRequired:true,month,peak:line(peak[0]),off:line(outside[0]),gd:gd.length?line(gd[0]):null};
  }catch{return blocked('Quantidade, tarifas e tributos da TE exigem conferência.');}
 }
+// Historical GD estimates carry nine decimal places; retain them through cent rounding.
+const energyAmount=(q:string,r:string)=>feeMoney((decimal(q)*decimal(r)*100n+500000000000000000n)/1000000000000000000n);
 export function baselineFromStudy(result:any){
  const ref:EnergyReference|undefined=result.location?.energyReference;
  if(!ref||ref.state!=='AVAILABLE'||!ref.peak||!ref.off)return {state:'PENDING',reason:'Registre nova versão com referência TE segregada e conferida.'};
@@ -37,8 +39,8 @@ export function baselineFromStudy(result:any){
  const credit=ref.gd?(documentary?ref.gd.quantity:gd.find((g:any)=>g.month===row.month)?.gdKwh):null;
  if(ref.gd&&typeof credit!=='string')throw Error('Crédito GD ausente; não foi convertido em zero.');
  const cost=(rateKey:'grossRate'|'netRate')=>{
-  const te=documentary&&rateKey==='grossRate'?feeCents(ref.peak!.amount)+feeCents(ref.off!.amount):feeCents(tariffProduct(p,ref.peak![rateKey]!).rounded)+feeCents(tariffProduct(o,ref.off![rateKey]!).rounded);
-  const compensation=ref.gd?(documentary&&rateKey==='grossRate'?feeCents(ref.gd.amount):feeCents(tariffProduct(credit!,ref.gd[rateKey]!).rounded)):0n;
+  const te=documentary&&rateKey==='grossRate'?feeCents(ref.peak!.amount)+feeCents(ref.off!.amount):feeCents(energyAmount(p,ref.peak![rateKey]!))+feeCents(energyAmount(o,ref.off![rateKey]!));
+  const compensation=ref.gd?(documentary&&rateKey==='grossRate'?feeCents(ref.gd.amount):feeCents(energyAmount(credit!,ref.gd[rateKey]!))):0n;
   if(compensation>te)throw Error('Crédito TE excede o custo de energia; referência bloqueada.');return te-compensation;
  };
  const g=cost('grossRate'),n=netAvailable?cost('netRate'):null;gross+=g;if(n!==null)net+=n;kwh+=volume;
