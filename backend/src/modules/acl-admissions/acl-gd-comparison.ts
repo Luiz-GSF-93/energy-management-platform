@@ -5,7 +5,7 @@ import {supplierBilledEnergy,type AclSupplierProposal} from './acl-supplier-prev
 type Kind='TUSD_PEAK'|'TUSD_OFF'|'DEMAND'|'TE'|'ACR_BAND'|'GD_CREDIT'|'SHARED';
 type Line={kind:Kind;description:string;amount:string;quantity:string|null;grossRate:string|null;source:string;pages:number[]};
 export type InvoiceCostReference={state:'AVAILABLE_REVIEW_REQUIRED'|'BLOCKED';documentId:string;month:string|null;billTotal:string|null;gdCredits:string|null;consumptionKwh:string|null;lines:Line[];pending:string[]};
-const norm=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+const norm=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\b(TE|TUSD)(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\d{2,4}\b/g,'$1').trim();
 const cents=(v:string)=>v.startsWith('-')?-feeCents(v.slice(1)):feeCents(v);
 const quantity=(v:string)=>{if(!/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,9})?$/.test(v))throw Error('Quantidade faturada inválida.');const [a,f='']=v.split('.');return BigInt(a)*1000000000n+BigInt(f.padEnd(9,'0'));};
 const qtyText=(n:bigint)=>{const d=n.toString().padStart(10,'0');return d.slice(0,-9)+'.'+d.slice(-9);};
