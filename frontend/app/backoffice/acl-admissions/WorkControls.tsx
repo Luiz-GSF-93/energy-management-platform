@@ -6,11 +6,13 @@ export type WorkDetail={id:string;status:string;revision:number;generation?:numb
 type WorkBody={requestId:string;expectedRevision:number;stageKey:string;action:'START'|'PAUSE'|'RESUME';pauseReason?:string;reason?:string};
 const names:Record<string,string>={registration:'Cadastro',invoices:'Faturas',feasibility:'Viabilidade',modality:'Modalidade',contracts:'Contratação',termination:'Denúncia',metering:'Medição',custody:'Conta e adesão',technical:'Habilitação técnica','contract-registration':'Registro de contratos',validation:'Validação',supply:'Início do suprimento'};
 const states:Record<string,string>={NOT_STARTED:'Não iniciada',RUNNING:'Em atividade',PAUSED:'Pausada',COMPLETED:'Concluída',SKIPPED:'Dispensada'};
-export default function WorkControls({detail,actorId,canWork,onUpdated}:{detail:WorkDetail;actorId:string;canWork:boolean;onUpdated:(v:WorkDetail)=>void}){
- const [stageKey,setStageKey]=useState(detail.stages[0]?.key||''),[pauseReason,setPauseReason]=useState('AWAITING_CUSTOMER'),[reason,setReason]=useState('');
+export default function WorkControls({detail,actorId,canWork,onUpdated,fixedStageKey,onTimeConfirmed}:{detail:WorkDetail;actorId:string;canWork:boolean;onUpdated:(v:WorkDetail)=>void;fixedStageKey?:string;onTimeConfirmed?:(key:string,ms:number)=>void}){
+ const [stageKey,setStageKey]=useState(fixedStageKey||detail.stages[0]?.key||''),[pauseReason,setPauseReason]=useState('AWAITING_CUSTOMER'),[reason,setReason]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmedAt,setConfirmedAt]=useState<string|null>(null),[stopped,setStopped]=useState(false),[retry,setRetry]=useState(false);
  const pending=useRef<WorkBody|null>(null),alive=useRef(true),sending=useRef(false);
  const [confirmationCycle,setConfirmationCycle]=useState(0);
+ const clockCallback=useRef(onTimeConfirmed);clockCallback.current=onTimeConfirmed;
+ useEffect(()=>{if(fixedStageKey)setStageKey(fixedStageKey);},[fixedStageKey]);
  const own=detail.stages.find(s=>s.status==='RUNNING'&&s.active?.actorId===actorId),selected=detail.stages.find(s=>s.key===stageKey);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
  useEffect(()=>{
@@ -18,7 +20,7 @@ export default function WorkControls({detail,actorId,canWork,onUpdated}:{detail:
   const abort=new AbortController();let flight=false;
   async function ping(){if(abort.signal.aborted||flight||sending.current||document.visibilityState!=='visible')return;flight=true;
    try{const v=await apiRequest<{confirmedAt:string;revision:number}>('/api/v1/acl-admissions/'+encodeURIComponent(detail.id)+'/heartbeat',{method:'POST',body:{stageKey:own!.key},signal:abort.signal});
-    if(!abort.signal.aborted)setConfirmedAt(v.confirmedAt);
+    if(!abort.signal.aborted){setConfirmedAt(v.confirmedAt);clockCallback.current?.(own!.key,own!.elapsedMs+Math.max(0,Date.parse(v.confirmedAt)-(own!.active?.startedAt||0)));}
    }catch(e){if(!abort.signal.aborted){abort.abort();setStopped(true);setError(e instanceof Error?e.message:'Não foi possível confirmar a atividade. Atualize o processo.');}}
    finally{flight=false;}}
   void ping();const interval=setInterval(()=>void ping(),20000);const visible=()=>void ping();document.addEventListener('visibilitychange',visible);
@@ -42,7 +44,7 @@ export default function WorkControls({detail,actorId,canWork,onUpdated}:{detail:
  {error?<Alert>{error}</Alert>:null}
  {own?<p role="status">Sua atividade: {names[own.key]||own.key} · Tempo confirmado: {Math.floor(ms/60000)} min{confirmedAt?' · Última confirmação: '+new Date(confirmedAt).toLocaleTimeString('pt-BR'):''}</p>:null}
  <p>O tempo é confirmado pelo servidor. Uma interrupção exige atualizar e retomar a atividade. Etapas pausadas permanecem bloqueadas para edição.</p>
- <label htmlFor="acl-work-stage">Etapa</label><select id="acl-work-stage" value={stageKey} disabled={busy||retry} onChange={e=>setStageKey(e.target.value)}>{detail.stages.map(s=><option key={s.key} value={s.key}>{names[s.key]||s.key} — {states[s.status]||s.status}</option>)}</select>
+ <div hidden={!!fixedStageKey}><label htmlFor="acl-work-stage">Etapa</label><select id="acl-work-stage" value={stageKey} disabled={busy||retry} onChange={e=>setStageKey(e.target.value)}>{detail.stages.map(s=><option key={s.key} value={s.key}>{names[s.key]||s.key} — {states[s.status]||s.status}</option>)}</select></div>
  {canWork&&detail.status!=='COMPLETED'?<>
  {selected?.status==='NOT_STARTED'?<Button disabled={busy||retry||stopped||!!own} onClick={()=>void command('START')}>Iniciar atividade</Button>:null}
  {selected?.status==='PAUSED'?<Button disabled={busy||retry||stopped||!!own} onClick={()=>void command('RESUME')}>Retomar atividade</Button>:null}
