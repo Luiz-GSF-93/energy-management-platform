@@ -13,11 +13,11 @@ export class ReportDeliveryWorker implements OnModuleInit,OnModuleDestroy{
  async runOnce(){
   if(this.stopped||this.busy||process.env.REPORTS_DELIVERY_ENABLED!=='true')return;this.busy=true;
   try{
-   const client=this.db.getClient(),enabled=['email','whatsapp'].filter(c=>reportProviderReady(c));
+   const client=this.db.getClient(),enabled=['email','whatsapp','sms'].filter(c=>reportProviderReady(c));
    if(!enabled.length)return;
    const claim=await client.rpc('claim_report_delivery',{p_channels:enabled});if(claim.error)throw Error('DELIVERY_CLAIM_UNAVAILABLE');if(!claim.data)return;
    const {delivery,job,context}=claim.data;
-   if(delivery.organization_id!==context.organizationId||job.organization_id!==context.organizationId||job.owner_id!==context.userId||delivery.job_id!==job.id||!['email','whatsapp'].includes(delivery.channel))throw Error('DELIVERY_SCOPE_INVALID');
+   if(delivery.organization_id!==context.organizationId||job.organization_id!==context.organizationId||job.owner_id!==context.userId||delivery.job_id!==job.id||!['email','whatsapp','sms'].includes(delivery.channel))throw Error('DELIVERY_SCOPE_INVALID');
    let attachments:ReportAttachment[]=[];
    try{
     // Recheck report integrity and current permissions before building any private attachment.
