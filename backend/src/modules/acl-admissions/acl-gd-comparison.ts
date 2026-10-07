@@ -4,7 +4,7 @@ import {moneyPercent,discountedMoney} from './acl-cost-premises';
 import {supplierBilledEnergy,type AclSupplierProposal} from './acl-supplier-preview';
 type Kind='TUSD_PEAK'|'TUSD_OFF'|'DEMAND'|'TE'|'ACR_BAND'|'GD_CREDIT'|'SHARED';
 type Line={kind:Kind;description:string;amount:string;quantity:string|null;grossRate:string|null;source:string;pages:number[]};
-export type InvoiceCostReference={state:'AVAILABLE_REVIEW_REQUIRED'|'BLOCKED';documentId:string;month:string|null;billTotal:string|null;gdCredits:string|null;consumptionKwh:string|null;lines:Line[];pending:string[]};
+export type InvoiceCostReference={state:'AVAILABLE_REVIEW_REQUIRED'|'BLOCKED';documentId:string;month:string|null;billTotal:string|null;gdCredits:string|null;consumptionKwh:string|null;lines:Line[];excludedTotals:{source:string;amount:string;reason:string}[];pending:string[]};
 const norm=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\b(TE|TUSD)(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\d{2,4}\b/g,'$1').trim();
 const cents=(v:string)=>v.startsWith('-')?-feeCents(v.slice(1)):feeCents(v);
 const quantity=(v:string)=>{if(!/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,9})?$/.test(v))throw Error('Quantidade faturada inválida.');const [a,f='']=v.split('.');return BigInt(a)*1000000000n+BigInt(f.padEnd(9,'0'));};
@@ -22,7 +22,7 @@ function kind(r:CpflOperation):Kind|null {
 }
 /** Documentary draft only: reconcile all detailed signed lines, never add subtotal rows twice. */
 export function invoiceCostReference(layout:{layoutId:string|null;operations:CpflOperation[]},documentId:string,month:string|null):InvoiceCostReference {
- const result:InvoiceCostReference={state:'BLOCKED',documentId,month,billTotal:null,gdCredits:null,consumptionKwh:null,lines:[],pending:[]};
+ const result:InvoiceCostReference={state:'BLOCKED',documentId,month,billTotal:null,gdCredits:null,consumptionKwh:null,lines:[],excludedTotals:[],pending:[]};
  const stop=(message:string)=>{result.pending.push(message);return result;};
  if(layout.layoutId!=='cpfl-paulista-a'||!month||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))return stop('Fatura de referência CPFL Grupo A e competência identificadas são necessárias.');
  const total=layout.operations.filter(r=>r.component==='TOTAL_A_PAGAR');if(total.length!==1)return stop('Total a pagar único não identificado na leitura.');
@@ -34,6 +34,10 @@ export function invoiceCostReference(layout:{layoutId:string|null;operations:Cpf
   for(const row of layout.operations){
    const d=norm(row.fields.description?.text??'');
    if(row.role==='TOTAL'||/^TOTAL DE DEVOLUCOES\b/.test(d))continue;
+   // A CPFL footer may repeat the grand total on the final adjacent row without a label.
+   // Preserve its source; no other unlabeled amount is treated as a total.
+   if(!d&&row===layout.operations[layout.operations.length-1]&&row.row===total[0].row+1&&row.source.replace(/row\[[0-9]+\]$/,'')===total[0].source.replace(/row\[[0-9]+\]$/,'')&&Object.entries(row.fields).every(([k,f])=>k==='amount'||!f.text.trim())&&validField(row.fields.amount)&&row.fields.amount.decimal===total[0].fields.amount.decimal&&!row.issues.some(i=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN'].includes(i))){result.excludedTotals.push({source:row.source,amount:row.fields.amount.decimal!,reason:'Repetição isolada do Total a Pagar na linha final adjacente; excluída da soma de componentes e sujeita à conferência.'});continue;}
+
    if(row.role==='INFORMATION'||!validField(row.fields.description)||!validField(row.fields.amount)||!row.fields.amount.decimal||row.issues.some(i=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN'].includes(i))||seen.has(row.source))return stop('Linha financeira sem fonte inequívoca ou duplicada: '+row.source);
    const k=kind(row);if(!k)return stop('Componente da fatura precisa de revisão para o comparativo: '+row.fields.description.text);
    const n=cents(row.fields.amount.decimal);if(k==='GD_CREDIT'?n>=0n:k!=='SHARED'&&n<0n)return stop('Sinal de débito/crédito precisa de revisão: '+row.source);
@@ -51,7 +55,7 @@ export function invoiceCostReference(layout:{layoutId:string|null;operations:Cpf
   const qs=consumptions.map(v=>quantity(v.fields.quantity.decimal!));
   if(teOff.length!==1||tePeak.length!==1||quantity(tePeak[0].fields.quantity.decimal!)!==qs[0]||quantity(teOff[0].fields.quantity.decimal!)!==qs[1])return stop('Quantidades TE/TUSD por período divergentes.');
   result.billTotal=feeMoney(billed);result.gdCredits=feeMoney(gd);result.consumptionKwh=qtyText(qs[0]+qs[1]);result.state='AVAILABLE_REVIEW_REQUIRED';
-  result.pending=['Conferência manual das linhas OCR e das premissas do cenário pelo Consultor.','Créditos de um mês não são histórico mensal de GD nem previsão anual.'];return result;
+  result.pending=['Conferência manual das linhas OCR e das premissas do cenário pelo Consultor.','Créditos de um mês não são histórico mensal de GD nem previsão anual.',...result.excludedTotals.map(t=>t.reason+' Fonte: '+t.source)];return result;
  }catch{return stop('Valores da fatura fora dos limites decimais do comparativo.');}
 }
 export function gdReferenceComparison(ref:InvoiceCostReference|null,p:AclSupplierProposal){
