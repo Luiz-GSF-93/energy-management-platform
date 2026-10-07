@@ -6,7 +6,15 @@ import {monthlyPld,parseCcee,pldHours,profilePresent,PldHour} from './ccee-respo
 @Injectable()
 export class CceeService {
   private running=false;
-  status(){try{const config=cceeConfig(process.env);config.pfx.fill(0);return {configured:true,enabled:true,mode:'READ_ONLY',automaticImport:false};}catch{return {configured:false,enabled:process.env.CCEE_READ_ENABLED==='true',mode:'READ_ONLY',automaticImport:false};}}
+  status(){
+    try{const config=cceeConfig(process.env);config.pfx.fill(0);return {configured:true,enabled:true,mode:'READ_ONLY',automaticImport:false,diagnostic:'READY'};}
+    catch(error){
+      const enabled=process.env.CCEE_READ_ENABLED==='true';
+      const code=error instanceof Error?error.message:'';
+      const diagnostic=!enabled?'DISABLED':code==='CCEE_NOT_CONFIGURED'?'MISSING_VARIABLE':code==='CCEE_INVALID_CONFIG'?'INVALID_FORMAT':code==='CCEE_INVALID_CERTIFICATE'?'PFX_OPEN_FAILED':'CONFIGURATION_FAILED';
+      return {configured:false,enabled,mode:'READ_ONLY',automaticImport:false,diagnostic};
+    }
+  }
   private async run<T>(operation:(config:ReturnType<typeof cceeConfig>)=>Promise<T>):Promise<T>{
     if(this.running)throw new ConflictException('Uma consulta CCEE já está em andamento.');
     let config:ReturnType<typeof cceeConfig>;
