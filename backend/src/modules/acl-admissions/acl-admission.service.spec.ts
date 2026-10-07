@@ -14,6 +14,21 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('drafts only from separately authorized source/target and approved current history',async()=>{
+  const h=harness(),id=randomUUID(),sourceId=randomUUID(),studyId=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const proposal={supplier:'AXIA',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350',distribution:null,losses:'PENDING',taxes:'PENDING',source:'Existing premises for internal simulation.',checked:true};
+  const one=jest.spyOn(h.service,'one').mockImplementation(async(v)=>({id:v,organizationId:'o1'} as any));
+  const studies=jest.spyOn(h.service,'studies').mockResolvedValue({rows:[{id:studyId,version:4,hash:'a'.repeat(64),review:null,body:{result:{proposal}}}],nextCursor:null} as any);
+  jest.spyOn(h.service as any,'invoiceLocation').mockResolvedValue({invoiceReference:{month:'2026-08'},tariffDraft:null});
+  h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{evidenceId,history:{sourceDocumentId:'current'},documents:[]}}));
+  const b={evidenceId,templateAdmissionId:sourceId,templateStudyId:studyId};
+  for(const extra of [{organizationId:'o2'},{proposal},{evidenceId:'bad'}])await expect(h.service.scenarioDraft(id,{...b,...extra},t)).rejects.toThrow();
+  await expect(h.service.scenarioDraft(id,b,tenant)).rejects.toThrow('documentos');
+  const d=await h.service.scenarioDraft(id,b,t);expect(d.proposal.checked).toBe(false);expect(one).toHaveBeenCalledWith(id,t);expect(one).toHaveBeenCalledWith(sourceId,t);expect(studies).toHaveBeenCalledWith(sourceId,{},t);
+  studies.mockResolvedValue({rows:[],nextCursor:null});await expect(h.service.scenarioDraft(id,b,t)).rejects.toThrow('escopo');
+  expect(h.rpc.mock.calls.some(([name])=>name==='acl_economic_study_command')).toBe(false);
+ });
+
  it('stores only server-generated economic snapshots and bounds write fields',async()=>{
   const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
   const proposal={supplier:'Fornecedor teste',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350',distribution:null,losses:'PENDING',taxes:'PENDING',source:'Fonte da proposta para simulação interna.',checked:true};
