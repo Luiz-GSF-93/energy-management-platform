@@ -1,0 +1,35 @@
+Adesão ACL — versões internas do estudo econômico (2026-10-06)
+
+POST /api/v1/acl-admissions/:id/simulations recebe somente premissas, evidenceId,
+requestId, expectedRevision e conferência explícita. O servidor recompõe os
+resultados com o motor decimal atual, o histórico aprovado e o endereço OCR já
+autorizado. Não aceita resultados, tenant, cliente ou unidade do navegador.
+
+Versões imutáveis acl-economic-study/1 preservam histórico, documento/hash/versão,
+fórmula acl-supplier-preview/2, premissas, memória mensal, estimativas e pendências.
+Hash SHA-256 do texto JSONB UTF-8. Fonte revalidada sob bloqueio no commit.
+SAVE exige Viabilidade RUNNING pelo autor. REVIEW/REJECT exige aprovador distinto
+do autor, fonte vigente para REVIEW, hash conferido e parecer explícito.
+Revisão identifica apenas premissas: REVIEWED não é aprovação econômica.
+Idempotência compara conteúdo completo depois de revalidar acesso. Revisões,
+versões e eventos são append-only. Paginação privada limitada a 51 registros.
+
+RLS habilitada; sem acesso/EXECUTE para anon/authenticated, sem escrita direta
+para service_role. Gateways revalidam vínculo, RBAC, licenças, organização,
+cliente/unidade e acesso documental. Nenhum estudo vai à projeção do portal.
+Nenhuma alteração automática de classificação, contrato, suprimento ou etapa.
+
+Permanecem pendentes para o piloto: proposta/documentação e perdas/tributos,
+demanda faturável, GD/créditos, encargos/CCEE, custos de migração, comparativo
+completo ACR/ACL, investimento/metodologia para ROI/payback. Valores desconhecidos
+ficam null, não zero. Fonte TUSD e custo adicional são premissas, não direitos
+regulatórios confirmados. R$350 é estimativa mensal configurável.
+
+O registro não conclui Fase 3 nem a adesão real. Faltam aprovação econômica de um
+estudo completo, vínculo explícito dessa versão à evidência de viabilidade e
+explicação Bot-Energy baseada em saídas aprovadas; integrações externas da Fase 4
+dependem da habilitação e validação dos provedores e evidências reais.
+
+Validação: 51 verificações SQL em PGlite descartável; 128 Jest; backend build;
+frontend TypeScript; 16 verificações de UI de estudos, 21 de rotas e 36 SQL de
+fechamento/checklists. Nenhum dado sintético é criado na produção.
