@@ -1,3 +1,5 @@
+import {AclFinancialReviewDto} from './acl-admission.dto';
+import {financialComparison,financialDraft} from './acl-financial-comparison';
 import {invoiceTariffDraft,scenarioDraft} from './acl-scenario-draft';
 import {invoiceCostReference,gdReferenceComparison,gdHistoryEstimate} from './acl-gd-comparison';
 import {aclHistoryDraft,validAclHistory,aclInvoiceReferenceMonth} from './acl-invoice-history';
@@ -167,7 +169,7 @@ export class AclAdmissionService {
     const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
     const location=await this.invoiceLocation(id,source.history.sourceDocumentId,source.documents,t);
-    try{return {evidenceId:source.evidenceId,documents:source.documents,location,...supplierPreview(source.history,proposal),...(proposal.costPremises?{gdComparison:gdReferenceComparison(location.invoiceReference??null,proposal),gdHistory:gdHistoryEstimate(location.invoiceReference??null,proposal,supplierPreview(source.history,proposal).rows)}:{})};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
+    try{const preview=supplierPreview(source.history,proposal);return {evidenceId:source.evidenceId,documents:source.documents,location,...preview,financialComparison:financialComparison(location.invoiceReference??null,proposal,preview),...(proposal.costPremises?{gdComparison:gdReferenceComparison(location.invoiceReference??null,proposal),gdHistory:gdHistoryEstimate(location.invoiceReference??null,proposal,supplierPreview(source.history,proposal).rows)}:{})};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
   }
   async scenarioDraft(id:string,input:unknown,t:TenantContext){
     const b=input as {evidenceId:string;templateAdmissionId:string;templateStudyId:string};
@@ -181,7 +183,7 @@ export class AclAdmissionService {
     const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Histórico atual aprovado indisponível.');
     const location=await this.invoiceLocation(id,source.history.sourceDocumentId,source.documents,t);
-    try{return {...scenarioDraft(study,location.tariffDraft??null,source.history.sourceDocumentId,location.invoiceReference?.month??null),evidenceId:b.evidenceId,documents:source.documents,location};}catch(e){throw new ConflictException((e as Error).message);}
+    try{return {...scenarioDraft(study,location.tariffDraft??null,source.history.sourceDocumentId,location.invoiceReference?.month??null),evidenceId:b.evidenceId,documents:source.documents,location,financialDraft:financialDraft(location.invoiceReference??null)};}catch(e){throw new ConflictException((e as Error).message);}
   }
   async studies(id:string,q:unknown,t:TenantContext){
     const after=aclCursor(q);await this.evidenceAllowed(id,t);
@@ -201,6 +203,12 @@ export class AclAdmissionService {
     if(d.reason.trim().length<20)throw new BadRequestException('Justifique a revisão das premissas.');
     await this.evidenceAllowed(id,t,true,true);
     return this.studyResult(await this.rpc('acl_economic_study_command',{...this.params(t),p_id:id,p_request:d.requestId,p_revision:d.expectedRevision,p_action:d.action,p_checked:d.checkedDocument,p_study:d.studyId,p_reason:d.reason,p_hash:d.hash}),id,t);
+  }
+  async financialReview(id:string,input:unknown,t:TenantContext){
+    const d=await validateWriteDto(AclFinancialReviewDto,input as AclFinancialReviewDto);
+    if(d.action!=='REVIEW'||d.reason.trim().length<20||Object.keys(d.checks).sort().join(',')!=='cashFlow,costs,gd,limitations,sources'||Object.values(d.checks).some(v=>v!==true))throw new BadRequestException('Confira fontes, custos, GD, fluxo de caixa e limites antes do parecer independente.');
+    await this.evidenceAllowed(id,t,true,true);
+    return this.studyResult(await this.rpc('acl_financial_review_command',{...this.params(t),p_id:id,p_request:d.requestId,p_revision:d.expectedRevision,p_study:d.studyId,p_hash:d.hash,p_reason:d.reason,p_decision:d.conclusion,p_checks:d.checks,p_checked:d.checkedDocument}),id,t);
   }
   private studyResult(result:any,id:string,t:TenantContext){
     if(result?.ok===false&&['CONFLICT','LOCKED'].includes(result.code))throw new ConflictException('O cenário ou a atividade mudou. Atualize o processo e confira a viabilidade em andamento.');
@@ -249,8 +257,9 @@ export class AclAdmissionService {
     }
     if (dto.action==='SUBMIT') {
       const f={...dto.facts!};delete f.checklist;const keys=Object.keys(f);
-      const expected=dto.kind==='SKIP'?null:dto.stageKey==='modality'?'modality':dto.stageKey==='supply'?'supplyDate':dto.stageKey==='invoices'&&keys.length?'history':null;
+      const expected=dto.kind==='SKIP'?null:dto.stageKey==='modality'?'modality':dto.stageKey==='supply'?'supplyDate':dto.stageKey==='feasibility'?'financialStudy':dto.stageKey==='invoices'&&keys.length?'history':null;
       if (expected ? keys.length!==1 || keys[0]!==expected : keys.length!==0) throw new BadRequestException('Informações adicionais da evidência inválidas.');
+      if(expected==='financialStudy'){const link=f.financialStudy as any;if(!link||Object.keys(link).sort().join(',')!=='hash,id'||!UUID.test(link.id)||!/^([a-f0-9]{64})$/.test(link.hash))throw new BadRequestException('Selecione a versão financeira revisada.');}
       if(expected==='history'&&!validAclHistory(f.history,dto.documentIds!))throw new BadRequestException('Confira os 12 meses consecutivos, consumo, demanda, dias e fontes do histórico.');
       if (expected==='modality' && !['RETAIL','OWN_AGENT'].includes(f.modality as string)) throw new BadRequestException('Informe a modalidade conferida pelo Consultor.');
       if (expected==='supplyDate') {

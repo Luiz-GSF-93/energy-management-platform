@@ -14,6 +14,14 @@ function harness(enabled=true) {
  return{rpc,licenses,service};
 }
 describe('ACL registry API authorization and projection',()=>{
+ it('requires all independent financial checks and rejects browser-supplied scope or results',async()=>{
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed','26cadaa7-2eea-4080-91f6-1f26f87ca809']};
+  const b={requestId:randomUUID(),expectedRevision:27,studyId:randomUUID(),action:'REVIEW',hash:'a'.repeat(64),reason:'Conferência independente de hipóteses e fontes.',checkedDocument:true,conclusion:'CONDITIONAL',checks:{sources:true,costs:true,gd:true,cashFlow:true,limitations:true}};
+  for(const extra of [{organizationId:'o2'},{roi:'100'},{checks:{...b.checks,gd:false}},{action:'REJECT'}])await expect(h.service.financialReview(id,{...b,...extra},t)).rejects.toThrow();
+  expect(h.rpc).not.toHaveBeenCalled();
+  h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{ok:true,studyId:b.studyId,admission:{id,organizationId:'o1'}}}));
+  await h.service.financialReview(id,b,t);expect(h.rpc).toHaveBeenLastCalledWith('acl_financial_review_command',expect.objectContaining({p_org:'o1',p_actor:t.userId,p_checks:b.checks,p_hash:b.hash,p_decision:'CONDITIONAL'}));
+ });
  it('drafts only from separately authorized source/target and approved current history',async()=>{
   const h=harness(),id=randomUUID(),sourceId=randomUUID(),studyId=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
   const proposal={supplier:'AXIA',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350',distribution:null,losses:'PENDING',taxes:'PENDING',source:'Existing premises for internal simulation.',checked:true};
@@ -28,7 +36,6 @@ describe('ACL registry API authorization and projection',()=>{
   studies.mockResolvedValue({rows:[],nextCursor:null});await expect(h.service.scenarioDraft(id,b,t)).rejects.toThrow('escopo');
   expect(h.rpc.mock.calls.some(([name])=>name==='acl_economic_study_command')).toBe(false);
  });
-
  it('stores only server-generated economic snapshots and bounds write fields',async()=>{
   const h=harness(),id=randomUUID(),evidenceId=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
   const proposal={supplier:'Fornecedor teste',energyBrlMwh:'220',startMonth:'2026-11',months:12,fixedMonthlyBrl:'990',savingsPercent:'9.5',estimatedMonthlyAclBrl:'350',distribution:null,losses:'PENDING',taxes:'PENDING',source:'Fonte da proposta para simulação interna.',checked:true};
@@ -111,7 +118,6 @@ describe('ACL registry API authorization and projection',()=>{
   hash='original';await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('layout');
   data.documents=null;await expect(h.service.historyPreview(id,'invoice',tenant)).rejects.toThrow('unidade');
  });
-
  it('authorizes reopening and rejects body-supplied history, scope and approvals',async()=>{
   const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:5,reason:'Correção revisada pelo Consultor responsável.',checkedDocument:true};
   for(const extra of [{generation:2},{previousId:id},{organizationId:'o2'},{checkedDocument:false},{state:{}}])await expect(h.service.reopen(id,{...body,...extra},tenant)).rejects.toThrow();
