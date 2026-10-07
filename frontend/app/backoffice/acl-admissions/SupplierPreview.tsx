@@ -16,10 +16,10 @@ export default function SupplierPreview({admissionId,evidenceId,detail,canSave,o
   const common={...proposal,months:Number(proposal.months),distribution:includeDistribution?{...distribution,checked:true}:null,checked:true};
   if(!structuredEnergy)return common;
   if(!/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,9})?$/.test(basis.baseBrlMwh)||!['lossPercent','icmsPercent'].every(k=>/^(100(\.0{1,4})?|[0-9]{1,2}(\.[0-9]{1,4})?)$/.test(basis[k as keyof typeof basis])))throw Error('Confira os decimais de preço-base, perdas e ICMS.');
-  const units=(v:string)=>{const [a,f='']=v.split('.');return BigInt(a)*10000n+BigInt(f.padEnd(4,'0'));};
-  const tax=units(basis.icmsPercent);if(tax>=1000000n)throw Error('ICMS deve ser inferior a 100%.');
-  const [a,f='']=basis.baseBrlMwh.split('.'),den=10n**BigInt(f.length)*(1000000n-tax),num=BigInt(a+f)*(1000000n+units(basis.lossPercent));
-  const n=((num*1000000000n+den/2n)/den).toString().padStart(10,'0'),rate=(n.slice(0,-9)+'.'+n.slice(-9)).replace(/\.?0+$/,'')||'0';
+  const units=(v:string)=>{const [a,f='']=v.split('.');return BigInt(a)*BigInt('10000')+BigInt(f.padEnd(4,'0'));};
+  const tax=units(basis.icmsPercent);if(tax>=BigInt('1000000'))throw Error('ICMS deve ser inferior a 100%.');
+  const [a,f='']=basis.baseBrlMwh.split('.'),den=BigInt('1'+'0'.repeat(f.length))*(BigInt('1000000')-tax),num=BigInt(a+f)*(BigInt('1000000')+units(basis.lossPercent));
+  const n=((num*BigInt('1000000000')+den/BigInt('2'))/den).toString().padStart(10,'0'),rate=(n.slice(0,-9)+'.'+n.slice(-9)).replace(/\.?0+$/,'')||'0';
   return {...common,energyBrlMwh:rate,losses:'INCLUDED',taxes:'INCLUDED',energyBasis:{...basis,method:'LOSS_UPLIFT_ICMS_INSIDE',checked:true}};
  }
  const pending=useRef<Record<string,unknown>|null>(null),flight=useRef(false),alive=useRef(true);
