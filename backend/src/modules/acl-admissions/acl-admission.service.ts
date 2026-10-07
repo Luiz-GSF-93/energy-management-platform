@@ -1,3 +1,4 @@
+import {invoiceCostReference,gdReferenceComparison,gdHistoryEstimate} from './acl-gd-comparison';
 import {aclHistoryDraft,validAclHistory,aclInvoiceReferenceMonth} from './acl-invoice-history';
 import {fixedHistoryTariffs,simulateFixedHistory} from './acl-history-simulation';
 import {supplierProposal,supplierPreview} from './acl-supplier-preview';
@@ -165,7 +166,7 @@ export class AclAdmissionService {
     const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Fonte da simulação indisponível.');
     const location=await this.invoiceLocation(id,source.history.sourceDocumentId,source.documents,t);
-    try{return {evidenceId:source.evidenceId,documents:source.documents,location,...supplierPreview(source.history,proposal)};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
+    try{return {evidenceId:source.evidenceId,documents:source.documents,location,...supplierPreview(source.history,proposal),...(proposal.costPremises?{gdComparison:gdReferenceComparison(location.invoiceReference??null,proposal),gdHistory:gdHistoryEstimate(location.invoiceReference??null,proposal,supplierPreview(source.history,proposal).rows)}:{})};}catch{throw new ConflictException('Histórico ou valores fora dos limites da simulação; confira a fonte atual.');}
   }
   async studies(id:string,q:unknown,t:TenantContext){
     const after=aclCursor(q);await this.evidenceAllowed(id,t);
@@ -195,17 +196,17 @@ export class AclAdmissionService {
     const source=Array.isArray(sources)?sources.find(v=>v.id===document):null;
     if(!source||typeof source.fileHash!=='string')throw new InternalServerErrorException('Versão documental indisponível.');
     const admission=await this.one(id,t),db=this.db.getClient();
-    const d=await db.from('documents').select('id,file_hash,file_verified,document_type').eq('organization_id',t.organizationId).eq('id',document).eq('customer_id',admission.customerId).eq('consumer_unit_id',admission.unitId).maybeSingle();
+    const d=await db.from('documents').select('id,file_hash,file_verified,document_type,reference_month').eq('organization_id',t.organizationId).eq('id',document).eq('customer_id',admission.customerId).eq('consumer_unit_id',admission.unitId).maybeSingle();
     if(d.error)throw new InternalServerErrorException('Endereço da fatura indisponível.');
     if(!d.data||!d.data.file_verified||d.data.document_type!=='INVOICE_DISTRIBUTOR'||d.data.file_hash!==source.fileHash)throw new ConflictException('A versão da fatura mudou; confira a fonte aprovada.');
     const job=await db.from('document_ocr_jobs').select('id,state').eq('organization_id',t.organizationId).eq('document_id',document).maybeSingle();
     if(job.error)throw new InternalServerErrorException('Leitura da fatura indisponível.');
-    if(job.data?.state!=='SUCCEEDED')return {documentId:document,fileHash:source.fileHash,...invoiceSubmarket(null)};
+    if(job.data?.state!=='SUCCEEDED')return {documentId:document,fileHash:source.fileHash,invoiceReference:null,...invoiceSubmarket(null)};
     const r=await db.from('document_ocr_results').select('raw_result,file_hash').eq('organization_id',t.organizationId).eq('document_id',document).eq('job_id',job.data.id).maybeSingle();
     if(r.error)throw new InternalServerErrorException('Endereço da leitura indisponível.');
     if(!r.data||r.data.file_hash!==source.fileHash)throw new ConflictException('A leitura pertence a outra versão da fatura.');
-    const fields=extractCpflPaulistaLayout(r.data.raw_result).fields.filter(f=>f.name==='serviceAddress');
-    return {documentId:document,fileHash:source.fileHash,addressSource:fields.length===1?fields[0].source:null,...invoiceSubmarket(fields.length===1?fields[0].value.text:null)};
+    const layout=extractCpflPaulistaLayout(r.data.raw_result),fields=layout.fields.filter(f=>f.name==='serviceAddress');
+    return {documentId:document,fileHash:source.fileHash,invoiceReference:invoiceCostReference(layout,document,aclInvoiceReferenceMonth(d.data.reference_month)),addressSource:fields.length===1?fields[0].source:null,...invoiceSubmarket(fields.length===1?fields[0].value.text:null)};
   }
   async historyPreview(id:string,document:string,t:TenantContext){
     if(!/^[A-Za-z0-9_-]{1,100}$/.test(document))throw new BadRequestException('Documento inválido.');

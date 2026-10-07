@@ -1,0 +1,10 @@
+import {feeCents,feeMoney} from '../contracts/services/management-fee';
+export type AclCostPremises={additionalCostDescription:string;cceePercent:string;cceeBase:'REFERENCE_INVOICE_TOTAL';migrationInvestmentBrl:string;source:string;gdHistoryEstimate?:'REFERENCE_RATIO_TOTAL'|'REFERENCE_RATIO_TOTAL_CONSERVATIVE_CAP'|'REFERENCE_RATIO_TOTAL_PROPORTIONAL'|'REFERENCE_RATIO_TOTAL_POINT_REDUCTION';checked:true};
+export function costPremises(value:unknown):AclCostPremises {
+ const c=value as AclCostPremises;
+ if(!c||typeof c!=='object'||Array.isArray(c)||Object.keys(c).filter(k=>k!=='gdHistoryEstimate').sort().join(',')!=='additionalCostDescription,cceeBase,cceePercent,checked,migrationInvestmentBrl,source'||c.checked!==true||c.cceeBase!=='REFERENCE_INVOICE_TOTAL'||typeof c.additionalCostDescription!=='string'||c.additionalCostDescription.trim().length<3||c.additionalCostDescription.length>200||typeof c.source!=='string'||c.source.trim().length<20||c.source.length>500||typeof c.cceePercent!=='string'||!/^(100(\.0{1,4})?|[0-9]{1,2}(\.[0-9]{1,4})?)$/.test(c.cceePercent)||typeof c.migrationInvestmentBrl!=='string')throw Error('Confira a composição do custo adicional, o percentual estimado CCEE e o investimento.');
+ if(Object.prototype.hasOwnProperty.call(c,'gdHistoryEstimate')&&!['REFERENCE_RATIO_TOTAL','REFERENCE_RATIO_TOTAL_CONSERVATIVE_CAP','REFERENCE_RATIO_TOTAL_PROPORTIONAL','REFERENCE_RATIO_TOTAL_POINT_REDUCTION'].includes(c.gdHistoryEstimate!))throw Error('Método de estimativa GD inválido.');feeCents(c.migrationInvestmentBrl);return {...c,additionalCostDescription:c.additionalCostDescription.trim(),source:c.source.trim()};
+}
+export function moneyPercent(amount:string,percent:string){const [a,f='']=percent.split('.'),units=BigInt(a)*10000n+BigInt(f.padEnd(4,'0'));return feeMoney((feeCents(amount)*units+500000n)/1000000n);}
+
+export function discountedMoney(amount:string,percent:string){const [a,f=""]=percent.split("."),units=BigInt(a)*10000n+BigInt(f.padEnd(4,"0"));return feeMoney((feeCents(amount)*(1000000n-units)+500000n)/1000000n);}
