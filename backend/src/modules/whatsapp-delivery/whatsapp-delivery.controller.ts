@@ -7,6 +7,7 @@ import {RequirePermission} from '../../common/decorators/require-permission.deco
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {SupabaseService} from '../../services/supabase.service';
 import {validSignature,validChallenge,statusEvents} from './whatsapp-delivery';
+import {WhatsappTemplatesService} from './whatsapp-templates.service';
 @Controller('integrations/whatsapp/webhook')
 export class WhatsappWebhookController{
  constructor(private readonly db:SupabaseService){}
@@ -33,4 +34,10 @@ export class WhatsappDeliveryController{
   if(error)throw new ServiceUnavailableException('Consulta de entrega indisponível');
   return {configured:!!process.env.WHATSAPP_APP_SECRET&&!!process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN&&!!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,events:data};
  }
+}
+@Controller('admin/dashboard/whatsapp-templates') @PlatformScope()
+export class WhatsappTemplatesController{
+ constructor(private readonly templates:WhatsappTemplatesService){}
+ @Get() @RequirePermission([P.PLATFORM_ORGANIZATIONS_VIEW])
+ get(){return this.templates.inspect();}
 }

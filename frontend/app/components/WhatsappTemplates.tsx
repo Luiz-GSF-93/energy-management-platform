@@ -1,0 +1,11 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {Alert,Button} from '@/app/components/ui';
+import {apiRequest} from '@/app/lib/api/client';
+type Data={configured:boolean;checkedAt:string;manageUrl:string|null;rows:{name:string;label:string;status:string}[]};
+const labels:Record<string,string>={APPROVED:'Aprovado',PENDING:'Em análise',REJECTED:'Rejeitado',PAUSED:'Pausado',DISABLED:'Desabilitado',IN_APPEAL:'Em recurso',PENDING_DELETION:'Exclusão pendente',DELETED:'Excluído',UNKNOWN:'Estado não confirmado',MISSING:'Não encontrado em português',UNAVAILABLE:'Consulta indisponível'};
+export default function WhatsappTemplates(){
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[version,setVersion]=useState(0);
+ useEffect(()=>{let active=true;const load=()=>apiRequest<Data>('/api/v1/admin/dashboard/whatsapp-templates').then(value=>{if(active){setData(value);setError('');}}).catch(()=>{if(active)setError('Não foi possível consultar os modelos na Meta.');});void load();const timer=setInterval(()=>{if(document.visibilityState==='visible')void load();},60000);return()=>{active=false;clearInterval(timer);};},[version]);
+ return <section aria-label="Modelos de avisos WhatsApp"><h3>Modelos de avisos aos clientes</h3><p>Aprovação consultada na Meta para a conta WhatsApp da plataforma, em português do Brasil.</p>{error?<Alert variant="error">{error}</Alert>:null}{data&&!data.configured?<Alert>Configure o token, a conta WhatsApp e a versão da API no Railway para consultar os modelos.</Alert>:null}{data?<><div style={{overflowX:'auto'}}><table><thead><tr><th>Aviso</th><th>Aprovação Meta</th></tr></thead><tbody>{data.rows.map(row=><tr key={row.name}><td title={row.name}>{row.label}</td><td>{labels[row.status]??'Estado não confirmado'}</td></tr>)}</tbody></table></div><p style={{fontSize:'0.85rem',opacity:0.75}}>Consulta: {new Date(data.checkedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}. Atualização em até um minuto. Aprovação do modelo não ativa envios: cada fluxo depende da integração, dos contatos autorizados e da revisão da organização.</p>{data.manageUrl?<p><a href={data.manageUrl} target="_blank" rel="noopener noreferrer">Gerenciar modelos na Meta</a></p>:null}</>:null}<Button variant="secondary" onClick={()=>setVersion(value=>value+1)}>Atualizar modelos</Button></section>;
+}
