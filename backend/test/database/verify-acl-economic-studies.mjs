@@ -48,10 +48,13 @@ try{
  s=await command({snapshot:adjusted});row=s.admission;check(s.ok);list=await read();const third=list.find(x=>x.version===3);check(third.body.result.proposal.energyBasis.lossPercent==='2.5');check(list.find(x=>x.id===first.id).hash===first.hash);check(JSON.stringify(list.find(x=>x.id===first.id).body)===JSON.stringify(first.body));
  check((await db.query("SELECT NOT has_function_privilege('authenticated','acl_economic_study_command(text,text,text,boolean,uuid,uuid,integer,text,boolean,jsonb,uuid,text,text)','EXECUTE') denied")).rows[0].denied);
  await deny(()=>command({snapshot:{...adjusted,result:{...adjusted.result,savings:'10'}}}));
+ await migrate('20261006_acl_reference_costs.sql');
+ const reference={...adjusted,result:{...adjusted.result,formulaVersion:'acl-supplier-preview/4',proposal:{...adjusted.result.proposal,costPremises:{cceePercent:'9',cceeBase:'REFERENCE_INVOICE_TOTAL',migrationInvestmentBrl:'9300',gdHistoryEstimate:'REFERENCE_RATIO_TOTAL'}}}};
+ s=await command({snapshot:reference});row=s.admission;check(s.ok);list=await read();check(list.find(x=>x.version===4).body.result.proposal.costPremises.cceeBase==='REFERENCE_INVOICE_TOTAL');check(list.find(x=>x.id===first.id).hash===first.hash);
  check(!JSON.stringify(await call('acl_portal',['o1',client,'client',null])).includes('Synthetic supplier'));
  row=(await call('acl_work_command',['o1',actor,'r1',false,row.id,randomUUID(),row.revision,'feasibility','PAUSE','ENDING_ACTIVITY',null])).admission;check((await command()).code==='LOCKED');
  await db.exec("UPDATE licenses SET document_management=false WHERE organization_id='o1'");await deny(()=>read());await db.exec("UPDATE licenses SET document_management=true WHERE organization_id='o1'");
  await db.query("UPDATE organization_members SET status='INACTIVE' WHERE user_id=$1",[actor]);await deny(()=>command({request,revision}));
- check((await db.query('SELECT count(*)::int n FROM acl_economic_studies')).rows[0].n===3);
+ check((await db.query('SELECT count(*)::int n FROM acl_economic_studies')).rows[0].n===4);
  console.log(JSON.stringify({ok:true,checks,scope:'synthetic in-memory only'}));
 }finally{await db.close();}
