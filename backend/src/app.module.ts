@@ -1,3 +1,4 @@
+import {WhatsappDeliveryModule} from './modules/whatsapp-delivery/whatsapp-delivery.module';
 import {EnergyPricesModule} from './modules/energy-prices/energy-prices.module';
 import {AclAdmissionsModule} from './modules/acl-admissions/acl-admissions.module';
 import {ReportsModule} from './modules/reports/reports.module';
@@ -50,6 +51,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     ReportsModule,
     AclAdmissionsModule,
     EnergyPricesModule,
+    WhatsappDeliveryModule,
   ],
   controllers: [AppController],
   providers: [
