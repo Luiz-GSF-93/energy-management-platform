@@ -1,0 +1,14 @@
+.chart{margin:0;padding:1.25rem;border:1px solid #334155;border-radius:1rem;background:#101b2d;color:#f1f5f9}
+.chart figcaption{font-size:1.1rem;font-weight:700;display:flex;justify-content:space-between;gap:1rem}
+.chart figcaption span{font-size:.85rem;font-weight:400;color:#cbd5e1}
+.legend{display:flex;flex-wrap:wrap;gap:1rem;padding:0;margin:1rem 0;list-style:none;font-size:.875rem}
+.legend li{display:flex;align-items:center;gap:.4rem}
+.legend li span{width:.7rem;height:.7rem;border-radius:50%}
+.plot svg{display:block;width:100%;height:auto;min-height:180px}
+.months{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:.15rem}
+.months button{padding:.4rem .1rem;font-size:.75rem;border:1px solid #334155;border-radius:.35rem;background:#18253a;color:#e2e8f0;cursor:pointer}
+.months button:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
+.months button[aria-pressed=true]{background:#164e63}
+.tooltip{display:flex;flex-wrap:wrap;gap:.35rem 1rem;min-height:3rem;padding:.75rem 0;color:#cbd5e1;font-size:.85rem}
+.sources{margin:.5rem 0 0;padding-top:.75rem;border-top:1px solid #334155;font-size:.75rem;line-height:1.6;color:#aebccd}
+@media(max-width:600px){.chart{padding:.75rem}.legend{gap:.5rem}.months{grid-template-columns:repeat(6,minmax(0,1fr))}.tooltip{min-height:5rem}}

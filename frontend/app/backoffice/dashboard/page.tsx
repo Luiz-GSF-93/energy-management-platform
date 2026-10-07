@@ -7,6 +7,7 @@ import ProtectedRoute from '@/app/components/ProtectedRoute';
 import FeeAdjustmentNotices from '@/app/components/FeeAdjustmentNotices';
 import DashboardMetrics from '@/app/components/DashboardMetrics';
 import FinancialAnalyticsPanel from '@/app/components/FinancialAnalyticsPanel';
+import EnergyPriceDashboard from '@/app/components/EnergyPriceDashboard';
 import PublishedFinancialDashboard from '@/app/components/PublishedFinancialDashboard';
 
 export default function DashboardPage() {
@@ -38,6 +39,7 @@ export default function DashboardPage() {
               {hasPermission('8f105b02-4443-49de-b188-847e0284e7ed') ? <p><Link href="/backoffice/documents">Enviar e consultar documentos</Link></p> : null}
             </>}
           </section>
+          {context?.scope==='organization'&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&hasPermission('2c933fdf-0bbf-406a-915c-03e7921e54d8')?<EnergyPriceDashboard key={'price:'+JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.role,context.currentOrganization.permissions,context.accessMode])} organizationId={context.currentOrganization.id}/>:null}
           {context?.scope==='organization'?<FeeAdjustmentNotices key={context.currentOrganization.id}/>:null}
           {context?<DashboardMetrics key={context.scope==='global'?'global':context.currentOrganization.id} organizationId={context.scope==='global'?null:context.currentOrganization.id}/>:null}
           {context?.scope==='organization'&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')?(hasPermission('3ebadd32-6f30-459e-8ed3-0d2843d89946')?<FinancialAnalyticsPanel key={JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.role,context.currentOrganization.permissions,context.accessMode])} organizationId={context.currentOrganization.id} organizationName={context.currentOrganization.name||context.currentOrganization.id} canPreview={['admin_org','gestor'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation'}/>:<PublishedFinancialDashboard key={JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.role,context.currentOrganization.permissions,context.accessMode])} organizationId={context.currentOrganization.id} organizationName={context.currentOrganization.name||context.currentOrganization.id} canPreview={['admin_org','gestor'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation'}/>):null}
