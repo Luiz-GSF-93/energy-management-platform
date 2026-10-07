@@ -9,6 +9,7 @@ import DashboardMetrics from '@/app/components/DashboardMetrics';
 import FinancialAnalyticsPanel from '@/app/components/FinancialAnalyticsPanel';
 import EnergyPriceDashboard from '@/app/components/EnergyPriceDashboard';
 import PublishedFinancialDashboard from '@/app/components/PublishedFinancialDashboard';
+import IntegrationRenewal from '@/app/components/IntegrationRenewal';
 
 export default function DashboardPage() {
   const { context, hasPermission } = useAuth();
@@ -39,6 +40,7 @@ export default function DashboardPage() {
               {hasPermission('8f105b02-4443-49de-b188-847e0284e7ed') ? <p><Link href="/backoffice/documents">Enviar e consultar documentos</Link></p> : null}
             </>}
           </section>
+          {context?.scope==='global'&&hasPermission('9a679254-bb1a-4353-9d17-cc2bd9eb5abd')?<IntegrationRenewal key={context.user.id}/>:null}
           {context?.scope==='organization'&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&(context.accessMode==='platform_operation'||hasPermission('2c933fdf-0bbf-406a-915c-03e7921e54d8'))?<EnergyPriceDashboard key={'price:'+JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.role,context.currentOrganization.permissions,context.accessMode])} organizationId={context.currentOrganization.id}/>:null}
           {context?.scope==='organization'?<FeeAdjustmentNotices key={context.currentOrganization.id}/>:null}
           {context?<DashboardMetrics key={context.scope==='global'?'global':context.currentOrganization.id} organizationId={context.scope==='global'?null:context.currentOrganization.id}/>:null}
