@@ -6,21 +6,22 @@ import { useAuth } from '@/app/providers';
 import { apiRequest } from '@/app/lib/api/client';
 import { Alert, Button } from '@/app/components/ui';
 import styles from './workspace.module.css';
-import WorkControls, { WorkDetail } from './WorkControls';
-import EvidenceControls from './EvidenceControls';
-import RequestControls from './RequestControls';
-import ClosureControls from './ClosureControls';
-import { ReopenControls, PerformanceComparisons } from './HistoryControls';
+import type { WorkDetail } from './WorkControls';
+import StageFlow from './StageFlow';
+import FlowModal from './FlowModal';
+import { PerformanceComparisons } from './HistoryControls';
+
 type Page<T>={rows:T[];nextCursor:string|null};
 type Candidate={unitId:string;customerId:string;unitName:string;customerName:string};
 type Registry={id:string;customerName:string;unitName:string;status:string;revision:number};
 type Detail=WorkDetail;
 type Access={enabled:boolean;canWork:boolean;canApprove:boolean;canReadRequests?:boolean;canRequest?:boolean};
-const stageNames:Record<string,string>={registration:'Cadastro',invoices:'Faturas',feasibility:'Viabilidade',modality:'Modalidade',contracts:'Contratação',termination:'Denúncia',metering:'Medição',custody:'Conta e adesão',technical:'Habilitação técnica','contract-registration':'Registro de contratos',validation:'Validação',supply:'Início do suprimento'};
+
 const statuses:Record<string,string>={DRAFT:'Registrada',IN_PROGRESS:'Em andamento',COMPLETED:'Concluída',NOT_STARTED:'Não iniciada',RUNNING:'Em atividade',PAUSED:'Pausada',SKIPPED:'Dispensada'};
 function Workspace({actorId,canReadEvidence}:{actorId:string;canReadEvidence:boolean}){
  const [access,setAccess]=useState<Access|null>(null),[records,setRecords]=useState<Page<Registry>>({rows:[],nextCursor:null}),[candidates,setCandidates]=useState<Page<Candidate>>({rows:[],nextCursor:null});
  const [selection,setSelection]=useState(''),[detail,setDetail]=useState<Detail|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [performanceOpen,setPerformanceOpen]=useState(false);
  const request=useRef<{selection:string;id:string}|null>(null),mounted=useRef(true);
  useEffect(()=>{mounted.current=true;const abort=new AbortController();(async()=>{
   try{const a=await apiRequest<Access>('/api/v1/acl-admissions/access',{signal:abort.signal});if(abort.signal.aborted)return;setAccess(a);
@@ -47,8 +48,8 @@ function Workspace({actorId,canReadEvidence}:{actorId:string;canReadEvidence:boo
  <Button disabled={busy||!selection} onClick={()=>void create()}>{busy?'Aguarde…':'Inserir adesão'}</Button>{candidates.nextCursor?<Button variant="secondary" disabled={busy} onClick={()=>void more('candidates')}>Mais unidades disponíveis</Button>:null}
  <p>Selecione uma unidade cadastrada em ACR, do Grupo A e sem adesão registrada.</p></section>:null}
  <section className={styles.panel}><h2>Adesões registradas</h2>{!records.rows.length?<p>Nenhuma adesão registrada neste escopo.</p>:<div className={styles.table}><table><thead><tr><th>Cliente</th><th>Unidade</th><th>Status</th><th>Processo</th></tr></thead><tbody>{records.rows.map(r=><tr key={r.id}><td>{r.customerName}</td><td>{r.unitName}</td><td>{statuses[r.status]||r.status}</td><td><Button variant="secondary" disabled={busy} onClick={()=>void open(r.id)}>Ver processo</Button></td></tr>)}</tbody></table></div>}{records.nextCursor?<Button variant="secondary" disabled={busy} onClick={()=>void more('records')}>Ver mais adesões</Button>:null}</section>
- {detail?<section className={styles.panel}><h2>Fluxo da adesão</h2><p>Status: {statuses[detail.status]||detail.status} · Processo {detail.generation||1} · Revisão {detail.revision}</p>{detail.previousId?<Button variant="secondary" disabled={busy} onClick={()=>void open(detail.previousId!)}>Consultar processo anterior preservado</Button>:null}<ol className={styles.stages}>{detail.stages.map(s=><li key={s.key}><strong>{stageNames[s.key]||s.key}</strong><span>{statuses[s.status]||s.status}</span><small>Tempo ativo: {Math.floor(s.elapsedMs/60000)} min</small></li>)}</ol><WorkControls key={detail.id} detail={detail} actorId={actorId} canWork={access.canWork} onUpdated={v=>{setDetail(v);setRecords(old=>({...old,rows:old.rows.map(r=>r.id===v.id?{...r,status:v.status,revision:v.revision}:r)}));}}/>{access.canReadRequests?<RequestControls key={'requests-'+detail.id} detail={detail} actorId={actorId} canCreate={!!access.canRequest}/>:null}{canReadEvidence?<><EvidenceControls key={'evidence-'+detail.id} detail={detail} actorId={actorId} canWork={access.canWork} canApprove={access.canApprove} onUpdated={v=>{setDetail(v);setRecords(old=>({...old,rows:old.rows.map(r=>r.id===v.id?{...r,status:v.status,revision:v.revision}:r)}));}}/><ClosureControls key={'closure-'+detail.id} detail={detail} canApprove={access.canApprove} onUpdated={v=>{setDetail(v);setRecords(old=>({...old,rows:old.rows.map(r=>r.id===v.id?{...r,status:v.status,revision:v.revision}:r)}));}}/><ReopenControls key={'reopen-'+detail.id} detail={detail} canApprove={access.canApprove} onUpdated={v=>{const previous=records.rows.find(r=>r.id===detail.id);setDetail(v);if(previous)setRecords(old=>({...old,rows:[{...previous,id:v.id,status:v.status,revision:v.revision},...old.rows]}));}}/></>:<p>A conferência de evidências exige acesso autorizado ao módulo Documentos.</p>}</section>:null}
- {canReadEvidence?<section className={styles.panel}><PerformanceComparisons refreshKey={(detail?.id||'')+':'+(detail?.revision||0)}/></section>:null}</>:null}</section>;
+ {detail?<><p className={styles.flowHint}>Processo {detail.generation||1} · Revisão {detail.revision}{detail.previousId?<Button variant="secondary" disabled={busy} onClick={()=>void open(detail.previousId!)}>Consultar processo anterior</Button>:null}</p><StageFlow key={detail.id} detail={detail} actorId={actorId} canWork={access.canWork} canApprove={access.canApprove} canReadEvidence={canReadEvidence} canReadRequests={!!access.canReadRequests} canRequest={!!access.canRequest} onUpdated={v=>{setDetail(v);setRecords(old=>({...old,rows:v.id===detail.id?old.rows.map(r=>r.id===v.id?{...r,status:v.status,revision:v.revision}:r):[{...(old.rows.find(r=>r.id===detail.id)||{customerName:'',unitName:''}),id:v.id,status:v.status,revision:v.revision},...old.rows]}));}}/></>:null}
+ {canReadEvidence?<><Button variant="secondary" className={styles.menuButton} onClick={()=>setPerformanceOpen(true)}>Comparar processos encerrados</Button><FlowModal open={performanceOpen} title="Comparativos de desempenho" onClose={()=>setPerformanceOpen(false)}>{performanceOpen?<PerformanceComparisons refreshKey={(detail?.id||'')+':'+(detail?.revision||0)}/>:null}</FlowModal></>:null}</>:null}</section>;
 }
 function AclAdmissionsContent(){const {context}=useAuth();if(!context||context.scope!=='organization')return <Alert>Selecione uma organização para consultar as adesões.</Alert>;
  return <Workspace actorId={context.user.id} canReadEvidence={context.accessMode==='platform_operation'||context.currentOrganization.permissions.includes('8f105b02-4443-49de-b188-847e0284e7ed')} key={JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.role,context.currentOrganization.permissions,context.accessMode])}/>;}

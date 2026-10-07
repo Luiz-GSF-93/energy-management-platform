@@ -1,0 +1,37 @@
+'use client';
+import {useState} from 'react';
+import {Button} from '@/app/components/ui';
+import WorkControls,{WorkDetail} from './WorkControls';
+import EvidenceControls from './EvidenceControls';
+import RequestControls from './RequestControls';
+import ClosureControls from './ClosureControls';
+import {ReopenControls,PerformanceComparisons} from './HistoryControls';
+import StudyVersions from './StudyVersions';
+import FlowModal from './FlowModal';
+import styles from './workspace.module.css';
+export const stageNames:Record<string,string>={registration:'Cadastro',invoices:'Histórico de consumo',feasibility:'Viabilidade',modality:'Modalidade',contracts:'Contratação',termination:'Denúncia',metering:'Medição',custody:'Conta e adesão',technical:'Habilitação técnica','contract-registration':'Registro de contratos',validation:'Validação',supply:'Início do suprimento'};
+const states:Record<string,string>={DRAFT:'Registrada',IN_PROGRESS:'Em andamento',COMPLETED:'Concluída',NOT_STARTED:'Não iniciada',RUNNING:'Em atividade',PAUSED:'Pausada',SKIPPED:'Dispensada'};
+const hints:Record<string,string>={registration:'Documentos e vínculo da unidade',invoices:'Leitura da fatura e revisão dos 12 meses',feasibility:'Cenário, custos e parecer independente',modality:'Enquadramento e fundamento',contracts:'Contratos de energia e gestão',termination:'Carta, protocolo e prazo',metering:'Medição e evidências técnicas',custody:'Conta e documentos de adesão',technical:'Dados técnicos e CUSD','contract-registration':'Registro e conferência contratual',validation:'Conferência final da migração',supply:'Suprimento, resultados e publicação'};
+type View={kind:'work'|'audit'|'checklist'|'performance';key:string};
+function Icon({eye=false}:{eye?:boolean}){return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">{eye?<><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></>:<path d="m9 5 10 7-10 7V5Z"/>}</svg>;}
+export default function StageFlow({detail,actorId,canWork,canApprove,canReadEvidence,canReadRequests,canRequest,onUpdated}:{detail:WorkDetail;actorId:string;canWork:boolean;canApprove:boolean;canReadEvidence:boolean;canReadRequests:boolean;canRequest:boolean;onUpdated:(v:WorkDetail)=>void}){
+ const [view,setView]=useState<View|null>(null),[open,setOpen]=useState(false),[clock,setClock]=useState<{key:string;ms:number}|null>(null),[dirty,setDirty]=useState(false),[pendingView,setPendingView]=useState<View|null>(null);
+ function show(kind:View['kind'],key=''){if(dirty&&view&&(view.kind!==kind||view.key!==key)){setPendingView({kind,key});setOpen(true);return;}setView({kind,key});setOpen(true);}
+ const title=view?.kind==='work'?stageNames[view.key]:view?.kind==='audit'?'Auditoria e versões · '+stageNames[view.key]:view?.kind==='performance'?'Resultados e comparativos de desempenho':'Checklist · resumo das etapas';
+ const done=detail.stages.filter(s=>['COMPLETED','SKIPPED'].includes(s.status)).length;
+ return <section className={styles.panel} aria-label="Fluxo da adesão">
+ <div className={styles.flowHeader}><div><h2>Fluxo da adesão</h2><p>{states[detail.status]||detail.status} · {done}/{detail.stages.length} etapas finalizadas</p></div><Button variant="secondary" className={styles.menuButton} onClick={()=>show('checklist')}>Ver checklist</Button></div>
+ <p className={styles.flowHint}>Abra uma etapa para conferir os dados interpretados, completar pendências ou solicitar informações ao cliente.</p>
+ <ol className={styles.stages}>{detail.stages.map((s,i)=><li key={s.key} className={s.status==='RUNNING'?styles.running:undefined}><div className={styles.stageHeading}><span className={styles.stageNumber}>{String(i+1).padStart(2,'0')}</span><strong>{stageNames[s.key]||s.key}</strong></div><span className={styles.stageStatus}>{states[s.status]||s.status}</span><p className={styles.stageHint}>{hints[s.key]}</p><small>Tempo ativo confirmado: {Math.floor((clock?.key===s.key&&s.active?.actorId===actorId?clock.ms:s.elapsedMs)/60000)} min</small><div className={styles.stageActions}><Button variant="secondary" className={styles.menuButton} aria-label={'Abrir etapa '+stageNames[s.key]} onClick={()=>show('work',s.key)}><Icon/> Abrir etapa</Button>{canReadEvidence?<Button variant="secondary" className={styles.iconButton} aria-label={'Auditoria e versões de '+stageNames[s.key]} title="Auditoria e versões" onClick={()=>show('audit',s.key)}><Icon eye/></Button>:null}</div>{s.key==='supply'&&canReadEvidence?<Button variant="secondary" className={styles.menuButton} onClick={()=>show('performance')}>Comparativos de desempenho</Button>:null}</li>)}</ol>
+ <FlowModal open={open} title={title} onClose={()=>setOpen(false)}>
+ {pendingView?<div role="alert"><p>Há alterações locais nesta etapa. Ao trocar de visão, os campos não registrados serão descartados. Fechar o modal mantém a edição disponível ao reabrir esta mesma etapa.</p><Button variant="secondary" onClick={()=>setPendingView(null)}>Continuar revisão</Button><Button variant="secondary" onClick={()=>{setView(pendingView);setPendingView(null);setDirty(false);}}>Descartar edição e trocar de visão</Button></div>:null}
+ <div onChangeCapture={()=>setDirty(true)}>
+ {/* Remains mounted when the dialog closes: server heartbeat and uncertain-command retries are preserved. */}
+ <div hidden={view?.kind!=='work'}><WorkControls detail={detail} actorId={actorId} canWork={canWork} onUpdated={onUpdated} fixedStageKey={view?.kind==='work'?view.key:undefined} onTimeConfirmed={(key,ms)=>setClock({key,ms})}/></div>
+ {view?.kind==='work'?<div key={'work-'+view.key}><p>Confira os dados já disponíveis. O preenchimento manual complementa os campos pendentes e continua sujeito à validação do Consultor.</p>{canReadRequests?<RequestControls detail={detail} actorId={actorId} canCreate={canRequest} fixedStageKey={view.key}/>:null}{canReadEvidence?<EvidenceControls detail={detail} actorId={actorId} canWork={canWork} canApprove={canApprove} onUpdated={onUpdated} fixedStageKey={view.key}/>:<p>As informações documentais exigem acesso autorizado ao módulo Documentos.</p>}{view.key==='supply'&&canReadEvidence?<><ClosureControls detail={detail} canApprove={canApprove} onUpdated={onUpdated}/><ReopenControls detail={detail} canApprove={canApprove} onUpdated={onUpdated}/></>:null}</div>:null}
+ {view?.kind==='audit'&&canReadEvidence?<div key={'audit-'+view.key}><p>Processo {detail.generation||1} · Revisão {detail.revision}. Evidências e fontes preservadas desta etapa.</p><EvidenceControls detail={detail} actorId={actorId} canWork={false} canApprove={false} onUpdated={onUpdated} fixedStageKey={view.key} auditOnly/></div>:null}
+ {view?.kind==='checklist'?<><p>Resumo do fluxo. A conclusão de cada item depende das evidências e aprovações registradas na etapa.</p><ul className={styles.checklistSummary}>{detail.stages.map(s=><li key={s.key}><strong>{stageNames[s.key]}</strong><span>{states[s.status]||s.status}</span><Button variant="secondary" className={styles.menuButton} onClick={()=>show('work',s.key)}>Abrir etapa</Button></li>)}</ul></>:null}
+ {view?.kind==='performance'&&canReadEvidence?<><p>Visão interna do processo. O portal recebe somente o resumo aprovado após encerramento e publicação.</p><StudyVersions detail={detail} actorId={actorId} canApprove={false} onUpdated={onUpdated} expandLatest/><PerformanceComparisons refreshKey={detail.id+':'+detail.revision} admissionId={detail.id}/></>:null}
+ </div></FlowModal>
+ </section>;
+}
