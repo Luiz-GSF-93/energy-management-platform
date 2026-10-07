@@ -58,7 +58,6 @@ export class AclReopenDto {
   @IsString() @Length(20,1000) reason!: string;
   @Equals(true) checkedDocument!: boolean;
 }
-
 export class AclRequestDto {
  @IsUUID() requestId!: string;
  @IsInt() @Min(1) expectedRevision!: number;
@@ -71,4 +70,8 @@ export class AclRequestDto {
  @IsIn(['INVOICE','DOCUMENT','INFORMATION']) requestType!: string;
  @IsString() @Length(10,500) reason!: string;
  @Equals(true) checked!: boolean;
+}
+export class AclFinancialReviewDto extends AclStudyReviewDto {
+ @IsIn(['FAVORABLE','UNFAVORABLE','CONDITIONAL']) conclusion!: string;
+ @IsObject() checks!: Record<string,unknown>;
 }
