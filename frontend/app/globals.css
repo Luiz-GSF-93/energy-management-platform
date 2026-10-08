@@ -304,9 +304,10 @@ a {
 }
 
 .auth-brand__powered {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-style: italic;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.025em;
+  margin-top:0.5rem;
 }
 
 .published-financial { margin-top: var(--space-6); }
@@ -395,7 +396,7 @@ a {
 .backoffice--collapsed { grid-template-columns:5.5rem minmax(0,1fr); }
 .backoffice-sidebar__toggle { align-self:flex-end;display:grid;place-items:center;min-width:40px;min-height:40px;margin-bottom:var(--space-3);border:1px solid var(--color-border);border-radius:999px;background:transparent;color:var(--color-text-muted);cursor:pointer; }
 .backoffice-sidebar__toggle:hover,.backoffice-sidebar__toggle:focus-visible { color:var(--color-primary);border-color:var(--color-primary); }
-.backoffice-brand__powered { margin:4px 0;font-size:.65rem;font-style:italic;color:var(--color-text-muted);white-space:nowrap; }
+.backoffice-brand__powered { margin:6px 0;font-size:.65rem;font-style:italic;color:var(--color-text-muted);line-height:1.4;white-space:nowrap; }
 .backoffice--collapsed .backoffice-sidebar { padding:var(--space-3); }
 .backoffice--collapsed .backoffice-brand { justify-content:center; }
 .backoffice--collapsed .backoffice-brand__text,.backoffice--collapsed .backoffice-context,.backoffice--collapsed .backoffice-nav__label { display:none; }
@@ -511,26 +512,22 @@ a {
 
 @media (max-width: 48rem) {
   .backoffice {
-    grid-template-columns: minmax(0,1fr);
+    grid-template-columns: var(--layout-sidebar) minmax(0,1fr);
   }
 
   .backoffice-sidebar {
     z-index:20;
-    position:relative;
-    height:auto;
-    min-height:0;
+    position:sticky;
+    height:100dvh;
+    min-height:100dvh;
     width:100%;
     box-sizing:border-box;
-    border-right:0;
-    border-bottom:1px solid var(--color-border);
+    border-right:1px solid var(--color-border);
     box-shadow:none;
   }
-  .backoffice--collapsed .backoffice-sidebar { width:100%; }
-  .backoffice-nav { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
-  .backoffice--collapsed .backoffice-nav { grid-template-columns:repeat(auto-fit,minmax(44px,1fr)); }
-  .backoffice-nav__indicator { display:none; }
-  .backoffice-nav__link--active { background:color-mix(in srgb,var(--brand-blue) 18%,transparent); }
-  .backoffice--collapsed .backoffice-context { display:grid; }
+  .backoffice--collapsed { grid-template-columns:4rem minmax(0,1fr); }
+  .backoffice--collapsed .backoffice-sidebar { padding:var(--space-2); }
+  .backoffice--collapsed .backoffice-nav__link { padding:var(--space-2); }
 
   .backoffice-sidebar__footer {
     margin-top: var(--space-6);
@@ -978,6 +975,12 @@ a {
 
 /* Visual refinements are screen-only; report printing retains its existing rules. */
 @media screen {
+  .auth-brand__logo,.backoffice-brand__logo {
+    background:#f1f5f9;
+    border-radius:var(--radius-md);
+    padding:8px 12px;
+  }
+  .backoffice-page__header { overflow-wrap:anywhere; }
   :is(button, a, input, select, textarea, summary):focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 3px;
