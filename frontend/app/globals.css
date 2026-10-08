@@ -976,10 +976,10 @@ a {
 /* Visual refinements are screen-only; report printing retains its existing rules. */
 @media screen {
   .auth-brand__logo,.backoffice-brand__logo {
-    background:#f1f5f9;
-    border-radius:var(--radius-md);
-    padding:8px 12px;
+    background:transparent;
+    padding:0;
   }
+  .auth-brand__powered,.backoffice-brand__powered { text-align:center; }
   .backoffice-page__header { overflow-wrap:anywhere; }
   :is(button, a, input, select, textarea, summary):focus-visible {
     outline: 2px solid var(--color-focus);
