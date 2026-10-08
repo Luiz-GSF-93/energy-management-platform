@@ -1,0 +1,22 @@
+/* Presentation only: dashboard spacing and links. */
+@media screen {
+  .energyos-admin-dashboard { display:grid; gap:var(--space-6); min-width:0; }
+  .energyos-admin-dashboard > * { min-width:0; }
+  .energyos-admin-dashboard > .ds-card { margin:0; }
+  .energyos-admin-dashboard > .ds-card:not(:has(> .ds-card__header)) { padding:var(--space-6); }
+  .energyos-admin-dashboard :is(h2,h3,h4) { margin-top:0; line-height:1.3; }
+  .energyos-admin-dashboard > .ds-card > h2,
+  .energyos-admin-dashboard .ds-card__header h2 { font-size:1.2rem; margin-bottom:0; }
+  .energyos-admin-dashboard > .ds-card > h2 + p { margin-top:var(--space-4); }
+  .energyos-admin-dashboard .ds-card__content > :first-child { margin-top:0; }
+  .energyos-admin-dashboard .ds-card__content > :last-child { margin-bottom:0; }
+  .energyos-admin-dashboard a { color:var(--color-primary); text-underline-offset:4px; }
+  .energyos-admin-dashboard a:not(:has(svg))::after { content:' ↗'; display:inline-block; margin-left:4px; font-size:.9em; }
+  .energyos-admin-dashboard details > summary { cursor:pointer; min-height:44px; padding:12px 0; font-weight:600; }
+  .energyos-admin-dashboard .published-financial__totals .ds-card__header h2 { font-size:.85rem; color:var(--color-text-muted); }
+  .energyos-admin-dashboard .published-financial__totals strong { font-size:1.45rem; font-variant-numeric:tabular-nums; }
+  @media (max-width:700px) {
+    .energyos-admin-dashboard { gap:var(--space-4); }
+    .energyos-admin-dashboard > .ds-card:not(:has(> .ds-card__header)) { padding:var(--space-4); }
+  }
+}
