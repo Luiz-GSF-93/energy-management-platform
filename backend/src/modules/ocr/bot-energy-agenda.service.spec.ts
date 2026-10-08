@@ -1,0 +1,12 @@
+import {BotEnergyAgendaService} from './bot-energy-agenda.service';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+const t:any={organizationId:'a',userId:'actor',scope:'organization',role:'operacional',permissions:[P.OPERACAO_CALENDAR_VIEW,P.ORGANIZATION_CUSTOMERS_VIEW,P.ORGANIZATION_CONSUMER_UNITS_VIEW]};
+const now=new Date('2026-10-08T13:00:00Z');
+function fixture(){const row={id:'record',revision:2,organization_id:'a',customer_id:'client',consumer_unit_id:'unit',title:'Fechamento CCEE',status:'OPEN',starts_at:'2026-09-01T12:00:00Z',due_at:'2026-10-09T12:00:00-03:00',responsible_id:'actor'};const operations={list:jest.fn(async()=>({rows:[row]}))};return {row,operations,service:new BotEnergyAgendaService(operations as any)};}
+describe('Bot-Energy agenda isolation',()=>{
+ it.each([{scope:'global'},{role:'cliente'},{organizationId:''},{userId:''},{permissions:[]}])('rejects unauthorized context before reading %p',async patch=>{const f=fixture();await expect(f.service.reminders({...t,...patch},now)).rejects.toMatchObject({status:403});expect(f.operations.list).not.toHaveBeenCalled();});
+ it('uses the licensed organization reader and actual deadline, not start date',async()=>{const f=fixture(),r=await f.service.reminders(t,now);expect(f.operations.list).toHaveBeenCalledWith('agenda',t);expect(r.reminders[0]).toMatchObject({days:1,stage:'ONE_DAY',key:'record:2:ONE_DAY',customerId:'client',unitId:'unit'});});
+ it('propagates licence and complete-set failures without claiming no deadlines',async()=>{const f=fixture();f.operations.list.mockRejectedValue(new Error('Licence unavailable'));await expect(f.service.reminders(t,now)).rejects.toThrow('Licence unavailable');});
+ it.each([{organization_id:'b'},{status:'DONE'},{status:'CANCELLED'},{customer_id:''},{consumer_unit_id:''},{due_at:'2026-10-20T12:00:00Z'},{due_at:'invalid'}])('excludes inactive, foreign or inapplicable agenda %p',async patch=>{const f=fixture();Object.assign(f.row,patch);expect((await f.service.reminders(t,now)).reminders).toHaveLength(0);});
+ it('keeps overdue tasks visible and does not infer official calendar approval',async()=>{const f=fixture();f.row.due_at='2026-10-06T12:00:00-03:00';const r=await f.service.reminders(t,now);expect(r.reminders[0].stage).toBe('OVERDUE');expect(r.reminders[0].source).toContain('Agenda registrada');expect(r.disclosure).toContain('calendário oficial CCEE');});
+});

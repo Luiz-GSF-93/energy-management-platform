@@ -2,9 +2,12 @@ import {Body,Controller,Get,Param,Post,Req} from '@nestjs/common';
 import {RequirePermission} from '../../common/decorators/require-permission.decorator';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {BotEnergyService} from './bot-energy.service';
+import {BotEnergyAgendaService} from './bot-energy-agenda.service';
 @Controller('documents')
 export class BotEnergyController {
- constructor(private readonly bot:BotEnergyService){}
+ constructor(private readonly bot:BotEnergyService,private readonly agenda:BotEnergyAgendaService){}
+ @Get('bot-energy/agenda') @RequirePermission([P.OPERACAO_CALENDAR_VIEW,P.ORGANIZATION_CUSTOMERS_VIEW,P.ORGANIZATION_CONSUMER_UNITS_VIEW])
+ reminders(@Req() req:any){return this.agenda.reminders(req.tenantContext);}
  @Get('bot-energy/context') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
  contextOptions(@Req() req:any){return this.bot.context(req.tenantContext);}
  @Get('bot-energy/topics') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])

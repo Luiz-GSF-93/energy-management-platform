@@ -1,0 +1,32 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import assert from 'node:assert/strict';
+const db=new PGlite();
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);INSERT INTO organizations VALUES('o1',NULL),('o2',NULL);
+ CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,free_market_management boolean);INSERT INTO licenses VALUES('o1',true,'ACTIVE',CURRENT_DATE-1,NULL,true);
+ CREATE TABLE roles(id text PRIMARY KEY,scope text,permissions jsonb);INSERT INTO roles VALUES('admin','global','["ede45b9c-8af4-4b47-8490-9d386a3efb13"]'),('org','organization','[]');
+ CREATE TABLE user_roles(user_id text,role_id text);INSERT INTO user_roles VALUES('publisher','admin'),('client','org');
+ CREATE TABLE energy_price_pld_monthly(organization_id text,month date,submarket text,mean_brl_mwh numeric,source text,source_hash text,hours integer,published_at timestamptz,provider text,PRIMARY KEY(organization_id,month,submarket));
+ CREATE FUNCTION acl_preserve_record() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Immutable';END$$;`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_pld_publication.sql',import.meta.url),'utf8'));
+ const payload={organizationId:'o1',state:'DRAFT',provider:'CCEE',source:'https://servicos.ccee.org.br/ws/prec/PLDBSv1',method:'HOURLY_ARITHMETIC_MEAN',taxesIncluded:false,months:['SE_CO','S','NE','N'].map(submarket=>({month:'2026-08',submarket,hours:744,meanBrlMwh:'128.117500'})),sourceHashes:['a'.repeat(64)],imported:false,digest:'b'.repeat(64)};
+ const call=(value=payload,actor='publisher',org='o1',request=randomUUID())=>db.query('SELECT ccee_publish_pld_month($1,$2,$3,$4) AS result',[org,actor,request,value]);
+ await assert.rejects(call(payload,'client'),e=>e.code==='42501');
+ await assert.rejects(call({...payload,organizationId:'o2'}),e=>e.code==='22023');
+ await assert.rejects(call({...payload,taxesIncluded:true}),e=>e.code==='22023');
+ await assert.rejects(call({...payload,months:payload.months.slice(0,3)}),e=>e.code==='22023');
+ await assert.rejects(call({...payload,months:payload.months.map(r=>({...r,hours:743}))}),e=>e.code==='22023');
+ assert.equal((await db.query('SELECT count(*)::int AS n FROM energy_price_pld_monthly')).rows[0].n,0);
+ const request=randomUUID(),first=(await call(payload,'publisher','o1',request)).rows[0].result;
+ assert.equal(first.published,true);assert.equal(first.replayed,false);
+ assert.equal((await db.query('SELECT count(*)::int AS n FROM energy_price_pld_monthly')).rows[0].n,4);
+ assert.equal((await call(payload,'publisher','o1',request)).rows[0].result.replayed,true);
+ assert.equal((await call({...payload,sourceHashes:['c'.repeat(64)]})).rows[0].result.id,first.id);
+ await assert.rejects(call({...payload,digest:'d'.repeat(64)}),e=>e.code==='40001');
+ await db.exec('SET ROLE authenticated');await assert.rejects(call(),e=>e.code==='42501');await assert.rejects(db.query('SELECT * FROM ccee_pld_publications'),e=>e.code==='42501');await db.exec('RESET ROLE');
+ await assert.rejects(db.query('UPDATE ccee_pld_publications SET created_by=$1',['changed']));
+ console.log('CCEE PLD SQL: authorization, provenance, atomicity, idempotency, immutability and direct-access rejection passed');
+}finally{await db.close();}

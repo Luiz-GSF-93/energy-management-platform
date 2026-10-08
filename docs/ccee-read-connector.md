@@ -1,6 +1,6 @@
 # Conector CCEE — primeira etapa de leitura
 
-O teste local do usuário confirmou SOAP HTTP 200 e retorno do perfil autorizado. Essa evidência não confirma as permissões para medições de todas as unidades nem o funcionamento do certificado no Railway.
+Em 08/10/2026, o teste do backend no Railway confirmou autenticação e perfil autorizado, e a prévia real do PLD de agosto/2026 cobriu 744 horas em cada submercado. Isso não confirma acesso às medições privadas de clientes. A evolução de publicação e avisos está descrita em ccee-layered-integration.md.
 
 ## Implementado
 
