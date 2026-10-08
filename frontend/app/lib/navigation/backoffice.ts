@@ -34,6 +34,7 @@ export const backofficeNavigation:
     { href:'/backoffice/acl-admissions',label:'Adesão ACL',platformOperation:true,permissionsAll:['2c933fdf-0bbf-406a-915c-03e7921e54d8','cbb2e904-0718-4eec-9396-dba899118cdd'],scope:'organization' },
     { href: '/backoffice/energy-map', label: 'Mapa energético', permissionsAll: ['b142bd7b-05a3-45ee-befd-e593066c2775','cbb2e904-0718-4eec-9396-dba899118cdd'], scope: 'organization' },
     {href:'/backoffice/trading-hub',label:'Trading Hub',permission:'60f9690a-145b-4dba-b23f-9f945baca296',scope:'organization'},
+    {href:'/backoffice/ccee-registrations',label:'Registros CCEE',permission:'f5364101-4486-42c2-a90f-807937ac3001',platformOperation:true,scope:'organization'},
     { href: '/backoffice/contracts', label: 'Contratos', permission: '60f9690a-145b-4dba-b23f-9f945baca296', scope: 'organization' },
     { href: '/backoffice/documents', label: 'Documentos', permission: '8f105b02-4443-49de-b188-847e0284e7ed', scope: 'organization' },
     { href: '/backoffice/ocr-audit', label: 'Auditoria OCR', permission: '8f105b02-4443-49de-b188-847e0284e7ed', scope: 'organization' },

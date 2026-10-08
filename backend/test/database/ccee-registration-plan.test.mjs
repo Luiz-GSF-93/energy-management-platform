@@ -1,0 +1,34 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite(),actor='11111111-1111-4111-8111-111111111111';
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE permissions(id uuid PRIMARY KEY,code text UNIQUE,name text,module text,resource text,action text);
+ CREATE TABLE roles(id text PRIMARY KEY,name text,scope text,permissions jsonb);
+ CREATE TABLE user_roles(user_id uuid,role_id text);
+ CREATE TABLE organizations(id text PRIMARY KEY,name text,deleted_at timestamptz);
+ CREATE TABLE organization_members(id text PRIMARY KEY,user_id uuid,organization_id text,status text);
+ CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,status text,deleted_at timestamptz);
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,upload_license_id text);
+ CREATE TABLE audit_logs(id text,organization_id text NOT NULL,user_id uuid,action text,resource_type text,resource_id text,changes jsonb,status text,ip_address text,user_agent text);
+ CREATE TABLE licenses(id text PRIMARY KEY,organization_id text,license_type text,documents_limit int,documents_used int,renewal_date date,start_date date,end_date date,status text,active bool,max_consumer_units int,document_management bool,advanced_analytics bool,report_generation bool,free_market_management bool,updated_at timestamptz);
+ INSERT INTO roles VALUES('global','admin_platform','global','[]');INSERT INTO user_roles VALUES('${actor}','global');INSERT INTO organizations VALUES('a','A',null),('b','B',null);`);
+ for(const name of ['20260924_f1_15_plan_catalog.sql','20260925_f1_39_license_governance.sql'])await db.exec(readFileSync(new URL('../../src/database/migrations/'+name,import.meta.url),'utf8'));
+ await db.exec(`ALTER TABLE plan_catalog ADD trading_hub boolean DEFAULT false, ADD bot_energy_rag boolean DEFAULT false, ADD ai_monthly_limit_micro_usd bigint DEFAULT 10000000, ADD monthly_price_brl_cents bigint;
+ ALTER TABLE licenses ADD trading_hub boolean DEFAULT false, ADD bot_energy_rag boolean DEFAULT false, ADD ai_monthly_limit_micro_usd bigint DEFAULT 0, ADD monthly_price_brl_cents bigint;`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_registration_plan.sql',import.meta.url),'utf8'));
+ const d={name:'CCEE avulso',description:'Independent module',active:true,documents_limit:10,documents_unlimited:false,max_consumer_units:10,max_users:10,document_management:false,advanced_analytics:false,report_generation:false,free_market_management:false,ccee_registrations:true};
+ const save=async(def=d,id=null,version=null)=>(await db.query('SELECT save_catalog_plan($1,$2,$3,$4,null,null) AS p',[id,version,def,actor])).rows[0].p;
+ const plan=await save();assert.equal(plan.ccee_registrations,true);assert.equal(plan.free_market_management,false);
+ const apply=async(p,modules=null)=>(await db.query("SELECT save_plan_license('a',null,null,$1,$2,CURRENT_DATE,null,CURRENT_DATE,'ACTIVE',$3,$4,null,null) AS l",[p.id,p.version,modules,actor])).rows[0].l;
+ const license=await apply(plan);assert.equal(license.ccee_registrations,true);assert.equal(license.free_market_management,false);assert.equal(license.plan_snapshot.ccee_registrations,true);
+ await save({...d,ccee_registrations:false},plan.id,plan.version);assert.equal((await db.query('SELECT ccee_registrations FROM licenses WHERE id=$1',[license.id])).rows[0].ccee_registrations,true);
+ const basic=await save({...d,name:'Sem módulo',ccee_registrations:false});
+ await assert.rejects(db.query("SELECT save_plan_license('b',null,null,$1,$2,CURRENT_DATE,null,CURRENT_DATE,'ACTIVE',$3,$4,null,null)",[basic.id,basic.version,{document_management:false,advanced_analytics:false,report_generation:false,free_market_management:false,ccee_registrations:true},actor]),e=>e.code==='22023');
+ await assert.rejects(save({...d,name:'Invalid',ccee_registrations:'yes'}),e=>e.code==='22023');
+ await assert.rejects(db.query('UPDATE licenses SET ccee_registrations=false WHERE id=$1',[license.id]),e=>e.code==='42501');
+ assert.equal((await db.query('SELECT changes FROM platform_plan_audit WHERE plan_id=$1 ORDER BY created_at LIMIT 1',[plan.id])).rows[0].changes.after.ccee_registrations,true);
+ await db.exec('SET ROLE authenticated');await assert.rejects(save(),e=>e.code==='42501');await db.exec('RESET ROLE');
+ console.log('CCEE add-on catalog SQL: independent plan/module, licensed selection, snapshots, non-retroactivity, audit and guarded writes passed');
+}finally{await db.close();}

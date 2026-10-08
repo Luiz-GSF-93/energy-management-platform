@@ -1,0 +1,1 @@
+.form{display:grid;gap:16px}.form label{display:grid;gap:6px}.form input,.form select,.form textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #475569;border-radius:8px;color:inherit;background:transparent}.form textarea{min-height:110px}.form select option{background:#0f172a;color:#fff}.form h2,.form p{margin:0}.form :disabled{opacity:.6}
