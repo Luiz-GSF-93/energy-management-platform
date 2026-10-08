@@ -15,6 +15,9 @@
   .energyos-admin-dashboard details > summary { cursor:pointer; min-height:44px; padding:12px 0; font-weight:600; }
   .energyos-admin-dashboard .published-financial__totals .ds-card__header h2 { font-size:.85rem; color:var(--color-text-muted); }
   .energyos-admin-dashboard .published-financial__totals strong { font-size:1.45rem; font-variant-numeric:tabular-nums; }
+  .energyos-admin-dashboard .published-financial__totals { grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr)); }
+  .energyos-admin-dashboard .financial-report .ds-card__header { padding:16px 20px 0; border:0; border-radius:0; background:transparent; }
+  .energyos-admin-dashboard .financial-report .ds-card__content { padding:12px 20px 20px; }
   .energyos-admin-dashboard .financial-report > header { display:grid; gap:8px; }
   .energyos-admin-dashboard .financial-report > header p { margin:0; font-size:.875rem; }
   .energyos-admin-dashboard .financial-report > header h3 { margin:0; font-size:1.35rem; }
@@ -52,6 +55,8 @@
   .report-source-details__dialog { width:min(680px,calc(100vw - 32px)); max-height:85dvh; box-sizing:border-box; padding:0; background:var(--color-surface); color:var(--color-text); border:1px solid var(--color-border); border-radius:var(--radius-xl); box-shadow:var(--shadow-card); overflow:auto; }
   .report-source-details__dialog::backdrop { background:rgb(3 16 32 / 75%); }
   .report-source-details__heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:24px; border-bottom:1px solid var(--color-border); }
+  .financial-report .report-source-details__heading { position:sticky; top:0; z-index:1; border:0; border-bottom:1px solid var(--color-border); border-radius:0; background:var(--color-surface); }
+  .report-source-details__heading > div { min-width:0; }
   .report-source-details__heading p { margin:0 0 8px; color:var(--color-text-muted); font-size:.8rem; }
   .report-source-details__heading h3 { margin:0; font-size:1.1rem; overflow-wrap:anywhere; }
   .report-source-details__heading button { min-height:44px; padding:8px 12px; border:1px solid var(--color-control-border); border-radius:var(--radius-md); background:var(--color-surface-raised); color:var(--color-text); font:inherit; cursor:pointer; white-space:nowrap; }
