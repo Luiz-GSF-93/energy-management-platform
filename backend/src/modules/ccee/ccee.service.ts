@@ -1,7 +1,11 @@
 import {BadRequestException,ConflictException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {cceeConfig} from './ccee-config';
 import {cceeRead} from './ccee-transport';
-import {monthlyPld,parseCcee,pldHours,profilePresent,PldHour} from './ccee-response';
+import {parseCcee,profilePresent,PldHour} from './ccee-response';
+import {pldReviewDigest} from './ccee-publication';
+import {normalizeCceePld} from './ccee-normalizer';
+import {validateCceePld} from './ccee-validation';
+import {calculateMonthlyMarketReference} from '../energy-prices/market-reference-calculation';
 
 @Injectable()
 export class CceeService {
@@ -40,10 +44,12 @@ export class CceeService {
         const response=parseCcee(await cceeRead(config,'pld',page,month),'pld',page);
         if(page>1&&(response.pages!==pages||response.total!==total))throw new Error('CCEE_CHANGED_PAGINATION');
         pages=response.pages;total=response.total;
-        rows.push(...pldHours(response.body,month));hashes.push(response.hash);
+        rows.push(...normalizeCceePld(response.body,month));hashes.push(response.hash);
       }
       if(rows.length!==total*4)throw new Error('CCEE_INCOMPLETE_MONTH');
-      return {organizationId:config.organizationId,state:'DRAFT',provider:'CCEE',source:'https://servicos.ccee.org.br/ws/prec/PLDBSv1',method:'HOURLY_ARITHMETIC_MEAN',taxesIncluded:false,months:monthlyPld(rows,month),sourceHashes:hashes,imported:false};
+      const validated=validateCceePld(rows,month);
+      const preview={organizationId:config.organizationId,state:'DRAFT',provider:'CCEE',source:'https://servicos.ccee.org.br/ws/prec/PLDBSv1',method:'HOURLY_ARITHMETIC_MEAN',taxesIncluded:false,months:calculateMonthlyMarketReference(validated,month),sourceHashes:hashes,imported:false};
+      return {...preview,digest:pldReviewDigest(preview)};
     });
   }
 }

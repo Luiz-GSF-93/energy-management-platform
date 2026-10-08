@@ -1,5 +1,7 @@
 import {XMLParser,XMLValidator} from 'fast-xml-parser';
 import {createHash} from 'node:crypto';
+import {validateCceePld} from './ccee-validation';
+import {calculateMonthlyMarketReference} from '../energy-prices/market-reference-calculation';
 
 const SOAP='http://schemas.xmlsoap.org/soap/envelope/';
 const list=(value:any):any[]=>value===undefined?[]:Array.isArray(value)?value:[value];
@@ -69,13 +71,5 @@ export function pldHours(body:any,month:string):PldHour[] {
   return rows;
 }
 export function monthlyPld(rows:PldHour[],month:string) {
-  const [year,number]=month.split('-').map(Number),hours=new Date(Date.UTC(year,number,0)).getUTCDate()*24;
-  const first=Date.parse(month+'-01T00:00:00-03:00');
-  const result=[];
-  for(const submarket of ['SE_CO','S','NE','N'] as const) {
-    const selected=rows.filter(row=>row.submarket===submarket).sort((a,b)=>a.start.localeCompare(b.start));
-    if(selected.length!==hours||selected.some((row,i)=>Date.parse(row.start)!==first+i*3600000))throw new Error('CCEE_INCOMPLETE_MONTH');
-    result.push({month,submarket,hours,meanBrlMwh:Number((selected.reduce((sum,row)=>sum+row.value,0)/hours).toFixed(6))});
-  }
-  return result;
+ return calculateMonthlyMarketReference(validateCceePld(rows,month),month);
 }
