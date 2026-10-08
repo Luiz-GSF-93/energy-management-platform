@@ -996,6 +996,25 @@ a {
   .document-manager__actions { flex-wrap:wrap; }
   .document-manager__pagination { flex-wrap:wrap; }
   .document-manager__filters label { min-width:0; }
+  /* Presentation only: retain form controls, actions and existing navigation. */
+  .backoffice-sidebar__toggle { min-width:2.75rem;min-height:2.75rem; }
+  .backoffice-page__header { margin-bottom:var(--space-6); }
+  .ds-field,.ds-card__content { min-width:0; }
+  .ds-label,.ds-input,.ds-alert { line-height:1.5; }
+  .ds-input { min-width:0; }
+  .ds-button:disabled { cursor:not-allowed; }
+  .ds-state { align-content:center; }
+  .ds-state__title,.ds-state__description { margin:0;overflow-wrap:anywhere; }
+  .ds-state__description { max-width:60ch;line-height:1.6; }
+  .document-manager :is(th,td) { line-height:1.5; }
+  .document-manager tbody tr:hover {
+    background:color-mix(in srgb,var(--brand-blue) 5%,var(--color-surface));
+  }
+  .document-manager__filters label { font-weight:600; }
+  .document-manager__pagination { gap:var(--space-3); }
+  @media (min-width:48.001rem) and (max-width:64rem) {
+    .backoffice-main { padding:var(--space-6); }
+  }
   @media (max-width:30rem) {
     .document-manager__filters { grid-template-columns:minmax(0,1fr); }
     .auth-page { padding:var(--space-4); }
