@@ -7,6 +7,7 @@ export class CceeRegistrationController {
  constructor(private service:CceeRegistrationService){}
  @Get() @Header('Cache-Control','private, no-store') list(@Tenant() t:TenantContext){return this.service.list(t);}
  @Get(':id/history') @Header('Cache-Control','private, no-store') history(@Param('id') id:string,@Tenant() t:TenantContext){return this.service.history(id,t);}
+ @Get(':id/readiness') @Header('Cache-Control','private, no-store') readiness(@Param('id') id:string,@Tenant() t:TenantContext){return this.service.readiness(id,t);}
  @Post() save(@Body() input:unknown,@Tenant() t:TenantContext){return this.service.save(input,t);}
  @Post(':id/transition') transition(@Param('id') id:string,@Body() input:unknown,@Tenant() t:TenantContext){return this.service.transition(id,input,t);}
 }
