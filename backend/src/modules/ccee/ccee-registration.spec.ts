@@ -1,0 +1,12 @@
+import {ForbiddenException} from '@nestjs/common';
+import {CceeRegistrationService,CCEE_REGISTRATION_PERMISSIONS as P} from './ccee-registration.service';
+describe('CCEE registration module',()=>{
+ const t:any={organizationId:'o1',userId:'user',role:'gestor',permissions:Object.values(P),scope:'organization'};
+ const fixture=()=>{const rpc=jest.fn().mockResolvedValue({data:[],error:null}),license={requireEntitlement:jest.fn().mockResolvedValue({})};return {rpc,license,s:new CceeRegistrationService({getClient:()=>({rpc})} as any,license as any)};};
+ it.each([{...t,scope:'global'},{...t,role:'consulta'},{...t,permissions:[]},{...t,organizationId:''}])('rejects invalid actor before accessing data',async actor=>{const f=fixture();await expect(f.s.list(actor)).rejects.toBeInstanceOf(ForbiddenException);expect(f.rpc).not.toHaveBeenCalled();});
+ it('requires the independent add-on, scopes RPC and never enables transmission',async()=>{const f=fixture();const r=await f.s.list(t);expect(f.license.requireEntitlement).toHaveBeenCalledWith('o1','ccee_registrations');expect(f.rpc).toHaveBeenCalledWith('read_ccee_registrations',{p_org:'o1',p_actor:'user'});expect(r.transmissionEnabled).toBe(false);});
+ it('allows explicit platform operation only inside a licensed organization and through the actor-checking RPC',async()=>{const f=fixture();const r=await f.s.list({...t,accessMode:'platform_operation',permissions:[]});expect(r.canManage).toBe(true);expect(f.rpc).toHaveBeenCalledWith('read_ccee_registrations',{p_org:'o1',p_actor:'user'});});
+ it('fails closed when the module is not contracted',async()=>{const f=fixture();f.license.requireEntitlement.mockRejectedValue(new ForbiddenException());await expect(f.s.list(t)).rejects.toBeInstanceOf(ForbiddenException);expect(f.rpc).not.toHaveBeenCalled();});
+ it('rejects a foreign response',async()=>{const f=fixture();f.rpc.mockResolvedValue({data:[{organization_id:'other'}],error:null});await expect(f.s.list(t)).rejects.toThrow('Resposta fora do escopo');});
+ it('rejects caller-defined organization or transmission status',async()=>{const f=fixture();await expect(f.s.save({organizationId:'other'},t)).rejects.toThrow();await expect(f.s.transition('f5364101-4486-42c2-a90f-807937ac3001',{revision:1,requestId:'f5364101-4486-42c2-a90f-807937ac3002',status:'SENT',reason:'test'},t)).rejects.toThrow();expect(f.rpc).not.toHaveBeenCalled();});
+});

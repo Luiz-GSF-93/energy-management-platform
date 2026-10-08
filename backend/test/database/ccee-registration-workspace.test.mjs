@@ -1,0 +1,45 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import assert from 'node:assert/strict';
+const db=new PGlite(),id=randomUUID(),request=randomUUID();
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE permissions(id uuid PRIMARY KEY,code text,name text,module text,resource text,action text);
+ CREATE TABLE organizations(id text PRIMARY KEY);INSERT INTO organizations VALUES('o1'),('o2');
+ CREATE TABLE customers(id text PRIMARY KEY,organization_id text,deleted_at timestamptz,UNIQUE(organization_id,id));INSERT INTO customers VALUES('c1','o1',NULL),('c2','o2',NULL);
+ CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,UNIQUE(organization_id,customer_id,id));INSERT INTO consumer_units VALUES('u1','o1','c1'),('u2','o2','c2');
+ CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,ccee_registrations boolean,free_market_management boolean);INSERT INTO licenses VALUES('o1',true,'ACTIVE',CURRENT_DATE,NULL,false,true);
+ CREATE TABLE roles(id text,name text,organization_id text,scope text,permissions jsonb);INSERT INTO roles VALUES('author','operacional','o1','organization','["f5364101-4486-42c2-a90f-807937ac3001","f5364101-4486-42c2-a90f-807937ac3002"]'),('reviewer','gestor','o1','organization','["f5364101-4486-42c2-a90f-807937ac3001","f5364101-4486-42c2-a90f-807937ac3002","f5364101-4486-42c2-a90f-807937ac3003"]');
+ CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text);INSERT INTO organization_members VALUES('o1','author','author','ACTIVE'),('o1','reviewer','reviewer','ACTIVE');
+ CREATE TABLE platform_organization_sessions(organization_id text,user_id text,expires_at timestamptz,revoked_at timestamptz);
+ CREATE TABLE operation_records(id uuid,organization_id text,kind text,customer_id text,consumer_unit_id text,status text,due_at timestamptz,ends_at timestamptz,starts_at timestamptz,PRIMARY KEY(id));
+ CREATE FUNCTION acl_preserve_record() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Immutable';END$$;
+ CREATE FUNCTION acl_operation_allowed(text,text,uuid,boolean) RETURNS boolean LANGUAGE sql AS $$SELECT true$$;
+ CREATE FUNCTION assert_operation_actor(text,text,text,boolean) RETURNS void LANGUAGE plpgsql AS $$BEGIN RETURN;END$$;
+ CREATE FUNCTION assert_license_platform_actor(uuid) RETURNS void LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'No global bypass' USING ERRCODE='42501';END$$;`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_registration_workspace.sql',import.meta.url),'utf8'));
+ const data={customerId:'c1',unitId:'u1',month:'2026-08',operation:'VALIDATE_AMOUNTS',title:'Monthly preparation',notes:'References to review',deadline:'2030-10-15T18:00:00Z',evidenceReference:'Existing contract evidence'};
+ const save=(d=data,actor='author',record=id,rev=0,status='DRAFT',req=request)=>(db.query('SELECT save_ccee_registration($1,$2,$3,$4,$5,$6,$7,$8) AS r',['o1',actor,record,req,rev,status,'Independent preparation',d])).then(r=>r.rows[0].r);
+ await assert.rejects(save(),e=>e.code==='42501');
+ await db.exec('UPDATE licenses SET ccee_registrations=true,free_market_management=false');
+ const draft=await save();assert.equal(draft.revision,1);assert.deepEqual(await save(),draft);
+ await assert.rejects(save({...data,unitId:'u2'},'author',randomUUID(),0,'DRAFT',randomUUID()),e=>e.code==='42501');
+ await assert.rejects(save({...data,organizationId:'o2'},'author',randomUUID(),0,'DRAFT',randomUUID()),e=>e.code==='22023');
+ await assert.rejects(save(data,'author',id,0,'DRAFT',randomUUID()),e=>e.code==='40001');
+ await assert.rejects(save(null,'author',id,1,'APPROVED',randomUUID()),e=>e.code==='42501');
+ await save(null,'author',id,1,'REVIEW',randomUUID());
+ await assert.rejects(save(null,'reviewer',id,2,'SENT',randomUUID()),e=>e.code==='22023');
+ const approved=await save(null,'reviewer',id,2,'APPROVED',randomUUID());assert.equal(approved.status,'APPROVED');assert.equal(approved.reviewed_by,'reviewer');
+ const ownReviewId=randomUUID();await save(data,'reviewer',ownReviewId,0,'DRAFT',randomUUID());await save(null,'reviewer',ownReviewId,1,'REVIEW',randomUUID());await assert.rejects(save(null,'reviewer',ownReviewId,2,'APPROVED',randomUUID()),e=>e.code==='42501');
+ const agendaId=randomUUID();await db.query("INSERT INTO operation_records VALUES($1,'o1','agenda','c1','u1','OPEN',$2,NULL,NULL)",[agendaId,data.deadline]);
+ await assert.rejects(save({...data,agendaId,deadline:'2030-10-16T18:00:00Z'},'author',randomUUID(),0,'DRAFT',randomUUID()),e=>e.code==='42501');
+ const scheduled=randomUUID();await save({...data,agendaId},'author',scheduled,0,'DRAFT',randomUUID());await save(null,'author',scheduled,1,'REVIEW',randomUUID());await db.query("UPDATE operation_records SET due_at='2030-10-16T18:00:00Z' WHERE id=$1",[agendaId]);await assert.rejects(save(null,'reviewer',scheduled,2,'APPROVED',randomUUID()),e=>e.code==='40001');
+ await assert.rejects(save(data,'author',id,3,'DRAFT',randomUUID()),e=>e.code==='40001');
+ const own=(await db.query("SELECT read_ccee_registrations('o1','author') AS r")).rows[0].r;assert.equal(own.length,3);
+ await assert.rejects(db.query("SELECT read_ccee_registrations('o2','author')"),e=>e.code==='42501');
+ await assert.rejects(db.exec('UPDATE ccee_registration_history SET reason=\'tamper\''));
+ for(const role of ['authenticated','service_role']){await db.exec('SET ROLE '+role);await assert.rejects(db.query('SELECT * FROM ccee_registration_records'),e=>e.code==='42501');await db.exec('RESET ROLE');}
+ await db.exec('UPDATE licenses SET ccee_registrations=false');await assert.rejects(db.query("SELECT read_ccee_registrations('o1','author')"),e=>e.code==='42501');
+ console.log('CCEE registration SQL: independent add-on, no retroactive access, isolation, versions, idempotency, review, immutable audit, direct grants and no forged transmission passed');
+}finally{await db.close();}

@@ -12,6 +12,7 @@ export class SavePlanDto {
  @IsBoolean() advanced_analytics!:boolean;
  @IsBoolean() report_generation!:boolean;
  @IsBoolean() free_market_management!:boolean;
+ @IsOptional() @IsBoolean() ccee_registrations?:boolean;
  @IsOptional() @IsBoolean() trading_hub?:boolean;
  @IsOptional() @IsBoolean() bot_energy_rag?:boolean;
  @IsOptional() @IsInt() @Min(0) @Max(1000000000000) ai_monthly_limit_micro_usd?:number;
@@ -19,6 +20,7 @@ export class SavePlanDto {
  @IsOptional() @IsInt() @Min(1) version?:number;
 }
 export class LicenseModulesDto {
+ @IsOptional() @IsBoolean() ccee_registrations?:boolean;
  @IsOptional() @IsBoolean() trading_hub?:boolean;
  @IsOptional() @IsBoolean() bot_energy_rag?:boolean;
  @IsBoolean() document_management!:boolean;
