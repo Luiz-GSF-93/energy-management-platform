@@ -19,6 +19,8 @@ try{
  CREATE FUNCTION assert_operation_actor(text,text,text,boolean) RETURNS void LANGUAGE plpgsql AS $$BEGIN RETURN;END$$;
  CREATE FUNCTION assert_license_platform_actor(uuid) RETURNS void LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'No global bypass' USING ERRCODE='42501';END$$;`);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_registration_workspace.sql',import.meta.url),'utf8'));
+ await db.exec(`CREATE TABLE ccee_unit_authorizations(id uuid,organization_id text,customer_id text,consumer_unit_id text,profile_code text,revision integer,status text,created_by text,reviewed_by text,reviewed_at timestamptz,evidence_reference text);`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_registration_readiness.sql',import.meta.url),'utf8'));
  const data={customerId:'c1',unitId:'u1',month:'2026-08',operation:'VALIDATE_AMOUNTS',title:'Monthly preparation',notes:'References to review',deadline:'2030-10-15T18:00:00Z',evidenceReference:'Existing contract evidence'};
  const save=(d=data,actor='author',record=id,rev=0,status='DRAFT',req=request)=>(db.query('SELECT save_ccee_registration($1,$2,$3,$4,$5,$6,$7,$8) AS r',['o1',actor,record,req,rev,status,'Independent preparation',d])).then(r=>r.rows[0].r);
  await assert.rejects(save(),e=>e.code==='42501');
@@ -37,9 +39,18 @@ try{
  const scheduled=randomUUID();await save({...data,agendaId},'author',scheduled,0,'DRAFT',randomUUID());await save(null,'author',scheduled,1,'REVIEW',randomUUID());await db.query("UPDATE operation_records SET due_at='2030-10-16T18:00:00Z' WHERE id=$1",[agendaId]);await assert.rejects(save(null,'reviewer',scheduled,2,'APPROVED',randomUUID()),e=>e.code==='40001');
  await assert.rejects(save(data,'author',id,3,'DRAFT',randomUUID()),e=>e.code==='40001');
  const own=(await db.query("SELECT read_ccee_registrations('o1','author') AS r")).rows[0].r;assert.equal(own.length,3);
+ const preflight=record=>db.query('SELECT read_ccee_registration_readiness($1,$2,$3) AS r',['o1','author',record]).then(v=>v.rows[0].r);
+ const missing=await preflight(id);assert.equal(missing.organizationId,'o1');assert.equal(missing.representation,null);assert.equal(missing.agendaCurrent,null);assert.equal(missing.customerActive,true);
+ await db.query("INSERT INTO ccee_unit_authorizations VALUES($1,'o1','c1','u1','12345',1,'APPROVED','author','reviewer',now(),'Do not expose document contents')",[randomUUID()]);
+ const proof=await preflight(id);assert.equal(proof.representation.profileCode,'12345');assert.equal(proof.representation.independentReview,true);assert.ok(!JSON.stringify(proof).includes('Do not expose'));
+ await db.query("INSERT INTO ccee_unit_authorizations VALUES($1,'o1','c1','u1','12345',2,'REVOKED','author','reviewer',now(),'Revoked proof')",[randomUUID()]);assert.equal((await preflight(id)).representation.status,'REVOKED');
+ assert.equal((await preflight(scheduled)).agendaCurrent,false);
+ await assert.rejects(preflight(randomUUID()),e=>e.code==='42501');await assert.rejects(db.query('SELECT read_ccee_registration_readiness($1,$2,$3)',['o2','author',id]),e=>e.code==='42501');
+ await db.exec("UPDATE customers SET deleted_at=now() WHERE id='c1'");assert.equal((await preflight(id)).customerActive,false);await db.exec("UPDATE customers SET deleted_at=NULL WHERE id='c1'");
  await assert.rejects(db.query("SELECT read_ccee_registrations('o2','author')"),e=>e.code==='42501');
  await assert.rejects(db.exec('UPDATE ccee_registration_history SET reason=\'tamper\''));
- for(const role of ['authenticated','service_role']){await db.exec('SET ROLE '+role);await assert.rejects(db.query('SELECT * FROM ccee_registration_records'),e=>e.code==='42501');await db.exec('RESET ROLE');}
+ for(const role of ['authenticated','service_role']){await db.exec('SET ROLE '+role);await assert.rejects(db.query('SELECT * FROM ccee_registration_records'),e=>e.code==='42501');if(role==='authenticated')await assert.rejects(preflight(id),e=>e.code==='42501');await db.exec('RESET ROLE');}
  await db.exec('UPDATE licenses SET ccee_registrations=false');await assert.rejects(db.query("SELECT read_ccee_registrations('o1','author')"),e=>e.code==='42501');
+ await assert.rejects(preflight(id),e=>e.code==='42501');
  console.log('CCEE registration SQL: independent add-on, no retroactive access, isolation, versions, idempotency, review, immutable audit, direct grants and no forged transmission passed');
 }finally{await db.close();}
