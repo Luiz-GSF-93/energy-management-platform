@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+<defs>
+  <linearGradient id="eosBorder" x1="32" y1="28" x2="230" y2="228" gradientUnits="userSpaceOnUse"><stop stop-color="#125BFF"/><stop offset=".48" stop-color="#00C9F2"/><stop offset="1" stop-color="#00E59B"/></linearGradient>
+  <radialGradient id="eosCore" cx="40%" cy="28%" r="86%"><stop stop-color="#0B3E82"/><stop offset=".56" stop-color="#06264B"/><stop offset="1" stop-color="#03182D"/></radialGradient>
+  <linearGradient id="eosWave1" x1="55" y1="150" x2="210" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#0A6EFF" stop-opacity=".95"/><stop offset="1" stop-color="#00D995" stop-opacity=".8"/></linearGradient>
+  <linearGradient id="eosWave2" x1="35" y1="170" x2="183" y2="238" gradientUnits="userSpaceOnUse"><stop stop-color="#003E9C" stop-opacity=".95"/><stop offset="1" stop-color="#008BC1" stop-opacity=".75"/></linearGradient>
+  <clipPath id="eosInnerClip"><path d="M128 28C136 28 143 30 150 34L207 67C215 72 219 79 219 88V168C219 177 215 184 207 189L150 222C143 226 136 228 128 228C120 228 113 226 106 222L49 189C41 184 37 177 37 168V88C37 79 41 72 49 67L106 34C113 30 120 28 128 28Z"/></clipPath>
+</defs>
+<path d="M128 12C137 12 145 14 153 19L222 59C230 64 234 72 234 82V174C234 184 230 192 222 197L153 237C145 242 137 244 128 244C119 244 111 242 103 237L34 197C26 192 22 184 22 174V82C22 72 26 64 34 59L103 19C111 14 119 12 128 12Z" fill="url(#eosBorder)"/>
+<path d="M128 28C136 28 143 30 150 34L207 67C215 72 219 79 219 88V168C219 177 215 184 207 189L150 222C143 226 136 228 128 228C120 228 113 226 106 222L49 189C41 184 37 177 37 168V88C37 79 41 72 49 67L106 34C113 30 120 28 128 28Z" fill="url(#eosCore)"/>
+<g clip-path="url(#eosInnerClip)">
+  <path d="M-2 165C40 155 60 180 91 187C133 196 153 163 188 153C215 145 237 156 261 143V235H-2Z" fill="url(#eosWave1)" opacity=".92"/>
+  <path d="M-10 186C31 175 57 202 90 207C126 212 146 187 171 178C198 169 224 173 263 157V246H-10Z" fill="url(#eosWave2)" opacity=".95"/>
+</g>
+<path d="M92 63H171L149 88H117L106 104H142L119 129H139L83 196L102 143H72L95 111H77Z" fill="#fff"/>
+</svg>

@@ -1,8 +1,8 @@
 import Image from 'next/image';
 
-/** Local SVG assets; the light lettering keeps the supplied logo legible on dark surfaces. */
+/** Official V1.1 assets: white institutional signature and compact product mark. */
 export default function EnergyOSLogo({ compact = false, className = '' }: { compact?: boolean; className?: string }) {
-  return <Image src={compact ? '/brand/energyos-symbol.svg' : '/brand/energyos-logo-dark.svg'}
-    alt="EnergyOS" width={compact ? 256 : 760} height={compact ? 256 : 200}
+  return <Image src={compact ? '/brand/energyos-product-mark-micro.svg' : '/brand/energyos-logo-horizontal-white.svg'}
+    alt="EnergyOS" width={compact ? 256 : 980} height={compact ? 256 : 230}
     className={className} priority />;
 }
