@@ -1002,6 +1002,8 @@ a {
   .ds-field,.ds-card__content { min-width:0; }
   .ds-label,.ds-input,.ds-alert { line-height:1.5; }
   .ds-input { min-width:0; }
+  .ds-button { max-width:100%;overflow-wrap:anywhere; }
+  .ds-card__content :is(h2,h3) { overflow-wrap:anywhere; }
   .ds-button:disabled { cursor:not-allowed; }
   .ds-state { align-content:center; }
   .ds-state__title,.ds-state__description { margin:0;overflow-wrap:anywhere; }
@@ -1016,6 +1018,19 @@ a {
     .backoffice-main { padding:var(--space-6); }
   }
   @media (max-width:30rem) {
+    .backoffice:not(.backoffice--collapsed) {
+      grid-template-columns:minmax(9rem,40%) minmax(0,1fr);
+    }
+    .backoffice:not(.backoffice--collapsed) .backoffice-sidebar {
+      padding:var(--space-3);
+    }
+    .backoffice:not(.backoffice--collapsed) .backoffice-nav__link {
+      gap:var(--space-2);padding:var(--space-2);
+    }
+    .backoffice-nav__link svg { width:1.25rem;height:1.25rem;flex-shrink:0; }
+    .backoffice-nav__label { white-space:normal;overflow-wrap:anywhere;line-height:1.25; }
+    .backoffice-brand__powered { white-space:normal; }
+    .backoffice-context :is(strong,p) { overflow-wrap:anywhere; }
     .document-manager__filters { grid-template-columns:minmax(0,1fr); }
     .auth-page { padding:var(--space-4); }
     .ds-card__header,.ds-card__content { padding:var(--space-4); }
