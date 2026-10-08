@@ -21,6 +21,7 @@
   .energyos-admin-dashboard .financial-report > header { display:grid; gap:8px; }
   .energyos-admin-dashboard .financial-report > header p { margin:0; font-size:.875rem; }
   .energyos-admin-dashboard .financial-report > header h3 { margin:0; font-size:1.35rem; }
+  .energyos-admin-dashboard .financial-report :is(p,h3,h4,dt,dd) { overflow-wrap:anywhere; }
   .energyos-admin-dashboard .financial-report table { width:100%; border-collapse:collapse; }
   .energyos-admin-dashboard .financial-report :is(th,td) { padding:14px 16px; text-align:left; border-bottom:1px solid var(--color-border); vertical-align:top; }
   .energyos-admin-dashboard .financial-report th { font-size:.75rem; font-weight:650; color:var(--color-text-muted); background:var(--color-surface-raised); }
