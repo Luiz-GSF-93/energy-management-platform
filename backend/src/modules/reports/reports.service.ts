@@ -43,6 +43,21 @@ export class ReportsService {
   const hash=reportHash(body),r=await this.client().rpc('capture_published_report',{p_org:t.organizationId,p_actor:t.userId,p_request:d,p_body:body,p_hash:hash});this.fail(r.error);return this.verified(r.data);
  }
  private verified(row:any){if(!row?.body||row.body.formatVersion!==REPORT_FORMAT||row.body.header?.organizationId!==row.organization_id||row.body.header.customerId!==row.customer_id||row.body.header.unitId!==row.consumer_unit_id||row.payload_hash!==reportHash(row.body))throw new InternalServerErrorException('Integridade do relatório indisponível.');return row;}
- async list(t:TenantContext){await this.access(t);const r=await this.client().rpc('read_published_reports',{p_org:t.organizationId,p_actor:t.userId,p_id:null});this.fail(r.error);return r.data;}
+ async selection(t:TenantContext){
+  await this.access(t);
+  const c=await this.client().from('customers').select('id,company_name').eq('organization_id',t.organizationId).eq('status','ACTIVE').is('deleted_at',null).order('company_name');this.fail(c.error);
+  const u=await this.client().from('consumer_units').select('id,customer_id,name').eq('organization_id',t.organizationId).eq('status','ACTIVE').order('name');this.fail(u.error);
+  const ids=new Set((c.data??[]).map((x:any)=>x.id));return {customers:c.data??[],units:(u.data??[]).filter((x:any)=>ids.has(x.customer_id))};
+ }
+ async list(t:TenantContext,q?:Record<string,string>){
+  await this.access(t);
+  if(q&&Object.keys(q).length){
+   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,month=/^(20|21)\d{2}-(0[1-9]|1[0-2])$/;
+   if(Object.keys(q).some(k=>!['customerId','unitId','from','to','kind'].includes(k))||!uuid.test(q.customerId??'')||!uuid.test(q.unitId??'')||!month.test(q.from??'')||!month.test(q.to??'')||q.from>q.to||!['OPERATIONAL','EXECUTIVE'].includes(q.kind))throw new BadRequestException('Selecione empresa, unidade, período e tipo válidos.');
+   await this.header(q.customerId,q.unitId,t);
+   const r=await this.client().rpc('read_selected_reports',{p_org:t.organizationId,p_actor:t.userId,p_customer:q.customerId,p_unit:q.unitId,p_from:q.from,p_to:q.to,p_kind:q.kind});this.fail(r.error);return r.data;
+  }
+  const r=await this.client().rpc('read_published_reports',{p_org:t.organizationId,p_actor:t.userId,p_id:null});this.fail(r.error);return r.data;
+ }
  async one(id:string,t:TenantContext){await this.access(t);const r=await this.client().rpc('read_published_reports',{p_org:t.organizationId,p_actor:t.userId,p_id:id});this.fail(r.error);return this.verified(r.data);}
 }
