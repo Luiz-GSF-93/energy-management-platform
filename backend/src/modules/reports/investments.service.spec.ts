@@ -1,0 +1,16 @@
+import {InvestmentsService} from './investments.service';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+const customer='00000000-0000-4000-8000-000000000001',unit='00000000-0000-4000-8000-000000000002',requestId='00000000-0000-4000-8000-000000000003',documentId='00000000-0000-4000-8000-000000000004';
+const t:any={organizationId:'test',userId:'actor',permissions:[P.ORGANIZATION_CONTRACTS_CREATE,P.DOCUMENTS_VIEW]};
+const input=()=>({customerId:customer,unitId:unit,requestId,expectedVersion:0,startMonth:'2026-01',items:[{category:'MIGRATION',description:'Serviços de migração',amount:'100.01',date:'2025-12-01',classification:'REALIZED',source:'Documento revisado do investimento inicial.',documentId}],note:'Investimentos da unidade conferidos com os documentos.'});
+describe('Investment write boundary',()=>{
+ let rpc:jest.Mock,service:InvestmentsService;
+ beforeEach(()=>{rpc=jest.fn(async(name:string,p:any)=>({data:name==='read_unit_investments'?{versions:[],documents:[{id:documentId}],studies:[]}:p,error:null}));service=new InvestmentsService({getClient:()=>({rpc})} as any);});
+ it('does not query or mutate without write permission',async()=>{await expect(service.save({...t,permissions:[]},input())).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();});
+ it('rejects injected organization and calculated outputs',async()=>{for(const field of ['organizationId','roiPercent','total'])await expect(service.save(t,{...input(),[field]:'injected'})).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();});
+ it('binds the write to the authenticated tenant and persists a backend sum',async()=>{const r=await service.save(t,input());expect(r.p_org).toBe('test');expect(r.p_body.total).toBe('100.01');expect(r.p_body.organizationId).toBe('test');expect(r.p_hash).toMatch(/^[a-f0-9]{64}$/);});
+ it('rejects realized investments with foreign or unavailable evidence',async()=>{const d=input();d.items[0].documentId=requestId;await expect(service.save(t,d)).rejects.toThrow('documento');expect(rpc.mock.calls.every(([name])=>name==='read_unit_investments')).toBe(true);});
+ it('rejects duplicate costs, invalid dates and extra item fields',async()=>{const a=input();a.items.push({...a.items[0]});await expect(service.save(t,a)).rejects.toThrow('duplicados');const b=input();b.items[0].date='2026-02-30';await expect(service.save(t,b)).rejects.toThrow();const c=input();(c.items[0] as any).roi='10';await expect(service.save(t,c)).rejects.toThrow();});
+ it('does not fabricate an ACL source for another unit',async()=>{await expect(service.save(t,{...input(),sourceStudyId:requestId})).rejects.toThrow('Estudo');});
+ it('maps revoked access and stale versions without retrying writes',async()=>{rpc.mockResolvedValue({error:{code:'42501'}});await expect(service.workspace(t,customer,unit)).rejects.toThrow('Permissão');rpc.mockResolvedValue({error:{code:'40001'}});await expect(service.validate(t,requestId,{requestId,payloadHash:'a'.repeat(64),note:'Validação da versão exata conferida.'})).rejects.toThrow('Versão');});
+});
