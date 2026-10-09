@@ -41,3 +41,5 @@ describe('Organization-scoped portal license presentation',()=>{
  it('rejects a foreign customer relation without returning its name',async()=>{const f=listFixture([{organization_id:'org',customers:{organization_id:'foreign',company_name:'Private company'}}]);await expect(f.service.list(f.manager)).rejects.toMatchObject({status:500});});
  it('never returns a partial license list at the management boundary',async()=>{const f=listFixture(Array.from({length:201},()=>({organization_id:'org',customers:{organization_id:'org'}})));await expect(f.service.list(f.manager)).rejects.toMatchObject({status:400});});
 });
+
+describe('Shared user quota supersedes separate company additions',()=>{it('rejects a new company addition without issuing a write RPC',async()=>{const f=fixture();const manager:any={...f.tenant,role:'admin_org',accessMode:'platform_operation',permissions:[P.ORGANIZATION_LICENSES_UPDATE]};await expect(f.service.addition(manager,{} as any)).rejects.toMatchObject({status:404});expect(f.client.rpc).not.toHaveBeenCalled();});});

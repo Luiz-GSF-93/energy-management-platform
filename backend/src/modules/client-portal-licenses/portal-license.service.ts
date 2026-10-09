@@ -12,7 +12,7 @@ export class PortalLicenseService {
  private errors(error:{code?:string}|null){
   if(!error)return;
   if(error.code==='42501')throw new ForbiddenException('Licença ou vínculo exclusivo do Portal indisponível.');
-  if(error.code==='P3410')throw new ConflictException('Configure o limite de clientes no plano e as licenças do Portal antes de ativar.');
+  if(error.code==='P3410')throw new ConflictException('Regularize o limite compartilhado de usuários e as licenças do Portal antes de ativar.');
   if(error.code==='P3411')throw new ConflictException('Limite contratado atingido. Solicite upgrade ou acréscimo.');
   if(error.code==='P3412')throw new ConflictException('O limite proposto é inferior ao uso atual.');
   if(error.code==='P3413')throw new ConflictException('A versão mudou. Atualize e confira antes de salvar.');
@@ -35,7 +35,7 @@ export class PortalLicenseService {
  }
  async save(t:TenantContext,input:PortalLicenseDto){this.backoffice(t,true);this.requireEnabled();const {customerId,...definition}=input;const r=await this.db.getClient().rpc('save_client_portal_license',{p_org:t.organizationId,p_customer:customerId,p_actor:t.userId,p_data:definition});this.errors(r.error);if(!r.data?.id||r.data.organization_id!==t.organizationId||r.data.customer_id!==customerId)throw new InternalServerErrorException('Licença não confirmada no cliente autorizado.');return r.data;}
  async policy(t:TenantContext,input:PortalPolicyDto){this.backoffice(t,true);this.requireEnabled();const r=await this.db.getClient().rpc('set_client_portal_policy',{p_org:t.organizationId,p_actor:t.userId,p_enabled:input.enabled,p_revision:input.revision,p_reason:input.reason.trim()});this.errors(r.error);if(r.data?.organization_id!==t.organizationId)throw new InternalServerErrorException('Ativação não confirmada.');return r.data;}
- async addition(t:TenantContext,input:ClientAdditionDto){this.backoffice(t,true);this.requireEnabled();const {id,...definition}=input;const r=await this.db.getClient().rpc('save_license_client_addition',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_data:definition});this.errors(r.error);if(r.data?.organization_id!==t.organizationId||r.data?.id!==id)throw new InternalServerErrorException('Acréscimo não confirmado.');return r.data;}
+ async addition(t:TenantContext,_input:ClientAdditionDto){this.backoffice(t,true);this.requireEnabled();throw new NotFoundException('Cotas separadas de clientes foram substituídas pelas vagas de usuários do plano.');}
  async client(t:TenantContext,module:PortalModule|null=null){
   if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||t.role!=='consulta'||t.accessMode||!t.roleId)throw new ForbiddenException('Use uma conta de cliente vinculada exclusivamente à empresa.');
   if(!this.enabled())return {enabled:false};
