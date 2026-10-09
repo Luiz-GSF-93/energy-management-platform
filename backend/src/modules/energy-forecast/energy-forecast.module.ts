@@ -1,4 +1,4 @@
-import {Body,Controller,Get,Header,Module,Param,ParseUUIDPipe,Post} from '@nestjs/common';
+import {Body,Controller,Get,Header,Module,Param,ParseUUIDPipe,Post,Query} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {RequirePermission} from '../../common/decorators/require-permission.decorator';
@@ -12,6 +12,7 @@ import {OcrModule} from '../ocr/ocr.module';
 @Controller('energy-forecasts')
 class EnergyForecastController {
  constructor(private service:EnergyForecastService){}
+ @Get('workspace') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) workspace(@Tenant() t:TenantContext,@Query('customerId') c:string,@Query('unitId') u:string){return this.service.workspace(t,c,u);}
  @Get('access') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) access(@Tenant() t:TenantContext){return this.service.access(t,false,true);}
  @Get('documents') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) documents(@Tenant() t:TenantContext){return this.service.documents(t);}
  @Get('documents/:id/draft') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) draft(@Param('id',ParseUUIDPipe) id:string,@Tenant() t:TenantContext){return this.service.draft(id,t);}

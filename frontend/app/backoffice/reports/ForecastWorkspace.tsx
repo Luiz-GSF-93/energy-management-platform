@@ -32,7 +32,7 @@ type History={id:string;document_id:string;reviewedAt:string|null;customerName:s
 
 const key=(s:Source)=>s.historyId??s.evidenceId??'';
 
-export default function ForecastWorkspace({canCreate}:{canCreate:boolean}){
+export default function ForecastWorkspace({canCreate,customerId,unitId}:{canCreate:boolean;customerId:string;unitId:string}){
 
  const [loaded,setLoaded]=useState(false),[sources,setSources]=useState<Source[]>([]),[documents,setDocuments]=useState<ForecastDocument[]>([]),[histories,setHistories]=useState<History[]>([]),[runs,setRuns]=useState<Run[]>([]),[canApprove,setCanApprove]=useState(false);
 
@@ -52,7 +52,7 @@ export default function ForecastWorkspace({canCreate}:{canCreate:boolean}){
 
  const act=async(f:(n:number)=>Promise<void>)=>{const n=generation.current;setBusy(true);setError('');try{await f(n);}catch(e){if(n===generation.current)setError(e instanceof Error?e.message:'Consulta indisponível.');}finally{if(n===generation.current)setBusy(false);}};
 
- const refresh=async()=>{const n=generation.current;const [a,s,d,h,r]=await Promise.all([apiRequest<{canApprove:boolean}>('/api/v1/energy-forecasts/access'),apiRequest<Source[]>('/api/v1/energy-forecasts/sources'),apiRequest<ForecastDocument[]>('/api/v1/energy-forecasts/documents'),apiRequest<History[]>('/api/v1/energy-forecasts/histories'),apiRequest<Run[]>('/api/v1/energy-forecasts')]);if(n!==generation.current)return;setCanApprove(Boolean(a.canApprove)&&canCreate);setSources(s);setDocuments(d);setHistories(h);setRuns(r);setLoaded(true);};
+ const refresh=async()=>{const n=generation.current;const q=new URLSearchParams({customerId,unitId});const result=await apiRequest<{canApprove:boolean;sources:Source[];documents:ForecastDocument[];histories:History[];runs:Run[]}>('/api/v1/energy-forecasts/workspace?'+q);if(n!==generation.current)return;setCanApprove(Boolean(result.canApprove)&&canCreate);setSources(result.sources);setDocuments(result.documents);setHistories(result.histories);setRuns(result.runs);setLoaded(true);};
 
  const first=sources.find(s=>key(s)===chosen[0]),available=first?sources.filter(s=>s.unitId===first.unitId&&s.customerId===first.customerId):sources;
 
@@ -70,7 +70,7 @@ export default function ForecastWorkspace({canCreate}:{canCreate:boolean}){
 
  return <Card title="Previsão de consumo"><details><summary>Preparar e validar a projeção anual</summary><p>Reúna de 12 a 36 competências consecutivas de faturas conferidas. A Adesão ACL é uma fonte opcional. A previsão publicada será incluída nas novas versões operacionais com a mesma unidade e competência de corte.</p><Button variant="secondary" disabled={busy} onClick={()=>void act(()=>refresh())}>{loaded?'Atualizar históricos e previsões':'Consultar históricos e previsões'}</Button>{busy?<p role="status">Consultando…</p>:null}{error?<Alert variant="error">{error}</Alert>:null}
 
- {loaded?<><fieldset disabled={busy}><legend>Fontes validadas</legend>{available.length?available.map(s=><label key={key(s)}><input type="checkbox" checked={chosen.includes(key(s))} onChange={e=>{reset();if(e.target.checked){setChosen(a=>[...a,key(s)]);if(!cutoff)setCutoff(s.lastMonth);}else setChosen(a=>a.filter(v=>v!==key(s)));}}/>{s.customerName} · {s.unitName} · até {s.lastMonth} · {s.historyId?'Fatura cadastrada':'Adesão ACL'}</label>):<p>Nenhum histórico validado disponível. Confira uma fatura abaixo para preparar o histórico.</p>}{chosen.length?<Button variant="secondary" onClick={()=>{reset();setChosen([]);setCutoff('');setExpansions([]);setSelected(null);setWeather(false);setConsent(false);setLatitude('');setLongitude('');setSensitivity('UNKNOWN');setClimateNote('');setDocumentedPeriods(false);setPeriods({});}}>Trocar unidade</Button>:null}<label>Competência de corte<input type="month" value={cutoff} onChange={e=>{reset();setCutoff(e.target.value);}}/></label></fieldset>
+ {loaded?<><fieldset disabled={busy}><legend>Fontes validadas</legend>{available.length?available.map(s=><label key={key(s)}><input type="checkbox" checked={chosen.includes(key(s))} onChange={e=>{reset();if(e.target.checked){setChosen(a=>[...a,key(s)]);if(!cutoff)setCutoff(s.lastMonth);}else setChosen(a=>a.filter(v=>v!==key(s)));}}/>{s.customerName} · {s.unitName} · até {s.lastMonth} · {s.historyId?'Fatura cadastrada':'Adesão ACL'}</label>):<p>Nenhum histórico validado disponível. Confira uma fatura abaixo para preparar o histórico.</p>}{chosen.length?<Button variant="secondary" onClick={()=>{reset();setChosen([]);setCutoff('');setExpansions([]);setSelected(null);setWeather(false);setConsent(false);setLatitude('');setLongitude('');setSensitivity('UNKNOWN');setClimateNote('');setDocumentedPeriods(false);setPeriods({});}}>Limpar fontes selecionadas</Button>:null}<label>Competência de corte<input type="month" value={cutoff} onChange={e=>{reset();setCutoff(e.target.value);}}/></label></fieldset>
 
  {canCreate?<><Button variant="secondary" disabled={busy||expansions.length>=20} onClick={()=>{setExpansion({...blankExpansion});setExpansionOpen(true);}}>Adicionar expansão de carga</Button>{expansions.map((e,i)=><p key={i}>{e.description} · {e.monthlyKwh} kWh/mês · {e.startMonth} a {e.endMonth} <Button variant="secondary" disabled={busy} onClick={()=>{reset();setExpansions(a=>a.filter((_,n)=>n!==i));}}>Remover expansão</Button></p>)}
 
