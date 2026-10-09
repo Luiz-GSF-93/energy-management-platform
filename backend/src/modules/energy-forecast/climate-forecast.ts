@@ -5,6 +5,7 @@ export type ClimateHistory = {
   provider: 'NASA_POWER'; parameter: string; unit: string; timeStandard: string;
   sourceHash: string; from: string; to: string;
   monthly: {month: string; temperatureC: number | null; validDays: number; expectedDays: number}[];
+  daily?: {date:string;temperatureC:number|null}[];
 };
 type Model = {coefficients: number[]; temperatureCenter: number; temperatureScale: number};
 const dot = (a: number[], b: number[]) => a.reduce((sum, v, i) => sum + v * b[i], 0);
