@@ -33,6 +33,28 @@ describe('isolated auditable forecast service',()=>{
   (loadNasaTemperature as jest.Mock).mockResolvedValueOnce({provider:'NASA_POWER',parameter:'T2M',unit:'°C',timeStandard:'UTC',sourceHash:'b'.repeat(64),from:'2023-09-01',to:'2026-08-31',monthly:rows.map(r=>({month:r.month,temperatureC:temperatures[Number(r.month.slice(5))-1],validDays:r.days,expectedDays:r.days}))});
   try{const run=await service.prepare({...input,weather:{latitude:-23.5,longitude:-46.5,consent:true}},t);expect(run.body.weatherApplied).toBe(true);expect(run.body.weatherStatus).toBe('CLIMATE_SCENARIO_APPLIED');expect(run.body.status).toBe('PRELIMINARY');expect(run.body.climateAssessment.comparison.predictions).toBe(21);expect(run.payload_hash).toBe(reportHash(run.body));expect(run.events).toEqual([]);prior=run;await expect(service.prepare({...input,weather:{latitude:-23.5,longitude:-46.5,consent:true}},t)).resolves.toEqual(run);expect(loadNasaTemperature).toHaveBeenCalledTimes(1);}finally{source.history.rows=originalRows;}
  });
+ it('persists all approved sources but calculates and requests weather for only the latest 36 months',async()=>{
+  const allRows=Array.from({length:44},(_,i)=>({month:new Date(Date.UTC(2023,i,1)).toISOString().slice(0,7),consumptionKwh:'3000',days:30,page:1,source:'test-table'}));
+  const older={...source,historyId:requestId,evidenceId:requestId,history:{...source.history,rows:allRows.slice(0,12)}};
+  const newer={...source,history:{...source.history,rows:allRows.slice(12)}};
+  const previous=rpc.getMockImplementation()!;
+  rpc.mockImplementation(async(name,p)=>name==='energy_forecast_history_source'?{error:null,data:p.p_history===history?newer:older}:previous(name,p));
+  (loadNasaTemperature as jest.Mock).mockRejectedValueOnce(Error('unavailable'));
+  const d={...input,sources:[{historyId:requestId},{historyId:history}],weather:{latitude:-23.5,longitude:-46.5,consent:true}};
+  const run=await service.prepare(d,t),write=rpc.mock.calls.find(([n])=>n==='energy_forecast_prepare')![1];
+  expect(write.p_sources.map((s:any)=>s.history.rows.length)).toEqual([12,32]);expect(run.body.historyWindow).toMatchObject({availableMonths:44,selectedMonths:36,from:'2023-09',to:'2026-08'});
+  expect(run.body.historyWindow.excludedMonths).toHaveLength(8);expect(run.body.qualifications.join(' ')).toContain('36 de 44');expect(run.payload_hash).toBe(reportHash(run.body));
+  expect(loadNasaTemperature).toHaveBeenCalledWith(d.weather,'2023-09-01','2026-08-31');
+  prior=run;rpc.mockClear();await expect(service.prepare(d,t)).resolves.toEqual(run);expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_history_source')).toBe(false);
+ });
+ it('rejects source conflicts even in months outside the calculation window',async()=>{
+  const rows=Array.from({length:44},(_,i)=>({month:new Date(Date.UTC(2023,i,1)).toISOString().slice(0,7),consumptionKwh:'3000',days:30,page:1,source:'test-table'}));
+  const older={...source,historyId:requestId,evidenceId:requestId,history:{...source.history,rows:rows.slice(0,12)}};
+  const conflict={...older,historyId:unit,evidenceId:unit,history:{...older.history,rows:rows.slice(0,12).map((r,i)=>i===0?{...r,consumptionKwh:'4000'}:r)}};
+  const newer={...source,history:{...source.history,rows:rows.slice(12)}};
+  const previous=rpc.getMockImplementation()!;rpc.mockImplementation(async(name,p)=>name==='energy_forecast_history_source'?{error:null,data:p.p_history===history?newer:p.p_history===unit?conflict:older}:previous(name,p));
+  await expect(service.prepare({...input,sources:[{historyId:requestId},{historyId:history},{historyId:unit}]},t)).rejects.toThrow('Histórico');expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_prepare')).toBe(false);
+ });
  it('operator can prepare but cannot validate or publish',async()=>{await expect(service.transition(requestId,{requestId,payloadHash:'a'.repeat(64),action:'VALIDATED',note:'Conferência documental do histórico.'},{...t,role:'operacional'})).rejects.toThrow('Gestor');expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_transition')).toBe(false);});
  it('returns no forecast to existing reports while disabled',async()=>{enabled=false;await expect(service.publishedForReport(customer,unit,'2026-08',t)).resolves.toBeNull();expect(rpc).not.toHaveBeenCalled();});
  it('exports only a recipient-safe published projection',async()=>{const run=await service.prepare(input,t);run.version=1;run.events=[{action:'PUBLISHED',created_at:'2026-09-02T00:00:00Z'}];rpc.mockImplementation(async name=>({error:null,data:name==='energy_forecast_published'?run:null}));const projection=await service.publishedForReport(customer,unit,'2026-08',t);expect(projection!.actual[0].evidence).toBeUndefined();expect(projection!.actual[0].consumptionKwh).toBe('3000.000000');expect(projection).not.toHaveProperty('sources');expect(projection).not.toHaveProperty('expansions');expect(projection).not.toHaveProperty('weather');});
