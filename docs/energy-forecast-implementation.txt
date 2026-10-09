@@ -1,0 +1,102 @@
+EnergyOS — previsão de consumo e comparação de emissões
+Data: 09/10/2026. Etapa 1: núcleo preliminar isolado, sem ativação em produção.
+
+DECISÕES DO USUÁRIO
+Histórico de consumo: faturas OCR + IA de interpretação, conferidas.
+Clima: API comercial, com orçamento antes de contratar. Nenhuma contratação autorizada.
+Expansão: novo modal para cadastrar premissas com evidência e vigência.
+Carbono: apenas no Executivo, com fatores e comprovação de origem; ausência não vira zero.
+Ganhos de carbono não são redução de kWh nem economia financeira.
+
+ARQUITETURA
+Origem preservada -> interpretação -> conferência de histórico -> entrada versionada
+-> motor preliminar -> validação do gestor -> resultado publicado -> relatórios.
+CCEE permanece em seu domínio de integração, normalização e validação; não se mistura
+ao histórico das faturas nem é chamada diretamente pelo frontend ou por este núcleo.
+O serviço autenticado deverá resolver evidências e escopo no servidor. As verificações
+de escopo do núcleo não substituem RBAC, RLS, licenciamento ou autorização das APIs.
+Nenhum cliente poderá fornecer validatedBy/hash como comprovação por meio de um DTO público.
+
+ETAPA 1 IMPLEMENTADA
+Funções puras no backend, sem chamadas externas, rotas, banco ou publicação.
+Entrada: 12–36 competências contínuas até a competência de corte, consumo em kWh,
+dias faturados, identificação de organização/cliente/unidade, hash, revisão e validação.
+Rejeitar lacunas, duplicatas, futuros, valores inválidos, fonte fora do escopo e dias inválidos.
+Os identificadores e validações deverão ser carregados pelo futuro serviço, nunca confiados
+ao navegador. Ausência de histórico suficiente bloqueia este núcleo em vez de inventar dados.
+
+Normalização: consumo kWh / dias faturados. A previsão utiliza dias de calendário.
+Essa diferença de períodos deve aparecer na ressalva, inclusive para faturas com mais de um mês.
+Modelos candidatos: média diária; tendência linear diária; repetição sazonal anual diária.
+12–17 meses: média preliminar, sem seleção estatística validada.
+18–29 meses: comparar média e tendência em seis origens cronológicas.
+30–36 meses: acrescentar candidato sazonal, garantindo 24 meses no primeiro treinamento.
+Comparar erros absolutos em kWh nos horizontes disponíveis, de 1 até 6 meses.
+Escolher menor MAE; empate favorece modelo simples. Projeções negativas exigem revisão.
+A pontuação não comprova precisão para todos os horizontes até dezembro. Testes adicionais
+com séries reais e horizontes de até 12 meses são obrigatórios antes da homologação.
+Valor exibido até seis casas; estatística usa números finitos com limite de precisão segura.
+Quantidades históricas, expansões, totais e comparação de carbono usam inteiros escalados.
+Não existem intervalos de previsão nesta etapa; nenhuma faixa será inventada.
+
+Expansão no núcleo: incremento mensal em kWh documentalmente aprovado, início e fim.
+Não converter potência nominal em kWh sem horas, simultaneidade e método documentados.
+Premissas com início anterior/igual ao corte são bloqueadas para evitar dupla contagem;
+expansões já observadas entram no histórico. Ajustes em implantação parcial exigem outra versão.
+
+Carbono: diferença estimada para o volume documentalmente coberto:
+cobertura_kWh / 1000 × (fator_referencia_tCO2/MWh − fator_contratual_tCO2/MWh).
+Fatores de mesma competência e mesmo gás CO2, com fonte e revisão; cobertura <= consumo.
+Resultado pode ser negativo e não é truncado. Fator ausente -> indicador pendente.
+Arredondamento a seis casas, metade afastada do zero; resultado em tCO2, não tCO2e.
+Isso não constitui crédito de carbono nem comprova emissões evitadas causalmente no sistema.
+Antes de publicação, a elegibilidade do instrumento e o fator contratual precisam de validação.
+Classificação ACL incentivada não define fator contratual zero automaticamente.
+
+PRÓXIMAS ETAPAS NECESSÁRIAS — AINDA NÃO IMPLEMENTADAS
+2. Adaptador de históricos OCR + IA conferidos, com conciliação e deduplicação entre faturas.
+   Histórico de Adesão ACL será reaproveitado como evidência, não como economia realizada.
+   Somar ponta + fora ponta no backend somente quando competência, dias e fonte conciliam;
+   não somar total novamente, nem usar demanda kW como consumo kWh.
+3. Persistência append-only de premissas e resultados: IDs, organização, unidade, documentos,
+   contratos quando aplicáveis, Formula/Input Version, hash e snapshots de entradas, responsável,
+   status preliminar/validado/publicado/substituído e auditoria. Idempotência e rejeição de fontes
+   alteradas entre cálculo, validação e publicação. Migração e reversão serão revisadas separadamente.
+4. Serviço/API com os controles existentes de tenant, RBAC, licença e cliente vinculado,
+   sem alterar permissões atuais ou sobrescrever cálculos de economia/honorários.
+5. Modal de expansão: descrição, vigência, adicional kWh ou dados para cálculo técnico,
+   documento/justificativa, revisão, situação e envio para validação; não aprovar pelo frontend.
+6. Adaptador meteorológico independente: localização autorizada, fornecedor/modelo, intervalo,
+   resolução, versão, data da captura e hash. Credencial somente no backend; timeout, cache,
+   limites de custo, atribuição e falha explícita. Não enviar faturas nem dados financeiros.
+   Dados históricos não garantem temperatura futura até dezembro: separar previsão meteorológica,
+   cenário climático e normais históricas. Comparar ganho de erro fora da amostra antes de usar clima.
+7. Relatórios: Operacional com realizado/previsão até dezembro e premissas; Executivo com
+   comparação de emissões, cobertura e fatores; Financeiro com valores de desperdício comprovados.
+   Remover lista genérica solicitada mantendo ressalvas específicas e avisos de autorização.
+   Resultados antigos ficam imutáveis; novos campos aparecem somente em versões compatíveis.
+8. Regressão/homologação: isolamento real nas APIs/banco, publicação, versão antiga, precisão,
+   fontes conflitantes, indisponibilidade climática e forecast com séries reais. Não concluir
+   homologação a partir dos testes sintéticos deste núcleo.
+
+CLIMA — ORÇAMENTO PENDENTE
+Página oficial consultada em 09/10/2026: https://open-meteo.com/en/pricing
+Professional ou superior para Historical Weather, Climate e Ensemble APIs.
+Professional: 5 milhões de chamadas contabilizadas por mês, conforme tabela atual.
+Pedidos longos podem contar como mais de uma chamada. Cache reduz repetição; para referência,
+36 meses / 14 dias ~79 unidades de chamada por localização para carga histórica inicial,
+com até 10 variáveis e um modelo; estimativa a confirmar no simulador do fornecedor.
+Valor monetário não verificado na página consultada: não apresentar preço presumido.
+Orçamento deverá discriminar assinatura, moeda, tributos/câmbio, volume, cache e infraestrutura.
+Nenhuma compra, geração de chave ou envio de localização foi realizado.
+
+FONTES DE METODOLOGIA DE CARBONO
+MCTI, fatores do SIN para inventários corporativos:
+https://www.gov.br/mcti/pt-br/acompanhe-o-mcti/sirene/dados-e-ferramentas/fatores-de-emissao
+Não trocar fator de inventário por margem de operação de projetos MDL.
+GHG Protocol, Scope 2 Guidance e critérios dos instrumentos contratuais:
+https://ghgprotocol.org/scope-2-guidance
+
+STATUS
+Núcleo local testado. Integração, persistência, clima, modal e relatórios pendentes.
+Nenhuma tabela, autenticação, autorização, CCEE ou regra financeira existente alterada.
