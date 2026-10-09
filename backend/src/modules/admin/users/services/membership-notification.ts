@@ -1,3 +1,4 @@
+import {membershipEmailHtml} from './membership-email-template';
 export type MembershipNotificationStatus = 'accepted' | 'unavailable' | 'failed';
 export async function sendMembershipNotification(input: { membershipId: string; email: string; organizationName: string; roleName: string; affiliationType: string; event?: 'reactivated' }): Promise<MembershipNotificationStatus> {
   const key = process.env.RESEND_API_KEY;
@@ -11,7 +12,7 @@ export async function sendMembershipNotification(input: { membershipId: string; 
     const response = await fetch('https://api.resend.com/emails', {
       method:'POST', signal:AbortSignal.timeout(10000),
       headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Idempotency-Key':'organization-membership/'+input.membershipId},
-      body:JSON.stringify({from:process.env.MEMBERSHIP_EMAIL_FROM || 'Expert Energy <nao-responda@notificacoes.expertenergy.com.br>',to:[input.email],subject:input.event==='reactivated'?'Seu acesso foi reativado — Expert Energy':'Você recebeu acesso a uma organização — Expert Energy',text}),
+      body:JSON.stringify({from:process.env.MEMBERSHIP_EMAIL_FROM || 'EnergyOS <nao-responda@notificacoes.expertenergy.com.br>',to:[input.email],subject:input.event==='reactivated'?'Seu acesso foi reativado — EnergyOS':'Bem-vindo ao EnergyOS',text,html:membershipEmailHtml(input,login)}),
     });
     if (!response.ok) return 'failed';
     const result = await response.json() as {id?: unknown};

@@ -1,3 +1,4 @@
+import {checkPortalInvite} from './portal-invite';
 import { sendMembershipNotification, MembershipNotificationStatus } from './membership-notification';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
 import {
@@ -763,6 +764,8 @@ export class UsersService {
       }
 
       // Profile-first lookup is the preferred identity resolution path.
+      await checkPortalInvite(client,dto,role,auditContext.organizationId);
+
       const { data: profiles, error: profileLookupError } = await client
         .from('user_profiles')
         .select(
@@ -1002,14 +1005,16 @@ export class UsersService {
             role_id: dto.roleId,
             affiliation_type: dto.affiliationType,
             display_name: normalizedName,
+            ...(dto.customerId ? {exclusive_customer_id:dto.customerId} : {}),
             invited_at: new Date().toISOString(),
             status: 'active',
           })
           .select(
-            'id, user_id, organization_id, role_id, status',
+            'id, user_id, organization_id, role_id, status'+(dto.customerId?', exclusive_customer_id':''),
           );
 
       if (membershipInsertError) {
+        if (['P3410','P3411'].includes((membershipInsertError as any)?.code))throw new ConflictException('Confira a licença do cliente e as vagas disponíveis no plano antes de convidar.');
         if ((membershipInsertError as any)?.code === 'P3392')throw new ConflictException('Solicite ao administrador da plataforma a vinculação da licença a um plano.');
         if ((membershipInsertError as any)?.code === 'P3390')throw new ConflictException('É necessária uma licença ativa para cadastrar usuários.');
         if (['P3152','P3391'].includes((membershipInsertError as any)?.code)) {
@@ -1055,6 +1060,7 @@ export class UsersService {
 
       membershipId = confirmedMembershipId;
       createdMembership = true;
+      if(dto.customerId && insertedMembership.exclusive_customer_id!==dto.customerId)throw new InternalServerErrorException('Exclusive Portal binding could not be confirmed');
 
       try {
         await this.auditService.logUserInvite({
@@ -1066,6 +1072,7 @@ export class UsersService {
           roleId: dto.roleId,
           affiliationType: dto.affiliationType,
           provisioningPath,
+          ...(dto.customerId ? {exclusiveCustomerId:dto.customerId} : {}),
           ipAddress: auditContext.ipAddress,
           userAgent: auditContext.userAgent,
         });

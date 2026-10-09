@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsOptional,
   IsIn,
   IsNotEmpty,
   IsString,
@@ -9,6 +10,10 @@ import {
 } from 'class-validator';
 
 export class InviteUserDto {
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
   @IsEmail()
   @MaxLength(254)
   email!: string;

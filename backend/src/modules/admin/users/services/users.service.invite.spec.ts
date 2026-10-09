@@ -1,3 +1,4 @@
+import * as portalInvite from './portal-invite';
 import {
   BadRequestException,
   ConflictException,
@@ -41,6 +42,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
 
   function harness(options: {
     profiles?: any[];
+    exclusiveCustomerId?: string;
     memberships?: any[];
     authUsers?: any[];
     authListResponse?: any;
@@ -97,6 +99,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
               organization_id: organizationId,
               role_id: roleId,
               status: 'active',
+              ...(options.exclusiveCustomerId?{exclusive_customer_id:options.exclusiveCustomerId}:{}),
             },
           ],
       error: options.membershipInsertError ?? null,
@@ -559,6 +562,23 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
       'profile',
       'identity',
     ]);
+  });
+
+  it('checks Portal scope before identity/email creation and persists and audits the exclusive binding',async()=>{
+    const customerId='66666666-6666-4666-8666-666666666666';
+    const check=jest.spyOn(portalInvite,'checkPortalInvite').mockResolvedValue(undefined);
+    try{const h=harness({profiles:[],authUsers:[],exclusiveCustomerId:customerId});await h.service.invite({...dto,customerId},auditContext);
+    expect(check.mock.invocationCallOrder[0]).toBeLessThan(h.authAdmin.inviteUserByEmail.mock.invocationCallOrder[0]);
+    expect(h.membershipInsert.insert).toHaveBeenCalledWith(expect.objectContaining({exclusive_customer_id:customerId,organization_id:organizationId,status:'active'}));
+    expect(h.auditService.logUserInvite).toHaveBeenCalledWith(expect.objectContaining({exclusiveCustomerId:customerId}));}finally{check.mockRestore();}
+  });
+  it('does not create an identity or send an invitation after Portal scope rejection',async()=>{
+    const check=jest.spyOn(portalInvite,'checkPortalInvite').mockRejectedValue(new BadRequestException('Not licensed'));
+    try{const h=harness({profiles:[],authUsers:[]});await expect(h.service.invite({...dto,customerId:'66666666-6666-4666-8666-666666666666'},auditContext)).rejects.toThrow('Not licensed');expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();expect(h.membershipInsert.insert).not.toHaveBeenCalled();}finally{check.mockRestore();}
+  });
+  it('compensates an unconfirmed exclusive binding and does not emit successful audit',async()=>{
+    const check=jest.spyOn(portalInvite,'checkPortalInvite').mockResolvedValue(undefined);
+    try{const h=harness();await expect(h.service.invite({...dto,customerId:'66666666-6666-4666-8666-666666666666'},auditContext)).rejects.toThrow('binding');expect(h.membershipDelete.delete).toHaveBeenCalled();expect(h.auditService.logUserInvite).not.toHaveBeenCalled();}finally{check.mockRestore();}
   });
 
 });

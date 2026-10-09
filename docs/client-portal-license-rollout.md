@@ -1,37 +1,24 @@
-# Client Portal licenses and client capacity
+# Client Portal licenses and shared user capacity
 
-The organization license remains the parent entitlement. A client Portal license does not create an identity, assign a role, bind a person to a customer, or open Backoffice routes. Portal access still requires an active external Consulta membership, its explicit exclusive customer binding and each endpoint's existing permissions. Only published customer results are exposed.
+The organization license remains the parent entitlement. Backoffice and Portal active memberships share its existing max_users limit. Registering a customer company does not consume a user seat. Three active people of one customer consume three seats; deactivation releases a seat under existing rules. Per-client max_users distributes parent seats, never adds capacity. No automatic billing or plan upgrade occurs.
 
-## Disabled deployment
+Apply `20261009_client_portal_licenses.sql` then `20261009_portal_shared_user_capacity.sql`. The second migration supersedes the unactivated company quota, retains its columns/history for compatibility and disables new company additions. It leaves the existing member/unit/document quota triggers and organization lock intact. It does not update users, roles, parent limits, customer rows, policies or grants.
 
-1. Apply `20261009_client_portal_licenses.sql` before enabling the backend feature. It adds nullable client capacities and empty, RLS-protected Portal tables; it does not update existing plan/license snapshots, grant access, or enable an organization policy.
-2. Deploy with `CLIENT_PORTAL_LICENSES_ENABLED` unset or `false`. The new management response is unavailable and does not query the new tables. Writes to these endpoints remain disabled. Existing customer registration and Portal behavior are preserved.
-3. Leave `NEXT_PUBLIC_CLIENT_PORTAL_LICENSES_ENABLED` unset or `false` in the frontend. The Portal preserves its current data components without requesting the new entitlement endpoint. The server remains the authority; a frontend flag cannot bypass licensing.
+## Rollout
 
-## Reviewed activation, separate from this deployment
+1. Keep CLIENT_PORTAL_LICENSES_ENABLED and NEXT_PUBLIC_CLIENT_PORTAL_LICENSES_ENABLED off while migrations and rollout are reviewed.
+2. Enable the backend feature to prepare per-client conditions through Licença e módulos → Portal do cliente e usuários do plano, with organization policies still off. Only platform operation with licence update permission can write conditions. Dates, modules and user/unit limits must fit the parent license.
+3. Review current exclusive external memberships and concessions before explicitly activating an organization policy. Database activation checks compatible shared quota and existing client grants.
+4. Enable the frontend feature in a reviewed build. Published Portal data remains scoped to the client's exclusive binding, permissions and licensed modules. Authorization failures mount no report components. Globally disabled compatibility retains existing handlers and guards.
+5. After separate real-recipient access approval, use Usuários → Inserir: first name/surname, email, Consulta role, external affiliation and the licensed exclusive customer. Portal invitations are rejected when rollout/policy/license is disabled, foreign/expired or the shared quota is full. The membership carries exclusive_customer_id in the same insert validated by parent and client quota triggers. Its binding is included in the invitation audit. Existing memberships are not rebound automatically.
+6. Verify the real pilot Portal results. Keep the backend flag enabled for organizations using these conditions; turning it off restores legacy compatibility, not client suspension.
 
-1. The platform administrator defines `max_clients` in the catalog. Blank/omitted values preserve the previous definition; undefined is neither zero nor unlimited. Apply the selected catalog version to the existing organization license through its existing governance endpoint. Do not create a second concurrent parent license.
-2. Check retained customer count. Each non-deleted customer occupies one slot, including inactive customers. Existing customers are preserved on expiration, cancellation or a capacity shortfall; new registrations/restorations are blocked while the enabled policy has insufficient capacity.
-3. Enable the backend feature to prepare conditions, with every organization's policy still disabled. In **Licenses → Portal do cliente e cota de clientes**, record explicit client limits, dates and modules within the parent entitlement. This does not invite or grant a user access. Customer names are resolved only inside the organization; no client-supplied tenant is accepted.
-4. Review the separately authorized account/binding definition without granting access yet: external Consulta, an exclusive customer association and the minimal module permissions. Do not broaden legacy shared accounts or release all customers by default.
-5. Enable the frontend feature in a new build. The entitlement endpoint fails closed on an expired/missing grant or invalid binding; the UI does not mount report components after an authorization failure. Only a 404 from an older backend uses compatibility behavior.
-6. Review and explicitly activate the organization's policy. The transaction checks its current quota and current external exclusive memberships. No policy is activated by migration or page load.
-7. After the pilot's separate access approval, provision its account/binding and verify the real published results. Activate the reviewed organization policy before granting a new pilot access so the narrower Portal conditions are already enforced. The global backend flag must remain enabled for organizations using these conditions; disabling it restores legacy compatibility rather than suspending a client.
+## Welcome email
 
-## Capacity and audit
+New identities keep the existing Supabase inviteUserByEmail → ConfirmationURL → /auth/accept-invite flow. Supabase renders `energyos-invite-supabase.html`; configured Resend SMTP transports it. The reusable Resend design is `energyos-welcome-resend.html`, with required ACTION_URL and no fallback shared invitation. This library template does not issue tokens or replace authentication.
 
-Client creation/restoration, policy changes, parent snapshots, client concessions and additions serialize through the organization's existing advisory-lock key. Catalog changes retain the platform governance lock. The old user/unit/document quota triggers remain in place; child Portal user/unit limits add constraints to that parent authority.
+Existing identities retain their password and receive the branded membership notice sent through Resend with the existing membership idempotency key. Password recovery, MFA, token expiry, permissions, tenant guards and invitation compensation remain unchanged. No real welcome message, account grant or test-recipient enrollment is sent by rollout.
 
-Client additions require an explicit UUID, optimistic revision, approved commercial reference, validity dates and justification. Repeating a stale request fails rather than creating a second addition. No price, payment, subscription or automatic upgrade is created. Cancellation is audited and does not delete customers.
+## Verification and limits
 
-Portal history is immutable and records actor ID, the registered name and platform affiliation/role as a snapshot, plus justification and before/after conditions. Missing names remain explicitly unidentified rather than being replaced with a role name. This migration does not rewrite historical audit entries in other modules.
-
-Existing upgrade requests display the current registered requester name and affiliation. Lookups are limited to organization/actor pairs already present in the authorized request set, with no emails, phone numbers or permissions returned. Directory failures preserve the pending request and its original actor ID; no request or approval is changed by this display enrichment.
-
-## Verification
-
-Backend tests cover default-off behavior, authenticated tenant derivation, exact route allowlisting, independent platform/RBAC checks, strict DTOs, foreign customer rejection and management list overflow. Frontend DOM checks cover disabled/read-only controls, an exact scoped save payload, no automatic writes, failed authorization and module filtering. The existing licensing UI regression suite must also pass.
-
-The migration was exercised in a rollback transaction against the existing schema: default-off and service-only/RLS boundaries, plan snapshot quota, creation/update/stale revision, unknown/foreign customer rejection, capacity exhaustion, one approved addition and immutable audit. Capacity insertion probes used temporary tables and existing rows; no customer/account fixture was persisted. Concurrent request stress testing and an external account end-to-end pilot remain rollout checks; the rollback test alone does not establish those outcomes.
-
-The official RAG library and financial calculations are outside this change. No draft chunk is reviewed or released automatically.
+Backend regression tests cover invitation compensation, roles, user quotas, default-off behavior, scoped concessions, retired additions, guarded enrollment and HTML escaping. Frontend checks cover scoped grant payloads, absence of automatic writes, authorization failure and module filtering. SQL migration validation uses a rollback transaction and verifies shared counts, retained parent quota triggers and service-only ACLs. Real recipient delivery/acceptance and concurrent stress remain rollout checks. Official RAG draft chunks and financial engines are outside this change.
