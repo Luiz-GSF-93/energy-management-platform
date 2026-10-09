@@ -11,3 +11,8 @@ describe('Azure backoffice generative boundary (synthetic transport only)',()=>{
  it.each([{...output,citations:['foreign']},{...output,fields:[{...output.fields[0],value:'999'}]},{...output,fields:[{...output.fields[0],key:'tax:ICMS'}]},{...output,answer:'Economia de 999 reais'},{...output,answer:'Clique https://evil.test/'},{...output,supported:false},{...output,doubts:[{question:'Conferir?',evidenceIds:['foreign']}]}])('rejects ungrounded/unsafe output %p',v=>expect(()=>validateInterpretation(v,evidence)).toThrow());
  it('does not leak provider failures',async()=>{const fetcher=jest.fn(async()=>{throw Error('synthetic-key private content');});await expect(new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Pergunta',evidence)).rejects.toThrow('PROVIDER_UNAVAILABLE');});
 });
+
+describe('Isolated published report prompt',()=>{
+ it('uses a client prompt without weakening numeric, source or tool guards',async()=>{const fetcher=jest.fn(async()=>response({...output,fields:[]}));const r=await new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Consumo?',evidence,'client');const [,init]=fetcher.mock.calls[0] as any;const b=JSON.parse(init.body);expect(b.messages[0].content).toContain('o cliente vinculado');expect(b.messages[0].content).not.toContain('Não atenda clientes');expect(r.promptVersion).toBe('published-report-client-v1');expect(b.store).toBe(false);expect(b.tools).toBeUndefined();});
+ it('never accepts a write suggestion in a report answer',async()=>{const fetcher=jest.fn(async()=>response(output));await expect(new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Consumo?',evidence,'client')).rejects.toThrow('UNGROUNDED_FIELD');});
+});

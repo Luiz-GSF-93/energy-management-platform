@@ -24,6 +24,15 @@ export class BotEnergyRagService {
  constructor(private db:SupabaseService,private embeddings:AzureKnowledgeEmbeddingsConnector,private budget:BotEnergyBudgetService,private licenses:BotEnergyLicenseService){}
  async retrieve(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>){
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation'))throw new ForbiddenException('Base disponível ao backoffice autorizado.');
+  return this.retrieveAuthorized(t,question,period);
+ }
+ async retrieveClient(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>,unitId:string){
+  if(t.role!=='consulta'||t.accessMode||!t.roleId||!t.permissions?.includes(P.INTELLIGENCE_AI_USE)||!t.permissions.includes(P.DOCUMENTS_REPORTS_VIEW))throw new ForbiddenException('Consulta de cliente autorizada necessária.');
+  const live=await this.db.getClient().rpc('bot_energy_client_reports',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_from:period.periodStart.slice(0,7),p_to:period.periodEnd.slice(0,7),p_unit:unitId});
+  if(live.error||!live.data?.customerId)throw new ForbiddenException('Vínculo atual do cliente indisponível.');
+  return this.retrieveAuthorized(t,question,period);
+ }
+ private async retrieveAuthorized(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>){
   if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('Bot-Energy + RAG exige licença vigente.');
   if(!question.trim()||question.length>500)throw new Error('INVALID_RAG_QUESTION');
   const query={...period,embeddingModel:KNOWLEDGE_EMBEDDING_MODEL,embeddingVersion:KNOWLEDGE_EMBEDDING_VERSION};

@@ -1,0 +1,29 @@
+Revisão do corpus oficial Bot-Energy — 09/10/2026
+
+Resultado: nenhuma liberação automática. Os 1.208 trechos permanecem em quatro versões DRAFT. Nenhuma versão REVIEWED.
+
+Conferência de integridade realizada no banco de produção:
+- ANEEL_RULES / REH 3.579/2026 CPFL Paulista: 263 trechos; 263 hashes SHA-256 conferidos; ordinais 0–262; 2 trechos com menções a alterações/vigência.
+- REN 1.000/2021: 800 trechos; 800 hashes conferidos; ordinais 0–799; 117 trechos com menções a alterações/vigência.
+- REN 1.059/2023: 99 trechos; 99 hashes conferidos; ordinais 0–98; 6 trechos com menções a alterações/vigência.
+- Lei 14.300/2022: 46 trechos; 46 hashes conferidos; ordinais 0–45; 4 trechos com menções a alterações/vigência.
+
+Estas contagens verificam integridade, não aplicabilidade jurídica. A busca de palavras não identifica todas as revogações e alterações. Há marcações históricas e seções explicitamente pendentes de revisão. Datas de captura não devem ser tratadas como início de vigência de todos os dispositivos.
+
+Pendências antes de liberar uma versão:
+- Conferir o texto e as retificações com a publicação oficial.
+- Separar redações revogadas, redações atuais e alterações com efeitos futuros.
+- Atribuir a vigência por dispositivo e registrar a versão anterior quando aplicável.
+- Conferir tabelas, anexos, unidades, paginação e recortes tarifários por distribuidora e período.
+- Registrar responsável, data e justificativa da revisão; liberar somente o recorte explicitamente conferido.
+- Reindexar o conteúdo revisado quando seu texto mudar; preservar o hash e a versão de origem.
+
+A integração consulta apenas fontes REVIEWED compatíveis com mercado e período. Se não houver evidência suficiente, o Bot informa a pendência e não inventa a regra. O guia de uso do produto fica separado do corpus normativo.
+
+Fontes institucionais:
+ANEEL legislação: https://www.gov.br/aneel/pt-br/centrais-de-conteudos/legislacao
+REN 1.000: https://www2.aneel.gov.br/cedoc/ren20211000.html
+REN 1.059: https://www2.aneel.gov.br/cedoc/ren20231059.html
+Lei 14.300: https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14300.htm
+
+Os acessos web diretos às duas resoluções retornaram indisponibilidade/403 nesta revisão; isso não autoriza utilizar uma cópia histórica como regra vigente. O manifesto antigo encontrado no Codespace também registra falhas de obtenção de fontes; não é um comprovante de revisão normativa.

@@ -1,3 +1,4 @@
+import {BotReportsModule} from './modules/bot-reports/bot-reports.module';
 import {CustomerNoticesModule} from './modules/customer-notices/customer-notices.module';
 import {SmsDeliveryModule} from './modules/sms-delivery/sms-delivery.module';
 import {WhatsappDeliveryModule} from './modules/whatsapp-delivery/whatsapp-delivery.module';
@@ -52,6 +53,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     TradingHubModule,
     EnergyMapModule,
     ReportsModule,
+    BotReportsModule,
     AclAdmissionsModule,
     EnergyPricesModule,
     CceeModule,

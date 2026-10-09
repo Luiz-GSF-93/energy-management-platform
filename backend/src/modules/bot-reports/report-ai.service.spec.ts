@@ -1,0 +1,8 @@
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+import {ReportAiService} from './report-ai.service';
+const t:any={organizationId:'org',userId:'actor',roleId:'role',role:'consulta',scope:'organization',permissions:[P.INTELLIGENCE_AI_USE,P.DOCUMENTS_REPORTS_VIEW]};
+function fixture(){const connector={available:()=>true,interpret:jest.fn(async()=>({supported:true,answer:'Resultado publicado',citations:['e'],usage:{inputTokens:10,outputTokens:10},promptVersion:'client-v1',model:'model'}))},audit={logCreate:jest.fn(async()=>{})},budget={reserve:jest.fn(async()=>({})),settle:jest.fn(async()=>{})},license={available:jest.fn(async()=>true)};return {connector,audit,budget,license,ai:new ReportAiService(connector as any,audit as any,budget as any,license as any)};}
+describe('Report AI durable audit and budget',()=>{
+ it('does not transmit when intent audit fails',async()=>{const f=fixture();f.audit.logCreate.mockRejectedValue(new Error('unavailable'));expect((await f.ai.interpret(t,'Pergunta',[{id:'e',label:'Valor',value:'10',source:'Publicado'}],'client')).state).toBe('FAILED');expect(f.connector.interpret).not.toHaveBeenCalled();});
+ it('keeps audience server-selected and exposes only cited evidence',async()=>{const f=fixture(),e=[{id:'e',label:'Valor',value:'10',source:'Publicado'},{id:'other',label:'Outro',value:'20',source:'Publicado'}];const r=await f.ai.interpret(t,'Pergunta',e,'client');expect(f.connector.interpret).toHaveBeenCalledWith('org','Pergunta',e,'client');expect(r.evidence).toEqual([e[0]]);expect(f.budget.settle).toHaveBeenCalled();expect(f.audit.logCreate).toHaveBeenCalledTimes(2);});
+});

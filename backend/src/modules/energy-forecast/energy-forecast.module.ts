@@ -24,5 +24,5 @@ class EnergyForecastController {
  @Post() @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_CREATE]) prepare(@Body() d:unknown,@Tenant() t:TenantContext){return this.service.prepare(d,t);}
  @Post(':id/transitions') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_CREATE]) transition(@Param('id',ParseUUIDPipe) id:string,@Body() d:unknown,@Tenant() t:TenantContext){return this.service.transition(id,d,t);}
 }
-@Module({imports:[LicensesModule,OcrModule],controllers:[EnergyForecastController,PublishedClientForecastController],providers:[EnergyForecastService,PublishedClientForecastService,SupabaseService],exports:[EnergyForecastService]})
+@Module({imports:[LicensesModule,OcrModule],controllers:[EnergyForecastController,PublishedClientForecastController],providers:[EnergyForecastService,PublishedClientForecastService,SupabaseService],exports:[EnergyForecastService,PublishedClientForecastService]})
 export class EnergyForecastModule {}
