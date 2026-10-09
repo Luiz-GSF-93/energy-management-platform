@@ -47,6 +47,22 @@ describe('isolated auditable forecast service',()=>{
   expect(loadNasaTemperature).toHaveBeenCalledWith(d.weather,'2023-09-01','2026-08-31');
   prior=run;rpc.mockClear();await expect(service.prepare(d,t)).resolves.toEqual(run);expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_history_source')).toBe(false);
  });
+ it('requires documented new premises before querying NASA or writing',async()=>{
+  await expect(service.prepare({...input,weather:{latitude:-23.5,longitude:-46.5,consent:true,assessment:'ANNUAL_CYCLE_2',sensitivity:'LOW'}},t)).rejects.toThrow('Documente');
+  expect(loadNasaTemperature).not.toHaveBeenCalled();expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_prepare')).toBe(false);
+ });
+ it('persists annual assessment as an immutable preliminary without automatic publication',async()=>{
+  const saved=source.history.rows;
+  const rows=Array.from({length:36},(_,i)=>{const d=new Date(Date.UTC(2023,8+i,1)),month=d.toISOString().slice(0,7),days=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();return {month,days,consumptionKwh:'3000',page:1,source:'test-table'};});source.history.rows=rows;
+  const daily=rows.flatMap(r=>Array.from({length:r.days},(_,i)=>({date:r.month+'-'+String(i+1).padStart(2,'0'),temperatureC:20})));
+  (loadNasaTemperature as jest.Mock).mockResolvedValueOnce({provider:'NASA_POWER',parameter:'T2M',unit:'°C',timeStandard:'UTC',sourceHash:'b'.repeat(64),from:'2023-09-01',to:'2026-08-31',monthly:[],daily});
+  const d={...input,weather:{latitude:-23.5,longitude:-46.5,consent:true,assessment:'ANNUAL_CYCLE_2',sensitivity:'LOW',premiseNote:'Unidade informada como pouco sensível à temperatura.'}};
+  try{const r=await service.prepare(d,t);expect(r.body.climateAssessment.version).toBe('climate-cycle/2.0');expect(r.body.climateAssessment.context.sensitivity).toBe('LOW');expect(r.body.weatherApplied).toBe(false);expect(r.body.status).toBe('PRELIMINARY');expect(r.body.weather.daily).toHaveLength(daily.length);expect(r.payload_hash).toBe(reportHash(r.body));expect(r.events).toEqual([]);prior=r;await expect(service.prepare(d,t)).resolves.toEqual(r);expect(loadNasaTemperature).toHaveBeenCalledTimes(1);}finally{source.history.rows=saved;}
+ });
+ it('rejects a reading period bound to another source before querying NASA',async()=>{
+  const periods=source.history.rows.map((r:any)=>({month:r.month,previousReading:r.month+'-01',currentReading:r.month+'-31',evidenceId:'foreign',page:3}));
+  await expect(service.prepare({...input,weather:{latitude:-23.5,longitude:-46.5,consent:true,assessment:'ANNUAL_CYCLE_2',premiseNote:'Períodos conferidos no documento da fonte.',readingPeriods:periods}},t)).rejects.toThrow('Histórico');expect(loadNasaTemperature).not.toHaveBeenCalled();
+ });
  it('rejects source conflicts even in months outside the calculation window',async()=>{
   const rows=Array.from({length:44},(_,i)=>({month:new Date(Date.UTC(2023,i,1)).toISOString().slice(0,7),consumptionKwh:'3000',days:30,page:1,source:'test-table'}));
   const older={...source,historyId:requestId,evidenceId:requestId,history:{...source.history,rows:rows.slice(0,12)}};

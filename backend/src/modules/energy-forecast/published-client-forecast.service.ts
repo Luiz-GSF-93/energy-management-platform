@@ -5,6 +5,7 @@ import {LicensesService} from '../licenses/services/licenses.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {reportHash} from '../reports/report.projection';
+import {climateCycleSummary} from './climate-summary';
 
 @Injectable()
 export class PublishedClientForecastService {
@@ -21,7 +22,7 @@ export class PublishedClientForecastService {
    const b=r.body;
    if(r.organization_id!==t.organizationId||r.customer_id!==data.customerId||b?.organizationId!==t.organizationId||b.customerId!==data.customerId||b.unitId!==r.consumer_unit_id||b.asOfMonth!==r.cutoff||r.payload_hash!==reportHash(b)||!r.publishedAt||!r.validatedAt)throw new InternalServerErrorException('Integridade da previsão indisponível.');
    return {id:r.id,version:r.version,unitId:r.consumer_unit_id,unitName:r.unitName,asOfMonth:b.asOfMonth,publishedAt:r.publishedAt,
-    formulaVersion:b.formulaVersion,method:b.method,weatherStatus:b.weatherStatus,
+    formulaVersion:b.formulaVersion,method:b.method,weatherStatus:b.weatherStatus,climateSummary:climateCycleSummary(b.climateAssessment),
     actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh})),
     future:b.future.map((a:any)=>({month:a.month,predictedKwh:a.predictedKwh,expansionKwh:a.expansionKwh,averageBasis:a.averageBasis})),
     observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh};
