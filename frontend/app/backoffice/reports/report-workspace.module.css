@@ -44,3 +44,6 @@
 .offPeakBar {background:var(--brand-green);}
 .bandColumn {min-width:200px;}
 .bandPair span {display:block;overflow-wrap:anywhere;line-height:1.4;}
+
+.workspace textarea {width:100%;min-height:100px;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface-raised);color:var(--color-text);font:inherit;resize:vertical;}
+.workspace textarea:focus-visible {outline:2px solid var(--color-primary);outline-offset:2px;}

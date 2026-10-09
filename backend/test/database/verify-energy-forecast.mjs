@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {aclFixture} from './acl-test-fixture.mjs';
+const f=await aclFixture(),{db,actor,peer,client,call,migrate,create,work,evidence,doc}=f;let checks=0;
+const check=v=>{assert.ok(v);checks++;},deny=async(fn,code)=>{await assert.rejects(fn,e=>!code||e.code===code);checks++;};
+try{
+ await db.exec("ALTER TABLE licenses ADD COLUMN report_generation boolean DEFAULT true; UPDATE roles SET permissions=permissions||'[\"3ebadd32-6f30-459e-8ed3-0d2843d89946\",\"60f9690a-145b-4dba-b23f-9f945baca296\",\"9541a7bb-c20a-4c4d-9f4c-2185262c8e9c\"]'::jsonb WHERE name='gestor'; CREATE TABLE monthly_energy_settlements(organization_id text,customer_id text,consumer_unit_id text,financial_group_id uuid,status text,validation_status text,financial_hash text,version_number int,month date);");
+ await migrate('20261006_r2_published_reports.sql');await migrate('20261006_acl_history_simulation.sql');await migrate('20261009_energy_forecast.sql');await migrate('20261009_energy_forecast_histories.sql');
+ let a=await create();const note='Histórico conferido com documento e leitura rastreável.';
+ await doc('registry');a=(await work(a.id,a.revision,'registration','START')).admission;
+ let e=await evidence(a.id,a.revision,'SUBMIT',{stage:'registration',documents:['registry'],facts:{},kind:'COMPLETE',note});a=e.admission;
+ a=(await evidence(a.id,a.revision,'APPROVE',{evidence:e.evidenceId,note,actor:peer})).admission;a=(await evidence(a.id,a.revision,'COMPLETE',{evidence:e.evidenceId})).admission;
+ await doc('history','INVOICE_DISTRIBUTOR','2026-08-01');a=(await work(a.id,a.revision,'invoices','START')).admission;
+ const rows=Array.from({length:12},(_,i)=>({month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),peakKwh:'100',offPeakKwh:'900',demandKw:'25',days:30,page:1,source:'table-'+i}));
+ e=await evidence(a.id,a.revision,'SUBMIT',{stage:'invoices',documents:['history'],facts:{history:{sourceDocumentId:'history',rows}},kind:'COMPLETE',note});a=e.admission;
+ const source=()=>call('energy_forecast_source',['o1',actor,'r1',false,a.id,e.evidenceId]);await deny(source);
+ a=(await evidence(a.id,a.revision,'APPROVE',{evidence:e.evidenceId,note,actor:peer})).admission;
+ const sources=[await source()];check(sources[0].reviewedBy===peer);check(sources[0].unitId==='u1');check((await call('energy_forecast_sources',['o1',actor,'r1',false])).length===1);
+ const req={requestId:randomUUID(),customerId:'c1',unitId:'u1',asOfMonth:'2026-08',sources:[{admissionId:a.id,evidenceId:e.evidenceId}],expansions:[]};
+ const body={formulaVersion:'consumption-forecast/1.0',status:'PRELIMINARY',organizationId:'o1',customerId:'c1',unitId:'u1',asOfMonth:'2026-08'};
+ const prepare=(request=req,s=sources,b=body,who=actor)=>call('energy_forecast_prepare',['o1',who,'r1',false,request,s,b,'a'.repeat(64)]);
+ const result=await prepare();check((await prepare()).id===result.id);check(result.version===1);check((await call('energy_forecast_request',['o1',actor,req.requestId])).id===result.id);check(await call('energy_forecast_published',['o1',actor,'c1','u1','2026-08'])===null);await deny(()=>prepare({...req,unitId:'u2'},sources,{...body,unitId:'u2'}),'40001');await deny(()=>prepare({...req,requestId:randomUUID()},{},body));
+ const transition=(action,who=peer,key=randomUUID(),hash='a'.repeat(64))=>call('energy_forecast_transition',['o1',who,'r1',false,result.id,key,hash,action,note]);
+ await deny(()=>transition('PUBLISHED'),'40001');await deny(()=>transition('VALIDATED',peer,randomUUID(),'b'.repeat(64)),'40001');
+ await db.exec("UPDATE document_catalog SET revision=2 WHERE document_id='history'");await deny(()=>transition('VALIDATED'));await db.exec("UPDATE document_catalog SET revision=1 WHERE document_id='history'");
+ const key=randomUUID();check((await transition('VALIDATED',peer,key)).action==='VALIDATED');check((await transition('VALIDATED',peer,key)).actor===peer);check((await transition('PUBLISHED')).action==='PUBLISHED');check((await call('energy_forecast_published',['o1',actor,'c1','u1','2026-08'])).id===result.id);check(await call('energy_forecast_published',['o1',actor,'c1','u1','2026-07'])===null);check(await call('energy_forecast_published',['o1',actor,'c2','u2','2026-08'])===null);
+ const read=(org='o1',who=actor,id=result.id)=>call('energy_forecast_read',[org,who,id]);check((await read()).events.length===2);check(!('sources' in await read()));await deny(()=>read('o2',actor),'42501');await deny(()=>read('o1',client),'42501');
+ await deny(()=>db.exec('UPDATE energy_forecast_runs SET version=100'),'23514');await deny(()=>db.exec('DELETE FROM energy_forecast_events'),'23514');
+ await db.exec("UPDATE roles SET name='operacional',permissions=permissions-'26cadaa7-2eea-4080-91f6-1f26f87ca809' WHERE id='r1'");
+ const result2=await prepare({...req,requestId:randomUUID()});check(result2.version===2);await deny(()=>call('energy_forecast_transition',['o1',actor,'r1',false,result2.id,randomUUID(),'a'.repeat(64),'VALIDATED',note]),'42501');await db.exec("UPDATE roles SET name='gestor',permissions=permissions||'[\"26cadaa7-2eea-4080-91f6-1f26f87ca809\"]' WHERE id='r1'");
+ for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await deny(()=>db.exec('SELECT * FROM energy_forecast_runs'),'42501');await deny(()=>db.exec('INSERT INTO energy_forecast_events SELECT * FROM energy_forecast_events'),'42501');if(role!=='service_role')await deny(()=>read(),'42501');await db.exec('RESET ROLE');}
+ await db.exec("UPDATE roles SET permissions=permissions||'[\"613b71d0-67db-4761-9e11-61fdf63ac8d5\"]'::jsonb WHERE id='r1'");
+ await doc('standalone','INVOICE_DISTRIBUTOR','2026-08-01','u1b');
+ const direct=await call('energy_forecast_document_source',['o1',actor,'standalone']);
+ const directRows=rows.map(r=>({month:r.month,consumptionKwh:'3000',days:30,page:1,source:r.source}));
+ const directRequest=randomUUID();
+ const record=()=>call('energy_forecast_history_record',['o1',actor,directRequest,direct,'c'.repeat(64),directRows,note]);
+ const history=await record();check((await record()).id===history.id);await deny(()=>call('energy_forecast_history_source',['o1',actor,history.id]),'P3862');
+ await deny(()=>call('energy_forecast_history_record',['o1',actor,randomUUID(),direct,'c'.repeat(64),[{...directRows[0],days:0}],note]),'22023');
+ await call('energy_forecast_history_approve',['o1',peer,history.id,randomUUID(),note]);
+ const approved=await call('energy_forecast_history_source',['o1',actor,history.id]);check(approved.historyId===history.id);check(approved.unitId==='u1b');
+ await db.exec("UPDATE roles SET permissions=permissions-'26cadaa7-2eea-4080-91f6-1f26f87ca809'-'2c933fdf-0bbf-406a-915c-03e7921e54d8' WHERE id='r1'");
+ const standaloneRun=await prepare({...req,requestId:randomUUID(),unitId:'u1b',sources:[{historyId:history.id}]},[approved],{...body,unitId:'u1b'});
+ for(const action of ['VALIDATED','PUBLISHED'])await call('energy_forecast_transition',['o1',peer,'r1',false,standaloneRun.id,randomUUID(),'a'.repeat(64),action,note]);
+ check((await read('o1',actor,standaloneRun.id)).events.length===2);
+ await db.exec("UPDATE document_catalog SET revision=2 WHERE document_id='standalone'");await deny(()=>call('energy_forecast_history_source',['o1',actor,history.id]),'40001');
+ check((await read('o1',actor,standaloneRun.id)).events.length===2);
+ await deny(()=>db.exec('DELETE FROM energy_forecast_histories'),'23514');
+ await deny(()=>call('energy_forecast_document_source',['o2',actor,'standalone']),'42501');
+ for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await deny(()=>db.exec('SELECT * FROM energy_forecast_histories'),'42501');await db.exec('RESET ROLE');}
+ await db.exec("UPDATE licenses SET active=false WHERE organization_id='o1'");await deny(()=>read(),'42501');
+ console.log(JSON.stringify({ok:true,checks}));
+}finally{await db.close();}
