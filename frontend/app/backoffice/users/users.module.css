@@ -1,0 +1,6 @@
+.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.header h1, .header h2 { margin: 0; }
+.actions { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.actions > div { min-width: 0; }
+.nameFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 600px) { .nameFields { grid-template-columns: 1fr; } }
