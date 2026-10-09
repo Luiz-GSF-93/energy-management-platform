@@ -25,6 +25,8 @@ Client additions require an explicit UUID, optimistic revision, approved commerc
 
 Portal history is immutable and records actor ID, the registered name and platform affiliation/role as a snapshot, plus justification and before/after conditions. Missing names remain explicitly unidentified rather than being replaced with a role name. This migration does not rewrite historical audit entries in other modules.
 
+Existing upgrade requests display the current registered requester name and affiliation. Lookups are limited to organization/actor pairs already present in the authorized request set, with no emails, phone numbers or permissions returned. Directory failures preserve the pending request and its original actor ID; no request or approval is changed by this display enrichment.
+
 ## Verification
 
 Backend tests cover default-off behavior, authenticated tenant derivation, exact route allowlisting, independent platform/RBAC checks, strict DTOs, foreign customer rejection and management list overflow. Frontend DOM checks cover disabled/read-only controls, an exact scoped save payload, no automatic writes, failed authorization and module filtering. The existing licensing UI regression suite must also pass.

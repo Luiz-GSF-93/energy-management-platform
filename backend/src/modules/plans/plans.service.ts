@@ -1,3 +1,4 @@
+import {licenseRequestAuthors} from './license-request-authors';
 import {BadRequestException,ForbiddenException,ConflictException,Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {ApplyPlanDto,SavePlanDto} from './plans.dto';
@@ -48,12 +49,12 @@ export class PlansService {
   const today=new Date().toISOString().slice(0,10);
   const effective=(licenses.data??[]).filter((l:any)=>l.status?.toLowerCase()==='active'&&l.start_date&&l.start_date<=today&&(!l.end_date||l.end_date>=today));
   if(effective.length>1)throw new ConflictException('Há mais de uma licença vigente. Solicite revisão administrativa.');
-  return {used:used.data,license:effective[0]??null,requests:requests.data??[],updatedAt:new Date().toISOString()};
+  return {used:used.data,license:effective[0]??null,requests:await licenseRequestAuthors(client,requests.data??[],org),updatedAt:new Date().toISOString()};
  }
  async upgrades(org?:string){
   let q=this.supabase.getClient().from('license_upgrade_requests').select('*, organizations(name)').eq('status','pending').order('created_at');
   if(org)q=q.eq('organization_id',org);
-  const {data,error}=await q;if(error)throw new InternalServerErrorException('Não foi possível consultar as solicitações.');return data??[];
+  const {data,error}=await q;if(error)throw new InternalServerErrorException('Não foi possível consultar as solicitações.');return licenseRequestAuthors(this.supabase.getClient(),data??[],org);
  }
  async requestUpgrade(org:string,note:string,actor:string){
   const {data,error}=await this.supabase.getClient().rpc('request_license_upgrade',{org,actor,message:note.trim()});
