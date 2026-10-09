@@ -1,6 +1,6 @@
 import {BotEnergyLicenseService} from './bot-energy-license.service';
 import {Injectable,ForbiddenException,ServiceUnavailableException} from '@nestjs/common';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
@@ -10,6 +10,17 @@ import {KnowledgeChunk,KnowledgeQuery,knowledgeEvidence,selectKnowledge} from '.
 
 @Injectable()
 export class BotEnergyRagService {
+ // Only query vectors are reused. Never cache answers, retrieved norms or financial context.
+ private readonly vectors=new Map<string,{expiresAt:number;vector:number[]}>();
+ private vectorKey(t:TenantContext,question:string){
+  return createHash('sha256').update(JSON.stringify([t.organizationId,t.userId,KNOWLEDGE_EMBEDDING_MODEL,KNOWLEDGE_EMBEDDING_VERSION,question])).digest('hex');
+ }
+ private remember(key:string,vector:number[]){
+  const now=Date.now();
+  for(const [id,value] of this.vectors)if(value.expiresAt<=now)this.vectors.delete(id);
+  if(this.vectors.size>=128)this.vectors.delete(this.vectors.keys().next().value!);
+  this.vectors.set(key,{expiresAt:now+60000,vector:[...vector]});
+ }
  constructor(private db:SupabaseService,private embeddings:AzureKnowledgeEmbeddingsConnector,private budget:BotEnergyBudgetService,private licenses:BotEnergyLicenseService){}
  async retrieve(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>){
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation'))throw new ForbiddenException('Base disponível ao backoffice autorizado.');
@@ -23,10 +34,17 @@ export class BotEnergyRagService {
   const ready=await client.from('bot_energy_knowledge_versions').select('id').eq('status','REVIEWED').limit(1);
   if(ready.error)throw new ServiceUnavailableException('Banco de conhecimento indisponível.');
   if(!ready.data?.length)return {state:'NO_EVIDENCE',evidence:[],sources:[]};
-  const reservation=await this.budget.reserve(t.organizationId,t.userId,randomUUID(),'embeddings',{inputTokens:Buffer.byteLength(question),outputTokens:0},'RAG');
-  const embedded=await this.embeddings.embed(t.organizationId,[question]);
-  await this.budget.settle(reservation,{inputTokens:embedded.inputTokens,outputTokens:0});
-  const {data,error}=await client.rpc('search_bot_energy_knowledge',{p_embedding:JSON.stringify(embedded.vectors[0]),p_period_start:period.periodStart,p_period_end:period.periodEnd,p_market:period.market,p_embedding_model:query.embeddingModel,p_embedding_version:query.embeddingVersion});
+  const key=this.vectorKey(t,question),cached=this.vectors.get(key);
+  let vector=cached&&cached.expiresAt>Date.now()?cached.vector:undefined;
+  if(!vector){
+   const reservation=await this.budget.reserve(t.organizationId,t.userId,randomUUID(),'embeddings',{inputTokens:Buffer.byteLength(question),outputTokens:0},'RAG');
+   const embedded=await this.embeddings.embed(t.organizationId,[question]);
+   await this.budget.settle(reservation,{inputTokens:embedded.inputTokens,outputTokens:0});
+   vector=embedded.vectors[0];
+   if(!vector)throw new ServiceUnavailableException('Vetor de consulta indisponível.');
+   this.remember(key,vector);
+  }
+  const {data,error}=await client.rpc('search_bot_energy_knowledge',{p_embedding:JSON.stringify(vector),p_period_start:period.periodStart,p_period_end:period.periodEnd,p_market:period.market,p_embedding_model:query.embeddingModel,p_embedding_version:query.embeddingVersion});
   if(error||!Array.isArray(data))throw new ServiceUnavailableException('Não foi possível verificar as normas aplicáveis.');
   const chunks:KnowledgeChunk[]=data.map(c=>({id:c.id,documentId:c.document_id,family:c.family,authority:c.authority,title:c.title,officialUrl:c.official_url,version:c.version,section:c.section,page:c.page,text:c.content,textHash:c.content_hash,documentHash:c.document_hash,validFrom:c.valid_from,validTo:c.valid_to,verifiedAt:c.verified_at,reviewedBy:c.reviewed_by,status:c.status,markets:c.markets,similarity:c.similarity,embeddingModel:c.embedding_model,embeddingVersion:c.embedding_version}));
   const selected=selectKnowledge(chunks,query);
