@@ -1,0 +1,24 @@
+'use client';
+import styles from './report-workspace.module.css';
+export type AnnualForecast={asOfMonth:string;formulaVersion:string;method:string;actual:{month:string;consumptionKwh:string}[];future:{month:string;predictedKwh:string;expansionKwh:string}[];estimatedYearKwh:string;observedYearKwh:string;futureKwh:string;weatherStatus:string;qualifications:string[];id?:string;version?:number;payloadHash?:string};
+const value=(s:string)=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(Number(s));
+const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+export default function AnnualForecastPresentation({forecast,preliminary=false}:{forecast:AnnualForecast;preliminary?:boolean}){
+ const year=forecast.asOfMonth.slice(0,4),actual=forecast.actual.filter(r=>r.month.startsWith(year+'-'));
+ const rows=[...actual.map(r=>({month:r.month,kwh:r.consumptionKwh,kind:'Apurado'})),...forecast.future.map(r=>({month:r.month,kwh:r.predictedKwh,kind:'Projetado'}))];
+ if(!rows.length||rows.some(r=>!/^\d+(\.\d+)?$/.test(r.kwh)||!Number.isFinite(Number(r.kwh))))return <p>Projeção indisponível: série requer conferência.</p>;
+ const max=Math.max(1,...rows.map(r=>Number(r.kwh))),x=(m:string)=>52+(Number(m.slice(5))-1)*58,y=(v:string)=>190-Number(v)/max*150;
+ const segments=(series:typeof rows)=>series.slice(1).filter((r,i)=>Number(r.month.slice(5))===Number(series[i].month.slice(5))+1).map(r=>{const i=series.indexOf(r),a=series[i-1];return {a,r};});
+ const observed=rows.filter(r=>r.kind==='Apurado'),projected=[...(observed.length?[observed[observed.length-1]]:[]),...rows.filter(r=>r.kind==='Projetado')];
+ return <section aria-label="Projeção anual de consumo"><h3>Consumo até dezembro · {year}</h3><p>{preliminary?'Previsão para conferência.':'Previsão validada e publicada.'} Dados históricos de faturas; a projeção não representa consumo medido futuro.</p>
+ <div className={styles.metrics}><div className={styles.metric}><span>Apurado no ano</span><strong>{value(forecast.observedYearKwh)} kWh</strong></div><div className={styles.metric}><span>Previsto até dezembro</span><strong>{value(forecast.futureKwh)} kWh</strong></div><div className={styles.metric}><span>Total anual estimado</span><strong>{value(forecast.estimatedYearKwh)} kWh</strong></div></div>
+ <svg viewBox="0 0 740 235" role="img" aria-label={`Tendência de consumo em ${year}; valores disponíveis na tabela abaixo`} style={{width:'100%',minHeight:180}}>
+ {[0,0.5,1].map(t=><g key={t}><line x1="45" x2="715" y1={190-t*150} y2={190-t*150} stroke="currentColor" opacity=".15"/><text x="46" y={185-t*150} fontSize="10" fill="currentColor">{value(String(max*t))} kWh</text></g>)}
+ {segments(observed).map(({a,r})=><line key={r.month} x1={x(a.month)} y1={y(a.kwh)} x2={x(r.month)} y2={y(r.kwh)} stroke="var(--brand-blue)" strokeWidth="3"/>)}
+ {segments(projected).map(({a,r})=><line key={r.month} x1={x(a.month)} y1={y(a.kwh)} x2={x(r.month)} y2={y(r.kwh)} stroke="var(--brand-green)" strokeWidth="3" strokeDasharray="7 5"/>)}
+ {rows.map(r=><circle key={r.month} cx={x(r.month)} cy={y(r.kwh)} r="4" fill={r.kind==='Apurado'?'var(--brand-blue)':'var(--brand-green)'}><title>{r.month}: {value(r.kwh)} kWh · {r.kind}</title></circle>)}
+ {months.map((m,i)=><text key={m} x={52+i*58} y="217" textAnchor="middle" fontSize="12" fill="currentColor">{m}</text>)}
+ </svg><p>Azul contínuo: apurado nas faturas · Verde tracejado: previsão. Lacunas não representam zero.</p>
+ <details><summary>Valores mensais e metodologia</summary><table className={styles.table}><thead><tr><th>Mês</th><th>Consumo (kWh)</th><th>Origem</th></tr></thead><tbody>{rows.map(r=><tr key={r.month}><td>{r.month}</td><td>{value(r.kwh)}</td><td>{r.kind}</td></tr>)}</tbody></table><p>Fórmula: {forecast.formulaVersion} · Método: {forecast.method} · Corte: {forecast.asOfMonth}</p><p>{forecast.weatherStatus==='HISTORY_COLLECTED_NOT_APPLIED'?'Temperatura NASA POWER consultada; ajuste climático ainda não aplicado.':forecast.weatherStatus==='UNAVAILABLE'?'Temperatura indisponível nesta versão; projeção sem ajuste climático.':'Projeção sem ajuste climático.'}</p><ul>{forecast.qualifications.map(q=><li key={q}>{q}</li>)}</ul>{forecast.id?<p>Previsão v{forecast.version} · {forecast.id}<br/>SHA-256: <code>{forecast.payloadHash}</code></p>:null}</details>
+ </section>;
+}
