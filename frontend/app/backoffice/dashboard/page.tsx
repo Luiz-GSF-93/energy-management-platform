@@ -12,13 +12,14 @@ import PublishedFinancialDashboard from '@/app/components/PublishedFinancialDash
 import IntegrationRenewal from '@/app/components/IntegrationRenewal';
 import WhatsappDelivery from '@/app/components/WhatsappDelivery';
 import CceeIntegration from '@/app/components/CceeIntegration';
+import './dashboard.css';
 
 export default function DashboardPage() {
   const { context, hasPermission } = useAuth();
   return (
     <ProtectedRoute>
       <BackofficeShell>
-        <section className="backoffice-page">
+        <section className="backoffice-page energyos-admin-dashboard">
           <header className="backoffice-page__header">
             <h1 className="backoffice-page__title">
               Dashboard administrativo
