@@ -309,6 +309,7 @@ export class AuditService {
     roleId: string;
     affiliationType: 'internal' | 'external';
     provisioningPath: 'new_identity' | 'existing_identity';
+    exclusiveCustomerId?: string;
     ipAddress?: string | null;
     userAgent?: string | null;
   }): Promise<void> {
@@ -340,6 +341,7 @@ export class AuditService {
           roleId,
           affiliationType,
           provisioningPath,
+          ...(params.exclusiveCustomerId ? {exclusiveCustomerId:params.exclusiveCustomerId} : {}),
         },
       },
       ip_address: ipAddress ?? null,

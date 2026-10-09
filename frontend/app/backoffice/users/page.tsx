@@ -16,6 +16,9 @@ function Users(){
  const {hasPermission,context}=useAuth();
  const [modalOpen,setModalOpen]=useState(false);
  const [rows,setRows]=useState<OrganizationUser[]>([]),[roles,setRoles]=useState<OrganizationUserRole[]>([]),[editing,setEditing]=useState<OrganizationUser|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
+ const [portalCustomers,setPortalCustomers]=useState<{id:string;company_name:string}[]>([]);
+ const portalInvite=process.env.NEXT_PUBLIC_CLIENT_PORTAL_LICENSES_ENABLED==='true';
+ useEffect(()=>{if(!portalInvite)return;let cancelled=false;apiRequest<{available:boolean;enabled:boolean;licenses:{customer_id:string;status:string;starts:string;ends:string;customers?:{company_name:string}}[]}>('/api/v1/licenses/portal').then(r=>{if(!cancelled&&r.available&&r.enabled){const today=new Date().toISOString().slice(0,10);setPortalCustomers(r.licenses.filter(l=>l.status==='ACTIVE'&&l.starts<=today&&l.ends>=today).map(l=>({id:l.customer_id,company_name:l.customers?.company_name||l.customer_id})));}}).catch(()=>{if(!cancelled)setPortalCustomers([]);});return()=>{cancelled=true;};},[portalInvite]);
  const view=hasPermission('f60e405e-f120-4420-a563-691162504b15');
  const deactivate=hasPermission('4c53c778-69c6-4994-b12f-c74a6867ca63');
  const invite=hasPermission('94f57d38-0438-43c5-81bc-5544ab53912a'),update=hasPermission('5f91d918-8def-4bc1-b6c7-37e1ff2d14e2');
@@ -26,7 +29,7 @@ function Users(){
  if(name.length<2||name.length>120)throw new Error('Primeiro nome e sobrenome devem totalizar entre 2 e 120 caracteres.');
  const details={name,affiliationType:String(f.get('affiliationType'))};
  if(editing){await apiRequest(`/api/v1/admin/users/${encodeURIComponent(editing.userId)}/details`,{method:'PATCH',body:details});if(String(f.get('roleId'))!==editing.role.id){try{await apiRequest(`/api/v1/admin/users/${encodeURIComponent(editing.userId)}/role`,{method:'PATCH',body:{roleId:String(f.get('roleId'))}});}catch(ex){throw new Error('Nome e vínculo salvos, mas a função não foi alterada. '+(ex instanceof Error?ex.message:''),{cause:ex});}}setMessage('Dados do usuário atualizados nesta organização.');}
- else {const r=await apiRequest<{provisioningPath:string;notificationStatus?:string}>('/api/v1/admin/users/invite',{method:'POST',body:{...details,email:String(f.get('email')||'').trim(),roleId:String(f.get('roleId'))}});setMessage(r.provisioningPath==='new_identity'?'Convite enviado. O destinatário deve abrir o e-mail para definir sua senha.':'Usuário existente vinculado a esta organização. '+notificationMessage(r.notificationStatus));}
+ else {const r=await apiRequest<{provisioningPath:string;notificationStatus?:string}>('/api/v1/admin/users/invite',{method:'POST',body:{...details,email:String(f.get('email')||'').trim(),roleId:String(f.get('roleId')),...(f.get('customerId')?{customerId:String(f.get('customerId'))}:{})}});setMessage(r.provisioningPath==='new_identity'?'Convite enviado. O destinatário deve abrir o e-mail para definir sua senha.':'Usuário existente vinculado a esta organização. '+notificationMessage(r.notificationStatus));}
  setRows(await getUsers());setEditing(null);setModalOpen(false);form.reset();
  }catch(ex){setError(ex instanceof Error?ex.message:'Não foi possível salvar.');}finally{setBusy(false);}}
  if(!view)return <p>Você não possui permissão para consultar usuários.</p>;
@@ -38,6 +41,7 @@ function Users(){
  {!editing?<Input label="E-mail" name="email" type="email" maxLength={254} required disabled={busy}/>:<p>{editing.email}</p>}
  <label>Função<select className="ds-input" name="roleId" required defaultValue={editing?.role.id||''} disabled={busy}><option value="" disabled>Selecione</option>{editing && !roles.some(r=>r.id===editing.role.id)?<option value={editing.role.id}>{labels[editing.role.name]||editing.role.name} (função atual)</option>:null}{roles.map(r=><option key={r.id} value={r.id}>{labels[r.name]||r.name}</option>)}</select></label>
  <label>Vínculo<select className="ds-input" name="affiliationType" required defaultValue={editing?.affiliationType||''} disabled={busy}><option value="" disabled>Selecione</option><option value="internal">Interno à organização</option><option value="external">Externo / consultor</option></select></label>
+ {!editing&&portalInvite?<label>Empresa exclusiva do Portal<select className="ds-input" name="customerId" defaultValue="" disabled={busy}><option value="">Usuário do Backoffice / sem vínculo de Portal</option>{portalCustomers.map(c=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select><small>Para o Portal, selecione a empresa licenciada, a função Consulta e vínculo Externo. Cada vínculo ativo consome uma vaga do plano.</small></label>:null}
  {!editing?<p>Para uma pessoa já cadastrada, este formulário adiciona somente o vínculo e a função nesta organização. Não altera seu perfil nas demais. Ele receberá um aviso por e-mail e continuará usando o login atual.</p>:null}
  <div className={styles.actions}><Button type="submit" disabled={busy||!roles.length}>{busy?'Salvando...':editing?'Salvar alterações':'Convidar / vincular'}</Button><Button type="button" variant="secondary" disabled={busy} onClick={()=>{setModalOpen(false);setEditing(null);setError('');}}>Cancelar</Button></div>
  </form></DocumentDialog>:null}
