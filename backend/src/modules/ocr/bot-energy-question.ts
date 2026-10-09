@@ -9,7 +9,13 @@ export function questionMonths(question:string):string[] {
  return [...matches];
 }
 export function questionMonth(question:string):string|null {const matches=questionMonths(question);return matches.length===1?matches[0]:null;}
-export function questionRegulation(question:string):boolean {const q=questionText(question);return /regra|norma|resolucao|legislacao|ofici|biblioteca|\blei\b/.test(q)&&/\bgd\b|geracao distribuida|tusd|demanda|tarifa|tribut|icms|pis|cofins/.test(q);}
+export function questionRegulation(question:string):boolean {
+ const q=questionText(question);
+ const subject=/\bgd\b|geracao distribuida|tusd|demanda|tarifa|tribut|icms|pis|cofins|fator de potencia|reativ/.test(q);
+ const rule=/regra|norma|resolucao|legislacao|ofici|biblioteca|\blei\b|permitid|obrigatori|limite legal/.test(q);
+ const request=/\bposso\b|como (?:posso )?(?:alterar|mudar|corrigir|corrijo|ajustar|reduzir|aumentar)|correcao/.test(q);
+ return subject&&(rule||request);
+}
 export function questionIntent(question:string){const q=questionText(question);return /economia|economizou|economiz|resultado|custo total/.test(q)?'economy':/fornecedor|contratual|preco.*energia/.test(q)?'supplier':/desperdicio|perda|ineficien/.test(q)?'waste':/demanda/.test(q)?'demand':/\bgd\b|geracao distribuida/.test(q)?'regulation':/tusd|tarifa/.test(q)?'tariff':'general';}
 
 /** Select evidence for this question, without deriving totals or changing source values. */
@@ -19,11 +25,11 @@ export function questionEvidence(question:string,evidence:AiEvidence[]):AiEviden
   if(['context','library-availability','financial-coverage'].includes(e.id))return 100;
   if(intent==='supplier'&&e.id.startsWith('supplier-'))return 90;
   if(intent==='economy'&&e.id.startsWith('published-unit-'))return 90;
-  if(intent==='regulation'&&e.id.startsWith('regulation-'))return 90;
+  if((intent==='regulation'||questionRegulation(question))&&e.id.startsWith('regulation-'))return 90;
   return words.filter(w=>questionText(e.label+' '+e.value).includes(w)).length*5;
  };
  const ordered=evidence.map((e,i)=>({e,i,s:score(e)})).sort((a,b)=>b.s-a.s||a.i-b.i),out:AiEvidence[]=[];let size=Buffer.byteLength(JSON.stringify({question,evidence:[]}));
- for(const {e} of ordered){const bytes=Buffer.byteLength(JSON.stringify(e))+1;if(size+bytes>42000||out.length>=140)continue;out.push(e);size+=bytes;}
+ for(const {e} of ordered){const bytes=Buffer.byteLength(JSON.stringify(e))+1;if(size+bytes>24000||out.length>=80)continue;out.push(e);size+=bytes;}
  if(out.length<evidence.length)out.push({id:'selected-context',label:'Recorte das evidências',value:'Foram selecionadas fontes pertinentes à pergunta. Este recorte não é uma auditoria completa; não extrapolar totais nem concluir ausência de desperdício.',source:'Seleção por relevância no backend'});
  return out;
 }

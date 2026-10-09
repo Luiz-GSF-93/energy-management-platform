@@ -2,6 +2,14 @@ import {questionMonth,questionEvidence,questionIntent,questionRegulation} from '
 import {financialAiEvidence,assistantAiEvidence} from './backoffice-ai.service';
 import {validateInterpretation} from './azure-backoffice-ai.connector';
 describe('Questions about unit results and official sources',()=>{
+ it.each(['Qual regra de correção do fator de potência?','Como corrigir o fator de potencia?','Posso alterar minha demanda?','É permitido reduzir demanda?','Qual norma de reativo excedente?'])('requires reviewed norms for semantic variation: %s',q=>expect(questionRegulation(q)).toBe(true));
+ it.each(['Quanto paguei de reativo em agosto?','Qual a demanda máxima nos últimos meses?','Qual minha média de demanda?'])('keeps measurements separate from normative advice: %s',q=>expect(questionRegulation(q)).toBe(false));
+ it('prioritizes official rules even when the lexical intent is demand and reduces oversized evidence',()=>{
+  const evidence=[...Array.from({length:100},(_,i)=>({id:'finding-'+i,label:'Demanda',value:'x'.repeat(1000),source:'Fonte'})),{id:'regulation-demand',label:'Norma de demanda',value:'Regra revisada',source:'Norma oficial'}];
+  const selected=questionEvidence('Posso alterar minha demanda?',evidence);
+  expect(selected[0].id).toBe('regulation-demand');expect(selected.some(e=>e.id==='selected-context')).toBe(true);
+  expect(Buffer.byteLength(JSON.stringify(selected))).toBeLessThan(25000);
+ });
  it('includes only sourced exact OCR tariff proposals and keeps their review status',()=>{const e=assistantAiEvidence({unitName:'U',month:'2026-08',counts:{blockers:1,reviews:0},records:{measurements:{status:'DRAFT'},costs:{status:'DRAFT'}},prefilled:{tariffs:[{component:'TUSD_ENERGY',band:'PEAK',rateMwh:'375.9493',source:'table 3 row 1',reason:'Tributos incluídos'},{component:'TUSD_ENERGY',band:'OFF_PEAK',rateMwh:null,source:'table 3 row 2'}]}});const tariffs=e.filter(x=>x.id.startsWith('prefilled-tariff'));expect(tariffs).toHaveLength(1);expect(tariffs[0].value).toBe('375.9493');expect(tariffs[0].source).toContain('não comprova parâmetro aprovado');});
  it('requires reviewed evidence for rules without blocking questions about measured demand',()=>{expect(questionRegulation('Qual regra de GD, TUSD e demanda?')).toBe(true);expect(questionRegulation('Qual a demanda medida em agosto de 2026?')).toBe(false);});
  it.each(['2026-08','08/2026','agosto de 2026','agosto 2026'])('recognizes the requested month in %s',text=>expect(questionMonth('Qual economia em '+text+'?')).toBe('2026-08'));
