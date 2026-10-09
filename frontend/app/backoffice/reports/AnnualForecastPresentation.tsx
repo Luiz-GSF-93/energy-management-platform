@@ -1,9 +1,10 @@
 'use client';
 import styles from './report-workspace.module.css';
-export type AnnualForecast={asOfMonth:string;formulaVersion:string;method:string;actual:{month:string;consumptionKwh:string}[];future:{month:string;predictedKwh:string;expansionKwh:string;averageBasis?:string}[];estimatedYearKwh:string;observedYearKwh:string;futureKwh:string;weatherStatus:string;qualifications:string[];id?:string;version?:number;payloadHash?:string};
+import ClimateDiagnostics,{type ClimateAssessment,type ClimateSummary} from './ClimateDiagnostics';
+export type AnnualForecast={asOfMonth:string;formulaVersion:string;method:string;actual:{month:string;consumptionKwh:string;billedDays?:number;evidence?:{id:string}}[];future:{month:string;predictedKwh:string;expansionKwh:string;averageBasis?:string}[];estimatedYearKwh:string;observedYearKwh:string;futureKwh:string;weatherStatus:string;qualifications:string[];id?:string;version?:number;payloadHash?:string;unitId?:string;climateAssessment?:ClimateAssessment;climateSummary?:ClimateSummary};
 const value=(s:string)=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(Number(s));
 const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const methods:Record<string,string>={MEAN_DAILY:'Média diária do período apurado',MONTHLY_MEAN_DAILY:'Média dos mesmos meses, com alternativa pelo período apurado',LINEAR_DAILY:'Tendência linear do consumo diário',SEASONAL_DAILY:'Referência sazonal do ano anterior',CLIMATE_TREND_SEASONAL_DAILY:'Tendência, sazonalidade e cenário climático'};
+const methods:Record<string,string>={MEAN_DAILY:'Média diária do período apurado',MONTHLY_MEAN_DAILY:'Média dos mesmos meses, com alternativa pelo período apurado',LINEAR_DAILY:'Tendência linear do consumo diário',SEASONAL_DAILY:'Referência sazonal do ano anterior',CLIMATE_TREND_SEASONAL_DAILY:'Tendência, sazonalidade e cenário climático',CLIMATE_ANNUAL_CYCLE_DAILY:'Cenário climático avaliado em ciclo anual'};
 const climateLabel=(status:string)=>status==='CLIMATE_SCENARIO_APPLIED'?'Ajuste climático aplicado com cenário histórico NASA POWER; não é previsão meteorológica.':status==='HISTORY_COLLECTED_NOT_APPLIED'?'Temperatura NASA POWER consultada; ajuste climático não aplicado nesta versão.':status==='UNAVAILABLE'?'Temperatura indisponível nesta versão; projeção sem ajuste climático.':'Projeção sem ajuste climático.';
 export default function AnnualForecastPresentation({forecast,preliminary=false}:{forecast:AnnualForecast;preliminary?:boolean}){
  const year=forecast.asOfMonth.slice(0,4),actual=forecast.actual.filter(r=>r.month.startsWith(year+'-'));
@@ -24,5 +25,5 @@ export default function AnnualForecastPresentation({forecast,preliminary=false}:
  {months.map((m,i)=><text key={m} x={52+i*58} y="217" textAnchor="middle" fontSize="12" fill="currentColor">{m}</text>)}
  </svg><p>Azul contínuo: apurado nas faturas · Verde tracejado: previsão. Lacunas não representam zero.</p>
  <details><summary>Valores mensais e metodologia</summary><table className={styles.table}><thead><tr><th>Mês</th><th>Consumo (kWh)</th><th>Origem</th></tr></thead><tbody>{rows.map(r=><tr key={r.month}><td>{r.month}</td><td>{value(r.kwh)}</td><td>{r.kind}</td></tr>)}</tbody></table><p>Fórmula: {forecast.formulaVersion} · Método: {forecast.method} · Corte: {forecast.asOfMonth}</p><ul>{forecast.qualifications.map(q=><li key={q}>{q}</li>)}</ul>{forecast.id&&forecast.payloadHash?<p>Previsão v{forecast.version} · {forecast.id}<br/>SHA-256: <code>{forecast.payloadHash}</code></p>:null}</details>
- </section>;
+ <ClimateDiagnostics summary={forecast.climateSummary} assessment={forecast.climateAssessment}/></section>;
 }

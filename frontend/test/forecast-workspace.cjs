@@ -31,6 +31,19 @@ const change=async(el,v)=>{assert.ok(el);await act(async()=>{const proto=el.tagN
  ok(first.sources[0].historyId===source.historyId&&!('admissionId' in first.sources[0]),'no ACL admission required');ok(first.expansions[0].monthlyKwh==='500','documented expansion sent for backend calculation');
  await click('Calcular previsão para validação');const retry=calls.filter(([p,o])=>p==='/api/v1/energy-forecasts'&&o?.method==='POST').at(-1)[1].body;ok(JSON.stringify(first)===JSON.stringify(retry),'uncertain retries preserve payload and request ID');
  fail=false;await click('Calcular previsão para validação');ok(Boolean(document.querySelector('svg')),'server result chart rendered');ok(document.body.textContent.includes('27.000 kWh'),'annual total uses backend result');
+
+ const labelInput=text=>[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith(text)).querySelector('input,select,textarea');
+ await act(async()=>labelInput('Consultar hist').click());
+ ok(button('Calcular previsão para validação').disabled,'climate requires consent and documented premise');
+ await change(labelInput('Latitude regional'),'-21.2');await change(labelInput('Longitude regional'),'-47.8');
+ await change(labelInput('Influência da temperatura'),'LOW');await change(labelInput('Justificativa da premissa climática'),'Unidade pouco sensível à temperatura conforme responsável.');
+ await act(async()=>labelInput('Autorizo consultar').click());
+ await click('Calcular previsão para validação');
+ const climateRequest=calls.filter(([p,o])=>p==='/api/v1/energy-forecasts'&&o?.method==='POST').at(-1)[1].body;
+ ok(climateRequest.weather.assessment==='ANNUAL_CYCLE_2'&&climateRequest.weather.sensitivity==='LOW','annual assessment and low sensitivity are explicit server premises');
+ ok(!climateRequest.weather.readingPeriods,'estimated dates are never silently supplied as evidence');
+ ok(!calls.some(([p])=>p.startsWith('https://power')),'frontend does not request climate or calculate models');
+ await act(async()=>labelInput('Consultar hist').click());
  const select=document.querySelector('select');await change(select,'test-document');await click('Conferir histórico OCR + IA');dialog=document.querySelector('dialog[open]');ok(dialog.querySelector('input[aria-label="Consumo 1"]').value==='3000','interpreted history is filled');
  await change(dialog.querySelector('textarea'),'Conferência de teste do histórico original.');await act(async()=>dialog.querySelector('input[type="checkbox"]').click());await click('Salvar para validação');
  const saved=calls.find(([p,o])=>p.endsWith('/histories')&&o?.method==='POST')[1].body;ok(saved.rows.length===12&&saved.checkedPdf&&saved.sourceHash==='b'.repeat(64),'reviewed history preserves source hash');ok(!calls.some(([p])=>p.includes('acl-admissions')),'no ACL API coupling');
