@@ -10,11 +10,13 @@ import {reportHash} from '../reports/report.projection';
 import {observationsFromApprovedHistories,type ApprovedHistory} from './ocr-history-adapter';
 import {calculateConsumptionForecast} from './consumption-forecast';
 import {loadNasaTemperature} from './nasa-power';
+import {applyClimateForecast} from './climate-forecast';
 import {PrepareForecastDto,TransitionForecastDto,RecordHistoryDto,ValidateHistoryDto} from './energy-forecast.dto';
 import {OcrQueueService} from '../ocr/ocr-queue.service';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import {aclHistoryDraft,aclInvoiceReferenceMonth} from '../acl-admissions/acl-invoice-history';
 import {decimal,quantity,monthIndex} from './consumption-forecast';
+type ForecastSnapshot = Omit<ReturnType<typeof calculateConsumptionForecast>, 'method' | 'weatherApplied'> & {method:string;weatherApplied:boolean;weather:Awaited<ReturnType<typeof loadNasaTemperature>>|null;weatherStatus:string;inputVersion:string;calculatedAt:string;calculatedBy:string};
 @Injectable()
 export class EnergyForecastService {
  private acl:AclAdmissionService;
@@ -58,14 +60,15 @@ export class EnergyForecastService {
   const prior=await this.rpc('energy_forecast_request',{p_org:t.organizationId,p_actor:t.userId,p_request:d.requestId});
   if(prior){if(prior.created_by!==t.userId||reportHash(prior.request)!==reportHash(d))throw new ConflictException('Requisição já utilizada.');return this.verify(prior,t);}
   const sources:ApprovedHistory[]=[];for(const s of d.sources){if(s.historyId)sources.push(await this.rpc('energy_forecast_history_source',{p_org:t.organizationId,p_actor:t.userId,p_history:s.historyId}));else{const a=await this.acl.access(t);if(!a.enabled)throw new ForbiddenException('Fonte ACL indisponível.');sources.push(await this.rpc('energy_forecast_source',{...this.params(t),p_admission:s.admissionId,p_evidence:s.evidenceId}));}}
-  const scope={organizationId:t.organizationId,customerId:d.customerId,unitId:d.unitId};let body;
+  const scope={organizationId:t.organizationId,customerId:d.customerId,unitId:d.unitId};let body:ForecastSnapshot;
   try{
    const observations=observationsFromApprovedHistories(scope,sources,d.asOfMonth),recordedAt=new Date().toISOString();
    const expansions=d.expansions.map((e,i)=>({...e,evidence:{...scope,id:d.requestId+':'+i,revision:1,hash:reportHash(e),recordedBy:t.userId,recordedAt,justification:e.justification}}));
-   body={...calculateConsumptionForecast({...scope,asOfMonth:d.asOfMonth,observations,expansions}),weather:null as any,weatherStatus:'NOT_REQUESTED',inputVersion:reportHash({sources,expansions}),calculatedAt:recordedAt,calculatedBy:t.userId};
+   const base=calculateConsumptionForecast({...scope,asOfMonth:d.asOfMonth,observations,expansions});
+   body={...base,weather:null,weatherStatus:'NOT_REQUESTED',inputVersion:reportHash({sources,expansions}),calculatedAt:recordedAt,calculatedBy:t.userId};
    if(d.weather){if(!d.weather.consent)throw new BadRequestException('Autorize a consulta meteorológica para a localização informada.');const from=observations[0].month+'-01',to=new Date(Date.UTC(Number(d.asOfMonth.slice(0,4)),Number(d.asOfMonth.slice(5)),0)).toISOString().slice(0,10);
-    try{body.weather=await loadNasaTemperature(d.weather,from,to);body.weatherStatus='HISTORY_COLLECTED_NOT_APPLIED';}catch{body.weatherStatus='UNAVAILABLE';}
-    body.qualifications.push('NASA POWER: histórico auxiliar; ajuste climático depende de calibração e comparação fora da amostra. Nenhum coeficiente climático foi inventado.');
+    try{body.weather=await loadNasaTemperature(d.weather,from,to);}catch{body.weatherStatus='UNAVAILABLE';body.qualifications.push('NASA POWER indisponível: cálculo preservado sem ajuste climático; nenhuma temperatura foi substituída por zero.');}
+    if(body.weather){const assessed=applyClimateForecast({...scope,asOfMonth:d.asOfMonth,observations,expansions},base,body.weather);body={...body,...assessed,weatherStatus:assessed.weatherApplied?'CLIMATE_SCENARIO_APPLIED':'HISTORY_COLLECTED_NOT_APPLIED'};}
    }
   }catch(e){if(e instanceof BadRequestException)throw e;throw new BadRequestException('Histórico incompleto, conflitante ou premissa inválida. Revise as fontes antes de calcular.');}
   body.inputVersion=reportHash({sources,expansions:body.expansions,weather:body.weather,weatherStatus:body.weatherStatus});
