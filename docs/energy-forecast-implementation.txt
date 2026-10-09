@@ -100,3 +100,19 @@ https://ghgprotocol.org/scope-2-guidance
 STATUS
 Núcleo local testado. Integração, persistência, clima, modal e relatórios pendentes.
 Nenhuma tabela, autenticação, autorização, CCEE ou regra financeira existente alterada.
+
+CHECKPOINT 2026-10-09 — Integração para homologação (não habilitada em produção)
+
+Fontes: histórico de Adesão ACL aprovado OU histórico independente de faturas cadastradas em Documentos. A Adesão não é requisito. O OCR original não é alterado; o histórico normalizado registra autor, fonte, justificativa e revisão. Campos sem leitura permanecem vazios; a conferência pode corrigir dados com justificativa e consulta ao PDF. O histórico independente pode conter 1–36 competências e várias faturas podem compor os 12–36 meses consecutivos exigidos pelo motor. Não se infere demanda nem consumo de meses ausentes.
+
+Persistência: quatro tabelas novas, imutáveis, com RLS e acesso direto negado inclusive à service_role. Escritas por RPC SECURITY DEFINER com search_path fixo, organização/vínculo/permissões/licenças vigentes, documento verificado, revisão e hash; requisições idempotentes e bloqueios transacionais. As funções existentes não são redefinidas. Fontes alteradas bloqueiam novas aprovações; snapshots já publicados permanecem legíveis e imutáveis.
+
+Fluxo: fatura OCR → conferência de histórico → validação por Gestor/Admin com permissão de atualização de documentos → previsão preliminar → validação de premissas → publicação → nova versão do relatório operacional. Fontes ACL ainda exigem suas permissões de aprovação específicas, além dos controles do novo módulo. Nenhuma regra financeira, de honorários, economia, autenticação ou CCEE é modificada.
+
+Expansão: modal para descrição, intervalo futuro, kWh adicionais mensais e justificativa/referência. É uma premissa registrada para revisão, não uma medição validada automaticamente. A versão do relatório captura apenas projeção já publicada, com corte/unidade/cliente/organização correspondentes. PDF/Excel de versões antigas conservam comportamento; versões novas com previsão incluem sua série e auditoria.
+
+NASA POWER: adaptador de T2M diário UTC, datas e tamanho limitados, timeout, esquema/unidade verificados, dados faltantes não convertidos em zero. Coordenadas regionais e período são enviados apenas mediante seleção e autorização explícita no formulário. Não são enviados consumo, faturas, nomes, identificadores ou dados financeiros. Snapshot inclui hash da resposta, local, data de coleta, cobertura e médias mensais apenas quando completas. Sem contratação de serviço pago.
+
+LIMITE METODOLÓGICO: histórico meteorológico coletado é auxiliar e ainda não modifica as previsões; weatherApplied=false. Modelos atuais de média diária, tendência linear e sazonal ingênuo são comparados cronologicamente conforme histórico disponível. Regressão conjunta com temperatura/sazonalidade, produção/demanda e intervalo de incerteza ainda requer calibração e testes próprios. Não chamar esta versão de modelo climático calibrado ou previsão meteorológica futura. Carbono possui núcleo isolado, mas fatores/evidências e indicador executivo ainda não estão integrados.
+
+ORDEM DE ATIVAÇÃO: manter ENERGY_FORECAST_ENABLED ausente/false; aplicar, em ambiente homologado, 20261009_energy_forecast.sql e depois 20261009_energy_forecast_histories.sql. Ambas dependem das migrações existentes de relatórios publicados e de evidências ACL. Publicar backend compatível, verificar autorização/rotas e habilitar ENERGY_FORECAST_ENABLED=true somente após conferir o esquema. Publicar frontend e homologar com históricos reais validados. Nenhuma dessas ações em produção foi realizada neste checkpoint. Reversão operacional: desativar a flag; preservar tabelas/snapshots, não apagar dados nem executar down destrutivo.

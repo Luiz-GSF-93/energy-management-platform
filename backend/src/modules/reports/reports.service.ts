@@ -1,4 +1,5 @@
-import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException,Optional} from '@nestjs/common';
+import {EnergyForecastService} from '../energy-forecast/energy-forecast.service';
 import {SupabaseService} from '../../services/supabase.service';
 import {LicensesService} from '../licenses/services/licenses.service';
 import {FinancialSettlementsService} from '../contracts/services/financial-settlements.service';
@@ -9,7 +10,7 @@ import {CreateReportDto} from './report.dto';
 import {projectReport,REPORT_FORMAT,reportHash} from './report.projection';
 @Injectable()
 export class ReportsService {
- constructor(private db:SupabaseService,private licenses:LicensesService,private financial:FinancialSettlementsService){}
+ constructor(private db:SupabaseService,private licenses:LicensesService,private financial:FinancialSettlementsService,@Optional() private forecast?:EnergyForecastService){}
  private client(){return this.db.getClient();}
  private fail(e:any){if(!e)return;if(e.code==='42501')throw new ForbiddenException('Acesso a relatórios revogado ou sem licença.');if(e.code==='P3862')throw new NotFoundException('Relatório ou unidade indisponível nesta organização.');if(['40001','23505'].includes(e.code))throw new ConflictException('Recorte ou requisição alterado. Atualize antes de gerar.');if(['22023','23514'].includes(e.code))throw new BadRequestException('Revise o recorte do relatório.');throw new InternalServerErrorException('Não foi possível consultar os relatórios.');}
  async access(t:TenantContext,write=false){
@@ -36,7 +37,8 @@ export class ReportsService {
    const last=new Date(Date.UTC(Number(d.to.slice(0,4)),Number(d.to.slice(5)),0)).toISOString().slice(0,10);
    const e=await this.client().from('operation_records').select('id,revision,title,priority,effective_date').eq('organization_id',t.organizationId).eq('kind','events').eq('status','PUBLISHED').eq('customer_id',d.customerId).eq('consumer_unit_id',d.unitId).gte('effective_date',d.from+'-01').lte('effective_date',last).order('effective_date',{ascending:false}).limit(201);this.fail(e.error);if(e.data?.length>200)throw new BadRequestException('Há muitos eventos. Reduza o período.');events=e.data??[];
   }
-  const body=projectReport(financial,header,d.kind,events,new Date().toISOString());
+  const base=projectReport(financial,header,d.kind,events,new Date().toISOString());
+  const body={...base,annualProjection:d.kind==='OPERATIONAL'&&this.forecast?.enabled?await this.forecast.publishedForReport(d.customerId,d.unitId,d.to,t):null};
   if(!t.permissions.includes(P.OPERACAO_EVENTS_VIEW))body.unavailable.push('Eventos: consulta não autorizada para este perfil.');
   const hash=reportHash(body),r=await this.client().rpc('capture_published_report',{p_org:t.organizationId,p_actor:t.userId,p_request:d,p_body:body,p_hash:hash});this.fail(r.error);return this.verified(r.data);
  }
