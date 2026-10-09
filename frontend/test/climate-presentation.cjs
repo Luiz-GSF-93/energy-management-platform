@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+for(const extension of ['.ts','.tsx'])require.extensions[extension]=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,p);
+require.extensions['.css']=m=>m.exports={};
+const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
+const Chart=require('../app/backoffice/reports/AnnualForecastPresentation.tsx').default;
+const forecast={asOfMonth:'2026-08',formulaVersion:'consumption-forecast/1.0',method:'MEAN_DAILY',actual:[{month:'2026-08',consumptionKwh:'1000'}],future:[{month:'2026-09',predictedKwh:'1200',expansionKwh:'0'}],observedYearKwh:'1000',futureKwh:'1200',estimatedYearKwh:'2200',weatherStatus:'NOT_REQUESTED',qualifications:[]};
+const render=patch=>renderToStaticMarkup(React.createElement(Chart,{forecast:{...forecast,...patch},preliminary:true}));
+assert.ok(render({}).includes('Projeção sem ajuste climático.'));
+assert.ok(render({weatherStatus:'UNAVAILABLE'}).includes('Temperatura indisponível'));
+assert.ok(render({weatherStatus:'HISTORY_COLLECTED_NOT_APPLIED',qualifications:['Ajuste climático não aplicado: histórico insuficiente.']}).includes('histórico insuficiente'));
+const climate=render({weatherStatus:'CLIMATE_SCENARIO_APPLIED',formulaVersion:'consumption-forecast/1.1',qualifications:['Cenário histórico; não é previsão meteorológica.','MAE climático 10 kWh; referência 20 kWh.']});
+assert.ok(climate.includes('Ajuste climático aplicado com cenário histórico NASA POWER'));
+assert.ok(!climate.includes('Projeção sem ajuste climático.'));
+assert.ok(climate.includes('não é previsão meteorológica'));
+assert.ok(climate.includes('MAE climático 10 kWh'));
+assert.ok(climate.includes('Previsão para conferência.'));
+console.log('8 climate presentation checks passed');
