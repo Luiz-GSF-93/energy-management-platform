@@ -1,7 +1,7 @@
 import {customerContacts} from './customer-contacts';
 import {searchRegistrations} from '../../../common/registration-search';
 import {editEnvelope,saveRegistration,registrationHistory} from '../../../common/registration-edit';
-import { Injectable, BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import {normalizeTaxId,validTaxId} from '../../../common/validation/tax-id';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateCustomerDto, UpdateCustomerDto } from '../dto/create-customer.dto';
@@ -63,6 +63,8 @@ export class CustomersService {
       .select()
       .single();
 
+    if (error?.code==='P3410') throw new ConflictException('Configure a cota de clientes do plano antes de cadastrar.');
+    if (error?.code==='P3411') throw new ConflictException('Limite de clientes contratado atingido. Solicite upgrade ou acréscimo em Licença e módulos.');
     if (error) throw new Error(error.message);
     return data;
   }

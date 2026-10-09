@@ -8,6 +8,7 @@ export class SavePlanDto {
  @IsInt() @Min(0) @Max(2147483647) documents_limit!:number;
  @IsInt() @Min(0) @Max(2147483647) max_consumer_units!:number;
  @IsInt() @Min(0) @Max(2147483647) max_users!:number;
+ @IsOptional() @IsInt() @Min(0) @Max(2147483647) max_clients?:number;
  @IsBoolean() document_management!:boolean;
  @IsBoolean() advanced_analytics!:boolean;
  @IsBoolean() report_generation!:boolean;

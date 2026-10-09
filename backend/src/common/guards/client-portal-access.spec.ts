@@ -10,6 +10,7 @@ function fixture(path:string,method='GET',patch:any={}){
  return {run:()=>guard.canActivate(ctx),req};
 }
 describe('explicit client portal binding narrows backend access',()=>{
+ it.each([['/api/v1/portal/license','GET'],['/api/v1/portal/energy-forecasts','GET'],['/api/v1/portal/energy-prices','GET'],['/api/v1/bot-energy/reports/client/units','GET'],['/api/v1/bot-energy/reports/client','POST'],['/api/v1/portal/evidence','GET'],['/api/v1/portal/evidence/11111111-1111-4111-8111-111111111111/upload','POST']])('preserves explicit client identity for the scoped module %s',async(path,method)=>{const f=fixture(path,method);await expect(f.run()).resolves.toBe(true);expect(f.req.tenantContext).toMatchObject({userId:'actor',organizationId:'org',role:'consulta'});});
  it.each(['/api/v1/portal/access','/api/v1/portal/financial','/api/v1/auth/context','/api/v1/auth/profile','/portal/financial/'])('allows only exact read route %s',async path=>{const f=fixture(path);await expect(f.run()).resolves.toBe(true);expect(f.req.tenantContext.userId).toBe('actor');});
  it.each(['/api/v1/documents','/api/v1/financial-settlements/published','/api/v1/portal/preview','/api/v1/portal/financial/other','/api/v1/portal/financial%2Fother','/api/v1/organization-members'])('blocks internal or nested route despite legacy permission %s',async path=>{await expect(fixture(path).run()).rejects.toThrow('portal do cliente');});
  it.each(['POST','PATCH','DELETE','PUT'])('blocks writes %s',async method=>{await expect(fixture('/api/v1/portal/financial',method).run()).rejects.toThrow();});

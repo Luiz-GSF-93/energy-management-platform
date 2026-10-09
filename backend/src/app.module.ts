@@ -1,3 +1,5 @@
+import {PortalLicenseModule} from './modules/client-portal-licenses/portal-license.module';
+import {PortalLicenseGuard} from './modules/client-portal-licenses/portal-license.guard';
 import {BotReportsModule} from './modules/bot-reports/bot-reports.module';
 import {CustomerNoticesModule} from './modules/customer-notices/customer-notices.module';
 import {SmsDeliveryModule} from './modules/sms-delivery/sms-delivery.module';
@@ -38,6 +40,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
+    PortalLicenseModule,
     AuthModule,
     CustomersModule,
     ConsumerUnitsModule,
@@ -74,6 +77,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
       provide: APP_GUARD,
       useClass: RoleGuard,
     },
+    {provide: APP_GUARD,useClass: PortalLicenseGuard},
     {
       provide: APP_INTERCEPTOR,
       useClass: TenantInterceptor,
