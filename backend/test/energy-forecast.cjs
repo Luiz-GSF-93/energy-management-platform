@@ -17,7 +17,7 @@ check(forecast(fixture(12)).scores.length,0);check(forecast(fixture(36)).scores.
 for(const patch of [{billedDays:0},{consumptionKwh:'NaN'},{consumptionKwh:'999999999999'}]){const f=fixture();Object.assign(f.observations[0],patch);rejects(()=>forecast(f),/INVALID|NUMERIC_RANGE/)}
 for(const patch of [{organizationId:'other'},{unitId:'other'},{customerId:'other'},{validatedBy:''},{revision:0},{hash:''}]){const f=fixture();Object.assign(f.observations[0].evidence,patch);rejects(()=>forecast(f),/SOURCE_/)}
 const duplicate=fixture();duplicate.observations[0].month=duplicate.observations[1].month;rejects(()=>forecast(duplicate),/HISTORY_GAP_DUPLICATE_OR_FUTURE/);
-const expansion=fixture();expansion.expansions=[{startMonth:'2026-10',endMonth:'2026-12',monthlyKwh:'250',evidence:{...evidence,id:'expansion'}}];check(forecast(expansion).future.map(r=>r.expansionKwh),['0.000000','250.000000','250.000000','250.000000']);
+const expansion=fixture();expansion.expansions=[{startMonth:'2026-10',endMonth:'2026-12',monthlyKwh:'250',evidence:{...scope,id:'expansion',revision:1,hash:'b'.repeat(64),recordedBy:'test-author',recordedAt:'2026-09-01T00:00:00Z',justification:'Premissa documental para revisão do gestor.'}}];check(forecast(expansion).future.map(r=>r.expansionKwh),['0.000000','250.000000','250.000000','250.000000']);
 expansion.expansions[0].startMonth='2026-08';rejects(()=>forecast(expansion),/EXPANSION_ALREADY/);
 const trend=fixture(36);trend.observations.forEach((r,i)=>r.consumptionKwh=String((100+i*3)*r.billedDays));check(forecast(trend).method,'LINEAR_DAILY');
 const seasonal=fixture(36);seasonal.observations.forEach(r=>r.consumptionKwh=String((100+Number(r.month.slice(5))*50)*r.billedDays));check(forecast(seasonal).method,'SEASONAL_DAILY');

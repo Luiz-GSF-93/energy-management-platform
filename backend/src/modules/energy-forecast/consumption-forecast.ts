@@ -3,7 +3,7 @@ export const FORECAST_FORMULA_VERSION = 'consumption-forecast/1.0';
 export type Scope = { organizationId: string; customerId: string; unitId: string };
 export type Evidence = Scope & { id: string; revision: number; hash: string; validatedBy: string; validatedAt: string };
 export type Observation = { month: string; consumptionKwh: string; billedDays: number; evidence: Evidence };
-export type Expansion = { startMonth: string; endMonth: string; monthlyKwh: string; evidence: Evidence };
+export type Expansion = { startMonth: string; endMonth: string; monthlyKwh: string; evidence: Omit<Evidence, 'validatedBy' | 'validatedAt'> & { recordedBy: string; recordedAt: string; justification: string } };
 export type ForecastInput = Scope & { asOfMonth: string; observations: Observation[]; expansions: Expansion[] };
 type Method = 'MEAN_DAILY' | 'LINEAR_DAILY' | 'SEASONAL_DAILY';
 const scale = 1000000n;
@@ -55,7 +55,9 @@ export function calculateConsumptionForecast(input: ForecastInput) {
   });
   const expansionKeys = new Set<string>();
   input.expansions.forEach(e => {
-    assertEvidence(input, e.evidence); quantity(e.monthlyKwh);
+    const premise = e.evidence;
+    if (!premise || ['organizationId','customerId','unitId'].some(k => premise[k as keyof Scope] !== input[k as keyof Scope]) || !premise.id || !Number.isSafeInteger(premise.revision) || premise.revision < 1 || !/^[a-f0-9]{64}$/.test(premise.hash) || !premise.recordedBy?.trim() || !Number.isFinite(Date.parse(premise.recordedAt)) || premise.justification?.trim().length < 20) throw Error('EXPANSION_PREMISE_INVALID');
+    quantity(e.monthlyKwh);
     if (monthIndex(e.startMonth) <= cutoff || monthIndex(e.endMonth) < monthIndex(e.startMonth)) throw Error('EXPANSION_ALREADY_IN_HISTORY_OR_INVALID');
     if (expansionKeys.has(e.evidence.id)) throw Error('EXPANSION_DUPLICATE');
     expansionKeys.add(e.evidence.id);
