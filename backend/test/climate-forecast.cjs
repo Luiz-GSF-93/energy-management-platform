@@ -15,7 +15,7 @@ function fixture(n=36,lastMonth=8){
 let checks=0;const check=(a,b)=>{assert.deepEqual(a,b);checks++;};
 const calculate=f=>applyClimateForecast(f.input,calculateConsumptionForecast(f.input),f.weather);
 const f=fixture(),original=JSON.stringify(f),r=calculate(f);
-check(r.weatherApplied,true);check(r.method,'CLIMATE_TREND_SEASONAL_DAILY');check(r.formulaVersion,'consumption-forecast/1.1');check(r.status,'PRELIMINARY');check(r.climateAssessment.comparison.predictions,21);
+check(r.weatherApplied,true);check(r.method,'CLIMATE_TREND_SEASONAL_DAILY');check(r.formulaVersion,'consumption-forecast/1.3');check(r.status,'PRELIMINARY');check(r.climateAssessment.comparison.predictions,21);
 check(r.climateAssessment.scenario,'SAME_MONTH_PREVIOUS_YEAR');check(r.climateAssessment.scenarios.map(s=>s.sourceMonth),['2025-09','2025-10','2025-11','2025-12']);check(JSON.stringify(f),original);
 check(r.uncertainty,null);check(r.demandApplied,false);check(r.future.length,4);check(Number(r.climateAssessment.comparison.climateMaeKwh)<0.001,true);
 for(const n of [12,18,24,29]){const short=calculate(fixture(n));check(short.weatherApplied,false);check(short.climateAssessment.reason.includes('30 a 36'),true);}
