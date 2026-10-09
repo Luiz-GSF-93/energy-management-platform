@@ -11,6 +11,8 @@ import {observationsFromApprovedHistories,type ApprovedHistory} from './ocr-hist
 import {calculateConsumptionForecast} from './consumption-forecast';
 import {loadNasaTemperature} from './nasa-power';
 import {applyClimateForecast} from './climate-forecast';
+import {climateCycleSummary} from './climate-summary';
+import {applyClimateCycle,cycleWeatherRange} from './climate-cycle';
 import {selectForecastHistoryWindow} from './history-window';
 import {PrepareForecastDto,TransitionForecastDto,RecordHistoryDto,ValidateHistoryDto} from './energy-forecast.dto';
 import {OcrQueueService} from '../ocr/ocr-queue.service';
@@ -67,9 +69,12 @@ export class EnergyForecastService {
    const expansions=d.expansions.map((e,i)=>({...e,evidence:{...scope,id:d.requestId+':'+i,revision:1,hash:reportHash(e),recordedBy:t.userId,recordedAt,justification:e.justification}}));
    const base=calculateConsumptionForecast({...scope,asOfMonth:d.asOfMonth,observations,expansions});
    body={...base,historyWindow,weather:null,weatherStatus:'NOT_REQUESTED',inputVersion:reportHash({sources,expansions}),calculatedAt:recordedAt,calculatedBy:t.userId};
-   if(d.weather){if(!d.weather.consent)throw new BadRequestException('Autorize a consulta meteorológica para a localização informada.');const from=observations[0].month+'-01',to=new Date(Date.UTC(Number(d.asOfMonth.slice(0,4)),Number(d.asOfMonth.slice(5)),0)).toISOString().slice(0,10);
+   if(d.weather){if(!d.weather.consent)throw new BadRequestException('Autorize a consulta meteorológica para a localização informada.');
+    if((d.weather.sensitivity||d.weather.readingPeriods)&&(!d.weather.assessment||!d.weather.premiseNote||d.weather.premiseNote.trim().length<20))throw new BadRequestException('Documente a premissa climática e selecione a avaliação anual.');
+    const range=d.weather.assessment?cycleWeatherRange({...scope,asOfMonth:d.asOfMonth,observations,expansions},d.weather.readingPeriods):{from:observations[0].month+'-01',to:new Date(Date.UTC(Number(d.asOfMonth.slice(0,4)),Number(d.asOfMonth.slice(5)),0)).toISOString().slice(0,10)};
+    const {from,to}=range;
     try{body.weather=await loadNasaTemperature(d.weather,from,to);}catch{body.weatherStatus='UNAVAILABLE';body.qualifications.push('NASA POWER indisponível: cálculo preservado sem ajuste climático; nenhuma temperatura foi substituída por zero.');}
-    if(body.weather){const assessed=applyClimateForecast({...scope,asOfMonth:d.asOfMonth,observations,expansions},base,body.weather);body={...body,...assessed,weatherStatus:assessed.weatherApplied?'CLIMATE_SCENARIO_APPLIED':'HISTORY_COLLECTED_NOT_APPLIED'};}
+    if(body.weather){const input={...scope,asOfMonth:d.asOfMonth,observations,expansions};const assessed=d.weather.assessment?applyClimateCycle(input,base,body.weather,d.weather):applyClimateForecast(input,base,body.weather);body={...body,...assessed,weatherStatus:assessed.weatherApplied?'CLIMATE_SCENARIO_APPLIED':'HISTORY_COLLECTED_NOT_APPLIED'};}
    }
    if(historyWindow.excludedMonths.length)body.qualifications.push(`Janela de cálculo: ${historyWindow.from} a ${historyWindow.to}; ${historyWindow.selectedMonths} de ${historyWindow.availableMonths} meses disponíveis. Meses anteriores preservados nas fontes, excluídos apenas desta execução.`);
   }catch(e){if(e instanceof BadRequestException)throw e;throw new BadRequestException('Histórico incompleto, conflitante ou premissa inválida. Revise as fontes antes de calcular.');}
@@ -83,6 +88,6 @@ export class EnergyForecastService {
   const r=await this.rpc('energy_forecast_published',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit,p_cutoff:cutoff});if(!r)return null;this.verify(r,t);const b=r.body,publication=r.events.find((e:any)=>e.action==='PUBLISHED');
   if(r.customer_id!==customer||r.consumer_unit_id!==unit||b.asOfMonth!==cutoff)throw new InternalServerErrorException('Recorte da previsão incompatível com o relatório.');
   if(!publication)throw new InternalServerErrorException('Previsão sem publicação.');
-  return {id:r.id,version:r.version,payloadHash:r.payload_hash,organizationId:t.organizationId,customerId:customer,unitId:unit,asOfMonth:cutoff,publishedAt:publication.created_at,formulaVersion:b.formulaVersion,inputVersion:b.inputVersion,method:b.method,actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh,billedDays:a.billedDays})),future:b.future,observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh,weatherStatus:b.weatherStatus,weatherApplied:b.weatherApplied,qualifications:b.qualifications};
+  return {id:r.id,version:r.version,payloadHash:r.payload_hash,organizationId:t.organizationId,customerId:customer,unitId:unit,asOfMonth:cutoff,publishedAt:publication.created_at,formulaVersion:b.formulaVersion,inputVersion:b.inputVersion,method:b.method,actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh,billedDays:a.billedDays})),future:b.future,observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh,weatherStatus:b.weatherStatus,weatherApplied:b.weatherApplied,qualifications:b.qualifications,climateSummary:climateCycleSummary(b.climateAssessment)};
  }
 }

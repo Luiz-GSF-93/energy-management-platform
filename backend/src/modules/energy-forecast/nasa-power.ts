@@ -31,6 +31,7 @@ export function normalizeNasaTemperature(raw:string,from:string,to:string){
  if(!daily.length||daily.length>1132)throw Error('WEATHER_PERIOD_INVALID');
  return {provider:'NASA_POWER' as const,parameter:'T2M',unit:'°C',timeStandard:'UTC',sourceHash:createHash('sha256').update(raw).digest('hex'),from,to,
   monthly:[...months].map(([month,m])=>({month,temperatureC:m.days===m.expected?Number((m.sum/m.days).toFixed(6)):null,validDays:m.days,expectedDays:m.expected})),
+  daily,
   qualification:'Temperatura regional de modelo/reanálise, não medição no imóvel. Ausências não são zero. Atualizações da fonte exigem novo snapshot.'};
 }
 export async function loadNasaTemperature(point:WeatherPoint,from:string,to:string){
