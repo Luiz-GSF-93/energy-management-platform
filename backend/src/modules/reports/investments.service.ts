@@ -1,4 +1,7 @@
-import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
+import {AclAdmissionService} from '../acl-admissions/acl-admission.service';
+import {LicensesService} from '../licenses/services/licenses.service';
+import {ConfigService} from '@nestjs/config';
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException,Optional} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
@@ -8,10 +11,10 @@ import type {InvestmentItem} from './investment-return';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,month=/^(20|21)\d{2}-(0[1-9]|1[0-2])$/;
 @Injectable()
 export class InvestmentsService {
- constructor(private db:SupabaseService){}
+ constructor(private db:SupabaseService,@Optional() private licenses?:LicensesService,@Optional() private config?:ConfigService){}
  private fail(e:any){if(!e)return;if(e.code==='42501')throw new ForbiddenException('Permissão para investimentos indisponível.');if(e.code==='P3862')throw new NotFoundException('Unidade indisponível.');if(['40001','23505'].includes(e.code))throw new ConflictException('Versão alterada; atualize antes de salvar.');if(['22023','23514','22P02'].includes(e.code))throw new BadRequestException('Confira investimentos, evidências e justificativa.');throw new InternalServerErrorException('Investimentos indisponíveis.');}
  private async rpc(name:string,p:any){const r=await this.db.getClient().rpc(name,p);this.fail(r.error);return r.data;}
- async workspace(t:TenantContext,customer:string,unit:string){if(!uuid.test(customer??'')||!uuid.test(unit??''))throw new BadRequestException('Selecione empresa e unidade.');const data=await this.rpc('read_unit_investments',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit});if(!t.permissions.includes(P.DOCUMENTS_VIEW))data.documents=[];data.canValidate=t.permissions.includes(P.DOCUMENTS_REPORTS_CREATE)&&t.permissions.includes(P.ORGANIZATION_CONTRACTS_CREATE)&&t.permissions.includes(P.ORGANIZATION_CONTRACTS_UPDATE)&&(t.accessMode==='platform_operation'||['admin_org','gestor'].includes(t.role));return data;}
+ async workspace(t:TenantContext,customer:string,unit:string){if(!uuid.test(customer??'')||!uuid.test(unit??''))throw new BadRequestException('Selecione empresa e unidade.');const data=await this.rpc('read_unit_investments',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit});if(!t.permissions.includes(P.DOCUMENTS_VIEW))data.documents=[];let aclAllowed=false;if(this.licenses&&this.config){try{aclAllowed=Boolean((await new AclAdmissionService(this.db,this.licenses,this.config).access(t)).enabled);}catch(e){if(!(e instanceof ForbiddenException))throw e;}}if(!aclAllowed)data.studies=[];data.canValidate=t.permissions.includes(P.DOCUMENTS_REPORTS_CREATE)&&t.permissions.includes(P.ORGANIZATION_CONTRACTS_CREATE)&&t.permissions.includes(P.ORGANIZATION_CONTRACTS_UPDATE)&&(t.accessMode==='platform_operation'||['admin_org','gestor'].includes(t.role));return data;}
  async save(t:TenantContext,d:any){
   if(!t.permissions.includes(P.ORGANIZATION_CONTRACTS_CREATE))throw new ForbiddenException('Cadastro de investimentos exige permissão de contratos.');
   if(!d||Object.keys(d).some(k=>!['customerId','unitId','requestId','expectedVersion','startMonth','items','sourceStudyId','note'].includes(k))||!uuid.test(d.customerId??'')||!uuid.test(d.unitId??'')||!uuid.test(d.requestId??'')||!Number.isInteger(d.expectedVersion)||d.expectedVersion<0||!month.test(d.startMonth??'')||!Array.isArray(d.items)||d.items.length<1||d.items.length>30||typeof d.note!=='string'||d.note.trim().length<20||d.note.length>1000)throw new BadRequestException('Revise os investimentos e a justificativa.');

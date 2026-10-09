@@ -1,3 +1,5 @@
+import {ForbiddenException} from '@nestjs/common';
+import {AclAdmissionService} from '../acl-admissions/acl-admission.service';
 import {InvestmentsService} from './investments.service';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 const customer='00000000-0000-4000-8000-000000000001',unit='00000000-0000-4000-8000-000000000002',requestId='00000000-0000-4000-8000-000000000003',documentId='00000000-0000-4000-8000-000000000004';
@@ -6,6 +8,9 @@ const input=()=>({customerId:customer,unitId:unit,requestId,expectedVersion:0,st
 describe('Investment write boundary',()=>{
  let rpc:jest.Mock,service:InvestmentsService;
  beforeEach(()=>{rpc=jest.fn(async(name:string,p:any)=>({data:name==='read_unit_investments'?{versions:[],documents:[{id:documentId}],studies:[]}:p,error:null}));service=new InvestmentsService({getClient:()=>({rpc})} as any);});
+ afterEach(()=>jest.restoreAllMocks());
+ it('hides ACL investment candidates when the existing ACL gateway denies access',async()=>{rpc.mockResolvedValue({data:{versions:[],documents:[],studies:[{id:requestId}]},error:null});const acl=jest.spyOn(AclAdmissionService.prototype,'access').mockRejectedValue(new ForbiddenException('ACL unavailable'));service=new InvestmentsService({getClient:()=>({rpc})} as any,{} as any,{} as any);expect((await service.workspace(t,customer,unit)).studies).toEqual([]);expect(acl).toHaveBeenCalledWith(t);});
+ it('uses the existing ACL gateway before showing a reviewed study candidate',async()=>{rpc.mockResolvedValue({data:{versions:[],documents:[],studies:[{id:requestId}]},error:null});const acl=jest.spyOn(AclAdmissionService.prototype,'access').mockResolvedValue({enabled:true} as any);service=new InvestmentsService({getClient:()=>({rpc})} as any,{} as any,{} as any);expect((await service.workspace(t,customer,unit)).studies).toEqual([{id:requestId}]);expect(acl).toHaveBeenCalledWith(t);});
  it('does not query or mutate without write permission',async()=>{await expect(service.save({...t,permissions:[]},input())).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();});
  it('rejects injected organization and calculated outputs',async()=>{for(const field of ['organizationId','roiPercent','total'])await expect(service.save(t,{...input(),[field]:'injected'})).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();});
  it('binds the write to the authenticated tenant and persists a backend sum',async()=>{const r=await service.save(t,input());expect(r.p_org).toBe('test');expect(r.p_body.total).toBe('100.01');expect(r.p_body.organizationId).toBe('test');expect(r.p_hash).toMatch(/^[a-f0-9]{64}$/);});
