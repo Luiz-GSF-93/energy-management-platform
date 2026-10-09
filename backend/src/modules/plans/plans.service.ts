@@ -17,6 +17,7 @@ export class PlansService {
  private check(error:any){
   if(!error)return;
   if(error.code==='42501')throw new ForbiddenException('Somente o administrador da plataforma pode alterar planos e licenças.');
+  if(error.code==='P3412')throw new ConflictException('O limite de clientes é inferior aos cadastros mantidos. Revise o plano ou os adicionais.');
   if(error.code==='P3393')throw new ConflictException('O plano selecionado é inferior ao consumo atual. Revise usuários, unidades e documentos.');
   if(error.code==='P3392')throw new BadRequestException('Selecione um plano do catálogo.');
   if(error.code==='P3150')throw new NotFoundException('Plano ativo ou organização não encontrado.');
