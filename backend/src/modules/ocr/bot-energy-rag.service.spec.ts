@@ -41,3 +41,8 @@ describe('RAG query vector reuse with fresh authorization and sources',()=>{
   await f.bot.retrieve(f.t,'Pergunta 0',f.period);expect(f.embeddings.embed).toHaveBeenCalledTimes(130);
  });
 });
+
+describe('Client RAG live boundary',()=>{
+ it('keeps drafts out and does not pay to embed without a reviewed corpus',async()=>{const f=fixture();f.ready.mockResolvedValue({data:[],error:null});f.client.rpc.mockResolvedValue({data:{customerId:'client'},error:null});const t={...f.t,role:'consulta',roleId:'role',permissions:[P.INTELLIGENCE_AI_USE,P.DOCUMENTS_REPORTS_VIEW]};expect((await f.bot.retrieveClient(t,'Qual regra?',f.period,'unit')).state).toBe('NO_EVIDENCE');expect(f.client.rpc).toHaveBeenCalledWith('bot_energy_client_reports',expect.objectContaining({p_actor:'user-a',p_role:'role',p_unit:'unit'}));expect(f.embeddings.embed).not.toHaveBeenCalled();expect(f.budget.reserve).not.toHaveBeenCalled();});
+ it('rejects revoked client linkage, platform access and missing permissions before paid retrieval',async()=>{const f=fixture();const t={...f.t,role:'consulta',roleId:'role',permissions:[P.INTELLIGENCE_AI_USE,P.DOCUMENTS_REPORTS_VIEW]};f.client.rpc.mockResolvedValue({data:null,error:{code:'42501'}});await expect(f.bot.retrieveClient(t,'Qual regra?',f.period,'unit')).rejects.toThrow();await expect(f.bot.retrieveClient({...t,accessMode:'platform_operation'},'Qual regra?',f.period,'unit')).rejects.toThrow();await expect(f.bot.retrieveClient({...t,permissions:[]},'Qual regra?',f.period,'unit')).rejects.toThrow();expect(f.embeddings.embed).not.toHaveBeenCalled();});
+});
