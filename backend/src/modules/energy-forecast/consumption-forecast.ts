@@ -1,11 +1,12 @@
 /** Pure preliminary calculation. No database, network, publication or permission decisions. */
-export const FORECAST_FORMULA_VERSION = 'consumption-forecast/1.0';
+import {monthlyAverage,MONTHLY_AVERAGE_VERSION,SAME_MONTH_MINIMUM} from './monthly-average';
+export const FORECAST_FORMULA_VERSION = 'consumption-forecast/1.2';
 export type Scope = { organizationId: string; customerId: string; unitId: string };
 export type Evidence = Scope & { id: string; revision: number; hash: string; validatedBy: string; validatedAt: string };
 export type Observation = { month: string; consumptionKwh: string; billedDays: number; evidence: Evidence };
 export type Expansion = { startMonth: string; endMonth: string; monthlyKwh: string; evidence: Omit<Evidence, 'validatedBy' | 'validatedAt'> & { recordedBy: string; recordedAt: string; justification: string } };
 export type ForecastInput = Scope & { asOfMonth: string; observations: Observation[]; expansions: Expansion[] };
-type Method = 'MEAN_DAILY' | 'LINEAR_DAILY' | 'SEASONAL_DAILY';
+type Method = 'MONTHLY_MEAN_DAILY' | 'LINEAR_DAILY' | 'SEASONAL_DAILY';
 const scale = 1000000n;
 export function quantity(value: string): bigint {
   if (typeof value !== 'string' || !/^(0|[1-9]\d{0,11})(\.\d{1,6})?$/.test(value)) throw Error('QUANTITY_INVALID');
@@ -25,11 +26,11 @@ export function assertEvidence(scope: Scope, evidence: Evidence) {
   if (!evidence || ['organizationId', 'customerId', 'unitId'].some(k => !scope[k as keyof Scope] || evidence[k as keyof Scope] !== scope[k as keyof Scope])) throw Error('SOURCE_SCOPE_INVALID');
   if (!evidence.id?.trim() || !Number.isSafeInteger(evidence.revision) || evidence.revision < 1 || !/^[a-f0-9]{64}$/.test(evidence.hash) || !evidence.validatedBy?.trim() || !/^\d{4}-\d{2}-\d{2}T/.test(evidence.validatedAt) || !Number.isFinite(Date.parse(evidence.validatedAt))) throw Error('SOURCE_NOT_VALIDATED');
 }
-function predict(values: number[], method: Method, horizon: number): number {
+function predict(values: number[], method: Method, horizon: number, months: string[]): number {
   const n = values.length;
   if (method === 'SEASONAL_DAILY') return values[n - 12 + (horizon - 1) % 12];
   const mean = values.reduce((a, b) => a + b, 0) / n;
-  if (method === 'MEAN_DAILY') return mean;
+  if (method === 'MONTHLY_MEAN_DAILY') return monthlyAverage(values,months,monthName(monthIndex(months[n-1])+horizon)).daily;
   const center = (n - 1) / 2;
   let covariance = 0, variance = 0;
   values.forEach((value, i) => { covariance += (i - center) * (value - mean); variance += (i - center) ** 2; });
@@ -63,7 +64,7 @@ export function calculateConsumptionForecast(input: ForecastInput) {
     expansionKeys.add(e.evidence.id);
   });
   const daily = rows.map(r => Number(quantity(r.consumptionKwh)) / 1000000 / r.billedDays);
-  const candidates: Method[] = ['MEAN_DAILY', 'LINEAR_DAILY'];
+  const candidates: Method[] = ['MONTHLY_MEAN_DAILY', 'LINEAR_DAILY'];
   // Six chronological origins with at least two annual cycles before a seasonal candidate.
   if (rows.length >= 30) candidates.push('SEASONAL_DAILY');
   const scores: { method: Method; maeKwh: string; predictions: number }[] = [];
@@ -71,7 +72,7 @@ export function calculateConsumptionForecast(input: ForecastInput) {
     let error = 0, count = 0, valid = true;
     for (let origin = rows.length - 6; origin < rows.length; origin++) {
       for (let target = origin; target < rows.length; target++) {
-        const prediction = predict(daily.slice(0, origin), method, target - origin + 1) * rows[target].billedDays;
+        const prediction = predict(daily.slice(0, origin), method, target - origin + 1,rows.slice(0,origin).map(r=>r.month)) * rows[target].billedDays;
         if (!Number.isFinite(prediction) || prediction < 0) { valid = false; break; }
         error += Math.abs(prediction - Number(quantity(rows[target].consumptionKwh)) / 1000000); count++;
       }
@@ -82,25 +83,27 @@ export function calculateConsumptionForecast(input: ForecastInput) {
   const selected = scores.reduce<Method>((best, score) => {
     const previous = scores.find(s => s.method === best);
     return !previous || quantity(score.maeKwh) < quantity(previous.maeKwh) ? score.method : best;
-  }, 'MEAN_DAILY');
-  const future: { month: string; baselineKwh: string; expansionKwh: string; predictedKwh: string; days: number }[] = [];
+  }, 'MONTHLY_MEAN_DAILY');
+  const future: { month: string; baselineKwh: string; expansionKwh: string; predictedKwh: string; days: number; averageBasis?: 'SAME_MONTH'|'AVAILABLE_PERIOD'; averageSourceMonths?:string[] }[] = [];
   const year = Math.floor(cutoff / 12);
   for (let index = cutoff + 1; index <= year * 12 + 11; index++) {
     const days = new Date(Date.UTC(year, index % 12 + 1, 0)).getUTCDate();
-    const baseline = rounded(predict(daily, selected, index - cutoff) * days);
+    const average = selected === 'MONTHLY_MEAN_DAILY' ? monthlyAverage(daily,rows.map(r=>r.month),monthName(index)) : null;
+    const baseline = rounded(predict(daily, selected, index - cutoff,rows.map(r=>r.month)) * days);
     const expansion = input.expansions.filter(e => monthIndex(e.startMonth) <= index && monthIndex(e.endMonth) >= index).reduce((n, e) => n + quantity(e.monthlyKwh), 0n);
-    future.push({ month: monthName(index), baselineKwh: decimal(baseline), expansionKwh: decimal(expansion), predictedKwh: decimal(baseline + expansion), days });
+    future.push({ month: monthName(index), baselineKwh: decimal(baseline), expansionKwh: decimal(expansion), predictedKwh: decimal(baseline + expansion), days, ...(average?{averageBasis:average.basis,averageSourceMonths:average.sourceMonths}:{}) });
   }
   const observed = rows.filter(r => Number(r.month.slice(0, 4)) === year).reduce((n, r) => n + quantity(r.consumptionKwh), 0n);
   return {
     formulaVersion: FORECAST_FORMULA_VERSION, status: 'PRELIMINARY' as const,
     organizationId: input.organizationId, customerId: input.customerId, unitId: input.unitId,
     asOfMonth: input.asOfMonth, method: selected, historyMonths: rows.length,
+    averagingPolicy:{version:MONTHLY_AVERAGE_VERSION,minimumSameMonthObservations:SAME_MONTH_MINIMUM,fallback:'AVAILABLE_PERIOD'},
     actual: rows, future, scores, expansions: input.expansions,
     observedYearKwh: decimal(observed), futureKwh: decimal(future.reduce((n, r) => n + quantity(r.predictedKwh), 0n)),
     estimatedYearKwh: decimal(observed + future.reduce((n, r) => n + quantity(r.predictedKwh), 0n)),
     uncertainty: null, weatherApplied: false, demandApplied: false,
-    qualifications: ['Normalização por dias faturados; previsão por dias de calendário. Conferir alinhamento dos períodos de leitura.', 'Sem ajuste climático, de demanda ou de emissões nesta versão.', 'Expansões são premissas documentadas; ganhos de carbono não reduzem consumo.', ...(rows.length < 18 ? ['Histórico insuficiente para seleção por teste cronológico; média diária preliminar.'] : [])],
+    qualifications: ['Normalização por dias faturados; previsão por dias de calendário. Conferir alinhamento dos períodos de leitura.', 'Sem ajuste climático, de demanda ou de emissões nesta versão.', 'Quando selecionada a média: mesmos meses dos anos anteriores com pelo menos duas observações; caso contrário, média diária do período apurado.', 'Expansões são premissas documentadas; ganhos de carbono não reduzem consumo.', ...(rows.length < 18 ? ['Histórico insuficiente para seleção por teste cronológico; média diária preliminar.'] : [])],
     sourceCount: sourceKeys.size,
   };
 }

@@ -98,11 +98,12 @@ export function applyClimateForecast(input: ForecastInput, base: Forecast, weath
       const temperature = temperatures[sourceIndex];
       scenarios.push({month: row.month, sourceMonth: months[sourceIndex], temperatureC: temperature});
       const baselineKwh = scaled(predict(model, monthIndex(row.month) - monthIndex(months[0]), row.month, temperature, true) * row.days);
-      return {...row, baselineKwh, predictedKwh: decimal(quantity(baselineKwh) + quantity(row.expansionKwh))};
+      const {averageBasis,averageSourceMonths,...original}=row;
+      return {...original, baselineKwh, predictedKwh: decimal(quantity(baselineKwh) + quantity(row.expansionKwh))};
     });
   } catch {return rejected('previsão futura inválida; revisar histórico e cenário', comparison);}
   const futureTotal = future.reduce((sum, r) => sum + quantity(r.predictedKwh), 0n);
-  return {...base, formulaVersion: 'consumption-forecast/1.1', method: 'CLIMATE_TREND_SEASONAL_DAILY', weatherApplied: true,
+  return {...base, formulaVersion: 'consumption-forecast/1.3', method: 'CLIMATE_TREND_SEASONAL_DAILY', weatherApplied: true,
     future, futureKwh: decimal(futureTotal), estimatedYearKwh: decimal(quantity(base.observedYearKwh) + futureTotal),
     climateAssessment: {version: 'climate-scenario/1.0', applied: true, reason: 'ganho cronológico acima do limiar', comparison, sourceHash: weather.sourceHash,
       coefficients: model.coefficients, temperatureCenter: model.temperatureCenter, temperatureScale: model.temperatureScale,

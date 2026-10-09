@@ -5,7 +5,7 @@ const f=await aclFixture(),{db,actor,peer,client,call,migrate,create,work,eviden
 const check=v=>{assert.ok(v);checks++;},deny=async(fn,code)=>{await assert.rejects(fn,e=>!code||e.code===code);checks++;};
 try{
  await db.exec("ALTER TABLE licenses ADD COLUMN report_generation boolean DEFAULT true; UPDATE roles SET permissions=permissions||'[\"3ebadd32-6f30-459e-8ed3-0d2843d89946\",\"60f9690a-145b-4dba-b23f-9f945baca296\",\"9541a7bb-c20a-4c4d-9f4c-2185262c8e9c\"]'::jsonb WHERE name='gestor'; CREATE TABLE monthly_energy_settlements(organization_id text,customer_id text,consumer_unit_id text,financial_group_id uuid,status text,validation_status text,financial_hash text,version_number int,month date);");
- await migrate('20261006_r2_published_reports.sql');await migrate('20261006_acl_history_simulation.sql');await migrate('20261009_energy_forecast.sql');await migrate('20261009_energy_forecast_histories.sql');
+ await migrate('20261006_r2_published_reports.sql');await migrate('20261006_acl_history_simulation.sql');await migrate('20261009_energy_forecast.sql');await migrate('20261009_energy_forecast_histories.sql');await migrate('20261009_energy_forecast_formula_versions.sql');
  let a=await create();const note='Histórico conferido com documento e leitura rastreável.';
  await doc('registry');a=(await work(a.id,a.revision,'registration','START')).admission;
  let e=await evidence(a.id,a.revision,'SUBMIT',{stage:'registration',documents:['registry'],facts:{},kind:'COMPLETE',note});a=e.admission;
@@ -17,7 +17,7 @@ try{
  a=(await evidence(a.id,a.revision,'APPROVE',{evidence:e.evidenceId,note,actor:peer})).admission;
  const sources=[await source()];check(sources[0].reviewedBy===peer);check(sources[0].unitId==='u1');check((await call('energy_forecast_sources',['o1',actor,'r1',false])).length===1);
  const req={requestId:randomUUID(),customerId:'c1',unitId:'u1',asOfMonth:'2026-08',sources:[{admissionId:a.id,evidenceId:e.evidenceId}],expansions:[]};
- const body={formulaVersion:'consumption-forecast/1.0',status:'PRELIMINARY',organizationId:'o1',customerId:'c1',unitId:'u1',asOfMonth:'2026-08'};
+ const body={formulaVersion:'consumption-forecast/1.2',status:'PRELIMINARY',organizationId:'o1',customerId:'c1',unitId:'u1',asOfMonth:'2026-08'};
  const prepare=(request=req,s=sources,b=body,who=actor)=>call('energy_forecast_prepare',['o1',who,'r1',false,request,s,b,'a'.repeat(64)]);
  const result=await prepare();check((await prepare()).id===result.id);check(result.version===1);check((await call('energy_forecast_request',['o1',actor,req.requestId])).id===result.id);check(await call('energy_forecast_published',['o1',actor,'c1','u1','2026-08'])===null);await deny(()=>prepare({...req,unitId:'u2'},sources,{...body,unitId:'u2'}),'40001');await deny(()=>prepare({...req,requestId:randomUUID()},{},body));
  const transition=(action,who=peer,key=randomUUID(),hash='a'.repeat(64))=>call('energy_forecast_transition',['o1',who,'r1',false,result.id,key,hash,action,note]);
