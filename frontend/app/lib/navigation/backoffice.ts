@@ -54,6 +54,7 @@ export const backofficeNavigation:
         ORGANIZATION_PERMISSIONS.USERS_VIEW,
       scope: 'organization',
     },
+    {href:'/backoffice/settings',label:'Configurações ambiente'},
   ];
 
 export function filterBackofficeNavigation(

@@ -2,6 +2,7 @@
 import { ReactNode, useState } from 'react';
 
 import OperationNotificationBell from '@/app/components/OperationNotificationBell';
+import UserIdentity from '@/app/components/UserIdentity';
 import Sidebar from '@/app/components/Sidebar';
 import BotEnergyBackoffice from '@/app/components/BotEnergyBackoffice';
 import BackofficeAudience from '@/app/components/BackofficeAudience';
@@ -21,7 +22,7 @@ export default function BackofficeShell({
       <Sidebar collapsed={collapsed} onToggle={()=>setCollapsed(value=>!value)} />
 
       <main className="backoffice-main">
-        <OperationNotificationBell />
+        <div className="environment-topbar"><OperationNotificationBell /><UserIdentity /></div>
         {children}
         <BotEnergyBackoffice />
       </main>

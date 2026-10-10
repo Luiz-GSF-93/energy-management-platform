@@ -112,6 +112,7 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const message=await readErrorMessage(response);
+    if(authenticated && response.status===403 && message==='MFA_REQUIRED') window.dispatchEvent(new Event('energyos-mfa-required'));
     if(authenticated && response.status===401) sessionAttention('Seu acesso precisa ser renovado. O formulário continua aberto.');
     if(authenticated && message==='Organization session expired or access revoked') sessionAttention('O acesso à organização expirou ou foi revogado. Use Renovar acesso; o formulário continua aberto.');
     throw new ApiError(

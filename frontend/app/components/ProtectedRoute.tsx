@@ -28,6 +28,7 @@ export default function ProtectedRoute({
   } = useAuth();
 
   useEffect(() => {
+    if(status==='mfa_required'){router.replace('/auth/mfa');}
     if (status === 'unauthenticated') {
       router.replace('/auth/login');
     }

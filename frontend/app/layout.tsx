@@ -1,4 +1,6 @@
 import './globals.css';
+import './environment.css';
+import {UserEnvironmentProvider} from '@/app/providers/UserEnvironmentProvider';
 
 import { AuthProvider } from '@/app/providers';
 
@@ -16,7 +18,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body>
         <AuthProvider>
-          {children}
+          <UserEnvironmentProvider>{children}</UserEnvironmentProvider>
         </AuthProvider>
       </body>
     </html>
