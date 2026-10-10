@@ -1,4 +1,4 @@
-import {ConflictException,ForbiddenException,HttpException,Injectable,NotFoundException,ServiceUnavailableException} from '@nestjs/common';
+import {ConflictException,GoneException,ForbiddenException,HttpException,Injectable,NotFoundException,ServiceUnavailableException} from '@nestjs/common';
 import {createHash,createHmac} from 'crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {normalizeLead} from './sales-intake.input';
@@ -12,6 +12,7 @@ export class SalesIntakeService{
   const lead=normalizeLead(body);
   const {data,error}=await this.db.getClient().rpc('submit_platform_sales_lead',{p_receipt:lead.requestId,p_payload:lead,p_hash:createHash('sha256').update(JSON.stringify(lead)).digest('hex'),p_requester:createHmac('sha256',secret).update(ip).digest('hex')});
   if(error?.code==='P3601')throw new ConflictException('Formulário alterado. Inicie um novo envio.');
+  if(error?.code==='P3603')throw new GoneException('Protocolo encerrado. Inicie uma nova solicitação.');
   if(error?.code==='P3602')throw new HttpException('Limite de solicitações atingido. Tente mais tarde.',429);
   if(error||data?.receipt!==lead.requestId)throw new ServiceUnavailableException('Recebimento não confirmado. Tente novamente.');
   return {receipt:lead.requestId,status:'RECEIVED',message:'Solicitação recebida para avaliação comercial. Nenhuma contratação foi realizada.'};

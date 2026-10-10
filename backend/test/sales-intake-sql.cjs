@@ -20,4 +20,22 @@ await rejects(()=>db.exec(`UPDATE platform_sales_leads SET status='RECEIVED'`),'
 for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await rejects(()=>db.exec('SELECT * FROM platform_sales_leads'),'42501');await db.exec('RESET ROLE');}
 await db.exec('SET ROLE anon');await rejects(()=>send(7),'42501');await db.exec('RESET ROLE');
 await db.exec('SET ROLE service_role');assert.equal((await db.query('select read_platform_sales_leads($1,0,\'\') result',[owner])).rows[0].result.total,5);checks++;await db.exec('RESET ROLE');
+const retention=fs.readFileSync('src/database/migrations/20261010_platform_sales_retention.sql','utf8');await db.exec(retention);await db.exec(retention);checks++;
+const erase=(actor,id,confirmation=id,basis='RETENTION_90_DAYS')=>db.query('select erase_platform_sales_lead($1,$2,$3,$4) result',[actor,id,confirmation,basis]);
+await rejects(()=>erase(outsider,receipt(1)),'42501');
+await rejects(()=>erase(owner,receipt(1),receipt(2)),'22023');
+await rejects(()=>erase(owner,receipt(1)),'22023');
+assert.equal((await db.query('select count(*) n from platform_sales_erasure_events')).rows[0].n,0);checks++;
+await db.exec(`INSERT INTO platform_sales_leads(receipt,payload,payload_hash,requester_hash,created_at) VALUES('${receipt(90)}','${JSON.stringify(payload(90))}','${hash}','${requester}',now()-interval '91 days')`);
+assert.equal((await erase(owner,receipt(90))).rows[0].result.status,'ERASED');checks++;
+assert.equal((await erase(owner,receipt(1),receipt(1),'DATA_SUBJECT_REQUEST')).rows[0].result.status,'ERASED');checks++;
+assert.equal((await erase(owner,receipt(1),receipt(1),'DATA_SUBJECT_REQUEST')).rows[0].result.status,'ERASED');checks++;
+await rejects(()=>send(1),'P3603');
+await rejects(()=>erase(owner,receipt(500)),'P3604');
+await rejects(()=>db.exec(`DELETE FROM platform_sales_leads WHERE receipt='${receipt(2)}'`),'42501');
+const events=(await db.query('select * from platform_sales_erasure_events order by receipt')).rows;assert.equal(events.length,2);assert.equal(JSON.stringify(events).includes('example.com'),false);assert.equal(JSON.stringify(events).includes(requester),false);assert.equal(events[0].actor_id,owner);checks++;
+await rejects(()=>db.exec("UPDATE platform_sales_erasure_events SET basis='DATA_SUBJECT_REQUEST'"),'42501');
+await rejects(()=>db.exec('DELETE FROM platform_sales_erasure_events'),'42501');
+for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await rejects(()=>db.exec('SELECT * FROM platform_sales_erasure_events'),'42501');await rejects(()=>db.exec('INSERT INTO platform_sales_erasure_events SELECT * FROM platform_sales_erasure_events'),'42501');if(role!=='service_role')await rejects(()=>erase(owner,receipt(2),receipt(2),'DATA_SUBJECT_REQUEST'),'42501');await db.exec('RESET ROLE');}
+await db.exec(`UPDATE platform_team_members SET active=false WHERE user_id='${owner}'`);await rejects(()=>erase(owner,receipt(2),receipt(2),'DATA_SUBJECT_REQUEST'),'42501');
 await db.close();console.log(checks+' SQL checks passed (disposable database, no production data).');})().catch(e=>{console.error(e);process.exitCode=1;});
