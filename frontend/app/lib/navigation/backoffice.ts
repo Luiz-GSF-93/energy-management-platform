@@ -27,6 +27,8 @@ export const backofficeNavigation:
         PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
     },
     { href:'/backoffice/platform-team',label:'Equipe da plataforma',permission:'82e7fc71-479a-4dd6-8b22-4fba6eaa6841',scope:'global' },
+    { href:'/backoffice/platform-reconciliation',label:'Conciliação',permissionsAny:['a7c8f257-580d-4d39-8900-4a5788068201','a7c8f257-580d-4d39-8900-4a5788068202'],scope:'global' },
+    { href:'/backoffice/platform-support',label:'Atendimento',permissionsAny:['a7c8f257-580d-4d39-8900-4a5788068203','a7c8f257-580d-4d39-8900-4a5788068204'],scope:'global' },
     { href:'/backoffice/platform-communications',label:'Comunicação',permissionsAny:['82e7fc71-479a-4dd6-8b22-4fba6eaa6841','c51b6e94-969a-4b9b-bcf9-05c18a4cb2d7'],scope:'global' },
     { href:'/backoffice/platform-costs',label:'Custos e performance',permissionsAny:['e23a5c98-8b68-4ed2-aef8-70a7166407e4','699703af-10ba-43a3-8eb8-9f0d9e477498'],scope:'global' },
     { href:'/backoffice/energy-map',label:'Mapa energético',permission:PLATFORM_PERMISSIONS.ORGANIZATIONS_OPERATE,scope:'global' },

@@ -28,3 +28,5 @@ Teste real concorrente: apenas um segundo Owner aceito; apenas uma desativação
 Lint geral possui problemas preexistentes fora do escopo.
 
 Comunicação: /backoffice/platform-communications mantém consulta compacta dos últimos 20 eventos/modelos. Eventos de entrega não são faturamento. Custos efetivos de WhatsApp por organização, filtros avançados e conciliação do provedor são pendências separadas.
+
+Fase D aprovada: capacidades específicas de conciliação e atendimento atribuídos estão descritas em docs/platform-workflows.txt. A consulta de comunicação foi ampliada na fase C com filtros e paginação; detalhes em docs/platform-communication-audit.txt.

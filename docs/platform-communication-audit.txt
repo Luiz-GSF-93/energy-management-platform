@@ -9,7 +9,7 @@ Banco: nova função de consulta, sem tabelas ou mudanças em filas/políticas/h
 Limites: modelo do envio antigo não foi preservado e não pode ser inferido da configuração atual. Valores cobrados permanecem Não apurados. Falhas de consulta não ativam envios/reenvios.
 Testes: 27 verificações SQL, 5 suites/36 testes Jest incluindo 10 novos, TypeScript, lint das páginas alteradas e Next build.
 
-PROPOSTA D — CONCILIAÇÃO E ATENDIMENTO (NÃO IMPLEMENTADA)
+FASE D — CONCILIAÇÃO E ATENDIMENTO (APROVADA; IMPLEMENTAÇÃO EM docs/platform-workflows.txt)
 Financeiro: criar/importar apuração por fornecedor, competência, moeda, valor em centavos, documento de origem, referência externa e justificativa. Registros versionados; um documento/recibo não pode ser lançado duas vezes. Estimado, Confirmado pelo provedor e Rateado permanecem categorias separadas. Documento agregado não comprova custo individual por organização.
 Persistência isolada: platform_cost_reconciliation_versions, platform_cost_reconciliation_allocations, platform_cost_reconciliation_audit. Documento financeiro privado com hash/referência e controle de acesso específico. Nenhum uso do catálogo de documentos de clientes para armazenar fatura da plataforma.
 Permissões: Financeiro prepara versões em rascunho e propõe conciliação; Owner confirma/rejeita com auditoria, sem aprovar a própria proposta. Nenhuma cobrança ou pagamento automático; não altera política de alertas, planos/licenças ou credenciais.
