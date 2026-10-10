@@ -8,6 +8,7 @@ import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {SupabaseService} from '../../services/supabase.service';
 import {validSignature,validChallenge,statusEvents} from './whatsapp-delivery';
 import {WhatsappTemplatesService} from './whatsapp-templates.service';
+import {PLATFORM_SUPPORT_VIEW,TEAM_MANAGE} from '../platform-team/platform-team.permissions';
 @Controller('integrations/whatsapp/webhook')
 export class WhatsappWebhookController{
  constructor(private readonly db:SupabaseService){}
@@ -28,7 +29,7 @@ export class WhatsappWebhookController{
 @Controller('admin/dashboard/whatsapp-delivery') @PlatformScope()
 export class WhatsappDeliveryController{
  constructor(private readonly db:SupabaseService){}
- @Get() @RequirePermission([P.PLATFORM_ORGANIZATIONS_VIEW])
+ @Get() @RequirePermission([TEAM_MANAGE,PLATFORM_SUPPORT_VIEW])
  async get(){
   const {data,error}=await this.db.getClient().from('platform_whatsapp_status_events').select('message_id,status,event_at,error_codes,received_at').order('received_at',{ascending:false}).limit(20);
   if(error)throw new ServiceUnavailableException('Consulta de entrega indisponível');
@@ -38,6 +39,6 @@ export class WhatsappDeliveryController{
 @Controller('admin/dashboard/whatsapp-templates') @PlatformScope()
 export class WhatsappTemplatesController{
  constructor(private readonly templates:WhatsappTemplatesService){}
- @Get() @RequirePermission([P.PLATFORM_ORGANIZATIONS_VIEW])
+ @Get() @RequirePermission([TEAM_MANAGE,PLATFORM_SUPPORT_VIEW])
  get(){return this.templates.inspect();}
 }

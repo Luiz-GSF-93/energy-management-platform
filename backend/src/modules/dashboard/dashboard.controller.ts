@@ -8,6 +8,7 @@ import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {DashboardService} from './dashboard.service';
+import {TEAM_MANAGE} from '../platform-team/platform-team.permissions';
 @Controller('admin/dashboard')
 @PlatformScope()
 export class PlatformDashboardController {
@@ -20,8 +21,8 @@ export class PlatformDashboardController {
 @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
 export class IntegrationRenewalController {
  constructor(private readonly renewal:IntegrationRenewalService){}
- @Get() @RequirePermission([P.PLATFORM_ORGANIZATIONS_VIEW]) get(){return this.renewal.get();}
- @Patch() @RequirePermission([P.PLATFORM_ORGANIZATIONS_UPDATE]) save(@Body() dto:IntegrationRenewalDto,@Req() req:RequestWithAuthenticatedUser){return this.renewal.save(dto,req.authenticatedUser.userId);}
+ @Get() @RequirePermission([TEAM_MANAGE]) get(){return this.renewal.get();}
+ @Patch() @RequirePermission([TEAM_MANAGE]) save(@Body() dto:IntegrationRenewalDto,@Req() req:RequestWithAuthenticatedUser){return this.renewal.save(dto,req.authenticatedUser.userId);}
 }
 @Controller('dashboard')
 export class OrganizationDashboardController {
