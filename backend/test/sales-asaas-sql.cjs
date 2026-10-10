@@ -1,0 +1,44 @@
+// Reuse commercial fixtures in a disposable database; no Asaas or production calls.
+const fs=require('fs');
+const cases=String.raw`{
+const migration=fs.readFileSync('src/database/migrations/20261010_platform_sales_asaas_sandbox.sql','utf8');await db.exec(migration);await db.exec(migration);
+const run=(action,body,a=owner)=>db.query('select platform_sales_asaas_action($1,$2,$3) result',[a,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
+const list={page:0,search:'',status:'',from:null,to:null};
+for(const a of [null,other])await reject(()=>run('list',list,a),'42501');
+await db.query("insert into platform_team_members values($1,true,'FINANCE')",[other]);await reject(()=>run('list',list,other),'42501');
+await db.query("update platform_team_members set profile='SUPPORT' where user_id=$1",[other]);await reject(()=>run('list',list,other),'42501');
+const binding={id:id(500),proposalId:id(2),paymentId:'pay_fixture',customerId:'cus_fixture',justification:'Fixture sandbox only.'};
+const b=await run('bind',binding);assert.equal(b.gross_cents,85000);assert.equal(b.company,'Fixture');checks++;
+assert.deepEqual(await run('bind',binding),b);checks++;await reject(()=>run('bind',{...binding,customerId:'cus_other'}),'P3611');
+await reject(()=>run('bind',{...binding,id:id(501),proposalId:id(999)}),'P3610');
+const summary={id:'pay_fixture',customer:'cus_fixture',status:'RECEIVED',reference:binding.id,grossCents:85000,netCents:84000};
+const body={event:{id:'evt_fixture&1',event:'PAYMENT_RECEIVED',payment:summary},hash:'a'.repeat(64)};
+await reject(()=>run('inbox',body),'42501');const item=await run('inbox',body,null);assert.deepEqual(await run('inbox',body,null),item);checks++;
+await reject(()=>run('inbox',{...body,hash:'b'.repeat(64)},null),'P3611');await reject(()=>run('inbox',{...body,event:{...body.event,payment:{...summary,grossCents:1}}},null),'P3611');
+assert.equal((await run('list',list)).total,1);assert.equal((await run('list',list)).rows[0].status,'PENDING');checks++;
+await reject(()=>run('claim',{id:item.id,lease:id(510)},other),'42501');
+await run('claim',{id:item.id,lease:id(510)});await reject(()=>run('claim',{id:item.id,lease:id(511)}),'P3611');
+await reject(()=>run('finish',{id:item.id,lease:id(511),summary}),'P3611');
+assert.equal((await run('finish',{id:item.id,lease:id(510),summary:{...summary,customer:'cus_other'}})).status,'REVIEW');checks++;
+await run('claim',{id:item.id,lease:id(512)});assert.equal((await run('finish',{id:item.id,lease:id(512),summary:null})).status,'REVIEW');checks++;
+await run('claim',{id:item.id,lease:id(513)});assert.equal((await run('finish',{id:item.id,lease:id(513),summary:{...summary,reference:'other'}})).status,'REVIEW');checks++;
+await run('claim',{id:item.id,lease:id(514)});assert.equal((await run('finish',{id:item.id,lease:id(514),summary:{...summary,status:'PENDING'}})).status,'REVIEW');checks++;
+await run('claim',{id:item.id,lease:id(515)});assert.equal((await run('finish',{id:item.id,lease:id(515),summary})).status,'VERIFIED');checks++;
+assert.equal((await run('claim',{id:item.id,lease:id(516)})).skip,true);checks++;
+assert.equal((await run('list',{...list,status:'VERIFIED',search:'Fixture'})).total,1);assert.equal((await run('list',{...list,search:'another company'})).total,0);checks++;
+const unknown=await run('inbox',{event:{...body.event,id:'evt_unlinked',payment:{...summary,id:'pay_unlinked'}},hash:'b'.repeat(64)},null);
+assert.equal((await run('claim',{id:unknown.id,lease:id(520)})).status,'UNLINKED');checks++;
+const order=await run('inbox',{event:{...body.event,id:'evt_old',payment:{...summary,status:'PENDING'}},hash:'c'.repeat(64)},null);
+await run('claim',{id:order.id,lease:id(521)});assert.equal((await run('finish',{id:order.id,lease:id(521),summary})).status,'REVIEW');checks++;
+await run('claim',{id:order.id,lease:id(522)});await db.exec('ALTER TABLE platform_sales_asaas_checks DISABLE TRIGGER commercial_immutable');await db.query("update platform_sales_asaas_checks set created_at=now()-interval '3 minutes' where event_id=$1 and status='PROCESSING'",[order.id]);await db.exec('ALTER TABLE platform_sales_asaas_checks ENABLE TRIGGER commercial_immutable');await run('claim',{id:order.id,lease:id(523)});await reject(()=>run('finish',{id:order.id,lease:id(522),summary}),'P3611');checks++;
+await db.query("update user_profiles set full_name='Later rename' where user_id=$1",[owner]);assert.notEqual((await run('read',{id:item.id})).binding.actor_name,'Later rename');checks++;
+await db.exec('DROP TABLE user_profiles');await reject(()=>run('read',{id:item.id}),'42P01');await db.exec('CREATE TABLE user_profiles(user_id uuid,full_name text)');await db.query('insert into user_profiles values($1,NULL)',[owner]);
+await db.query('update platform_team_members set active=false where user_id=$1',[owner]);await reject(()=>run('list',list),'42501');await db.query('update platform_team_members set active=true where user_id=$1',[owner]);
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>run('list',list),'42501');await reject(()=>run('inbox',body,null),'42501');await db.exec('RESET ROLE');}
+await db.exec('SET ROLE service_role');await run('list',list);await reject(()=>db.query('select * from platform_sales_asaas_bindings'),'42501');await db.exec('RESET ROLE');
+await reject(()=>db.query('delete from platform_sales_asaas_inbox'),'42501');await reject(()=>db.query("update platform_sales_asaas_bindings set company='changed'"),'42501');
+assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,0);assert.equal((await db.query("select count(*)::int n from pg_class where relname in ('platform_sales_asaas_bindings','platform_sales_asaas_inbox','platform_sales_asaas_checks') and relrowsecurity")).rows[0].n,3);checks++;
+console.log('Asaas sandbox isolation, deduplication, lease recovery and mismatch checks completed.');
+}`;
+const fixture=fs.readFileSync('test/sales-offer-terms-sql.cjs','utf8').replace('await db.close();console.log(',cases+'\nawait db.close();console.log(');
+new Function('require',fixture)(require);
