@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/app/providers";
 import { apiRequest } from "@/app/lib/api/client";
 import { session } from "@/app/lib/auth/session";
+import { assertSameMfaSession } from "@/app/lib/auth/mfa-session";
 import { Alert, Button, Input } from "@/app/components/ui";
 interface Factor {
   id: string;
@@ -27,16 +28,22 @@ export default function AuthenticatorSettings({
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const load = useCallback(async () => {
+    const before = session.getAccessToken();
     const data = await apiRequest<{ factors: Factor[] }>(
       "/api/v1/auth/account/mfa",
     );
+    assertSameMfaSession(before);
     setFactors(data.factors);
   }, []);
   useEffect(() => {
     let active = true;
+    const before = session.getAccessToken();
     void apiRequest<{ factors: Factor[] }>("/api/v1/auth/account/mfa")
       .then((d) => {
-        if (active) setFactors(d.factors);
+        if (active) {
+          assertSameMfaSession(before);
+          setFactors(d.factors);
+        }
       })
       .catch(() => {
         if (active) setError("Não foi possível consultar o autenticador.");
@@ -69,6 +76,7 @@ export default function AuthenticatorSettings({
         "/api/v1/auth/account/mfa/challenge",
         { method: "POST", body: { factor_id: factorId } },
       );
+      const before = session.getAccessToken();
       const tokens = await apiRequest<Tokens>(
         "/api/v1/auth/account/mfa/verify",
         {
@@ -76,6 +84,7 @@ export default function AuthenticatorSettings({
           body: { factor_id: factorId, challenge_id: challenge.id, code },
         },
       );
+      assertSameMfaSession(before, tokens.access_token);
       session.setTokens(tokens);
       setQr("");
       setPending("");
@@ -84,9 +93,12 @@ export default function AuthenticatorSettings({
           method: "POST",
           body: { factor_id: factorId },
         });
+        assertSameMfaSession(tokens.access_token);
         setNotice("Autenticador desativado por você.");
       } else setNotice("Código confirmado. Autenticador ativo.");
+      assertSameMfaSession(tokens.access_token);
       await load();
+      assertSameMfaSession(tokens.access_token);
       await refresh(challengeOnly);
     });
   }
@@ -123,10 +135,12 @@ export default function AuthenticatorSettings({
               disabled={busy}
               onClick={() =>
                 void run(async () => {
+                  const before = session.getAccessToken();
                   const data = await apiRequest<{
                     id: string;
                     qr_code: string;
                   }>("/api/v1/auth/account/mfa/enroll", { method: "POST" });
+                  assertSameMfaSession(before);
                   if (!data.id || !data.qr_code)
                     throw new Error("QR Code indisponível. Atualize a tela.");
                   setPending(data.id);
