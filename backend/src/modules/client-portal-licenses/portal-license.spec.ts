@@ -16,7 +16,7 @@ describe('Isolated portal license policy',()=>{
  it('derives actor, role and organization from authenticated context',async()=>{const f=fixture();await f.service.client(f.tenant,'reports');expect(f.client.rpc).toHaveBeenCalledWith('client_portal_entitlement',{p_org:'org',p_actor:'actor',p_role:'role',p_module:'reports'});});
  it.each([{role:'gestor'},{accessMode:'platform_operation'},{userId:''},{roleId:''},{organizationId:''}])('rejects forged or backoffice client scope %p',async patch=>{const f=fixture();await expect(f.service.client({...f.tenant,...patch})).rejects.toMatchObject({status:403});expect(f.client.rpc).not.toHaveBeenCalled();});
  it('cannot substitute a module not present in the concession',async()=>{const f=fixture();await expect(f.service.client(f.tenant,'forecasts')).rejects.toMatchObject({status:403});});
- it('does not forward unrelated payload when organization policy is disabled',async()=>{const f=fixture();f.client.rpc.mockResolvedValue({data:{enabled:false,customerId:'foreign',privateData:'not part of compatibility'},error:null} as any);expect(await f.service.client(f.tenant,'reports')).toEqual({enabled:false});});
+ it('does not forward unrelated payload when organization policy is disabled',async()=>{const f=fixture();f.client.rpc.mockResolvedValue({data:{enabled:false,customerId:'foreign',privateData:'not part of compatibility'},error:null} as any);await expect(f.service.client(f.tenant,'reports')).rejects.toMatchObject({status:403});expect(await f.service.client(f.tenant)).toEqual({enabled:false});});
  it('fails closed on missing/foreign/expired entitlement RPC response',async()=>{for(const data of [null,{}, {enabled:true,modules:['reports']}]){const f=fixture();f.client.rpc.mockResolvedValue({data,error:null} as any);await expect(f.service.client(f.tenant,'reports')).rejects.toThrow();}});
  it.each(['42501','P3410','P3411','P3412','P3413'])('does not convert failed authorization/quota into a positive response %s',async code=>{const f=fixture();f.client.rpc.mockResolvedValue({data:null,error:{code}} as any);await expect(f.service.client(f.tenant,'reports')).rejects.toThrow();});
  it('does not query unavailable migration tables when rollout is globally disabled',async()=>{const f=fixture('false');const t={...f.tenant,role:'admin_org',permissions:[P.ORGANIZATION_LICENSES_VIEW]};expect(await f.service.list(t)).toMatchObject({available:false,enabled:false});expect(f.client.from).not.toHaveBeenCalled();});
@@ -43,3 +43,19 @@ describe('Organization-scoped portal license presentation',()=>{
 });
 
 describe('Shared user quota supersedes separate company additions',()=>{it('rejects a new company addition without issuing a write RPC',async()=>{const f=fixture();const manager:any={...f.tenant,role:'admin_org',accessMode:'platform_operation',permissions:[P.ORGANIZATION_LICENSES_UPDATE]};await expect(f.service.addition(manager,{} as any)).rejects.toMatchObject({status:404});expect(f.client.rpc).not.toHaveBeenCalled();});});
+
+describe('Commercial Portal customer manager boundary',()=>{
+ const input:any={customerId:id};
+ it.each(['admin_org','gestor'])('permits %s with both existing management permissions',async role=>{
+  const f=fixture();f.client.rpc.mockResolvedValue({data:{id,organization_id:'org',customer_id:id},error:null} as any);
+  await f.service.save({...f.tenant,role,permissions:[P.ORGANIZATION_USERS_INVITE,P.ORGANIZATION_LICENSES_VIEW]},input);
+  expect(f.client.rpc).toHaveBeenCalledWith('save_client_portal_license',{p_org:'org',p_customer:id,p_actor:'actor',p_data:{}});
+ });
+ it.each([{role:'operacional',permissions:[P.ORGANIZATION_USERS_INVITE,P.ORGANIZATION_LICENSES_VIEW]},{role:'admin_org',permissions:[P.ORGANIZATION_USERS_INVITE]},{role:'admin_org',permissions:[P.ORGANIZATION_LICENSES_VIEW]},{role:'admin_org',scope:'global',permissions:[P.ORGANIZATION_USERS_INVITE,P.ORGANIZATION_LICENSES_VIEW]},{role:'admin_org',accessMode:'foreign',permissions:[P.ORGANIZATION_USERS_INVITE,P.ORGANIZATION_LICENSES_VIEW]}])('denies substituted role, context or missing permission %p',async patch=>{
+  const f=fixture();await expect(f.service.save({...f.tenant,...patch},input)).rejects.toMatchObject({status:403});expect(f.client.rpc).not.toHaveBeenCalled();
+ });
+ it('keeps platform-only commercial activation separate from customer selection',async()=>{
+  const f=fixture();const manager={...f.tenant,role:'admin_org',permissions:[P.ORGANIZATION_USERS_INVITE,P.ORGANIZATION_LICENSES_VIEW]};
+  await expect(f.service.policy(manager,{enabled:true,revision:0,reason:'test'})).rejects.toMatchObject({status:403});expect(f.client.rpc).not.toHaveBeenCalled();
+ });
+});

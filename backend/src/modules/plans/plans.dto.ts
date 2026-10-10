@@ -1,6 +1,7 @@
 import {IsBoolean,IsIn,ValidateNested,IsDateString,IsInt,IsOptional,IsString,IsUUID,Matches,Max,MaxLength,Min,MinLength} from 'class-validator';
 import {Type} from 'class-transformer';
 export class SavePlanDto {
+ @IsOptional() @IsBoolean() client_portal?:boolean;
  @IsString() @MinLength(2) @MaxLength(120) name!:string;
  @IsString() @MaxLength(2000) description!:string;
  @IsBoolean() active!:boolean;
@@ -21,6 +22,7 @@ export class SavePlanDto {
  @IsOptional() @IsInt() @Min(1) version?:number;
 }
 export class LicenseModulesDto {
+ @IsOptional() @IsBoolean() client_portal?:boolean;
  @IsOptional() @IsBoolean() ccee_registrations?:boolean;
  @IsOptional() @IsBoolean() trading_hub?:boolean;
  @IsOptional() @IsBoolean() bot_energy_rag?:boolean;

@@ -20,7 +20,8 @@ export class PortalLicenseService {
   if(['22023','23514','23502','22P02','22003','22007','22008'].includes(error.code??''))throw new BadRequestException('Confira datas, limites e módulos da licença.');
   throw new InternalServerErrorException('Não foi possível confirmar a licença do Portal.');
  }
- private backoffice(t:TenantContext,write=false){
+ private backoffice(t:TenantContext,write=false,customers=false){
+  if(customers&&write){const platform=t?.accessMode==='platform_operation'&&t.permissions?.includes(P.ORGANIZATION_LICENSES_UPDATE);const manager=['admin_org','gestor'].includes(t?.role)&&!t.accessMode&&t.permissions?.includes(P.ORGANIZATION_USERS_INVITE)&&t.permissions.includes(P.ORGANIZATION_LICENSES_VIEW);if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||(!platform&&!manager))throw new ForbiddenException('Gestão dos clientes do Portal exige administrador ou gestor autorizado nesta organização.');return;}
   if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||(!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation')||!t.permissions?.includes(write?P.ORGANIZATION_LICENSES_UPDATE:P.ORGANIZATION_LICENSES_VIEW)||(write&&t.accessMode!=='platform_operation'))throw new ForbiddenException('Gestão de licença restrita à organização e ao administrador da plataforma.');
  }
  private requireEnabled(){if(!this.enabled())throw new NotFoundException('Licenças do Portal em implantação; ativação ainda desligada.');}
@@ -32,9 +33,9 @@ export class PortalLicenseService {
   if(!capacity.data||!Array.isArray(licenses.data)||licenses.data.length>200||!Array.isArray(additions.data)||additions.data.length>200||!Array.isArray(history.data))throw new BadRequestException('Consulta de licenças extensa ou indisponível; nenhum conjunto parcial foi emitido.');
   for(const result of [licenses,additions,history])if(result.data.some((r:{organization_id:string})=>r.organization_id!==t.organizationId))throw new InternalServerErrorException('Licença fora do escopo da organização.');
   if(licenses.data.some((r:{customers?:{organization_id?:string}})=>r.customers?.organization_id!==t.organizationId))throw new InternalServerErrorException('Cliente fora do escopo da licença.');
-  return {available:true,enabled:policy.data?.enabled??false,revision:policy.data?.revision??0,capacity:capacity.data,licenses:licenses.data,additions:additions.data,history:await auditAuthorNames(this.db.getClient(),t.organizationId,history.data)};
+  return {available:true,enabled:capacity.data.portalContracted===true,revision:policy.data?.revision??0,capacity:capacity.data,licenses:licenses.data,additions:additions.data,history:await auditAuthorNames(this.db.getClient(),t.organizationId,history.data)};
  }
- async save(t:TenantContext,input:PortalLicenseDto){this.backoffice(t,true);this.requireEnabled();const {customerId,...definition}=input;const r=await this.db.getClient().rpc('save_client_portal_license',{p_org:t.organizationId,p_customer:customerId,p_actor:t.userId,p_data:definition});this.errors(r.error);if(!r.data?.id||r.data.organization_id!==t.organizationId||r.data.customer_id!==customerId)throw new InternalServerErrorException('Licença não confirmada no cliente autorizado.');return r.data;}
+ async save(t:TenantContext,input:PortalLicenseDto){this.backoffice(t,true,true);this.requireEnabled();const {customerId,...definition}=input;const r=await this.db.getClient().rpc('save_client_portal_license',{p_org:t.organizationId,p_customer:customerId,p_actor:t.userId,p_data:definition});this.errors(r.error);if(!r.data?.id||r.data.organization_id!==t.organizationId||r.data.customer_id!==customerId)throw new InternalServerErrorException('Licença não confirmada no cliente autorizado.');return r.data;}
  async policy(t:TenantContext,input:PortalPolicyDto){this.backoffice(t,true);this.requireEnabled();const r=await this.db.getClient().rpc('set_client_portal_policy',{p_org:t.organizationId,p_actor:t.userId,p_enabled:input.enabled,p_revision:input.revision,p_reason:input.reason.trim()});this.errors(r.error);if(r.data?.organization_id!==t.organizationId)throw new InternalServerErrorException('Ativação não confirmada.');return r.data;}
  async addition(t:TenantContext,_input:ClientAdditionDto){this.backoffice(t,true);this.requireEnabled();throw new NotFoundException('Cotas separadas de clientes foram substituídas pelas vagas de usuários do plano.');}
  async client(t:TenantContext,module:PortalModule|null=null){
@@ -43,6 +44,6 @@ export class PortalLicenseService {
   const r=await this.db.getClient().rpc('client_portal_entitlement',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_module:module});this.errors(r.error);
   if(typeof r.data?.enabled!=='boolean')throw new InternalServerErrorException('Estado da licença não confirmado.');
   if(r.data.enabled&&(r.data.organizationId!==t.organizationId||!r.data.customerId||!Array.isArray(r.data.modules)||(module&&!r.data.modules.includes(module))))throw new ForbiddenException('Módulo não contratado no Portal.');
-  return r.data.enabled?r.data:{enabled:false};
+  if(module&&!r.data.enabled)throw new ForbiddenException('Portal não liberado para este cliente.');return r.data.enabled?r.data:{enabled:false};
  }
 }
