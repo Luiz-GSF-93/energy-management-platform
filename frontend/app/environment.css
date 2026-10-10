@@ -245,3 +245,49 @@
     gap: 8px;
   }
 }
+
+.environment-photo-dialog {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 540px;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.environment-photo-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+.environment-photo-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.environment-photo-dialog-header h2 {
+  margin: 0;
+}
+.environment-photo-canvas {
+  display: block;
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  margin: 20px auto;
+  border-radius: 50%;
+  background: var(--color-background);
+  outline: 2px solid var(--color-border);
+}
+.environment-photo-controls {
+  display: grid;
+  gap: 10px;
+}
+.environment-photo-controls input[type="range"] {
+  padding: 0;
+  border: 0;
+  height: 32px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}

@@ -3,6 +3,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { useUserEnvironment } from "@/app/providers/UserEnvironmentProvider";
 import { Preferences, themeLabels, Theme } from "@/app/lib/account";
 import { UserAvatar } from "./UserIdentity";
+import PhotoFraming from "./PhotoFraming";
+import { useAuth } from "@/app/providers/AuthProvider";
 import AuthenticatorSettings from "./AuthenticatorSettings";
 import { Alert, Button, Input } from "./ui";
 import { apiRequest } from "@/app/lib/api/client";
@@ -13,43 +15,20 @@ const roles: Record<string, string> = {
   consulta: "Consulta",
   admin_platform: "Administrador da plataforma",
 };
-async function thumbnail(file: File): Promise<string> {
-  if (
-    !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
-    file.size > 5 * 1024 * 1024
-  )
-    throw new Error("Selecione uma foto PNG, JPEG ou WebP de até 5 MB.");
-  const url = URL.createObjectURL(file);
-  try {
-    const image = new Image();
-    image.src = url;
-    await image.decode();
-    if (image.width * image.height > 40000000)
-      throw new Error("A imagem é muito grande.");
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 128;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Foto indisponível neste navegador.");
-    const side = Math.min(image.width, image.height);
-    ctx.drawImage(
-      image,
-      (image.width - side) / 2,
-      (image.height - side) / 2,
-      side,
-      side,
-      0,
-      0,
-      128,
-      128,
-    );
-    const data = canvas.toDataURL("image/png");
-    if (data.length > 80000) throw new Error("Reduza o tamanho da foto.");
-    return data;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 export default function AccountSettings() {
+  const { context } = useAuth();
+  const ownerId = context?.user.id;
+  const [photoSource, setPhotoSource] = useState<{
+    uri: string;
+    owner: string;
+  } | null>(null);
+  useEffect(() => {
+    const uri = photoSource?.uri;
+    return () => {
+      if (uri?.startsWith("blob:")) URL.revokeObjectURL(uri);
+    };
+  }, [photoSource]);
+
   const { account, error, reload, save } = useUserEnvironment(),
     [draft, setDraft] = useState<Preferences | null>(null),
     [busy, setBusy] = useState(false),
@@ -219,26 +198,57 @@ export default function AccountSettings() {
                         label="Selecionar foto"
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
+                        disabled={busy}
                         onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f)
-                            void thumbnail(f)
-                              .then((p) => change("photo", p))
-                              .catch((e) => setFailure(e.message));
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file || !ownerId) return;
+                          if (
+                            !["image/jpeg", "image/png", "image/webp"].includes(
+                              file.type,
+                            ) ||
+                            file.size > 5 * 1024 * 1024
+                          ) {
+                            setFailure(
+                              "Selecione uma foto PNG, JPEG ou WebP de até 5 MB.",
+                            );
+                            return;
+                          }
+                          setFailure("");
+                          setPhotoSource({
+                            uri: URL.createObjectURL(file),
+                            owner: ownerId,
+                          });
                         }}
                       />
                       {draft.photo ? (
-                        <img
-                          className="environment-photo-preview"
-                          src={draft.photo}
-                          alt="Prévia da sua foto"
-                          width={72}
-                          height={72}
-                        />
+                        <>
+                          <img
+                            className="environment-photo-preview"
+                            src={draft.photo}
+                            alt="Prévia da sua foto"
+                            width={72}
+                            height={72}
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => {
+                              if (ownerId)
+                                setPhotoSource({
+                                  uri: draft.photo,
+                                  owner: ownerId,
+                                });
+                            }}
+                          >
+                            Ajustar foto atual
+                          </Button>
+                        </>
                       ) : null}
                       <p className="environment-help">
-                        Foto privada da sua conta. A imagem será recortada em
-                        quadrado e os metadados serão removidos.
+                        Ajuste a imagem na prévia circular antes de salvar. Para
+                        evitar cortes, use “Mostrar imagem inteira”.
                       </p>
                     </>
                   ) : null}
@@ -322,6 +332,17 @@ export default function AccountSettings() {
             </Button>
           </section>
           <AuthenticatorSettings />
+          {photoSource && ownerId === photoSource.owner ? (
+            <PhotoFraming
+              key={photoSource.uri}
+              source={photoSource.uri}
+              onClose={() => setPhotoSource(null)}
+              onApply={(photo) => {
+                change("photo", photo);
+                setPhotoSource(null);
+              }}
+            />
+          ) : null}
         </>
       )}
     </section>
