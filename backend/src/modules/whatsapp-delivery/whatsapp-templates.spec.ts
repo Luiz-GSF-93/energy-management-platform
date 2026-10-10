@@ -2,6 +2,14 @@ import {customerTemplates,inspectCustomerTemplates} from './whatsapp-templates.s
 describe('Customer template approval metadata',()=>{
  const env={WHATSAPP_ACCESS_TOKEN:'private-test-token',WHATSAPP_BUSINESS_ACCOUNT_ID:'123',WHATSAPP_GRAPH_VERSION:'v26.0'};
  const transport=(body:unknown,status=200)=>jest.fn().mockResolvedValue({ok:status===200,json:async()=>body}) as jest.Mock;
+ it('looks up exact V2 names and validates their static login button without accepting the parameterized alert as a customer notice',async()=>{
+  const fetcher=jest.fn(async(url:string)=>{const name=new URL(url).searchParams.get('name');return {ok:true,json:async()=>({data:[{name,language:'pt_BR',status:'APPROVED',components:[{type:'BODY',text:name==='energyos_alerta_custos_v2'?'Alerta: {{1}}':'Aviso EnergyOS'},{type:'BUTTONS',buttons:[{type:'URL',text:'Acessar EnergyOS',url:'https://app.expertenergy.com.br/auth/login'}]}]}]})};});
+  const result=await inspectCustomerTemplates({...env,WHATSAPP_TEMPLATE_VERSION:'v2'},fetcher as any);
+  expect(result.rows.every(r=>r.name.endsWith('_v2')&&r.status==='APPROVED')).toBe(true);
+  expect(result.rows[0].parameterless).toBe(false);
+  expect(result.rows.slice(1).every(r=>r.parameterless)).toBe(true);
+  expect(JSON.stringify(result)).not.toMatch(/private|token|components/);
+ });
  it('queries only the configured account and never returns token, bodies or errors',async()=>{
   const fetcher=jest.fn(async(url:string)=>{const name=new URL(url).searchParams.get('name');return {ok:true,json:async()=>({data:[{name,language:'pt_BR',status:'APPROVED',components:'private body'}]})};});
   const result=await inspectCustomerTemplates(env,fetcher as any);

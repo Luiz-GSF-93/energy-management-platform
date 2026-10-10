@@ -1,4 +1,5 @@
 import {Injectable} from '@nestjs/common';
+import {customerTemplateName,hasNoRuntimeParameters} from './whatsapp-template-selection';
 
 export const customerTemplates = [
  {name:'energyos_alerta_custos',label:'Alerta de custos'},
@@ -15,7 +16,8 @@ const states=new Set<TemplateState>(['APPROVED','PENDING','REJECTED','PAUSED','D
 export async function inspectCustomerTemplates(env:NodeJS.ProcessEnv=process.env,transport:typeof fetch=fetch):Promise<TemplateSnapshot>{
  const account=env.WHATSAPP_BUSINESS_ACCOUNT_ID,version=env.WHATSAPP_GRAPH_VERSION;
  const configured=!!env.WHATSAPP_ACCESS_TOKEN&&/^\d+$/.test(account??'')&&/^v\d+\.\d+$/.test(version??'');
- const rows=await Promise.all(customerTemplates.map(async template=>{
+ const rows=await Promise.all(customerTemplates.map(async original=>{
+  const template={...original,name:customerTemplateName(original.name,env)};
   let status:TemplateState='UNAVAILABLE',parameterless=false;
   if(configured)try{
    const query=new URLSearchParams({name:template.name,fields:'name,language,status,components',limit:'100'});
@@ -25,7 +27,7 @@ export async function inspectCustomerTemplates(env:NodeJS.ProcessEnv=process.env
     if(Array.isArray(body.data)){
      const exact=body.data.filter(row=>row?.name===template.name&&row?.language==='pt_BR');
      // Ambiguous or truncated responses never imply approval.
-     if(exact.length===1&&!body.paging?.next){status=states.has(exact[0].status)?exact[0].status:'UNKNOWN';parameterless=Array.isArray(exact[0].components)&&exact[0].components.length>0&&exact[0].components.every((c:any)=>['BODY','FOOTER','HEADER'].includes(c.type)&&(!c.format||c.format==='TEXT')&&typeof c.text==='string'&&!c.text.includes('{{'));}
+     if(exact.length===1&&!body.paging?.next){status=states.has(exact[0].status)?exact[0].status:'UNKNOWN';parameterless=hasNoRuntimeParameters(exact[0].components);}
      else if(!exact.length&&!body.paging?.next)status='MISSING';
      else status='UNKNOWN';
     }
