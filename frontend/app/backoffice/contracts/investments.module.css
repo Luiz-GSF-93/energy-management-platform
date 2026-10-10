@@ -1,0 +1,32 @@
+.workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.workspace p { margin: 0; line-height: 1.6; }
+.workspace label { display: grid; gap: 8px; min-width: 0; font-size: .875rem; font-weight: 600; }
+.workspace :global(.ds-input) { min-width: 0; box-sizing: border-box; font: inherit; }
+.workspace textarea { min-height: 96px; resize: vertical; }
+.item {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.item legend { padding: 0 8px; font-weight: 700; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.workspace h3 { margin: 4px 0 0; }
+.workspace details { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.workspace summary { cursor: pointer; font-weight: 600; }
+.workspace details p { margin-top: 12px; }
+@media (max-width: 640px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .item { padding: 14px; }
+  .actions { align-items: stretch; }
+  .actions :global(.ds-button) { flex: 1 1 100%; }
+}
