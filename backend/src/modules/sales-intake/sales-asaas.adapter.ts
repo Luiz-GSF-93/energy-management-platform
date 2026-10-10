@@ -11,8 +11,8 @@ export function paymentSummary(value:unknown){
  if(!value||typeof value!=='object'||Array.isArray(value))throw new BadRequestException('Cobrança inválida.');
  const p=value as Record<string,unknown>;
  if(typeof p.id!=='string'||!paymentId.test(p.id)||typeof p.status!=='string'||!/^[A-Z_]{1,60}$/.test(p.status)||typeof p.customer!=='string'||!/^cus_[a-zA-Z0-9]{1,100}$/.test(p.customer))throw new BadRequestException('Identificação financeira inválida.');
- const reference=p.externalReference??null;
- if(reference!==null&&(typeof reference!=='string'||reference.length>120||/[\x00-\x1f]/.test(reference)))throw new BadRequestException('Referência inválida.');
+ // Persist our UUID only; third-party free text may contain contact data.
+ const reference=typeof p.externalReference==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(p.externalReference)?p.externalReference.toLowerCase():null;
  const gross=cents(p.value),net=cents(p.netValue);
  if(gross===null||net!==null&&net>gross)throw new BadRequestException('Valores financeiros inconsistentes.');
  return {id:p.id,customer:p.customer,status:p.status,reference,grossCents:gross,netCents:net};

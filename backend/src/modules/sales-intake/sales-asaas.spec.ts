@@ -28,6 +28,8 @@ describe('Asaas sandbox foundation',()=>{
  it.each([0,0.01,850,9999999.99])('handles valid currency precision',v=>expect(cents(v)).toBe(Math.round(v*100)));
  it.each([-1,NaN,Infinity,'1',0.001,10000001])('rejects invalid currency precision',v=>expect(()=>cents(v)).toThrow(BadRequestException));
  it('unknown net value is not zero',()=>expect(paymentSummary({...payment,netValue:undefined}).netCents).toBeNull());
+ it('does not persist contact data in arbitrary external references',()=>expect(paymentSummary({...payment,externalReference:'private@example.com'}).reference).toBeNull());
+ it('canonicalizes the allowed binding UUID',()=>expect(paymentSummary({...payment,externalReference:id.toUpperCase()}).reference).toBe(id));
 });
 describe('Read-only Asaas adapter',()=>{
  const original=global.fetch;afterEach(()=>{global.fetch=original;});
