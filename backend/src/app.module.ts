@@ -1,4 +1,5 @@
 import {PlatformTeamModule} from './modules/platform-team/platform-team.module';
+import {PlatformWorkflowsModule} from './modules/platform-workflows/platform-workflows.module';
 import {PortalLicenseModule} from './modules/client-portal-licenses/portal-license.module';
 import {PortalLicenseGuard} from './modules/client-portal-licenses/portal-license.guard';
 import {BotReportsModule} from './modules/bot-reports/bot-reports.module';
@@ -42,6 +43,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
     PlatformTeamModule,
+    PlatformWorkflowsModule,
     PortalLicenseModule,
     AuthModule,
     CustomersModule,
