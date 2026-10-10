@@ -5,6 +5,7 @@ const lead={requestId:'11111111-1111-4111-8111-111111111111',name:'Pessoa de Tes
 describe('Sales intake: no identity, licensing or payment side effects',()=>{
  const env={...process.env};afterEach(()=>{process.env={...env};});
  test('normalizes CNPJ, email and phone',()=>{expect(normalizeLead(lead)).toMatchObject({email:'test@example.com',phone:'+5516999999999',cnpj:'11222333000181',emailKind:'CORPORATE'});});
+ test('accepts Receita Federal public alphanumeric example with verified digits',()=>{expect(normalizeLead({...lead,cnpj:'00.000.000/E08G-12'}).cnpj).toBe('00000000E08G12');expect(()=>normalizeLead({...lead,cnpj:'00.000.000/E08G-13'})).toThrow();});
  test('personal email is received for commercial review',()=>{expect(normalizeLead({...lead,email:'pessoa@gmail.com'}).emailKind).toBe('PERSONAL');});
  test.each([{cnpj:'11222333000182'},{consent:false},{consentVersion:'other'},{website:'spam'},{organization_id:'victim'},{role:'admin_platform'},{units:0},{users:1.5},{goals:[]},{goals:['ocr','ocr']},{goals:['hidden_module']},{phone:'16999999999'},{name:'x\nsecret'},{freeMarket:'unknown'}])('rejects invalid or unauthorized fields %j',patch=>{expect(()=>normalizeLead({...lead,...patch})).toThrow();});
  test('feature is off by default',async()=>{delete process.env.SALES_INTAKE_ENABLED;const rpc=jest.fn();await expect(new SalesIntakeService({getClient:()=>({rpc})} as any).submit(lead,'https://www.expertenergy.com.br','1')).rejects.toMatchObject({status:404});expect(rpc).not.toHaveBeenCalled();});

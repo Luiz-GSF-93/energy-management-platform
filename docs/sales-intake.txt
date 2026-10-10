@@ -26,3 +26,5 @@ Retenção: antes de exposição pública, definir prazo, atendimento LGPD e pro
 
 Testes: Jest de validação/CORS/serviço; SQL PGlite descartável com helper Owner real, migração repetida, revogação, RLS, limite e duplicidade; wizard em JSDOM com fetch simulado apenas no teste. Não validar integrações externas com dados fictícios em produção.
 Rollback: desligar SALES_INTAKE_ENABLED e reverter links/página. Não apagar registros coletados. Migração aditiva permanece sem efeito sobre licenças atuais.
+
+CNPJ: valida formatos numérico e alfanumérico com DV por ASCII menos 48, conforme manual oficial Receita Federal: https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/documentos-tecnicos/cnpj/manual-dv-cnpj.pdf . Validade do DV não comprova situação cadastral ou representação legal.

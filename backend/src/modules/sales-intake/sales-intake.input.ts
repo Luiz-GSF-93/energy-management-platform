@@ -10,8 +10,8 @@ export function normalizeLead(input:unknown){
  const requestId=str('requestId',36);if(!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(requestId))return fail();
  const name=str('name',120),company=str('company',160),jobTitle=str('jobTitle',120),email=str('email',254).toLowerCase();
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail();
- const cnpj=str('cnpj',18).replace(/[.\/\- ]/g,'');if(!/^\d{14}$/.test(cnpj)||/^(\d)\1+$/.test(cnpj))return fail();
- for(let size=12;size<14;size++){const w=size===12?[5,4,3,2,9,8,7,6,5,4,3,2]:[6,5,4,3,2,9,8,7,6,5,4,3,2];const mod=w.reduce((v,n,i)=>v+n*Number(cnpj[i]),0)%11;if(Number(cnpj[size])!==(mod<2?0:11-mod))return fail();}
+ const cnpj=str('cnpj',18).replace(/[.\/\- ]/g,'').toUpperCase();if(!/^[A-Z0-9]{12}\d{2}$/.test(cnpj)||/^(\d)\1+$/.test(cnpj))return fail();
+ for(let size=12;size<14;size++){const w=size===12?[5,4,3,2,9,8,7,6,5,4,3,2]:[6,5,4,3,2,9,8,7,6,5,4,3,2];const mod=w.reduce((v,n,i)=>v+n*(cnpj.charCodeAt(i)-48),0)%11;if(Number(cnpj[size])!==(mod<2?0:11-mod))return fail();}
  const phone=str('phone',24).replace(/[()+ \-]/g,'');if(!/^55\d{10,11}$/.test(phone))return fail();
  if(!Number.isInteger(b.units)||Number(b.units)<1||Number(b.units)>100000||!Number.isInteger(b.users)||Number(b.users)<1||Number(b.users)>100000)return fail();
  if(!['yes','no','partial'].includes(String(b.freeMarket))||typeof b.solar!=='boolean'||typeof b.buysEnergy!=='boolean'||!['spreadsheet','software','none'].includes(String(b.management))||!['email','whatsapp','phone'].includes(String(b.contactMethod)))return fail();
