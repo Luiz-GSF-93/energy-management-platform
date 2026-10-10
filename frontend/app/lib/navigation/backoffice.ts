@@ -26,8 +26,10 @@ export const backofficeNavigation:
       permission:
         PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
     },
-    { href:'/backoffice/platform-costs',label:'Custos e performance',permission:'e23a5c98-8b68-4ed2-aef8-70a7166407e4',scope:'global' },
-    { href:'/backoffice/energy-map',label:'Mapa energético',permission:PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,scope:'global' },
+    { href:'/backoffice/platform-team',label:'Equipe da plataforma',permission:'82e7fc71-479a-4dd6-8b22-4fba6eaa6841',scope:'global' },
+    { href:'/backoffice/platform-communications',label:'Comunicação',permissionsAny:['82e7fc71-479a-4dd6-8b22-4fba6eaa6841','c51b6e94-969a-4b9b-bcf9-05c18a4cb2d7'],scope:'global' },
+    { href:'/backoffice/platform-costs',label:'Custos e performance',permissionsAny:['e23a5c98-8b68-4ed2-aef8-70a7166407e4','699703af-10ba-43a3-8eb8-9f0d9e477498'],scope:'global' },
+    { href:'/backoffice/energy-map',label:'Mapa energético',permission:PLATFORM_PERMISSIONS.ORGANIZATIONS_OPERATE,scope:'global' },
     { href: '/backoffice/plans', label: 'Catálogo de planos', permission: 'e23a5c98-8b68-4ed2-aef8-70a7166407e4', scope: 'global' },
     { href: '/backoffice/licenses', label: 'Licença e módulos', permission: '8c5673e4-115c-4ab7-bb11-3b410eddcad3', scope: 'organization' },
     { href: '/backoffice/setup', label: 'Clientes e unidades', permission: 'cbb2e904-0718-4eec-9396-dba899118cdd', scope: 'organization' },
