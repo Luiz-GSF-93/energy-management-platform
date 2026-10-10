@@ -24,7 +24,7 @@ import {
 import { useAuth } from '@/app/providers';
 
 const roleLabels: Record<string,string> = {admin_platform:'Owner da plataforma',platform_administrator:'Administrador da plataforma',platform_finance:'Financeiro da plataforma',platform_support:'Suporte da plataforma',admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
-const navigationIcons:Record<string,typeof BarChart3>={'platform-team':UsersRound,'platform-communications':Bell,settings:Settings,dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,'energy-map':MapPinned,'trading-hub':TrendingUp,'platform-costs':TrendingUp,licenses:ShieldCheck,setup:ContactRound,'ccee-registrations':FileSignature,'acl-admissions':FileSignature,contracts:FileSignature,documents:Files,'ocr-audit':ScanEye,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
+const navigationIcons:Record<string,typeof BarChart3>={'platform-reconciliation':TrendingUp,'platform-support':ClipboardList,'platform-team':UsersRound,'platform-communications':Bell,settings:Settings,dashboard:BarChart3,organizations:Building2,plans:LayoutGrid,'energy-map':MapPinned,'trading-hub':TrendingUp,'platform-costs':TrendingUp,licenses:ShieldCheck,setup:ContactRound,'ccee-registrations':FileSignature,'acl-admissions':FileSignature,contracts:FileSignature,documents:Files,'ocr-audit':ScanEye,users:UsersRound,agenda:CalendarDays,requests:ClipboardList,events:CalendarClock,pld:TrendingUp,notifications:Bell};
 
 export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;onToggle?:()=>void}={}) {
   const router = useRouter();
