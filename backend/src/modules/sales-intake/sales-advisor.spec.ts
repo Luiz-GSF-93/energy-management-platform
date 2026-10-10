@@ -1,0 +1,24 @@
+import 'reflect-metadata';
+import {ForbiddenException} from '@nestjs/common';
+import {advisePlan,CatalogPlan} from './sales-advisor.engine';
+import {SalesAdvisorService} from './sales-advisor.service';
+import {AdminSalesController} from './sales-intake.controller';
+import {PERMISSIONS_KEY} from '../../common/decorators/require-permission.decorator';
+const receipt='11111111-1111-4111-8111-111111111111';
+const profile={units:10,users:20,freeMarket:'no',solar:false,buysEnergy:false,goals:['reports']};
+const plan=(id:string,units:number,users=20):CatalogPlan=>({id,name:id,version:2,active:true,max_consumer_units:units,max_users:users,report_generation:true});
+describe('Sales advisor: isolated preliminary eligibility',()=>{
+ test('capacity includes both units and shared user seats',()=>{expect(advisePlan(profile,[plan('small',5),plan('few-seats',10,19),plan('fits',10)]).plan?.id).toBe('fits');});
+ test('excludes inactive or invalid catalog entries',()=>{expect(advisePlan(profile,[{...plan('off',10),active:false},{...plan('corrupt',10),version:0}]).plan).toBeNull();});
+ test('chooses lowest compatible capacity with deterministic ties regardless of input order',()=>{const plans=[plan('z',20),plan('b',10),plan('a',10)];expect(advisePlan(profile,plans).plan?.id).toBe('a');expect(advisePlan(profile,[...plans].reverse()).plan?.id).toBe('a');});
+ test('requires modules, never enables missing trading or free market',()=>{expect(advisePlan({...profile,freeMarket:'yes',buysEnergy:true},[plan('missing',10)]).plan).toBeNull();expect(advisePlan({...profile,freeMarket:'partial',buysEnergy:true},[{...plan('fits',10),trading_hub:true,free_market_management:true}]).plan?.id).toBe('fits');});
+ test('solar requires explicit review instead of promising unavailable GD',()=>{expect(advisePlan({...profile,solar:true},[plan('fits',10)]).status).toBe('REVIEW_REQUIRED');});
+ test('unknown goals and invalid profile fail closed',()=>{expect(()=>advisePlan({...profile,goals:['owner_access']},[])).toThrow();expect(()=>advisePlan({...profile,users:0},[])).toThrow();});
+ test('does not expose price or calculate example discounts',()=>{expect(advisePlan(profile,[{...plan('fits',10),monthly_price_brl_cents:42000}]).plan).not.toHaveProperty('monthly_price_brl_cents');});
+ test('does not mutate catalog or profile',()=>{const input=[plan('fits',10)],before=JSON.stringify([profile,input]);advisePlan(profile,input);expect(JSON.stringify([profile,input])).toBe(before);});
+ test('Owner denial happens before reading catalog',async()=>{const from=jest.fn(),list=jest.fn().mockRejectedValue(new ForbiddenException());const service=new SalesAdvisorService({list} as any,{getClient:()=>({from})} as any);await expect(service.preview('non-owner',receipt,0,'')).rejects.toMatchObject({status:403});expect(from).not.toHaveBeenCalled();});
+ test('receipt must belong to current authorized selection',async()=>{const from=jest.fn();const service=new SalesAdvisorService({list:jest.fn().mockResolvedValue({rows:[]})} as any,{getClient:()=>({from})} as any);await expect(service.preview('owner',receipt,1,'company')).rejects.toMatchObject({status:404});expect(from).not.toHaveBeenCalled();});
+ test('only reads catalog after private Owner receipt resolution',async()=>{const eq=jest.fn().mockResolvedValue({data:[plan('fits',10)]}),select=jest.fn().mockReturnValue({eq}),from=jest.fn().mockReturnValue({select}),list=jest.fn().mockResolvedValue({rows:[{receipt,data:profile}]});const service=new SalesAdvisorService({list} as any,{getClient:()=>({from})} as any);expect(await service.preview('owner',receipt,2,'company')).toMatchObject({receipt,plan:{id:'fits'}});expect(list).toHaveBeenCalledWith('owner',2,'company');expect(from).toHaveBeenCalledWith('plan_catalog');expect(eq).toHaveBeenCalledWith('active',true);});
+ test('database failure cannot recommend from stale or fabricated plans',async()=>{const service=new SalesAdvisorService({list:jest.fn().mockResolvedValue({rows:[{receipt,data:profile}]})} as any,{getClient:()=>({from:()=>({select:()=>({eq:async()=>({error:{message:'private'}})})})})} as any);await expect(service.preview('owner',receipt,0,'')).rejects.toMatchObject({status:503});});
+ test('route keeps existing Owner permission and rejects injected scope fields',()=>{expect(Reflect.getMetadata(PERMISSIONS_KEY,AdminSalesController.prototype.preview)).toEqual(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']);const preview=jest.fn(),controller=new AdminSalesController({} as any,{preview} as any);expect(()=>controller.preview({authenticatedUser:{userId:'owner'}} as any,{receipt,organization_id:'foreign'})).toThrow();expect(preview).not.toHaveBeenCalled();});
+});
