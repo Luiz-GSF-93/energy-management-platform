@@ -3,6 +3,7 @@ import {PlatformScope} from '../../common/decorators/platform-scope.decorator';
 import {RequirePermission} from '../../common/decorators/require-permission.decorator';
 import {RequestWithAuthenticatedUser} from '../../common/interfaces/authenticated-user.interface';
 import {SalesCommercialService} from './sales-commercial.service';
+import {offerDocumentModel} from './sales-offer-document';
 import {proposalDocumentModel,renderProposalPdf} from './sales-proposal-document';
 @Controller('admin/sales/commercial') @PlatformScope()
 export class SalesCommercialController{
@@ -13,6 +14,10 @@ export class SalesCommercialController{
  async preview(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string){return proposalDocumentModel(await this.sales.approvedProposal(req.authenticatedUser.userId,id));}
  @Get('proposals/:id/pdf') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store') @Header('X-Content-Type-Options','nosniff')
  async pdf(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string){const model=proposalDocumentModel(await this.sales.approvedProposal(req.authenticatedUser.userId,id));return new StreamableFile(await renderProposalPdf(model),{type:'application/pdf',disposition:`attachment; filename="energyos-proposta-${id}.pdf"`});}
+ @Get('proposals/:id/conditions/:revision/preview') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
+ async offerPreview(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string,@Param('revision') revision:string){return offerDocumentModel(await this.sales.offerDocument(req.authenticatedUser.userId,id,revision));}
+ @Get('proposals/:id/conditions/:revision/pdf') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store') @Header('X-Content-Type-Options','nosniff')
+ async offerPdf(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string,@Param('revision') revision:string){const model=offerDocumentModel(await this.sales.offerDocument(req.authenticatedUser.userId,id,revision));return new StreamableFile(await renderProposalPdf(model),{type:'application/pdf',disposition:`attachment; filename="energyos-condicoes-${id}-r${Number(revision)}.pdf"`});}
  @Get('proposals/:id/terms') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
  terms(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string){return this.sales.offerTerms(req.authenticatedUser.userId,id);}
  @Post('offer-terms') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')

@@ -1,0 +1,23 @@
+import {offerDocumentModel} from './sales-offer-document';
+import {renderProposalPdf} from './sales-proposal-document';
+import {SalesCommercialService} from './sales-commercial.service';
+import {SalesCommercialController} from './sales-commercial.controller';
+import {Reflector} from '@nestjs/core';
+import {PERMISSIONS_KEY} from '../../common/decorators/require-permission.decorator';
+import {BadRequestException,ServiceUnavailableException,ConflictException,ForbiddenException} from '@nestjs/common';
+const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const data={proposal:{id,receipt:id,status:'APPROVED_INTERNAL',snapshot:{currency:'BRL',planName:'Fixture Basic',units:5,users:8,documentsLimit:800,monthlyRecurringCents:260000,annualRecurringCents:3120000,policy:{starts:'2020-01-01',ends:'2099-12-31'}}},terms:{revision:2,status:'APPROVED_INTERNAL',approvedAt:'2026-10-10',definition:{validUntil:'2026-10-31',contractTerm:'12 meses',paymentTerms:'Transferência bancária',implementationTerms:'Condições de implantação',supportTerms:'Suporte por chamados',renewalCancellationTerms:'Renovação automática com IPCA positivo.',exclusions:'Módulos adicionais fora do escopo'}},asOfDate:'2026-10-10',expired:false};
+describe('Private consolidated documents',()=>{
+ const rpc=jest.fn();let service:SalesCommercialService;
+ beforeEach(()=>{rpc.mockReset();rpc.mockResolvedValue({data,error:null});service=new SalesCommercialService({getClient:()=>({rpc})} as any);});
+ it('requires the explicit revision and authenticated actor',async()=>{await service.offerDocument(id,id,'2');expect(rpc).toHaveBeenCalledWith('read_platform_sales_offer_document',{p_actor:id,p_proposal:id,p_revision:2});});
+ it.each(['0','-1','1.5','bad','2147483648','1e2',''])('rejects invalid revision %s before RPC',revision=>{expect(()=>service.offerDocument(id,id,revision)).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it('rejects an invalid proposal ID',()=>expect(()=>service.offerDocument(id,'bad','2')).toThrow(BadRequestException));
+ it.each([['42501',ForbiddenException],['P3611',ConflictException]])('preserves access errors %s',async(code,kind)=>{rpc.mockResolvedValue({data:null,error:{code}});await expect(service.offerDocument(id,id,'2')).rejects.toBeInstanceOf(kind);});
+ it('rejects output for another revision',async()=>{rpc.mockResolvedValue({data:{...data,terms:{...data.terms,revision:3}},error:null});await expect(service.offerDocument(id,id,'2')).rejects.toBeInstanceOf(ServiceUnavailableException);});
+ it.each([null,{...data,terms:{...data.terms,status:'DRAFT'}},{...data,terms:{...data.terms,status:'CHECKED'}},{...data,terms:{...data.terms,definition:{}}},{...data,expired:null}])('fails closed on incomplete or unapproved data',value=>expect(()=>offerDocumentModel(value)).toThrow(ServiceUnavailableException));
+ it('preserves prices and omits personal/author data',()=>{const before=JSON.stringify(data);const model=offerDocumentModel({...data,email:'private@example.com',actor_id:'private-author',terms:{...data.terms,justification:'private-justification'}});const result=JSON.stringify(model);expect(result).toContain('2.600,00');expect(result).toContain('31.200,00');expect(result).toContain('800');expect(result).toContain('IPCA');expect(result).not.toMatch(/private/);expect(JSON.stringify(data)).toBe(before);});
+ it('marks expired historical conditions explicitly',()=>expect(JSON.stringify(offerDocumentModel({...data,expired:true}))).toContain('VENCIDA'));
+ it('requires Owner permission and no-store on both routes',()=>{const r=new Reflector();for(const method of ['offerPreview','offerPdf'] as const){expect(r.get(PERMISSIONS_KEY,SalesCommercialController.prototype[method])).toEqual(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']);expect(r.get('__headers__',SalesCommercialController.prototype[method])).toContainEqual({name:'Cache-Control',value:'no-store'});}});
+ it('renders long approved terms without changing the model',async()=>{const model=offerDocumentModel({...data,terms:{...data.terms,definition:{...data.terms.definition,supportTerms:'Suporte técnico e interpretação de informações. '.repeat(20)}}});const before=JSON.stringify(model);const pdf=await renderProposalPdf(model);expect(pdf.subarray(0,4).toString()).toBe('%PDF');expect(JSON.stringify(model)).toBe(before);});
+});
