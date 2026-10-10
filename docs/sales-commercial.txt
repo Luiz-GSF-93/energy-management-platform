@@ -1,0 +1,15 @@
+ENERGYOS — Política e propostas internas (etapa 2B)
+
+Owner: Interesse comercial > Configurar políticas comerciais. Cada plano tem uma única revisão corrente; revisões anteriores são imutáveis. Uma revisão substitui a anterior imediatamente para novas propostas, mesmo com início futuro. Isso evita faixas/vigências concorrentes dentro do mesmo plano; não seleciona preços entre planos automaticamente. Plano inativo ou com versão alterada exige revisão da política.
+
+Definir base pacote/unidade, limites, centavos mensais, desconto anual em pontos-base, vigência, impostos/inclusões explícitos e adicionais opcionais mensais ou únicos. Nenhum preço ilustrativo foi semeado. Desconto anual só sobre a base: round(base mensal × 12 × (10000-desconto)/10000). PostgreSQL numeric/round half-up; extras mensais ×12 sem desconto; únicos somados uma vez. BRL, limites inteiros, total <=9 trilhões de centavos para serialização segura. Motor commercial-cents-v1 executado na RPC transacional do backend.
+
+Solicitação > Conferir > Propostas internas: escolher política/periodicidade/adicionais, justificar e preparar rascunho. Conferir valores abre modal com metodologia, condições preservadas e histórico. Fluxo: DRAFT -> CHECKED -> APPROVED_INTERNAL. Aprovação interna não significa envio/publicação ao cliente. Nenhuma assinatura, cobrança, licença, usuário ou conta é criada.
+
+Migração aditiva 20261010_platform_sales_commercial.sql. Três tabelas isoladas, RLS, privilégios diretos revogados inclusive service_role, quatro RPCs SECURITY DEFINER/search_path pg_catalog com Owner ativo. Handlers autenticados PlatformScope e permissão por método. Ator vem do JWT, não do formulário. Imutabilidade, controle otimista, locks por política/proposta/protocolo, idempotência por UUID+conteúdo. Apenas referência lógica ao protocolo, sem FK e sem cópia de telefone/e-mail/empresa. A retenção de contato continua funcionando; propostas preservadas não geram novas propostas com protocolo apagado. Justificativas devem evitar dados pessoais.
+
+Consultas: políticas correntes e catálogo ativo; últimas 50 propostas por protocolo, incluindo histórico completo. Políticas antigas aparecem no snapshot das propostas. Dados históricos não dependem de nome atual do plano/cadastro. Nome do ator registrado na época quando disponível no cadastro; ausência explícita e IDs originais preservados. Sem alterar auditorias existentes. Política/preço comercial não modifica monthly_price_brl_cents do catálogo nem snapshots das licenças.
+
+Instalação: aplicar migração aditiva após dry-run e depois publicar backend/frontend. Sem variáveis novas, credenciais ou serviços pagos. Não cadastrar preços de teste em produção. Homologação financeira exige o Owner preencher condições reais aprovadas antes de gerar proposta real.
+
+Testes: node test/sales-commercial-sql.cjs; jest --runInBand --runTestsByPath src/modules/sales-intake/sales-commercial.spec.ts e regressão dos demais sales*.spec; tsc backend/frontend. Banco descartável, sem contatos reais. Próximas fases (não autorizadas nesta entrega): proposta externa autorizada, assinatura, provedor financeiro/webhooks e ativação comercial.
