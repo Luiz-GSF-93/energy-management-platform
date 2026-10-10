@@ -1,4 +1,5 @@
 'use client';
+import AuditIdentity,{type Identity} from '../../components/AuditIdentity';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, apiRequest } from '@/app/lib/api/client';
 import { Alert, Button } from '@/app/components/ui';
@@ -17,7 +18,7 @@ export function ReopenControls({detail,canApprove,onUpdated}:{detail:WorkDetail;
  <Button disabled={busy||retry||!checked||reason.trim().length<20} onClick={()=>void send({requestId:crypto.randomUUID(),expectedRevision:detail.revision,reason:reason.trim(),checkedDocument:true})}>Criar reabertura</Button>
  {retry?<Button disabled={busy} onClick={()=>void send(pending.current!)}>Repetir a mesma reabertura</Button>:null}</section>;
 }
-type Performance={id:string;admissionId:string;unitId:string;unitName:string;customerName:string;generation:number;version:number;closedAt:string;calendarMs:number;activeMs:number;responsibles:{actorId:string;actorName:string;activeMs:number}[]};
+type Performance={id:string;admissionId:string;unitId:string;unitName:string;customerName:string;generation:number;version:number;closedAt:string;calendarMs:number;activeMs:number;responsibles:{authorIdentity?:Identity|null;actorId:string;actorName:string;activeMs:number}[]};
 type Page={rows:Performance[];nextCursor:string|null};
 const minutes=(ms:number)=>(ms/60000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' min';
 export function PerformanceComparisons({refreshKey,admissionId}:{refreshKey:string;admissionId?:string}){
@@ -34,6 +35,6 @@ export function PerformanceComparisons({refreshKey,admissionId}:{refreshKey:stri
  <table><thead><tr><th>Comparar</th><th>Cliente e unidade</th><th>Processo / versão</th><th>Tempo ativo</th><th>Duração total</th><th>Encerramento</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><input type="checkbox" aria-label={'Comparar '+r.unitName+', processo '+r.generation+', versão '+r.version} checked={selected.includes(r.id)} disabled={!selected.includes(r.id)&&(selected.length>=2||!!before&&before.unitId!==r.unitId)} onChange={e=>setSelected(old=>e.target.checked?[...old,r.id]:old.filter(id=>id!==r.id))}/></td><td>{r.customerName} · {r.unitName}</td><td>{r.generation} / {r.version}</td><td>{minutes(r.activeMs)}</td><td>{minutes(r.calendarMs)}</td><td>{new Date(r.closedAt).toLocaleString('pt-BR')}</td></tr>)}</tbody></table>
  {chosen.length?<figure><figcaption>Tempo ativo e duração total por versão encerrada (minutos)</figcaption><svg viewBox="0 0 640 180" role="img" aria-label="Comparativo de tempos dos processos encerrados" style={{width:'100%',maxHeight:220}}>{chosen.map((r,i)=>{const max=Math.max(1,...chosen.map(v=>v.calendarMs),...chosen.map(v=>v.activeMs));return <g key={r.id}><text x="8" y={25+i*80} fill="currentColor">Processo {r.generation} · v{r.version}</text><rect x="170" y={10+i*80} width={420*r.activeMs/max} height="20" fill="var(--color-primary)"><title>Tempo ativo: {minutes(r.activeMs)}</title></rect><rect x="170" y={36+i*80} width={420*r.calendarMs/max} height="20" fill="#8297b7"><title>Duração total: {minutes(r.calendarMs)}</title></rect></g>;})}</svg><p>Azul: tempo ativo · Cinza: duração total. Valores exatos na tabela.</p></figure>:null}
  {before&&after?<p>Variação de esforço entre os processos {before.generation} e {after.generation}: {minutes(after.activeMs-before.activeMs)}. Variação da duração total: {minutes(after.calendarMs-before.calendarMs)}.</p>:null}
- {chosen.map(r=><article key={r.id}><h3>{r.unitName} · processo {r.generation}</h3><ul>{r.responsibles.map(a=><li key={a.actorId}>{a.actorName}: {minutes(a.activeMs)} de atividade registrada.</li>)}</ul></article>)}
+ {chosen.map(r=><article key={r.id}><h3>{r.unitName} · processo {r.generation}</h3><ul>{r.responsibles.map(a=><li key={a.actorId}><AuditIdentity historical title="Responsável no período" identity={a.authorIdentity} id={a.actorId} recordedName={a.actorName}/>{minutes(a.activeMs)} de atividade registrada.</li>)}</ul></article>)}
  {page.nextCursor?<Button variant="secondary" disabled={busy} onClick={()=>void more()}>Mais versões de desempenho</Button>:null}</section>;
 }

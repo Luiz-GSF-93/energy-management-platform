@@ -1,3 +1,4 @@
+import {auditAuthorNames} from '../contracts/services/audit-author-names';
 import {energyReference} from '../energy-prices/energy-price-score';
 import {AclFinancialReviewDto} from './acl-admission.dto';
 import {financialComparison,financialDraft} from './acl-financial-comparison';
@@ -68,6 +69,16 @@ export class AclAdmissionService {
     if (!Array.isArray(value) || value.length > 51 || value.some(v => !v || typeof v[key] !== 'string')) throw new InternalServerErrorException('Lista de adesões inválida.');
     const rows = value.slice(0, 50); return { rows, nextCursor: value.length === 51 ? rows[49][key] as string : null };
   }
+  private async auditPage(page:any,table:string,admission:string,t:TenantContext) {
+    if(!page.rows.length)return page;
+    const ids=page.rows.map((r:any)=>r.id);
+    let metadata:any[]=[];try{const q=await this.db.getClient().from(table).select('id,organization_id,customer_id,created_by,actor_name').eq('organization_id',t.organizationId).eq('admission_id',admission).in('id',ids);if(!q.error&&Array.isArray(q.data))metadata=q.data.filter((r:any)=>r.organization_id===t.organizationId&&ids.includes(r.id));}catch{/* Preserve authorized history if identity metadata is unavailable. */}
+    const named=await auditAuthorNames(this.db.getClient(),t.organizationId,metadata);
+    const reviewTable=table==='acl_admission_evidence'?'acl_admission_evidence_reviews':'acl_economic_study_reviews',foreignKey=table==='acl_admission_evidence'?'evidence_id':'study_id';
+    let reviews:any[]=[];try{const q=await this.db.getClient().from(reviewTable).select('organization_id,'+foreignKey+',reviewed_by,actor_name').eq('organization_id',t.organizationId).in(foreignKey,ids);if(!q.error&&Array.isArray(q.data))reviews=q.data.filter((r:any)=>r.organization_id===t.organizationId&&ids.includes(r[foreignKey]));}catch{/* Identity directory unavailable. */}
+    const reviewNames=await auditAuthorNames(this.db.getClient(),t.organizationId,reviews);
+    return {...page,rows:page.rows.map((r:any)=>({...r,authorIdentity:named.find(v=>v.id===r.id)?.auditIdentities.created_by??null,...(r.review?{review:{...r.review,authorIdentity:reviewNames.find(v=>v[foreignKey]===r.id)?.auditIdentities.reviewed_by??null}}:{})}))};
+  }
   private async requestAllowed(id: string,t: TenantContext,write=false) {
     if(!UUID.test(id))throw new BadRequestException('Adesão inválida.');
     await this.allowed(t,write);
@@ -100,7 +111,9 @@ export class AclAdmissionService {
     await this.allowed(t);
     const value = await this.rpc('acl_read', { ...this.params(t), p_id: id, p_after: null });
     if (!Array.isArray(value) || value.length !== 1 || value[0].organizationId !== t.organizationId || value[0].id !== id) throw new InternalServerErrorException('Escopo da adesão inválido.');
-    return value[0];
+    const row=value[0];if(!Array.isArray(row.stages))return row;const active=(row.stages??[]).flatMap((stage:any)=>stage.active?[{...stage.active,organization_id:t.organizationId,customer_id:row.customerId}]:[]);
+    const actors=await auditAuthorNames(this.db.getClient(),t.organizationId,active);
+    return {...row,stages:(row.stages??[]).map((stage:any)=>({...stage,...(stage.active?{active:{...stage.active,authorIdentity:actors.find(a=>a.actorId===stage.active.actorId)?.auditIdentities.actorId??null}}:{})}))};
   }
   async create(input: unknown, t: TenantContext) {
     const dto = await validateWriteDto(CreateAclAdmissionDto, input as CreateAclAdmissionDto); await this.allowed(t, true);
@@ -147,8 +160,8 @@ export class AclAdmissionService {
   }
   async evidenceList(id: string, q: unknown, t: TenantContext, sources = false) {
     const after = aclCursor(q,sources); await this.evidenceAllowed(id,t);
-    return this.page(await this.rpc(sources?'acl_evidence_sources':'acl_evidence_read',{
-      ...this.params(t),p_id:id,p_after: sources ? after || '' : after }), 'id');
+    const page=this.page(await this.rpc(sources?'acl_evidence_sources':'acl_evidence_read',{
+      ...this.params(t),p_id:id,p_after: sources ? after || '' : after }), 'id');return sources?page:this.auditPage(page,'acl_admission_evidence',id,t);
   }
   async historySimulation(id:string,input:unknown,t:TenantContext){
     const b=input as {evidenceId:string;tariffs:unknown};
@@ -179,7 +192,7 @@ export class AclAdmissionService {
     // Source and target each pass relationship, tenant, permissions and license checks.
     await this.evidenceAllowed(b.templateAdmissionId,t);await this.one(b.templateAdmissionId,t);
     const visible=await this.studies(b.templateAdmissionId,{},t);
-    const study=visible.rows.find(v=>v.id===b.templateStudyId);
+    const study=visible.rows.find((v:any)=>v.id===b.templateStudyId);
     if(!study)throw new NotFoundException('Modelo indisponível neste escopo.');
     const source=await this.rpc('acl_history_simulation_source',{...this.params(t),p_id:id,p_evidence:b.evidenceId});
     if(source?.evidenceId!==b.evidenceId||!source.history)throw new InternalServerErrorException('Histórico atual aprovado indisponível.');
@@ -188,7 +201,7 @@ export class AclAdmissionService {
   }
   async studies(id:string,q:unknown,t:TenantContext){
     const after=aclCursor(q);await this.evidenceAllowed(id,t);
-    return this.page(await this.rpc('acl_economic_study_read',{...this.params(t),p_id:id,p_after:after}),'id');
+    return this.auditPage(this.page(await this.rpc('acl_economic_study_read',{...this.params(t),p_id:id,p_after:after}),'id'),'acl_economic_studies',id,t);
   }
   async saveStudy(id:string,input:unknown,t:TenantContext){
     const d=await validateWriteDto(AclStudySaveDto,input as AclStudySaveDto);
@@ -291,13 +304,17 @@ export class AclAdmissionService {
     await this.allowed(t);
     if(t.accessMode!=='platform_operation' && !t.permissions?.includes('8f105b02-4443-49de-b188-847e0284e7ed')) throw new ForbiddenException('Desempenho exige acesso a documentos.');
     await this.licenses.requireEntitlement(t.organizationId,'document_management');
-    return this.page(await this.rpc('acl_performance_read',{...this.params(t),p_after:after,p_unit:filters.unitId??null}),'id');
+    const page=this.page(await this.rpc('acl_performance_read',{...this.params(t),p_after:after,p_unit:filters.unitId??null}),'id');
+    const actors=await auditAuthorNames(this.db.getClient(),t.organizationId,page.rows.flatMap((r:any)=>(r.responsibles??[]).map((a:any)=>({...a,organization_id:t.organizationId}))));
+    return {...page,rows:page.rows.map((r:any)=>({...r,responsibles:(r.responsibles??[]).map((a:any)=>({...a,authorIdentity:actors.find(v=>v.actorId===a.actorId&&v.actorName===a.actorName)?.auditIdentities.actorId??null}))}))};
   }
   async closureRead(id: string, t: TenantContext) {
     await this.evidenceAllowed(id,t);
     const value=await this.rpc('acl_closure_read',{...this.params(t),p_id:id});
     if (value?.performance && (value.performance.body?.organizationId!==t.organizationId || value.performance.body?.admissionId!==id)) throw new InternalServerErrorException('Escopo do fechamento inválido.');
-    return value;
+    if(!value?.performance)return value;
+    const body=value.performance.body,identities=await auditAuthorNames(this.db.getClient(),t.organizationId,[{organization_id:t.organizationId,customer_id:body.customerId,actor_id:body.closedBy,actor_name:body.closedByName},...(body.evidence??[]).map((e:any)=>({...e,organization_id:t.organizationId,customer_id:body.customerId}))]);
+    return {...value,performance:{...value.performance,closedByIdentity:identities[0]?.auditIdentities.actor_id??null,evidenceIdentities:Object.fromEntries(identities.slice(1).map((e:any)=>[e.stageKey,e.auditIdentities.reviewerId??null]))}};
   }
   async closureCommand(id: string, input: unknown, t: TenantContext) {
     const dto=await validateWriteDto(AclClosureCommandDto,input as AclClosureCommandDto);

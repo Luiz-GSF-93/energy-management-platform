@@ -1,8 +1,9 @@
 'use client';
+import AuditIdentity,{type Identity} from '../../components/AuditIdentity';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, apiRequest } from '@/app/lib/api/client';
 import { Alert, Button } from '@/app/components/ui';
-export type WorkDetail={id:string;status:string;revision:number;generation?:number;previousId?:string;stages:{key:string;status:string;elapsedMs:number;evidenceRef?:string;active?:{actorId:string;actorName:string;startedAt:number}}[]};
+export type WorkDetail={id:string;status:string;revision:number;generation?:number;previousId?:string;stages:{key:string;status:string;elapsedMs:number;evidenceRef?:string;active?:{authorIdentity?:Identity|null;actorId:string;actorName:string;startedAt:number}}[]};
 type WorkBody={requestId:string;expectedRevision:number;stageKey:string;action:'START'|'PAUSE'|'RESUME';pauseReason?:string;reason?:string};
 const names:Record<string,string>={registration:'Cadastro',invoices:'Faturas',feasibility:'Viabilidade',modality:'Modalidade',contracts:'Contratação',termination:'Denúncia',metering:'Medição',custody:'Conta e adesão',technical:'Habilitação técnica','contract-registration':'Registro de contratos',validation:'Validação',supply:'Início do suprimento'};
 const states:Record<string,string>={NOT_STARTED:'Não iniciada',RUNNING:'Em atividade',PAUSED:'Pausada',COMPLETED:'Concluída',SKIPPED:'Dispensada'};
@@ -51,7 +52,7 @@ export default function WorkControls({detail,actorId,canWork,onUpdated,fixedStag
  {selected?.status==='RUNNING'&&selected.active?.actorId===actorId?<><label htmlFor="acl-pause-reason">Motivo da pausa</label><select id="acl-pause-reason" value={pauseReason} disabled={busy||retry} onChange={e=>setPauseReason(e.target.value)}><option value="AWAITING_CUSTOMER">Aguardando cliente</option><option value="ENDING_ACTIVITY">Encerrando atividade</option><option value="OTHER">Outro</option></select>
  {pauseReason==='OTHER'?<><label htmlFor="acl-pause-note">Justificativa</label><textarea id="acl-pause-note" value={reason} maxLength={500} disabled={busy||retry} onChange={e=>setReason(e.target.value)}/></>:null}
  <Button disabled={busy||retry||stopped||pauseReason==='OTHER'&&reason.trim().length<10} onClick={()=>void command('PAUSE')}>Pausar atividade</Button></>:null}
- {selected?.status==='RUNNING'&&selected.active?.actorId!==actorId?<p>Atividade em uso por {selected.active?.actorName||'outro Consultor'}.</p>:null}
+ {selected?.status==='RUNNING'&&selected.active?.actorId!==actorId?<AuditIdentity title="Responsável pela atividade" identity={selected.active?.authorIdentity} id={selected.active?.actorId}/>:null}
  </>:null}
  {retry?<Button disabled={busy} onClick={()=>void command(pending.current!.action,true)}>Repetir o mesmo comando</Button>:null}
  <Button variant="secondary" disabled={busy} onClick={()=>void refresh()}>Atualizar processo</Button>
