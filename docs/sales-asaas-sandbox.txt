@@ -1,0 +1,33 @@
+EnergyOS — etapa 4A: base Asaas sandbox, desligada por padrão
+
+Escopo: acompanhamento privado de cobranças de teste existentes, fontes comerciais preservadas, recepção autenticada e deduplicada e conferência pontual por GET. Não cria cliente, cobrança, recorrência, nota fiscal, transferência, estorno, assinatura documental ou licença. Nenhuma chamada externa executada na implantação.
+
+Owner: Interesse comercial > Financeiro comercial · Asaas sandbox. Módulo recolhido, lista paginada, filtros de empresa/proposta/evento, período de recebimento e situação; detalhes e inserção em modal. Financeiro/Suporte/org/portal continuam bloqueados; nenhuma autorização global modificada. As permissões atuais do Financeiro não autorizam consulta dos novos registros. Ampliar mediante proposta específica.
+
+Novas tabelas privadas: platform_sales_asaas_bindings, platform_sales_asaas_inbox, platform_sales_asaas_checks. RLS ligada, acesso direto revogado inclusive service_role; RPC restrita a service_role. Comandos internos revalidam Owner ativo na base; apenas a ação inbox, invocada pelo serviço autenticador do webhook, utiliza ator nulo. Evento recebido não representa recebimento confirmado. Sem vínculos com cadastros de unidades, organizações e licenças; fonte é a proposta comercial aprovada.
+
+Binding é referência interna a primeiro ciclo de cobrança existente em sandbox. Valor initialTotalCents (recorrente inicial + adicionais únicos) vem do snapshot aprovado, em BRL. Não cadastrar valor pelo navegador. Nome da empresa é registrado do lead referenciado pela proposta, sem copiar contatos; nome/ID do ator preservados, ausência explícita. Evento é vinculado por payment_id; durante conferência exige customer, externalReference=id do binding e valor correspondente. Não aceitar um ID remoto como autorização.
+
+Webhook POST /api/v1/public/sales/asaas-sandbox/webhook: header asaas-access-token, segredo independente de 32–255 caracteres. Comparação de bytes em tempo constante quando tamanhos coincidem. Limite JSON normalizado 16KiB; rejeita eventos não PAYMENT_; body parser já existente mantém sua proteção global. Preserva somente campos permitidos, não payload remoto bruto, dados pessoais, links ou segredo. Evento ID é deduplicado em transação/lock; alteração de conteúdo reutilizando ID retorna conflito. HTTP200 somente após persistência. Não registra webhook no provedor nesta etapa.
+
+Owner POST /api/v1/admin/sales/asaas/:id/verify: autorização precede GET. Consulta fixa https://api-sandbox.asaas.com/v3/payments/{id}, sem redirect, sem body, timeout 10s, resposta <=64KiB. Nenhum método de criação ou mutação remota implementado. Chave de ambiente separada e habilitação adicional necessária. Nunca expõe mensagens de erro remotas nem chave. Normalização monetária aceita somente números não negativos com precisão de centavos; netValue ausente permanece null.
+
+Conferência é histórico append-only. PROCESSING adquire lease de 2min; interrupção permite retomada pelo Owner, retorno antigo é rejeitado. VERIFIED apenas se resumo remoto coincide com evento, vínculo e status compatível do evento. Divergência de estado/evento fora de ordem, desconhecido, netValue alterado ou falta de vínculo não reconhece pagamento: REVIEW ou UNLINKED. Eventos já conferidos permanecem evidência histórica; mudanças posteriores são eventos separados, não saldo financeiro consolidado. Não há ativação por status VERIFIED. Nenhuma criação remota é repetida: não há operações de criação nesta fase.
+
+Configuração futura, somente backend, sem valores no repositório:
+SALES_ASAAS_SANDBOX_ENABLED (ausente/false na implantação)
+SALES_ASAAS_SANDBOX_CALLS_ENABLED (ausente/false; bloqueia mesmo GET)
+SALES_ASAAS_BASE_URL = https://api-sandbox.asaas.com/v3 (exata; URL de produção recusada)
+SALES_ASAAS_SANDBOX_API_KEY (registro seguro pelo responsável)
+SALES_ASAAS_SANDBOX_WEBHOOK_TOKEN (independente da chave da API)
+Não habilitar flags, criar credenciais, aceitar termos ou cadastrar webhook sem homologação/configuração posterior. Nenhum destes valores foi configurado nesta implantação.
+
+Migração: 20261010_platform_sales_asaas_sandbox.sql. Executar primeiro em transação de ensaio com rollback e revisar RLS/privilégios, contagens anteriores e guardas. Produção somente com flags desligadas. Preservar tabelas comerciais anteriores. Desativação pela flag bloqueia APIs e mantém registros para auditoria; não apagar históricos.
+
+Testes: test/sales-asaas-sql.cjs reaproveita fixtures descartáveis das condições comerciais; inclui Owner/Finance/Suporte/anônimo, inacessibilidade cadastro, renomeação, imutabilidade, fonte aprovada, duplicação/conflito, lease/recovery e reordenação. sales-asaas.spec.ts valida segredos, flag, minimização, persistência antes ACK, rede bloqueada, GET único, redirects, precisão monetária e erros sem segredo. Dados controlados exclusivamente em testes automatizados, nenhum dado fictício na aplicação ou produção.
+
+Pendências de próximas fases: testes reais autorizados no sandbox; revisão contratual e assinatura documental; criação controlada de clientes/cobranças/recorrência; financeiro completo com taxas detalhadas, conciliação, estornos e fiscal; provisionamento. Custos existentes da plataforma não são tratados como recebimentos destas vendas. Não declarar 4–6 concluídas com a entrega 4A.
+
+Referências: https://docs.asaas.com/docs/sandbox
+https://docs.asaas.com/reference/recuperar-uma-unica-cobranca
+https://docs.asaas.com/docs/receba-eventos-do-asaas-no-seu-endpoint-de-webhook
