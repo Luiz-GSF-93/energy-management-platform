@@ -1,5 +1,6 @@
 'use client';
 import dynamic from 'next/dynamic';
+import AuditIdentity,{type Identity} from '../../components/AuditIdentity';
 import {FormEvent,useEffect,useRef,useState} from 'react';
 import {MapPinned,Search,ArrowUpRight,MapPin,RefreshCw,Building2,CheckCircle2,LocateFixed,TriangleAlert} from 'lucide-react';
 import BackofficeShell from '@/app/components/BackofficeShell';
@@ -17,7 +18,7 @@ import PlatformEnergyMap from './PlatformEnergyMap';
 import GeocodingReview from './GeocodingReview';
 import PublishedMapIndicators from './PublishedMapIndicators';
 const Canvas=dynamic(()=>import('./MapCanvas'),{ssr:false,loading:()=> <div className={styles.mapFrame}><div className={styles.mapNotice}>Preparando mapa…</div></div>});
-type History={revision:number;reason:string;actor_id:string;recorded_at:string;location:{precision:keyof typeof precisionLabels}};
+type History={auditIdentities?:Record<string,Identity>;revision:number;reason:string;actor_id:string;recorded_at:string;location:{precision:keyof typeof precisionLabels}};
 const states='AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ');
 
 function EnergyMap({organizationId}:{organizationId:string}) {
@@ -80,7 +81,7 @@ function EnergyMap({organizationId}:{organizationId:string}) {
      </dl>{typeof selected.distanceKm==='number'?<p>Distância ao centro: {selected.distanceKm.toLocaleString('pt-BR')} km (aproximada).</p>:null}{selected.locationStatus==='STALE'?<Alert>O cadastro mudou após a conferência. Revise a localização antes de recolocá-la no mapa.</Alert>:null}
      {data?.canManage?<Button onClick={()=>openEdit(selected)}><LocateFixed size={16}/>{selected.revision?'Revisar localização':'Localizar unidade'}</Button>:null}
           {data?.canManage?<GeocodingReview key={selected.id+selected.addressHash+selected.revision} unit={selected} onConfirmed={()=>setRefresh(v=>v+1)}/>:null}<PublishedMapIndicators unit={selected}/><a className={styles.link} href="/backoffice/setup">Abrir clientes e unidades <ArrowUpRight size={15}/></a>
-     {history.length?<details><summary>Histórico de localização ({history.length})</summary>{history.map(h=><p key={h.revision}><strong>Versão {h.revision}</strong><br/>{new Date(h.recorded_at).toLocaleString('pt-BR')}<br/>{h.reason}</p>)}</details>:null}
+     {history.length?<details><summary>Histórico de localização ({history.length})</summary>{history.map(h=><div key={h.revision}><strong>Versão {h.revision}</strong><br/>{new Date(h.recorded_at).toLocaleString('pt-BR')}<br/>{h.reason}<AuditIdentity historical identity={h.auditIdentities?.actor_id} id={h.actor_id}/></div>)}</details>:null}
     </>:<div className={styles.emptyDetail}><MapPinned size={36}/><h2>Explore sua carteira</h2><p>Escolha uma unidade no mapa ou na lista para ver seus detalhes e conferir a localização.</p></div>}</aside>
    </div>
    <div className={styles.listHeader}><h2>Unidades da carteira</h2><span>{loading?'Atualizando…':data?`${data.total?offset+1:0}–${Math.min(offset+data.rows.length,data.total)} de ${data.total}`:'Consulta indisponível'}</span></div>

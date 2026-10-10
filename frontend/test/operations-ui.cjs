@@ -5,7 +5,7 @@ global.IS_REACT_ACT_ENVIRONMENT=true;
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
 let calls=[],scope='organization',alerts=[];const hasPermission=()=>true;
-const apiRequest=async(url)=>{calls.push(url);assert.ok(url.startsWith('/api/v1/'),'Deployed API requires version prefix');if(url==='/api/v1/operations/notifications?sources=1')return {rows:alerts};if(url.includes('/operations/')&&!url.endsWith('/responsible'))return {rows:[],canManage:true,canPublish:false};return [];};
+const apiRequest=async(url)=>{calls.push(url);assert.ok(url.startsWith('/api/v1/'),'Deployed API requires version prefix');if(url==='/api/v1/customer-notices')return {customers:[],units:[],policies:[],deliveries:[],providers:{enabled:false,email:false,sms:false,whatsapp:{}}};if(url==='/api/v1/operations/notifications?sources=1')return {rows:alerts};if(url.includes('/operations/')&&!url.endsWith('/responsible'))return {rows:[],canManage:true,canPublish:false};return [];};
 const original=Module._load;Module._load=function(name,parent,main){
  if(name==='@/app/providers')return {useAuth:()=>({context:scope==='global'?{scope,user:{id:'actor'}}:{scope,user:{id:'actor'},currentOrganization:{id:'org-a',permissions:[]}},hasPermission})};
  if(name==='@/app/lib/api/client')return {apiRequest};

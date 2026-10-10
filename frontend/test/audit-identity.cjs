@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,file);
+const AuditIdentity=require('../app/components/AuditIdentity.tsx').default;
+const identity={id:'original-id',recordedName:'Ana Original',currentName:'Ana Renomeada',lookup:'AVAILABLE',currentRole:'gestor',currentAffiliation:'internal',currentCustomer:null};
+let count=0;const check=(value,message)=>{assert.ok(value,message);count++;};
+const view=props=>renderToStaticMarkup(React.createElement(AuditIdentity,props));
+let html=view({identity,historical:true});
+check(html.includes('Ana Original'),'Historic name retained');check(html.includes('Nome atual: Ana Renomeada'),'Rename labelled as current');check(html.includes('Função na época: Não registrada'),'Current role not asserted as historic');check(html.includes('Função atual: Gestor'),'Current role separate');check(html.includes('Identificador original: original-id'),'Original ID retained');
+html=view({identity:{...identity,currentName:null,lookup:'UNAVAILABLE'},historical:true});check(html.includes('Ana Original'),'Directory failure retains recorded author');check(html.includes('Cadastro indisponível no momento'),'Directory outage explicit');
+html=view({identity:{...identity,recordedName:null,currentName:null,lookup:'MISSING'},recordedName:'Consultor',historical:true});check(html.includes('Nome não registrado na época'),'Role never substitutes for personal name');check(!html.includes('>Consultor<'),'Generic role not shown as name');
+html=view({identity,historical:true,recordedRole:'operacional',recordedAffiliation:'external',company:{id:'c',currentName:'Empresa'}});check(html.includes('Função na época: Operador'),'Existing historical role retained');check(html.includes('Vínculo na época: Externo'),'Existing historical affiliation retained');check(html.includes('Empresa do registro (nome atual): Empresa'),'Company date semantics explicit');
+console.log(count+' identity rendering checks passed');

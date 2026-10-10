@@ -18,4 +18,28 @@ describe('private evidence exchange boundary',()=>{let service:ClientEvidenceSer
  it('propagates atomic authorization revocation and does not report success',async()=>{db.rpc.mockResolvedValue({error:{code:'P2031'}});await expect(service.append(record,{requestId:randomUUID(),subject:'Assunto',body:'Mensagem',documentIds:[]},t,'agenda')).rejects.toMatchObject({status:403});});
  it('links returned contracts only to a shared original and retains unit/month/type',async()=>{documents.findOne=jest.fn(async()=>({id:doc,customer_id:customer,consumer_unit_id:unit,file_verified:true,document_type:'CONTRACT_ENERGY',reference_month:'2026-08-01'}));jest.spyOn(service,'thread').mockResolvedValue({documents:[{id:doc}]} as any);const file:any={buffer:Buffer.from('pdf')};await service.upload(record,file,t,'agenda',{previousDocumentId:doc});expect(documents.upload).toHaveBeenCalledWith(expect.objectContaining({previousDocumentId:doc,documentType:'CONTRACT_ENERGY',referenceMonth:'2026-08-01',customerId:customer,consumerUnitId:unit}),file,'a',actor);});
  it('rejects unshared originals and OCR invoice returns before upload',async()=>{jest.spyOn(service,'thread').mockResolvedValue({documents:[]} as any);await expect(service.upload(record,{} as any,t,'agenda',{previousDocumentId:doc})).rejects.toMatchObject({status:404});(service.thread as jest.Mock).mockResolvedValue({documents:[{id:doc}]});documents.findOne=jest.fn(async()=>({id:doc,customer_id:customer,consumer_unit_id:unit,file_verified:true,document_type:'INVOICE_DISTRIBUTOR'}));await expect(service.upload(record,{} as any,t,'agenda',{previousDocumentId:doc})).rejects.toMatchObject({status:400});expect(documents.upload).not.toHaveBeenCalled();});
+ it('resolves requester, current responsible and response author independently without writing',async()=>{
+  operations.one.mockResolvedValue({id:record,organization_id:'a',kind:'agenda',customer_id:customer,consumer_unit_id:unit,status:'OPEN',created_by:'requester',responsible_id:'owner',requested_by_name:'Nome original'});
+  rows.customers=[{id:customer,organization_id:'a',company_name:'Empresa'}];rows.consumer_units=[{id:unit,name:'Unidade'}];
+  rows.organization_members=[{organization_id:'a',user_id:'requester',display_name:'Ana Silva'},{organization_id:'a',user_id:'owner',display_name:'Bruno Santos'},{organization_id:'a',user_id:'reply',display_name:'Carla Souza'},{organization_id:'b',user_id:'reply',display_name:'Nome estrangeiro'}];
+  rows.operation_client_messages=[{organization_id:'a',id:'message',actor_id:'reply',actor_name:'Carla original',direction:'INBOUND',document_ids:[]}];
+  const result=await service.thread(record,t,'agenda');
+  expect(result.record.requesterIdentity).toMatchObject({id:'requester',currentName:'Ana Silva',recordedName:'Nome original'});
+  expect(result.record.responsibleIdentity).toMatchObject({id:'owner',currentName:'Bruno Santos'});
+  expect(result.messages[0].auditIdentities.actor_id).toMatchObject({id:'reply',currentName:'Carla Souza',recordedName:'Carla original'});
+  expect(JSON.stringify(result)).not.toContain('Nome estrangeiro');expect(db.rpc).not.toHaveBeenCalled();
+ });
+
+ it('batches portal participant names after verifying the exclusive customer and returns no internal context',async()=>{
+  const role={id:'r',name:'consulta',scope:'organization',organization_id:'a',permissions:[P.DOCUMENTS_REPORTS_VIEW]};
+  rows.organization_members=[{organization_id:'a',user_id:actor,role_id:'r',status:'ACTIVE',affiliation_type:'external',exclusive_customer_id:customer,roles:role,display_name:'Cliente'},{organization_id:'a',user_id:'requester',display_name:'Ana Silva',affiliation_type:'internal',roles:{name:'gestor'}},{organization_id:'a',user_id:'owner',display_name:'Bruno Santos',affiliation_type:'internal',roles:{name:'operacional'}}];
+  rows.customers=[{id:customer,organization_id:'a',status:'ACTIVE',company_name:'Empresa'}];rows.consumer_units=[{id:unit,name:'Unidade'}];
+  rows.operation_records=Array.from({length:5},()=>({id:randomUUID(),organization_id:'a',customer_id:customer,consumer_unit_id:unit,created_by:'requester',responsible_id:'owner',status:'OPEN'}));
+  rows.operation_client_messages=rows.operation_records.map((r:any)=>({record_id:r.id,consumer_unit_id:unit,subject:'Pedido compartilhado'}));
+  const result=await service.portalList({...t,role:'consulta',permissions:[P.DOCUMENTS_REPORTS_VIEW]});
+  expect(result).toHaveLength(5);for(const r of result){expect(r.requesterIdentity).toMatchObject({currentName:'Ana Silva',currentRole:null,currentAffiliation:null,currentCustomer:null});expect(r.responsibleIdentity.currentName).toBe('Bruno Santos');}
+  expect(db.from.mock.calls.filter(([table]:[string])=>table==='organization_members')).toHaveLength(3);
+  expect(db.rpc).not.toHaveBeenCalled();
+ });
+
 });
