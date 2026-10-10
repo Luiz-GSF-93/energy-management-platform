@@ -145,7 +145,7 @@ BEGIN
  VALUES(p_id,p_revision+1,status,prep,p_actor,doc.id,payload) RETURNING id INTO v;
  INSERT INTO public.platform_cost_reconciliation_allocations(version_id,organization_id,amount_minor)
  SELECT v,value->>'organizationId',(value->>'amountMinor')::bigint FROM jsonb_array_elements(payload->'allocations');
- INSERT INTO public.platform_cost_reconciliation_audit(version_id,actor_id,details) VALUES(v,p_actor,jsonb_build_object('action',p_action,'reason',reason,'actorNameAtTime',public.platform_workflow_name(p_actor),'preparedNameAtTime',public.platform_workflow_name(prep),'ip',left(p_ip,80),'agent',left(p_agent,500),'previousVersion',old.id));
+ INSERT INTO public.platform_cost_reconciliation_audit(version_id,actor_id,details) VALUES(v,p_actor,jsonb_build_object('action',p_action,'reason',reason,'actorNameAtTime',public.platform_workflow_name(p_actor),'preparedNameAtTime',public.platform_workflow_name(prep),'actorProfileAtTime',(SELECT profile FROM public.platform_team_members WHERE user_id=p_actor),'ip',left(p_ip,80),'agent',left(p_agent,500),'previousVersion',old.id));
  RETURN jsonb_build_object('id',p_id,'revision',p_revision+1,'status',status);
 END $$;
 CREATE OR REPLACE FUNCTION public.save_platform_support_case(p_actor uuid,p_id uuid,p_revision integer,p_body jsonb,p_ip text,p_agent text) RETURNS jsonb
@@ -175,7 +175,7 @@ BEGIN
  IF old.id IS NULL THEN
  INSERT INTO public.platform_support_cases(id,revision,organization_id,requester_id,assignee_id,title,priority,deadline,status) VALUES(p_id,1,next.organization_id,p_actor,next.assignee_id,next.title,next.priority,next.deadline,next.status);
  ELSE UPDATE public.platform_support_cases SET revision=p_revision+1,organization_id=next.organization_id,assignee_id=next.assignee_id,title=next.title,priority=next.priority,deadline=next.deadline,status=next.status,updated_at=now() WHERE id=p_id; END IF;
- INSERT INTO public.platform_support_case_events(case_id,revision,actor_id,details) VALUES(p_id,p_revision+1,p_actor,jsonb_build_object('reason',reason,'before',CASE WHEN old.id IS NULL THEN NULL ELSE to_jsonb(old) END,'after',(SELECT to_jsonb(c) FROM public.platform_support_cases c WHERE c.id=p_id),'actorNameAtTime',public.platform_workflow_name(p_actor),'requesterNameAtTime',public.platform_workflow_name(coalesce(old.requester_id,p_actor)),'assigneeNameAtTime',public.platform_workflow_name(next.assignee_id),'ip',left(p_ip,80),'agent',left(p_agent,500)));
+ INSERT INTO public.platform_support_case_events(case_id,revision,actor_id,details) VALUES(p_id,p_revision+1,p_actor,jsonb_build_object('reason',reason,'before',CASE WHEN old.id IS NULL THEN NULL ELSE to_jsonb(old) END,'after',(SELECT to_jsonb(c) FROM public.platform_support_cases c WHERE c.id=p_id),'actorNameAtTime',public.platform_workflow_name(p_actor),'requesterNameAtTime',public.platform_workflow_name(coalesce(old.requester_id,p_actor)),'assigneeNameAtTime',public.platform_workflow_name(next.assignee_id),'actorProfileAtTime',profile,'organizationNameAtTime',(SELECT name FROM public.organizations WHERE id=next.organization_id),'ip',left(p_ip,80),'agent',left(p_agent,500)));
  RETURN jsonb_build_object('id',p_id,'revision',p_revision+1,'status',next.status);
 END $$;
 CREATE OR REPLACE FUNCTION public.read_platform_workflows(p_actor uuid,p_kind text,p_page integer DEFAULT 0,p_id uuid DEFAULT NULL,p_filter jsonb DEFAULT '{}'::jsonb) RETURNS jsonb
@@ -193,7 +193,7 @@ BEGIN
  WHERE (NOT p_filter ? 'status' OR v.status=p_filter->>'status') AND (NOT p_filter ? 'month' OR v.payload->>'month'=p_filter->>'month') AND (NOT p_filter ? 'organization' OR EXISTS(SELECT 1 FROM public.platform_cost_reconciliation_allocations a WHERE a.version_id=v.id AND a.organization_id=p_filter->>'organization'));
  SELECT coalesce(jsonb_agg(j),'[]'::jsonb) INTO rows FROM (SELECT to_jsonb(v)||jsonb_build_object('preparedName',public.platform_workflow_name(v.prepared_by),
  'evidence',(SELECT jsonb_build_object('id',e.id,'filename',e.filename,'sha256',e.sha256) FROM public.platform_financial_evidence e WHERE e.id=v.evidence_id),
- 'history',CASE WHEN p_id IS NULL THEN '[]'::jsonb ELSE (SELECT jsonb_agg(to_jsonb(h)||jsonb_build_object('audit',(SELECT a.details FROM public.platform_cost_reconciliation_audit a WHERE a.version_id=h.id))) FROM public.platform_cost_reconciliation_versions h WHERE h.reconciliation_id=v.reconciliation_id) END) j
+ 'history',CASE WHEN p_id IS NULL THEN '[]'::jsonb ELSE (SELECT jsonb_agg(to_jsonb(h)||jsonb_build_object('audit',(SELECT a.details FROM public.platform_cost_reconciliation_audit a WHERE a.version_id=h.id)) ORDER BY h.revision) FROM public.platform_cost_reconciliation_versions h WHERE h.reconciliation_id=v.reconciliation_id) END) j
  FROM (SELECT DISTINCT ON (reconciliation_id) * FROM public.platform_cost_reconciliation_versions ORDER BY reconciliation_id,revision DESC) v WHERE (p_id IS NULL OR v.reconciliation_id=p_id)
  AND (NOT p_filter ? 'status' OR v.status=p_filter->>'status') AND (NOT p_filter ? 'month' OR v.payload->>'month'=p_filter->>'month') AND (NOT p_filter ? 'organization' OR EXISTS(SELECT 1 FROM public.platform_cost_reconciliation_allocations a WHERE a.version_id=v.id AND a.organization_id=p_filter->>'organization')) ORDER BY created_at DESC,reconciliation_id LIMIT 25 OFFSET p_page*25) q;
  ELSIF p_kind='support' THEN
