@@ -1,0 +1,30 @@
+EQUIPE DA PLATAFORMA — 2026-10-10
+
+Ambiente global /backoffice/platform-team, separado dos usuários de organizações e do Portal.
+O Owner existente mantém identidade, papel admin_platform e permissões anteriores.
+Até dois Owners ativos; não é possível desativar ou rebaixar o último.
+Somente Owners concedem perfis globais, editam planos, licenças e configurações de integrações.
+
+Perfis iniciais:
+- Owner: administração completa existente e gestão da equipe.
+- Administrador: cadastro/consulta/atualização de organizações, sem operação como administrador de organização, planos ou credenciais.
+- Financeiro: consulta dos gastos e consumo já apurados, sem alterar política, acessos ou infraestrutura.
+- Suporte: consulta técnica de modelos e eventos de WhatsApp, sem gastos ou concessão de acesso.
+Atendimento atribuído e conciliação financeira do provedor exigem uma etapa própria; não há nova capacidade de escrita desses perfis nesta entrega.
+
+Cadastro: primeiro nome, sobrenome, e-mail, perfil e justificativa em modal. Convite utiliza o fluxo de senha existente. Nenhuma nova pessoa recebe perfil automaticamente na migração.
+Identidades de organizações/Portal não são reaproveitadas para equipe global. E-mail e IDs existentes não são reescritos.
+Se o provedor aceitar convite mas a transação negar a concessão, a identidade pode existir sem perfil privilegiado; conferir e recuperar separadamente, sem exclusão automática.
+
+Persistência: platform_team_members e platform_team_audit, RLS e acesso direto revogado inclusive para service_role. Somente RPCs autorizadas; actor vem da autenticação do backend.
+Auditoria global exclusiva: ID original, nomes e perfil na época, estado anterior/posterior, justificativa e versão. Não exposta à auditoria das organizações.
+Transação serializada, revisão otimista e restrição diferida impedem terceiro Owner, remoção simultânea do último Owner e múltiplos perfis globais.
+
+Implantação: executar 20261010_platform_team.sql antes do novo backend. Migração compatível e idempotente, sem alterar planos, licenças, vínculos ou cadastro histórico.
+O ensaio no banco real termina em ROLLBACK e compara os registros protegidos antes/depois. Não confundir ensaio com migração aplicada.
+
+Validação: TypeScript backend/frontend; Next build; lint das páginas novas; 7 suites/46 testes Jest; 41 verificações PGlite; PostgreSQL 17 com sessões concorrentes em container isolado sem rede.
+Teste real concorrente: apenas um segundo Owner aceito; apenas uma desativação de dois Owners aceita.
+Lint geral possui problemas preexistentes fora do escopo.
+
+Comunicação: /backoffice/platform-communications mantém consulta compacta dos últimos 20 eventos/modelos. Eventos de entrega não são faturamento. Custos efetivos de WhatsApp por organização, filtros avançados e conciliação do provedor são pendências separadas.
