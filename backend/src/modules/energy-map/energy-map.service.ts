@@ -1,3 +1,4 @@
+import {auditAuthorNames} from '../contracts/services/audit-author-names';
 import {ConflictException,ForbiddenException,Injectable,InternalServerErrorException,BadRequestException,NotFoundException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -33,7 +34,7 @@ export class EnergyMapService {
  async history(id:string,t:TenantContext){
   await this.allowed(t);mapId(id);
   const u=await this.db.getClient().from('consumer_units').select('id').eq('organization_id',t.organizationId).eq('id',id).maybeSingle();this.fail(u.error);if(!u.data)throw new NotFoundException('Unidade indisponível nesta organização.');
-  const r=await this.db.getClient().from('consumer_unit_location_history').select('revision,reason,actor_id,recorded_at,location').eq('organization_id',t.organizationId).eq('consumer_unit_id',id).order('revision',{ascending:false}).limit(50);this.fail(r.error);return r.data;
+  const r=await this.db.getClient().from('consumer_unit_location_history').select('organization_id,revision,reason,actor_id,recorded_at,location').eq('organization_id',t.organizationId).eq('consumer_unit_id',id).order('revision',{ascending:false}).limit(50);this.fail(r.error);return auditAuthorNames(this.db.getClient(),t.organizationId,r.data);
  }
  async save(id:string,input:unknown,t:TenantContext){
   await this.allowed(t,true);mapId(id);const d=locationInput(input);

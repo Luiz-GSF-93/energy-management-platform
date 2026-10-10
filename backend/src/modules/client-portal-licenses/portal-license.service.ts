@@ -1,3 +1,4 @@
+import {auditAuthorNames} from '../contracts/services/audit-author-names';
 import {Injectable,ForbiddenException,ConflictException,BadRequestException,InternalServerErrorException,NotFoundException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -31,7 +32,7 @@ export class PortalLicenseService {
   if(!capacity.data||!Array.isArray(licenses.data)||licenses.data.length>200||!Array.isArray(additions.data)||additions.data.length>200||!Array.isArray(history.data))throw new BadRequestException('Consulta de licenças extensa ou indisponível; nenhum conjunto parcial foi emitido.');
   for(const result of [licenses,additions,history])if(result.data.some((r:{organization_id:string})=>r.organization_id!==t.organizationId))throw new InternalServerErrorException('Licença fora do escopo da organização.');
   if(licenses.data.some((r:{customers?:{organization_id?:string}})=>r.customers?.organization_id!==t.organizationId))throw new InternalServerErrorException('Cliente fora do escopo da licença.');
-  return {available:true,enabled:policy.data?.enabled??false,revision:policy.data?.revision??0,capacity:capacity.data,licenses:licenses.data,additions:additions.data,history:history.data};
+  return {available:true,enabled:policy.data?.enabled??false,revision:policy.data?.revision??0,capacity:capacity.data,licenses:licenses.data,additions:additions.data,history:await auditAuthorNames(this.db.getClient(),t.organizationId,history.data)};
  }
  async save(t:TenantContext,input:PortalLicenseDto){this.backoffice(t,true);this.requireEnabled();const {customerId,...definition}=input;const r=await this.db.getClient().rpc('save_client_portal_license',{p_org:t.organizationId,p_customer:customerId,p_actor:t.userId,p_data:definition});this.errors(r.error);if(!r.data?.id||r.data.organization_id!==t.organizationId||r.data.customer_id!==customerId)throw new InternalServerErrorException('Licença não confirmada no cliente autorizado.');return r.data;}
  async policy(t:TenantContext,input:PortalPolicyDto){this.backoffice(t,true);this.requireEnabled();const r=await this.db.getClient().rpc('set_client_portal_policy',{p_org:t.organizationId,p_actor:t.userId,p_enabled:input.enabled,p_revision:input.revision,p_reason:input.reason.trim()});this.errors(r.error);if(r.data?.organization_id!==t.organizationId)throw new InternalServerErrorException('Ativação não confirmada.');return r.data;}

@@ -1,3 +1,4 @@
+import {auditAuthorNames} from '../contracts/services/audit-author-names';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -42,7 +43,7 @@ export class EnergyForecastService {
   const c=await this.db.getClient().from('customers').select('id').eq('organization_id',t.organizationId).eq('id',customer).eq('status','ACTIVE').is('deleted_at',null).maybeSingle();
   if(u.error||c.error)throw new InternalServerErrorException('Consulta da unidade indisponível.');if(!u.data||!c.data)throw new NotFoundException('Unidade indisponível nesta organização.');
   const [histories,runRows,docs]=await Promise.all([this.rpc('energy_forecast_histories_selected',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit}),this.rpc('energy_forecast_read_selected',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit,p_run:null}),this.db.getClient().from('documents').select('id,customer_id,consumer_unit_id,original_filename,reference_month').eq('organization_id',t.organizationId).eq('customer_id',customer).eq('consumer_unit_id',unit).eq('document_type','INVOICE_DISTRIBUTOR').eq('file_verified',true).order('reference_month',{ascending:false}).limit(100)]);
-  const runs=runRows.map((v:any)=>this.verify(v,t));let acl:any[]=[];try{const a=await this.acl.access(t);if(a.enabled)acl=await this.rpc('energy_forecast_sources_selected',{...this.params(t),p_customer:customer,p_unit:unit});}catch(e){if(!(e instanceof ForbiddenException))throw e;}
+  const runs=await Promise.all(runRows.map((v:any)=>this.auditRun(v,t)));let acl:any[]=[];try{const a=await this.acl.access(t);if(a.enabled)acl=await this.rpc('energy_forecast_sources_selected',{...this.params(t),p_customer:customer,p_unit:unit});}catch(e){if(!(e instanceof ForbiddenException))throw e;}
   const sources=[...acl,...histories.filter((h:any)=>h.reviewedAt).map((h:any)=>({historyId:h.id,customerId:h.customer_id,unitId:h.consumer_unit_id,customerName:h.customerName,unitName:h.unitName,lastMonth:h.lastMonth,reviewedAt:h.reviewedAt}))];
   if(docs.error)throw new InternalServerErrorException('Consulta das faturas indisponível.');
   return {...access,sources:sources.filter((s:any)=>s.customerId===customer&&s.unitId===unit),histories:histories.filter((h:any)=>h.customer_id===customer&&h.consumer_unit_id===unit),runs:runs.filter((v:any)=>v.customer_id===customer&&v.consumer_unit_id===unit),documents:docs.data??[]};
@@ -66,8 +67,9 @@ export class EnergyForecastService {
  }
  async approveHistory(id:string,input:unknown,t:TenantContext){await this.access(t,true,true);const d=await validateWriteDto(ValidateHistoryDto,input as ValidateHistoryDto);return this.rpc('energy_forecast_history_approve',{p_org:t.organizationId,p_actor:t.userId,p_history:id,p_request:d.requestId,p_note:d.note});}
  private verify(r:any,t:TenantContext){if(r.organization_id!==t.organizationId||r.body?.organizationId!==t.organizationId||r.body?.customerId!==r.customer_id||r.body?.unitId!==r.consumer_unit_id||r.payload_hash!==reportHash(r.body))throw new InternalServerErrorException('Integridade da previsão indisponível.');return r;}
- async list(t:TenantContext){await this.access(t);const rows=await this.rpc('energy_forecast_read',{p_org:t.organizationId,p_actor:t.userId,p_run:null});return rows.map((r:any)=>this.verify(r,t));}
- async one(id:string,t:TenantContext){await this.access(t);return this.verify(await this.rpc('energy_forecast_read',{p_org:t.organizationId,p_actor:t.userId,p_run:id}),t);}
+ private async auditRun(r:any,t:TenantContext){this.verify(r,t);const events=await auditAuthorNames(this.db.getClient(),t.organizationId,(r.events??[]).map((e:any)=>({...e,organization_id:e.organization_id??r.organization_id,customer_id:r.customer_id})));return {...r,events};}
+ async list(t:TenantContext){await this.access(t);const rows=await this.rpc('energy_forecast_read',{p_org:t.organizationId,p_actor:t.userId,p_run:null});return Promise.all(rows.map((r:any)=>this.auditRun(r,t)));}
+ async one(id:string,t:TenantContext){await this.access(t);return this.auditRun(await this.rpc('energy_forecast_read',{p_org:t.organizationId,p_actor:t.userId,p_run:id}),t);}
  async prepare(input:unknown,t:TenantContext){
   await this.access(t,true,true);const d=await validateWriteDto(PrepareForecastDto,input as PrepareForecastDto);
   if(d.asOfMonth>=new Date().toISOString().slice(0,7))throw new BadRequestException('Selecione uma competência encerrada.');
