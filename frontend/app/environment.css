@@ -109,6 +109,7 @@
   max-width: 1050px;
 }
 .environment-page .ds-card {
+  padding: 24px;
   margin-bottom: 22px;
 }
 .environment-page h2 {
