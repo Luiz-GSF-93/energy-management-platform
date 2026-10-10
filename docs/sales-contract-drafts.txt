@@ -1,0 +1,21 @@
+EnergyOS — etapa 3A, minutas contratuais internas
+
+Implantação incremental do domínio comercial do SaaS. Não utiliza o módulo de contratos de energia das organizações. Não envia ofertas, não assina contratos, não chama Asaas e não provisiona licenças.
+
+SALES_CONTRACT_DRAFTS_ENABLED deve permanecer ausente/false até migração, validação de privilégios e homologação. Rotas admin/sales/contracts possuem escopo da plataforma e permissão de Owner. Cada RPC verifica novamente o Owner ativo, usando a guarda existente. Cadastro de identidade indisponível bloqueia a consulta; não há fallback que dispense autorização.
+
+Três tabelas privadas com RLS, sem acesso direto para anon, authenticated ou service_role: modelos por ID/revisão; minutas preservadas; eventos imutáveis. Apenas platform_sales_contract_action é executável pela service_role. O auxiliar de composição não é uma API pública. Os registros existentes não são alterados pela migração.
+
+O arquivo PDF, limitado a 1 MiB, é armazenado como bytea na tabela privada da minuta. Isso preserva documento, composição e hash na mesma transação, sem bucket público ou operação externa parcialmente concluída. É adequado à etapa interna; qualquer futura mudança de armazenamento deverá preservar o hash e exigir análise de impactos. A consulta paginada nunca retorna o arquivo nem as partes completas. O download autenticado verifica novamente o SHA-256; não regenera o PDF.
+
+O backend compõe a minuta com proposta aprovada, revisão explícita aprovada das condições e versão aprovada do modelo. Moeda, preços e limites vêm do snapshot; os campos enviados pelo frontend não podem substituí-los. Partes e signatários são preenchidos e conferidos manualmente, sem copiar o contato da landing page. Modelo com marcador [PENDENTE: não pode ser conferido/aprovado. O texto inicial é uma sugestão não aprovada, carregada apenas no formulário e preservada em rascunho mediante ação do Owner.
+
+Estados internos: DRAFT, CHECKED e APPROVED_INTERNAL. Não existe ação para marcar SIGNED. Aprovação interna não prova aceite, pagamento ou representação legal do signatário. A revisão de conteúdo contratual depende do Owner; o código não inventa cláusulas, multas, prazos de cancelamento ou foro.
+
+Idempotência: mesmo identificador e conteúdo recuperam o resultado; conteúdo diferente gera conflito. Locks transacionais serializam IDs/revisões. Renderização falha antes da gravação; gravação falha sem deixar minuta parcial. Se a resposta se perder após a gravação, reenviar o mesmo ID recupera o documento preservado sem regenerá-lo. Uma nova solicitação com conteúdo alterado usa outro ID. Modelos antigos e documentos publicados internamente são imutáveis.
+
+Listas paginadas e detalhes em modal, com revisão explícita e histórico dos nomes registrados na época. Nome ausente aparece como Nome não disponível, mantendo o ID original. Financeiro, Suporte e usuários das organizações não recebem acesso nesta fase.
+
+Asaas será a integração financeira da etapa 4. A documentação pública do Asaas apresenta assinatura eletrônica por integração com provedores como ZapSign/Clicksign; subscriptions representa cobrança recorrente. Não foi presumido endpoint de assinatura contratual nem contratado serviço externo. O adaptador de assinatura da etapa 3B será definido separadamente.
+
+Validação: banco descartável PGlite e testes de API/renderer; TypeScript backend/frontend; revisão do diff e testes remotos antes do PR. Dados usados nos testes são exclusivamente fixtures, sem contatos reais ou escrita de licenças. A migração pode ser ensaiada dentro de uma transação com ROLLBACK antes de aplicar. Desativar a flag é a reversão operacional; não excluir dados históricos como rollback automático.
