@@ -1,0 +1,23 @@
+const {PGlite}=require('@electric-sql/pglite');const fs=require('fs');const assert=require('node:assert/strict');
+(async()=>{const db=new PGlite();let checks=0;
+await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;CREATE TABLE user_roles(user_id text,role_id text);CREATE TABLE roles(id text,scope text,name text,organization_id text,permissions jsonb);CREATE TABLE platform_team_members(user_id uuid,active boolean,profile text);CREATE TABLE user_profiles(user_id uuid);`);
+const team=fs.readFileSync('src/database/migrations/20261010_platform_team.sql','utf8');const helper=team.slice(team.indexOf('CREATE OR REPLACE FUNCTION public.platform_team_owner('),team.indexOf('CREATE OR REPLACE FUNCTION public.platform_team_lock('));await db.exec(helper);
+const migration=fs.readFileSync('src/database/migrations/20261010_platform_sales_intake.sql','utf8');await db.exec(migration);await db.exec(migration);checks++;
+const owner='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',outsider='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';await db.exec(`INSERT INTO roles VALUES('owner','global','admin_platform','platform','["82e7fc71-479a-4dd6-8b22-4fba6eaa6841"]');INSERT INTO user_roles VALUES('${owner}','owner');INSERT INTO platform_team_members VALUES('${owner}',true,'OWNER');INSERT INTO user_profiles VALUES('${owner}');`);
+const requester='a'.repeat(64),hash='b'.repeat(64);const receipt=n=>'11111111-1111-4111-8111-'+String(n).padStart(12,'0');
+const payload=n=>({requestId:receipt(n),consent:true,consentVersion:'sales-contact-v1',company:'Empresa teste',email:'teste@example.com'});
+const send=(n,body=payload(n),h=hash,ip=requester)=>db.query('select submit_platform_sales_lead($1,$2,$3,$4) result',[receipt(n),JSON.stringify(body),h,ip]);
+const rejects=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+await send(1);await send(1);assert.equal((await db.query('select count(*) n from platform_sales_leads')).rows[0].n,1);checks++;
+await rejects(()=>send(1,payload(1),'c'.repeat(64)),'P3601');await rejects(()=>send(1,payload(1),hash,'c'.repeat(64)),'P3601');
+await rejects(()=>send(9,{}),'22023');await rejects(()=>send(9,{...payload(9),consent:false}),'22023');
+for(let n=2;n<=5;n++)await send(n);await rejects(()=>send(6),'P3602');
+await rejects(()=>db.query('select read_platform_sales_leads($1,0,\'\')',[outsider]),'42501');
+const read=(await db.query('select read_platform_sales_leads($1,0,\'Empresa\') result',[owner])).rows[0].result;assert.equal(read.total,5);assert.equal(read.rows.length,5);assert.equal(JSON.stringify(read).includes('requester_hash'),false);checks++;
+await db.exec(`UPDATE platform_team_members SET active=false WHERE user_id='${owner}'`);await rejects(()=>db.query('select read_platform_sales_leads($1,0,\'\')',[owner]),'42501');await db.exec(`UPDATE platform_team_members SET active=true WHERE user_id='${owner}'`);
+await rejects(()=>db.query('select read_platform_sales_leads($1,1001,\'\')',[owner]),'22023');
+await rejects(()=>db.exec(`UPDATE platform_sales_leads SET status='RECEIVED'`),'42501');await rejects(()=>db.exec('DELETE FROM platform_sales_leads'),'42501');
+for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await rejects(()=>db.exec('SELECT * FROM platform_sales_leads'),'42501');await db.exec('RESET ROLE');}
+await db.exec('SET ROLE anon');await rejects(()=>send(7),'42501');await db.exec('RESET ROLE');
+await db.exec('SET ROLE service_role');assert.equal((await db.query('select read_platform_sales_leads($1,0,\'\') result',[owner])).rows[0].result.total,5);checks++;await db.exec('RESET ROLE');
+await db.close();console.log(checks+' SQL checks passed (disposable database, no production data).');})().catch(e=>{console.error(e);process.exitCode=1;});

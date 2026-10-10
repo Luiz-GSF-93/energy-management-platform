@@ -1,3 +1,4 @@
+import {salesCors} from './modules/sales-intake/sales-intake.cors';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
@@ -6,10 +7,7 @@ async function bootstrap() {
   
   app.setGlobalPrefix('api/v1');
   
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
-  });
+  app.enableCors(salesCors);
   
   const port = process.env.PORT || 3001;
   await app.listen(port);
