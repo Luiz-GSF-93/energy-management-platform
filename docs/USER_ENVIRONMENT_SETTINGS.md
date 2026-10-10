@@ -11,3 +11,5 @@ Validação: 258 suítes do backend com 3.907 testes aprovados; build Nest, Type
 Homologação manual: abrir Configurações ambiente, conferir nome e vínculos, salvar e restaurar cada tema, conferir avatar, recarregar e verificar persistência. Ativação real do autenticador deve ser feita pelo próprio usuário, escaneando o QR e confirmando o código diretamente no software; depois testar novo login, código inválido e desativação com código novo. Nenhum fator de usuário foi ativado pelo agente. Perda do aplicativo exige recuperação assistida com verificação de identidade; não existe remoção administrativa automática neste módulo.
 
 Em uma reversão, preservar a exigência AAL2 e a tela de desafio para contas já inscritas. Não remover a proteção enquanto existirem fatores verificados. As tabelas novas não devem ser apagadas para reverter a interface.
+
+Roundtrip de preferências: `node frontend/test/preferences-roundtrip.cjs` verifica o serializer real contra o DTO estrito do backend, incluindo metadados de resposta, revisão e rejeição de propagação de IDs/campos administrativos. 7 verificações adicionais, total de 83 verificações específicas.
