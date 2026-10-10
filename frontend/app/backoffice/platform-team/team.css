@@ -1,0 +1,10 @@
+.platform-team__actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.platform-team__table{overflow-x:auto;margin:20px 0}
+.platform-team__table table{width:100%;border-collapse:collapse}
+.platform-team__table th,.platform-team__table td{text-align:left;padding:12px;border-bottom:1px solid var(--border-color,#345370);vertical-align:middle}
+.platform-team__table small{display:block;font-size:.75rem;color:var(--text-muted,#adc0d5);margin-top:6px}
+.platform-team__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.platform-team__form{display:grid;gap:20px}
+.platform-team dt{font-weight:600;margin-top:16px}
+.platform-team dd{margin:6px 0 0}
+@media(max-width:600px){.platform-team__grid{grid-template-columns:1fr}.platform-team__actions button{flex:1 1 auto}}

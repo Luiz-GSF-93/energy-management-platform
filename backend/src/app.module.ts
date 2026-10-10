@@ -1,3 +1,4 @@
+import {PlatformTeamModule} from './modules/platform-team/platform-team.module';
 import {PortalLicenseModule} from './modules/client-portal-licenses/portal-license.module';
 import {PortalLicenseGuard} from './modules/client-portal-licenses/portal-license.guard';
 import {BotReportsModule} from './modules/bot-reports/bot-reports.module';
@@ -40,6 +41,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
+    PlatformTeamModule,
     PortalLicenseModule,
     AuthModule,
     CustomersModule,

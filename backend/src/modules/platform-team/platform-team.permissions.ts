@@ -1,0 +1,4 @@
+export const TEAM_MANAGE='82e7fc71-479a-4dd6-8b22-4fba6eaa6841';
+export const PLATFORM_COSTS_VIEW='699703af-10ba-43a3-8eb8-9f0d9e477498';
+export const PLATFORM_SUPPORT_VIEW='c51b6e94-969a-4b9b-bcf9-05c18a4cb2d7';
+export const TEAM_PROFILES=['OWNER','ADMINISTRATOR','FINANCE','SUPPORT'] as const;
