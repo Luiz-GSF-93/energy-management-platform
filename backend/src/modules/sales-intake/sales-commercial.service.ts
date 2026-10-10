@@ -22,6 +22,11 @@ export class SalesCommercialService{
   return data;
  }
  read(actor:string,receipt?:string){if(receipt!==undefined&&!uuid.test(receipt))throw new BadRequestException('Protocolo inválido.');return this.rpc('read_platform_sales_commercial',{p_actor:actor,p_receipt:receipt??null});}
+ async approvedProposal(actor:string,id:string){
+  if(!uuid.test(id))throw new BadRequestException('Proposta inválida.');
+  try{return await this.rpc('read_platform_sales_approved_proposal',{p_actor:actor,p_id:id});}
+  catch(error){if(error instanceof ForbiddenException||error instanceof ConflictException||error instanceof NotFoundException||error instanceof BadRequestException)throw error;throw new ServiceUnavailableException('Documento interno indisponível.');}
+ }
  policy(actor:string,body:unknown){const b=commercialInput(body,['requestId','planId','expectedVersion','planVersion','definition'],['requestId','planId'],['expectedVersion','planVersion']);return this.rpc('save_platform_sales_policy',{p_actor:actor,p_request:b.requestId,p_plan:b.planId,p_expected:b.expectedVersion,p_plan_version:b.planVersion,p_definition:b.definition});}
  proposal(actor:string,body:unknown){const b=commercialInput(body,['id','receipt','planId','policyVersion','cycle','extras','justification'],['id','receipt','planId'],['policyVersion']);if(!['MONTHLY','ANNUAL'].includes(b.cycle)||!Array.isArray(b.extras)||b.extras.length>20||b.extras.some((x:unknown)=>typeof x!=='string')||typeof b.justification!=='string')throw new BadRequestException('Proposta inválida.');return this.rpc('create_platform_sales_proposal',{p_actor:actor,p_id:b.id,p_receipt:b.receipt,p_plan:b.planId,p_policy_version:b.policyVersion,p_cycle:b.cycle,p_extras:b.extras,p_justification:b.justification});}
  review(actor:string,body:unknown){const b=commercialInput(body,['requestId','id','expectedVersion','status','justification'],['requestId','id'],['expectedVersion']);if(!['CHECKED','APPROVED_INTERNAL'].includes(b.status)||typeof b.justification!=='string')throw new BadRequestException('Revisão inválida.');return this.rpc('transition_platform_sales_proposal',{p_actor:actor,p_request:b.requestId,p_id:b.id,p_expected:b.expectedVersion,p_status:b.status,p_justification:b.justification});}
