@@ -43,7 +43,7 @@ const statusLabels:Record<string,string>={DRAFT:'Rascunho',ACTIVE:'Ativo',INACTI
 function Hub(){
 
 
- const {context}=useAuth();const org=context?.scope==='organization'?context.currentOrganization.id:'';
+ const {context}=useAuth();const org=!!context&&context.scope!=='global'?context.currentOrganization.id:'';
 
 
  const [state,setState]=useState<State|null>(null),[tab,setTab]=useState('dashboard'),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[documents,setDocuments]=useState<any[]>([]),[customers,setCustomers]=useState<any[]>([]),[units,setUnits]=useState<any[]>([]),[customerId,setCustomerId]=useState(''),[unitId,setUnitId]=useState(''),[history,setHistory]=useState<any[]>([]),[period,setPeriod]=useState('month');
@@ -151,6 +151,6 @@ function Hub(){
 }
 
 
-export default function Page(){const {context}=useAuth();return <ProtectedRoute><BackofficeShell>{context?.scope==='organization'?<Hub key={context.currentOrganization.id}/>:<section className="backoffice-page"><h1>Trading Hub</h1><p>Selecione uma organização pela operação administrativa. O módulo exige licença vigente com Trading Hub habilitado.</p></section>}</BackofficeShell></ProtectedRoute>;}
+export default function Page(){const {context}=useAuth();return <ProtectedRoute><BackofficeShell>{!!context&&context.scope!=='global'?<Hub key={context.currentOrganization.id}/>:<section className="backoffice-page"><h1>Trading Hub</h1><p>Selecione uma organização pela operação administrativa. O módulo exige licença vigente com Trading Hub habilitado.</p></section>}</BackofficeShell></ProtectedRoute>;}
 
 
