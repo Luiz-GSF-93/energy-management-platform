@@ -6,6 +6,7 @@ import {RequirePermission} from '../../common/decorators/require-permission.deco
 import {RequestWithAuthenticatedUser} from '../../common/interfaces/authenticated-user.interface';
 import {SalesIntakeService} from './sales-intake.service';
 import {salesRequesterIp} from './sales-intake.ingress';
+import {SalesAdvisorService} from './sales-advisor.service';
 @Controller('public/sales')
 export class PublicSalesController{
  constructor(private readonly sales:SalesIntakeService){}
@@ -14,7 +15,15 @@ export class PublicSalesController{
 }
 @Controller('admin/sales') @PlatformScope()
 export class AdminSalesController{
- constructor(private readonly sales:SalesIntakeService){}
+ constructor(private readonly sales:SalesIntakeService,private readonly advisor:SalesAdvisorService){}
+ @Get('recommendation') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
+ preview(@Req() req:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){
+  if(Object.entries(q).some(([k,v])=>!['receipt','page','search'].includes(k)||typeof v!=='string')||
+   !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(String(q.receipt??''))||
+   q.page!==undefined&&!/^\d{1,4}$/.test(String(q.page))||Number(q.page??0)>1000||String(q.search??'').length>120)
+   throw new BadRequestException('Filtros inválidos.');
+  return this.advisor.preview(req.authenticatedUser.userId,String(q.receipt).toLowerCase(),Number(q.page??0),String(q.search??'').trim());
+ }
  @Get('leads') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
  list(@Req() req:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){
   if(Object.entries(q).some(([k,v])=>!['page','search'].includes(k)||typeof v!=='string')||q.page!==undefined&&!/^\d{1,4}$/.test(String(q.page))||Number(q.page??0)>1000||String(q.search??'').length>120)throw new BadRequestException('Filtros inválidos.');
