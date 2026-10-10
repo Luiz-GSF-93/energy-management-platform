@@ -1,4 +1,7 @@
-export type AuditAuthorFields = {created_by_name?:string|null;updated_by_name?:string|null;validated_by_name?:string|null};
-export default function AuditAuthor({id,name}:{id:string|null;name?:string|null}) {
- return <span title={id ? 'Identificador de auditoria: '+id : undefined}>{name?.trim() || 'Nome não disponível'}</span>;
+import type {Identity} from '../../components/AuditIdentity';
+export type AuditAuthorFields={created_by_name?:string|null;updated_by_name?:string|null;validated_by_name?:string|null;auditIdentities?:Record<string,Identity>;auditCompany?:{id:string;currentName:string|null}};
+export default function AuditAuthor({id,name,identity,company,record,field}:{id:string|null;name?:string|null;identity?:Identity;company?:{id:string;currentName:string|null};record?:unknown;field?:string}){
+ const metadata=record&&typeof record==='object'?record as AuditAuthorFields:undefined;identity=identity??(field?metadata?.auditIdentities?.[field]:undefined);company=company??metadata?.auditCompany;
+ const role:Record<string,string>={admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'};
+ return <span title={'Identificador original: '+(id??'Não disponibilizado')}><strong>{identity?.currentName||(name?.trim()&&!['consultor','administrador da plataforma','administrador da organização','gestor','operador','operacional','consulta','eu'].includes(name.trim().toLowerCase())?name.trim():'Nome não cadastrado')}</strong> (cadastro atual)<small> · Função atual: {identity?.currentRole?role[identity.currentRole]??identity.currentRole:'Não informada'} · Vínculo atual: {identity?.currentAffiliation==='internal'?'Interno':identity?.currentAffiliation==='external'?'Externo':'Não informado'}{company?' · Empresa do registro (nome atual): '+(company.currentName??'Indisponível'):''} · Identidade na época: {identity?.recordedName??'não registrada'}</small></span>;
 }
