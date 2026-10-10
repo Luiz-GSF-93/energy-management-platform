@@ -16,7 +16,8 @@ export default function ClientPortalContent(){
  if(!context||context.scope!=='organization')return null;
  if(error)return <Alert variant="error">{error} <Button variant="secondary" onClick={()=>{setError('');setLicense(null);setAttempt(a=>a+1);}}>Conferir novamente</Button></Alert>;
  if(!license)return <p>Conferindo o acesso ao Portal…</p>;
- const allowed=(module:PortalModule)=>!license.enabled||license.modules?.includes(module);
+ if(checkLicense&&!license.enabled)return <Alert>O Portal ainda não foi liberado para este cliente. Solicite a conferência à administração da organização.</Alert>;
+ const allowed=(module:PortalModule)=>!checkLicense||license.modules?.includes(module);
  const key=JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.permissions]);
  return <>{license.enabled?<p>Licença do Portal: {license.starts} a {license.ends}. Os resultados exibidos são publicados e pertencem à empresa vinculada ao seu usuário.</p>:null}
  {allowed('energy_prices')?<EnergyPriceDashboard key={'price:'+key} audience="client" organizationId={context.currentOrganization.id}/>:null}

@@ -9,7 +9,7 @@ import {PortalLicenseDto,PortalPolicyDto,ClientAdditionDto} from './portal-licen
 export class PortalLicenseController {
  constructor(private licenses:PortalLicenseService){}
  @Get() @RequirePermission([P.ORGANIZATION_LICENSES_VIEW]) list(@Tenant() t:TenantContext){return this.licenses.list(t);}
- @Post() @RequirePermission([P.ORGANIZATION_LICENSES_UPDATE]) save(@Tenant() t:TenantContext,@Body() dto:PortalLicenseDto){return this.licenses.save(t,dto);}
+ @Post() @RequirePermission([P.ORGANIZATION_USERS_INVITE]) save(@Tenant() t:TenantContext,@Body() dto:PortalLicenseDto){return this.licenses.save(t,dto);}
  @Post('policy') @RequirePermission([P.ORGANIZATION_LICENSES_UPDATE]) policy(@Tenant() t:TenantContext,@Body() dto:PortalPolicyDto){return this.licenses.policy(t,dto);}
  @Post('additions') @RequirePermission([P.ORGANIZATION_LICENSES_UPDATE]) addition(@Tenant() t:TenantContext,@Body() dto:ClientAdditionDto){return this.licenses.addition(t,dto);}
 }
