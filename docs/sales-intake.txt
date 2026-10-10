@@ -1,0 +1,36 @@
+ENERGYOS SALES — ETAPA 1 / 10-10-2026
+Escopo: landing page estática, qualificação em cinco etapas, persistência real e leitura pelo Owner.
+Não implementa recomendação/preço, assinatura, pagamento, NF, ativação, suspensão nem Sales Representative.
+
+Implantação incremental:
+1. Revisar e publicar PR backend/frontend a partir de feat/energyos-sales-intake.
+2. Aplicar 20261010_platform_sales_intake.sql após 20261010_platform_team.sql. Migração transacional, aditiva e idempotente; não reexecutar migrações antigas de perfis.
+3. Configurar SALES_INTAKE_ORIGIN=https://www.expertenergy.com.br e SALES_INTAKE_HASH_SECRET (segredo aleatório de pelo menos 32 caracteres, somente servidor). Nunca incluir em site, Git ou logs.
+4. SALES_INTAKE_ENABLED permanece false/ausente até conferir migração, acesso do Owner, origem, retenção/privacidade e captação. Consulta administrativa não depende da flag de recebimento.
+5. Verificar req.ip no proxy Railway: o código usa IP confiável do framework e não aceita x-forwarded-for arbitrário. Se todas as requisições chegam com o IP do proxy, a cota será compartilhada; ajustar somente mediante topologia de proxy verificada. Não configurar trust proxy irrestrito.
+6. Publicar site via PR próprio feat/energyos-landing. Confirmar se Cloudflare usa Pages/Workers ou é apenas proxy. Não presumir hospedagem por causa do CNAME.
+7. Habilitar intake, conferir preflight/POST a partir do domínio exato e homologar um envio autorizado. Nenhum envio de teste foi realizado em produção nesta etapa.
+8. Conferir registro em /backoffice/platform-sales. Tela possui busca por empresa/e-mail, paginação e modal. Não envia contato automaticamente.
+
+APIs:
+POST /api/v1/public/sales/leads: público, validação estrita, origem exata, consentimento sales-contact-v1, honeypot, UUID por envio, HMAC do IP sem armazenar IP bruto. Retorna somente protocolo após RPC confirmar.
+GET /api/v1/admin/sales/leads?page=0&search=: autenticação, escopo global, permissão exclusiva Owner existente e nova conferência SQL via platform_team_owner. Nenhuma consulta pública.
+CORS especial somente para URL exata de intake; demais rotas preservam CORS_ORIGIN e credentials existentes.
+
+Persistência:
+platform_sales_leads separada, sem organization_id porque prospect ainda não é organização provisionada. RLS, sem acesso direto anon/authenticated/service_role. RPC de gravação apenas service_role; leitura verifica Owner ativo. Eventos de coleta preservados contra UPDATE/DELETE. Hashes internos não são apresentados.
+Máximo 5 novas solicitações por origem de IP por hora / 20 por 24h; tentativas repetidas com mesmo protocolo e payload não geram linha nova. Payload diferente ou solicitante diferente com mesmo protocolo resulta conflito. Locks transacionais para protocolo e solicitante.
+Lista paginada de 25, até página 1000. Sem associação automática por CNPJ/email.
+Dados pessoais não são registrados em console ou em armazenamento do navegador pela nova implementação.
+Retenção: antes de exposição pública, definir prazo, atendimento LGPD e processo autorizado de expurgo. A preservação desta etapa não elimina obrigações de correção/exclusão; futuras ações devem manter evidência mínima e autorização, sem disparar DELETE genérico ou purgar produção automaticamente.
+
+Testes: Jest de validação/CORS/serviço; SQL PGlite descartável com helper Owner real, migração repetida, revogação, RLS, limite e duplicidade; wizard em JSDOM com fetch simulado apenas no teste. Não validar integrações externas com dados fictícios em produção.
+Rollback: desligar SALES_INTAKE_ENABLED e reverter links/página. Não apagar registros coletados. Migração aditiva permanece sem efeito sobre licenças atuais.
+
+CNPJ: valida formatos numérico e alfanumérico com DV por ASCII menos 48, conforme manual oficial Receita Federal: https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/documentos-tecnicos/cnpj/manual-dv-cnpj.pdf . Validade do DV não comprova situação cadastral ou representação legal.
+
+Política operacional aprovada: solicitações comerciais não convertidas, 90 dias; solicitações de correção/exclusão pelo contato@expertenergy.com.br, tratamento restrito ao Owner.
+Aplicar também 20261010_platform_sales_retention.sql após intake. Ela disponibiliza erase_platform_sales_lead(actor UUID, receipt UUID, confirmation UUID idêntico, basis). Bases: RETENTION_90_DAYS (banco exige prazo atingido) ou DATA_SUBJECT_REQUEST (pedido conferido pelo Owner). Sem cron, exclusão automática ou botão de exclusão nesta fase. Antes de ativar a captação, atribuir ao Owner conferência diária do prazo e execução controlada da rotina.
+A função verifica Owner vigente, confirmação de protocolo e mantém ação mínima sem contato, CNPJ, payload ou hashes. Exclusão é irreversível: conferir protocolo e pedido antes de executar; nenhum registro de produção foi excluído. Eventos da eliminação são imutáveis. Protocolos eliminados não permitem restaurar a solicitação por reenvio.
+Correção: receber novo formulário com novo protocolo e consentimento e eliminar o anterior após conferir pedido; não editar payload preservado. Não usar esta rotina em clientes, contratos, licenças ou dados energéticos.
+Hospedagem conferida pela API GitHub: GitHub Pages legacy, branch main, raiz /, CNAME www.expertenergy.com.br, status built. A configuração administrativa de Pages não é acessível à conta colaboradora. Confirmar com Bruno o papel do Cloudflare; não criar Pages/Workers ou alterar DNS como pré-requisito desta página.

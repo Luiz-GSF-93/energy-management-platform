@@ -26,6 +26,7 @@ export const backofficeNavigation:
       permission:
         PLATFORM_PERMISSIONS.ORGANIZATIONS_VIEW,
     },
+    { href:'/backoffice/platform-sales',label:'Interesse comercial',permission:'82e7fc71-479a-4dd6-8b22-4fba6eaa6841',scope:'global' },
     { href:'/backoffice/platform-team',label:'Equipe da plataforma',permission:'82e7fc71-479a-4dd6-8b22-4fba6eaa6841',scope:'global' },
     { href:'/backoffice/platform-reconciliation',label:'Conciliação',permissionsAny:['a7c8f257-580d-4d39-8900-4a5788068201','a7c8f257-580d-4d39-8900-4a5788068202'],scope:'global' },
     { href:'/backoffice/platform-support',label:'Atendimento',permissionsAny:['a7c8f257-580d-4d39-8900-4a5788068203','a7c8f257-580d-4d39-8900-4a5788068204'],scope:'global' },
