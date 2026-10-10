@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict');
+require('../../backend/node_modules/reflect-metadata');
+const fs=require('node:fs');const path=require('node:path');const ts=require('typescript');const Module=require('node:module');
+const {ValidationPipe}=require('../../backend/node_modules/@nestjs/common');
+const {PreferencesDto}=require('../../backend/dist/modules/auth/account.dto');
+const pipe=new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true});
+let calls=[];
+const source=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../app/lib/account.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+const mod=new Module('account-roundtrip',module);mod.filename=__filename;mod.paths=module.paths;
+mod.require=(id)=>id==='./api/client'?{apiRequest:async(url,options)=>{assert.equal(url,'/api/v1/auth/account/preferences');assert.equal(options.method,'PATCH');const valid=await pipe.transform(options.body,{type:'body',metatype:PreferencesDto});calls.push(valid);return {...valid,revision:valid.revision+1,updated_at:'2026-10-10T00:00:00Z'};}}:module.require(id);
+mod._compile(source,__filename);
+(async()=>{const initial={revision:0,theme:'blue',avatar_kind:'initials',emoji:'🙂',photo:'',cep:'',personal_phone:'',updated_at:'2026-10-09',user_id:'foreign',organization_id:'foreign',name:'protected'};
+const first=await mod.exports.accountApi.save(initial);assert.equal(first.revision,1);
+const second=await mod.exports.accountApi.save({...first,theme:'light'});assert.equal(second.revision,2);
+assert.deepEqual(calls.map(x=>x.revision),[0,1]);assert.equal(calls[1].theme,'light');
+assert.deepEqual(Object.keys(calls[1]).sort(),['revision','theme','avatar_kind','emoji','photo','cep','personal_phone'].sort());
+assert.equal(calls[0].user_id,undefined);assert.equal(calls[0].name,undefined);
+console.log('Preferences roundtrip: 7 checks passed; real serializer and strict backend DTO');})().catch(e=>{console.error(e);process.exitCode=1;});

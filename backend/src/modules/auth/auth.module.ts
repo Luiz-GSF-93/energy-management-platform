@@ -1,3 +1,5 @@
+import { AccountController } from './account.controller';
+import { AccountService } from './account.service';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -52,8 +54,8 @@ function parseExpiresIn(expiresIn: string): number {
       },
     }),
   ],
-  controllers: [AuthController, PasswordRecoveryController],
-  providers: [PasswordRecoveryService, AuthService, JwtStrategy, SupabaseService],
+  controllers: [AuthController, PasswordRecoveryController, AccountController],
+  providers: [AccountService, PasswordRecoveryService, AuthService, JwtStrategy, SupabaseService],
   exports: [AuthService, PasswordRecoveryService],
 })
 export class AuthModule {}

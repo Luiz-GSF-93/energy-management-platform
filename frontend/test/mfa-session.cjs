@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const jwt=(sub,id)=>'e30.'+Buffer.from(JSON.stringify({sub,session_id:id})).toString('base64url')+'.test';
+let current=jwt('A','first'),checks=0;
+const m=new Module('mfa-session',module);
+m.require=id=>id==='@/app/lib/auth/session'?{session:{getAccessToken:()=>current},tokenClaims:t=>{try{return JSON.parse(Buffer.from(t.split('.')[1],'base64url'))}catch{return {}}}}:require(id);
+m._compile(ts.transpileModule(fs.readFileSync('app/lib/auth/mfa-session.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,'mfa-session');
+const {assertSameMfaSession}=m.exports,first=current;
+assert.doesNotThrow(()=>assertSameMfaSession(first,jwt('A','verified')));checks++;
+current=null;assert.throws(()=>assertSameMfaSession(first,jwt('A','verified')),/sessão mudou/);checks++;
+current=jwt('B','second');assert.throws(()=>assertSameMfaSession(first,jwt('A','verified')));checks++;
+current=jwt('A','new-login');assert.throws(()=>assertSameMfaSession(first,jwt('A','verified')));checks++;
+current=first;assert.throws(()=>assertSameMfaSession(first,jwt('B','verified')));checks++;
+assert.throws(()=>assertSameMfaSession(null,jwt('A','verified')));checks++;
+console.log('Late MFA response / logout / account switch:',checks,'checks passed');

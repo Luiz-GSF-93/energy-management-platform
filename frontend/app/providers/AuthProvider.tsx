@@ -28,6 +28,7 @@ import { session, tokenClaims } from '@/app/lib/auth/session';
 import SessionNotice from '@/app/components/SessionNotice';
 
 type AuthStatus =
+  | 'mfa_required'
   | 'loading'
   | 'authenticated'
   | 'unauthenticated'
@@ -40,7 +41,7 @@ interface AuthContextValue {
   logout(): void;
   enterOrganization(id: string): Promise<void>;
   leaveOrganization(): Promise<void>;
-  refresh(): Promise<void>;
+  refresh(recoverOrganization?: boolean): Promise<void>;
   switchOrganization(
     organizationId: string,
   ): Promise<void>;
@@ -69,7 +70,7 @@ async function resolveAccessContext(recoverOrganization=false): Promise<AuthCont
   clearOperation:()=>session.setOrganizationSession(null),
   organizations:()=>apiRequest<Array<{organizationId:string;role:string}>>('/api/v1/auth/my-organizations'),
   switchOrganization:switchOrganizationRequest,
-  forbidden:(error)=>error instanceof ApiError && error.status===403,
+  forbidden:(error)=>error instanceof ApiError && error.status===403 && error.message!=='MFA_REQUIRED',
  },recoverOrganization);
 }
 
@@ -89,7 +90,7 @@ export function AuthProvider({
       setStatus('unauthenticated');
     }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (recoverOrganization=false) => {
     const token = session.getAccessToken();
 
     if (!token) {
@@ -102,12 +103,13 @@ export function AuthProvider({
 
     try {
       const nextContext =
-        await resolveAccessContext();
+        await resolveAccessContext(recoverOrganization);
 
       setContext(nextContext);
       session.expectUser(nextContext.user.id);
       setStatus('authenticated');
     } catch (error) {
+      if(error instanceof ApiError && error.status===403 && error.message==='MFA_REQUIRED'){setContext(null);setStatus('mfa_required');return;}
       if (
         error instanceof ApiError &&
         (error.status === 401 ||
@@ -164,6 +166,7 @@ export function AuthProvider({
         setContext(nextContext);
         setStatus('authenticated');
       } catch (error) {
+        if(error instanceof ApiError && error.status===403 && error.message==='MFA_REQUIRED'){setContext(null);setStatus('mfa_required');return;}
         session.clear();
         setContext(null);
         setStatus('unauthenticated');
@@ -172,6 +175,8 @@ export function AuthProvider({
     },
     [],
   );
+
+  useEffect(()=>{const required=()=>{setContext(null);setStatus('mfa_required');};window.addEventListener('energyos-mfa-required',required);return()=>window.removeEventListener('energyos-mfa-required',required);},[]);
 
   const logout = useCallback(() => {
     clearAuthentication();

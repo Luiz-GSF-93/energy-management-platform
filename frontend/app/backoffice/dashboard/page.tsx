@@ -1,5 +1,6 @@
 'use client';
 
+import {UserWelcome} from '@/app/components/UserIdentity';
 import Link from 'next/link';
 import { useAuth } from '@/app/providers';
 import BackofficeShell from '@/app/components/BackofficeShell';
@@ -20,6 +21,7 @@ export default function DashboardPage() {
     <ProtectedRoute>
       <BackofficeShell>
         <section className="backoffice-page energyos-admin-dashboard">
+          <UserWelcome/>
           <header className="backoffice-page__header">
             <h1 className="backoffice-page__title">
               Dashboard administrativo

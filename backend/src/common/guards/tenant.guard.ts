@@ -1,4 +1,5 @@
 import { resolvePlatformOperation, PLATFORM_SESSION_HEADER } from '../services/platform-operation';
+import {assertMfa, MFA_HANDSHAKE} from '../auth/mfa-policy';
 import {restrictClientPortalRequest} from './client-portal-access';
 import {
   Injectable,
@@ -93,6 +94,8 @@ export class TenantGuard implements CanActivate {
       } catch (decodeError) {
         this.logger.warn(`[JWT_DECODE_WARNING] Não foi possível extrair iat/exp: ${(decodeError as Error).message}`);
       }
+
+      assertMfa(data.user.factors || [], token, this.reflector.get<boolean>(MFA_HANDSHAKE, context.getHandler()) === true);
 
       // 5. Buscar perfil do usuário (PRESERVADO DO ORIGINAL)
 
