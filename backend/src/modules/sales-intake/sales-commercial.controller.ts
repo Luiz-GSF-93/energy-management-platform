@@ -13,6 +13,12 @@ export class SalesCommercialController{
  async preview(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string){return proposalDocumentModel(await this.sales.approvedProposal(req.authenticatedUser.userId,id));}
  @Get('proposals/:id/pdf') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store') @Header('X-Content-Type-Options','nosniff')
  async pdf(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string){const model=proposalDocumentModel(await this.sales.approvedProposal(req.authenticatedUser.userId,id));return new StreamableFile(await renderProposalPdf(model),{type:'application/pdf',disposition:`attachment; filename="energyos-proposta-${id}.pdf"`});}
+ @Get('proposals/:id/terms') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
+ terms(@Req() req:RequestWithAuthenticatedUser,@Param('id') id:string){return this.sales.offerTerms(req.authenticatedUser.userId,id);}
+ @Post('offer-terms') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
+ saveTerms(@Req() req:RequestWithAuthenticatedUser,@Body() body:unknown){return this.sales.saveOfferTerms(req.authenticatedUser.userId,body);}
+ @Post('offer-term-reviews') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
+ reviewTerms(@Req() req:RequestWithAuthenticatedUser,@Body() body:unknown){return this.sales.reviewOfferTerms(req.authenticatedUser.userId,body);}
  @Post('policies') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
  policy(@Req() req:RequestWithAuthenticatedUser,@Body() body:unknown){return this.sales.policy(req.authenticatedUser.userId,body);}
  @Post('proposals') @RequirePermission(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']) @Header('Cache-Control','no-store')
