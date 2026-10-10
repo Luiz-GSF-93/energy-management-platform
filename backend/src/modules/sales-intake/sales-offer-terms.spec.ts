@@ -1,0 +1,21 @@
+import {SalesCommercialService} from './sales-commercial.service';
+import {SalesCommercialController} from './sales-commercial.controller';
+import {BadRequestException,ConflictException,ForbiddenException,NotFoundException,ServiceUnavailableException} from '@nestjs/common';
+import {Reflector} from '@nestjs/core';
+import {PERMISSIONS_KEY} from '../../common/decorators/require-permission.decorator';
+const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const draft={requestId:id,proposalId:id,expectedRevision:0,definition:{},justification:'Internal terms review.'};
+const review={requestId:id,proposalId:id,revision:1,expectedVersion:1,status:'CHECKED',justification:'Internal terms review.'};
+describe('Owner-only offer terms API',()=>{
+ const rpc=jest.fn();let service:SalesCommercialService;
+ beforeEach(()=>{rpc.mockReset();rpc.mockResolvedValue({data:{proposal:{id,status:'APPROVED_INTERNAL'},revisions:[],asOfDate:'2026-10-10'},error:null});service=new SalesCommercialService({getClient:()=>({rpc})} as any);});
+ it('uses original proposal ID and trusted authenticated actor',async()=>{await service.offerTerms(id,id);await service.saveOfferTerms(id,draft);await service.reviewOfferTerms(id,review);expect(rpc.mock.calls.every(([,args])=>args.p_actor===id&&args.p_proposal===id)).toBe(true);});
+ it.each([null,[],{}, {...draft,total:1},{...draft,actor:id},{...draft,proposalId:'bad'},{...draft,expectedRevision:-1},{...draft,expectedRevision:1.5}])('rejects forged or invalid revisions before RPC',body=>{expect(()=>service.saveOfferTerms(id,body)).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it.each([{...review,status:'SIGNED'}, {...review,total:1}, {...review,revision:1.5}, {...review,actor:id}])('rejects unknown actions and actors',body=>{expect(()=>service.reviewOfferTerms(id,body)).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it('rejects invalid ID before read',()=>{expect(()=>service.offerTerms(id,'bad')).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it.each([['42501',ForbiddenException],['P3610',NotFoundException],['P3611',ConflictException],['22023',BadRequestException],['42P01',ServiceUnavailableException]])('fails closed for %s',async(code,kind)=>{rpc.mockResolvedValue({data:null,error:{code,message:'private database detail'}});await expect(service.offerTerms(id,id)).rejects.toBeInstanceOf(kind);});
+ it('fails closed on absent output and transport failure without leaking details',async()=>{rpc.mockResolvedValue({data:null,error:null});await expect(service.offerTerms(id,id)).rejects.toThrow('Condições comerciais indisponíveis.');rpc.mockRejectedValue(new Error('private credential'));await expect(service.saveOfferTerms(id,draft)).rejects.toThrow('Condições comerciais indisponíveis.');});
+ it('gets actor from request rather than body',()=>{const mock={saveOfferTerms:jest.fn()};const controller=new SalesCommercialController(mock as any);controller.saveTerms({authenticatedUser:{userId:id}} as any,draft);expect(mock.saveOfferTerms).toHaveBeenCalledWith(id,draft);});
+ it.each([{}, {proposal:{id,status:'DRAFT'},revisions:[],asOfDate:'2026-10-10'}, {proposal:{id,status:'APPROVED_INTERNAL'},revisions:null,asOfDate:'2026-10-10'}])('rejects malformed read output',async data=>{rpc.mockResolvedValue({data,error:null});await expect(service.offerTerms(id,id)).rejects.toBeInstanceOf(ServiceUnavailableException);});
+ it('requires Owner permission and no cache on each new handler',()=>{const reflector=new Reflector();for(const key of ['terms','saveTerms','reviewTerms'] as const){const handler=SalesCommercialController.prototype[key];expect(reflector.get(PERMISSIONS_KEY,handler)).toEqual(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']);expect(reflector.get('__headers__',handler)).toContainEqual({name:'Cache-Control',value:'no-store'});}});
+});
