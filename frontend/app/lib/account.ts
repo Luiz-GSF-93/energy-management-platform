@@ -26,7 +26,15 @@ export const accountApi = {
   save: (body: Preferences) =>
     apiRequest<Preferences>("/api/v1/auth/account/preferences", {
       method: "PATCH",
-      body,
+      body: {
+        revision: body.revision,
+        theme: body.theme,
+        avatar_kind: body.avatar_kind,
+        emoji: body.emoji,
+        photo: body.photo,
+        cep: body.cep,
+        personal_phone: body.personal_phone,
+      },
     }),
 };
 export function initials(name: string | null | undefined) {
