@@ -1,0 +1,15 @@
+SALES ADVISOR — ETAPA 2A: COMPATIBILIDADE INTERNA / 10-10-2026
+Pré-requisito: captação e consulta Owner da etapa1 implantadas.
+GET /api/v1/admin/sales/recommendation?receipt=&page=&search=
+Somente escopo plataforma e permissão Owner existente. A RPC privada de leitura confirma Owner vigente antes de consultar qualquer plano. O protocolo deve existir na mesma seleção paginada da tela; protocolo retirado/fora da seleção falha 404. Não recebe perfil, preço ou organization_id do navegador.
+
+Motor catalog-capacity-v1: usa unidades/usuários e objetivos do registro real preservado. Catálogo ativo, versão válida, limites inteiros e módulos explicitamente true. Menor capacidade de unidades compatível; empate por usuários e ID. Não compara preços nem usa nomes/faixas de exemplo do documento como tabela comercial.
+Objetivos: custos/relatórios=>Relatórios; automação=>Bot-Energy; OCR=>Documentos e Análises avançadas; mercado livre=>Gestão do mercado livre; trading/compra ACL=>Trading Hub; documentos=>Documentos. Mercado livre sim/parcial também exige Gestão do mercado livre. Multiunidades usa capacidade. Geração solar permanece pendência explícita porque não há elegibilidade GD no catálogo atual. Registros CCEE avulsos não são presumidos como integração operacional CCEE.
+
+Resultado preliminar: plano e versão, limites, motivos, módulos, regra, instante da consulta e avisos. Sem candidato: revisão manual, sem criar plano. Não é oferta preservada. Cada consulta reavalia catálogo atual; nome/versão podem mudar entre consultas, o que é apresentado na interface. Nenhum resultado gravado ou publicado automaticamente.
+Sem preço: catálogo atual não define base comercial (por unidade vs pacote), faixas mínimas, valores anuais/desconto e adicionais versionados. monthly_price_brl_cents não é multiplicado por unidade. Exemplos de preço,15% de desconto,ROI/Payback e ganho de produtividade não são usados como fatos.
+
+Sem migração, gravação, mudança de RBAC/trust proxy, nova credencial ou dependência. Não altera licenças, planos, organizações, usuários, financeiro, dados energéticos, Portal ou landing. Nenhum contato ou catálogo é enviado a IA/terceiros. Reversão: reverter PR desta etapa; registros da captação permanecem intactos.
+Testes: limites simultâneos, módulos obrigatórios, catálogo inativo/corrompido, desempate, solar pendente, entrada inválida, não mutação, preços omitidos, Owner negado antes do catálogo, protocolo fora da seleção, erro de cadastro, permissão e rejeição de organization_id.
+
+Próxima etapa exige proposta concreta antes de alterar regras de produção: política comercial versionada configurada pelo Owner (base de preço, faixas, mensal/anual/desconto e adicionais), proposta preservada ligada a protocolo+plano+versão de política, aprovação e publicação somente de oferta individual. Contrato/assinatura, Asaas/pagamentos, NF e ativação ficam em fases posteriores com webhooks idempotentes e aprovações específicas. Sales Representative posterior.
