@@ -1,0 +1,20 @@
+COMUNICAÇÃO DA PLATAFORMA — CONSULTA E PRÓXIMA ETAPA
+2026-10-10
+
+ENTREGA C: somente leitura em /backoffice/platform-communications.
+Backend associa envios de customer_notice_deliveries/report_deliveries pelo provider_id exato ao webhook assinado. Conflitos entre fluxos não são atribuídos a uma organização. Recibos sem vínculo ficam Não associados. Não consulta telefone, destinatário ou conteúdo da mensagem.
+Filtros: organização, período de até 366 dias em UTC, fluxo, processamento, entrega, associação e recibo exato. Paginação 25 registros, até página 1000. Estado read/delivered não regride por eventos sent posteriores. Um recibo não é contado várias vezes por seus eventos.
+Controle: mesma permissão existente de Owner/Suporte; RPC revalida identidade global única, equipe ativa e perfil. Financeiro, Administrador limitado, organizações e Portal não recebem este acesso. RPC inacessível ao navegador.
+Banco: nova função de consulta, sem tabelas ou mudanças em filas/políticas/históricos. Migração compatível antes do backend. Ensaio real em transação com ROLLBACK e comparação de registros protegidos.
+Limites: modelo do envio antigo não foi preservado e não pode ser inferido da configuração atual. Valores cobrados permanecem Não apurados. Falhas de consulta não ativam envios/reenvios.
+Testes: 27 verificações SQL, 5 suites/36 testes Jest incluindo 10 novos, TypeScript, lint das páginas alteradas e Next build.
+
+PROPOSTA D — CONCILIAÇÃO E ATENDIMENTO (NÃO IMPLEMENTADA)
+Financeiro: criar/importar apuração por fornecedor, competência, moeda, valor em centavos, documento de origem, referência externa e justificativa. Registros versionados; um documento/recibo não pode ser lançado duas vezes. Estimado, Confirmado pelo provedor e Rateado permanecem categorias separadas. Documento agregado não comprova custo individual por organização.
+Persistência isolada: platform_cost_reconciliation_versions, platform_cost_reconciliation_allocations, platform_cost_reconciliation_audit. Documento financeiro privado com hash/referência e controle de acesso específico. Nenhum uso do catálogo de documentos de clientes para armazenar fatura da plataforma.
+Permissões: Financeiro prepara versões em rascunho e propõe conciliação; Owner confirma/rejeita com auditoria, sem aprovar a própria proposta. Nenhuma cobrança ou pagamento automático; não altera política de alertas, planos/licenças ou credenciais.
+Atendimento interno: platform_support_cases e platform_support_case_events. Owner/Administrador abre e atribui chamado a membro Suporte ativo; Suporte atualiza somente chamados atribuídos a si. Solicitante/responsável separados por IDs originais, nomes registrados na época, prazo, prioridade, estado e respostas internas. Não concede operação irrestrita na organização nem acesso a faturas/credenciais.
+Fluxo: ABERTO > EM_ATENDIMENTO > AGUARDANDO > RESOLVIDO > ENCERRADO; reabertura com motivo e nova revisão. Respostas nesta fase são internas, sem envio automático ao cliente.
+Impacto: tabelas e permissões específicas novas, migração compatível, nenhuma edição da autenticação ou dos motores de energia. Amplia escrita dos perfis Financeiro/Suporte hoje limitados à consulta; deve ser aprovada antes da ativação.
+Testes obrigatórios: acesso cross-tenant negado, suporte não atribuído negado, membro desativado negado, troca simultânea de responsável/revisão obsoleta, renomeação preservando histórico, deduplicação de documentos/valores, soma de rateio, moedas/câmbio ausentes, indisponibilidade de cadastro, proibição de autoaprovação, atomicidade da auditoria.
+Dependências pendentes: amostra de fatura/relatório oficial Meta para verificar granularidade e fonte de cobrança; nenhum valor de tarifa é presumido. Usuários da equipe precisam ser indicados antes dos convites reais.

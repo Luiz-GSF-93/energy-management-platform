@@ -1,0 +1,8 @@
+.communications__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:18px 0}
+.communications__actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.communications__filters{margin:16px 0}.communications__filters summary{cursor:pointer}
+.communications__table{overflow-x:auto;margin:20px 0}.communications__table table{width:100%;border-collapse:collapse}
+.communications__table th,.communications__table td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border-color,#345370)}
+.communications__table small{display:block;margin-top:6px;font-size:.8rem}
+.communications__table dd{margin:6px 0 16px;overflow-wrap:anywhere;max-width:320px}.communications__table dt{font-weight:600}
+@media(max-width:600px){.communications__grid{grid-template-columns:1fr}}
