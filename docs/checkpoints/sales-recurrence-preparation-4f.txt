@@ -1,0 +1,46 @@
+4F-1: PREPARACAO PRIVADA DE RECORRENCIA SANDBOX
+
+Escopo aprovado na conclusao tecnica por etapas. Este incremento prepara e confere;
+nao cria assinatura, cobra, envia contrato ou ativa licenca. Comandos externos nao
+existem neste incremento. SALES_RECURRENCE_PREPARATION_ENABLED exige 'true' exato;
+ausente/desligado bloqueia a capacidade inteira. Entrega inicial desligada.
+
+Tres tabelas privadas, aditivas e imutaveis: platform_sales_billing_agreements,
+platform_sales_billing_cycles, platform_sales_billing_events. RLS habilitada,
+acesso direto revogado inclusive service_role. RPC restrita revalida autoridade.
+Owner prepara/confere/aprova internamente; Financeiro com capacidade existente
+somente consulta. Sem novas concessoes; organizacoes e Portal sem acesso.
+
+Fonte: intencao do primeiro ciclo CREATED com vinculo compativel, proposta e
+condicoes aprovadas preservadas. Pagador, moeda BRL, periodicidade e preco vem
+do servidor. Mensal usa monthlyRecurringCents; anual annualRecurringCents.
+Custos unicos do primeiro ciclo nao repetidos. Data do proximo ciclo explicita,
+posterior em pelo menos uma periodicidade; nenhuma sobreposicao do primeiro.
+Previa mensal de ate 12 ciclos, anual de um ciclo, limitada a vigencia da politica.
+Datas sao calculadas pela ancora original, preservando fim de mes sem deriva.
+Competencia ESTIMADA pelo vencimento, sem apuracao fiscal. Previa nao integra
+totais de recebimentos, nao gera ID remoto, nao representa assinatura ativa.
+Nao aplica IPCA presumido nem reajuste automatico. Exige outra revisao futura
+com indice positivo, fonte, competencia e conferencia, antes de executar reajuste.
+
+ID estavel, unicidade por intencao/proposta/primeiro pagamento, bloqueio transacional
+contra repeticoes, revisoes com versao esperada e requestId idempotente. Historico
+preserva nome registrado e ID original, resolvendo nome atual separadamente.
+Consulta tolera cadastro de nomes indisponivel sem criar autoridade; escrita fecha.
+Interface: filtros, 25 por pagina e detalhes em modal. Nenhum backend atual alterado
+alem de registrar novo controller/service no modulo. Nenhum webhook existente alterado.
+
+Migracao SQL: 20261011_platform_sales_recurrence_preparation.sql.
+Testes: Jest autorizacao/flag/validacao e PostgreSQL descartavel concorrencia,
+isolamento, custo unico, nomes historicos, RLS e cadastro indisponivel.
+
+Proxima fase 4F-2: adaptador de assinatura sandbox, reserva de envio persistida,
+consulta/reconciliacao sem repetir POST ambiguo, eventos de assinatura e vinculo
+individual de cobrancas. Entrega externa desligada e homologacao especifica.
+Exigir pagador novamente conferido na API e evidencia documental para uso real.
+4G: conciliacao detalhada, cancelamento/estorno/fiscal. 5: ativacao restrita pelo Owner.
+
+Documentacao consultada em 11/10/2026:
+https://docs.asaas.com/docs/assinaturas
+https://docs.asaas.com/reference/criar-nova-assinatura
+https://docs.asaas.com/docs/eventos-para-assinaturas
