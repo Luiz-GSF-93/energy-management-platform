@@ -1,0 +1,22 @@
+import {SalesSignedDocumentsService,SIGNED_DOCUMENT_LIMIT,SignedUpload} from './sales-signed-documents.service';
+import {SalesSignedDocumentsController} from './sales-signed-documents.controller';
+import {BadRequestException,ServiceUnavailableException} from '@nestjs/common';
+import {Reflector} from '@nestjs/core';
+import {PERMISSIONS_KEY} from '../../common/decorators/require-permission.decorator';
+import {createHash} from 'node:crypto';
+const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const buffer=Buffer.from('%PDF-1.7\n'+'.'.repeat(200)+'\n%%EOF');
+const file:SignedUpload={buffer,size:buffer.length,mimetype:'application/pdf',originalname:'original.pdf'};
+const body={id,draftId:id,draftSha256:'a'.repeat(64),signedAt:'2026-10-01',supplierSignatory:'Fixture supplier',customerSignatory:'Fixture customer',source:'External signature evidence fixture.',justification:'Import fixture evidence only.'};
+describe('Private external signature evidence',()=>{
+ let service:SalesSignedDocumentsService,rpc:jest.Mock;
+ beforeEach(()=>{rpc=jest.fn().mockResolvedValue({id});service=new SalesSignedDocumentsService({rpc} as any,{get:()=> 'true'} as any);});
+ it.each([undefined,'false','TRUE'])('defaults off and never persists or reads: %s',flag=>{service=new SalesSignedDocumentsService({rpc} as any,{get:()=>flag} as any);for(const action of [()=>service.list(id,{}),()=>service.read(id,id),()=>service.import(id,body,file),()=>service.review(id,{id,requestId:id,expectedVersion:1,status:'CHECKED',checks:{},justification:'Fixture'} )])expect(action).toThrow(ServiceUnavailableException);expect(rpc).not.toHaveBeenCalled();});
+ it('preserves original file bytes and authenticated actor',async()=>{const before=Buffer.from(buffer);await service.import(id,body,file);expect(rpc).toHaveBeenCalledWith('platform_sales_signed_document_action',expect.objectContaining({p_actor:id,p_action:'import',p_body:expect.objectContaining({id,draftId:id,hex:buffer.toString('hex'),draftSha256:body.draftSha256,metadata:expect.objectContaining({source:body.source})})}));expect(buffer).toEqual(before);});
+ it.each([undefined,{...file,mimetype:'text/html'},{...file,originalname:'file.exe'},{...file,size:1},{...file,buffer:Buffer.alloc(100),size:100},{...file,buffer:Buffer.concat([Buffer.from('%PDF-1.7'),Buffer.alloc(100)]),size:108},{...file,buffer:Buffer.alloc(SIGNED_DOCUMENT_LIMIT+1),size:SIGNED_DOCUMENT_LIMIT+1}])('rejects invalid or oversized file before persistence',bad=>{expect(()=>service.import(id,body,bad)).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it.each([{organizationId:id},{actor:id},{hex:'forged'},{draftSha256:'invalid'},{signedAt:'2026-02-30'},{supplierSignatory:'ab'},{customerSignatory:'Name\nInjected'},{source:null}])('rejects spoofed context or incomplete provenance',change=>{expect(()=>service.import(id,{...body,...change},file)).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it.each([{page:'1001'},{page:'-1'},{search:{}},{status:'SIGNED_AUTOMATICALLY'},{actor:id},{search:'a'.repeat(101)}])('rejects unsafe filters',q=>{expect(()=>service.list(id,q)).toThrow(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ it('retries using the same ID and bytes without creating a replacement request',async()=>{await service.import(id,body,file);await service.import(id,body,file);expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);});
+ it('validates hash and downloads original bytes only',async()=>{rpc.mockResolvedValue({hex:buffer.toString('hex'),sha256:createHash('sha256').update(buffer).digest('hex')});await expect(service.pdf(id,id)).resolves.toEqual(buffer);rpc.mockResolvedValue({hex:buffer.toString('hex'),sha256:'0'.repeat(64)});await expect(service.pdf(id,id)).rejects.toBeInstanceOf(ServiceUnavailableException);rpc.mockResolvedValue({hex:'f',sha256:'0'.repeat(64)});await expect(service.pdf(id,id)).rejects.toBeInstanceOf(ServiceUnavailableException);});
+ it('requires Owner and private non-cacheable responses on every route',()=>{const r=new Reflector();for(const name of ['list','import','review','read','pdf'] as const){expect(r.get(PERMISSIONS_KEY,SalesSignedDocumentsController.prototype[name])).toEqual(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']);expect(r.get('__headers__',SalesSignedDocumentsController.prototype[name])).toContainEqual({name:'Cache-Control',value:'no-store'});}expect(r.get('__headers__',SalesSignedDocumentsController.prototype.pdf)).toContainEqual({name:'X-Content-Type-Options',value:'nosniff'});});
+});
