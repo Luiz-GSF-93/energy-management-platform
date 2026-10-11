@@ -1,0 +1,45 @@
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_finance_consolidated.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_financial_evidence.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_financial_evidence.sql','utf8'));
+const ev=(action,body,actor=owner)=>db.query('select platform_sales_evidence_action($1,$2,$3) result',[actor,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
+const onceBinding=(await db.query("select * from platform_sales_asaas_bindings where payment_id='pay_recurrence'")).rows[0];
+const onceSummary={id:onceBinding.payment_id,customer:onceBinding.customer_id,reference:onceBinding.id,grossCents:Number(onceBinding.gross_cents),netCents:134901,status:'RECEIVED'};
+await db.query("insert into platform_sales_asaas_inbox(id,provider_id,event,payment_id,summary,hash) values($1,'evt_evidence_once','PAYMENT_RECEIVED',$2,$3,repeat('c',64))",[id(1180),onceBinding.payment_id,JSON.stringify(onceSummary)]);
+await db.query("insert into platform_sales_asaas_checks(id,event_id,version,status,lease,actor_id,note,summary) values($1,$2,1,'VERIFIED',$3,$4,'Fixture preserved check',$5)",[id(1181),id(1180),id(1182),owner,JSON.stringify(onceSummary)]);
+const beforeOnce=await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,'']);
+await ev('claim',{kind:'ONCE',id:onceBinding.id,lease:id(1183),justification:'Fixture one-off evidence verification.'});
+assert.equal((await ev('finish',{lease:id(1183),evidence:{payment:onceSummary,refunds:[],invoices:[],refundsComplete:true,invoicesComplete:true}})).status,'COMPLETE');checks++;
+assert.equal((await ev('read',{kind:'ONCE',id:onceBinding.id,page:0},finance)).rows.length,1);checks++;
+const afterOnce=await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,'']);assert.deepEqual(afterOnce.rows[0].result.totals,beforeOnce.rows[0].result.totals);checks++;
+const eb={kind:'CYCLE',id:cy.id,lease:id(1100),justification:'Fixture isolated evidence review.'};
+for(const actor of [finance,other,id(40),id(41),null])await reject(()=>ev('claim',eb,actor),'42501');
+await reject(()=>ev('read',{...eb,page:0},other),'42501');
+await reject(()=>ev('read',{kind:'OTHER',id:cy.id,page:0}),'22023');
+await reject(()=>ev('read',{kind:'CYCLE',id:id(1199),page:0}),'P3690');
+const priorCycles=await readCycles();
+const claimedEvidence=await Promise.allSettled([ev('claim',eb),ev('claim',{...eb,lease:id(1101)})]);assert.equal(claimedEvidence.filter(x=>x.status==='fulfilled').length,1);checks++;
+const er={payment:{...verified,status:'RECEIVED'},refunds:[{status:'DONE',valueCents:100,date:'2030-01-20'},{status:'PENDING',valueCents:200,date:'2030-01-20'},{status:'CANCELLED',valueCents:300,date:'2030-01-20'}],refundsComplete:true,invoicesComplete:true,invoices:[{id:'inv_fixture',payment:'pay_cycle',customer:'cus_recurrence',status:'AUTHORIZED',valueCents:85000,effectiveDate:'2030-01-20'}]};
+await reject(()=>ev('finish',{lease:eb.lease,evidence:er},finance),'42501');
+assert.equal((await ev('finish',{lease:eb.lease,evidence:er})).status,'COMPLETE');checks++;
+assert.equal((await ev('finish',{lease:eb.lease,evidence:er})).replayed,true);checks++;
+await reject(()=>ev('finish',{lease:eb.lease,evidence:{...er,refunds:[]}}),'P3691');
+let ed=await ev('read',{kind:'CYCLE',id:cy.id,page:0},finance);assert.equal(ed.canCheck,false);assert.equal(ed.rows.length,1);assert.equal(ed.rows[0].evidence.refunds.length,3);checks++;
+assert.equal((await ev('read',{kind:'CYCLE',id:cy.id,page:0})).canCheck,true);checks++;
+assert.deepEqual((await readCycles()).totals,priorCycles.totals);checks++;
+await db.query('update user_profiles set full_name=$1 where user_id=$2',['New Owner Name',owner]);ed=await ev('read',{kind:'CYCLE',id:cy.id,page:0},finance);assert.notEqual(ed.rows[0].actor_name,ed.rows[0].current_actor_name);assert.equal(ed.rows[0].actor_id,owner);checks++;
+await db.exec('ALTER TABLE user_profiles RENAME TO profiles_unavailable');ed=await ev('read',{kind:'CYCLE',id:cy.id,page:0},finance);assert.equal(ed.rows[0].current_actor_name,null);assert.ok(ed.rows[0].actor_name);await db.exec('ALTER TABLE profiles_unavailable RENAME TO user_profiles');checks++;
+for(const [offset,evidence,status] of [[2,{...er,refunds:[],refundsComplete:false},'PARTIAL'],[3,{...er,invoices:[],invoicesComplete:false},'PARTIAL'],[4,null,'REVIEW'],[5,{...er,payment:{...er.payment,customer:'cus_wrong'}},'REVIEW']]){await ev('claim',{...eb,lease:id(1100+offset)});assert.equal((await ev('finish',{lease:id(1100+offset),evidence})).status,status);checks++;}
+await ev('claim',{...eb,lease:id(1110)});
+await reject(()=>ev('finish',{lease:id(1110),evidence:{...er,invoices:[{...er.invoices[0],payment:'pay_other'}]}}),'22023');
+await reject(()=>ev('finish',{lease:id(1110),evidence:{...er,invoices:[er.invoices[0],er.invoices[0]]}}),'22023');
+await reject(()=>ev('finish',{lease:id(1110),evidence:{...er,refunds:[{status:'DONE',valueCents:85001,date:'2030-01-20'}]}}),'22023');
+await reject(()=>ev('finish',{lease:id(1110),evidence:{...er,privateContact:'secret'}}),'22023');
+await ev('finish',{lease:id(1110),evidence:null});
+ed=await ev('read',{kind:'CYCLE',id:cy.id,page:0},finance);assert.equal(ed.total,6);assert.equal(ed.rows[0].status,'REVIEW');checks++;
+assert.equal((await ev('read',{kind:'CYCLE',id:cy.id,page:1},finance)).rows.length,0);checks++;
+await db.query("insert into platform_sales_evidence_attempts(id,kind,source_id,source,actor_id,actor_name,justification,created_at) select $1,kind,source_id,source,actor_id,actor_name,justification,clock_timestamp()-interval '120 seconds' from platform_sales_evidence_attempts where id=$2",[id(1120),eb.lease]);
+await ev('claim',{...eb,lease:id(1121)});await reject(()=>ev('finish',{lease:id(1120),evidence:er}),'P3691');await ev('finish',{lease:id(1121),evidence:er});checks++;
+for(const table of ['platform_sales_evidence_attempts','platform_sales_evidence_revisions']){await reject(()=>db.query('delete from '+table),'42501');for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');}}
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>ev('read',{kind:'CYCLE',id:cy.id,page:0}),'42501');await db.exec('RESET ROLE');}
+assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,0);checks++;
+console.log('4H evidence: snapshots, partial data, immutable identity, isolation, no prior totals changed.');
