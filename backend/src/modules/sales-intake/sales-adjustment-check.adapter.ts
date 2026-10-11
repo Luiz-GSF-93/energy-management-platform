@@ -50,13 +50,15 @@ export class SalesAdjustmentCheckAdapter {
  }
  // Only documented list envelopes or a complete bounded refunds array are accepted.
  // Unsupported schemas, duplicates and truncated enumeration never prove completeness.
- private async enumerate(path:string,convert:(x:any)=>any,allowArray=false,scope:'CHECK'|'COMMAND'='CHECK'){
+ private async enumerate(path:string,convert:(x:any)=>any,allowArray=false,scope:'CHECK'|'COMMAND'='CHECK',allowEmptyRefundPage=false){
   const rows:any[]=[];let total:number|undefined;
   for(let offset=0;offset<100;offset+=25){
    const raw=await this.get(path+(path.includes('?')?'&':'?')+new URLSearchParams({offset:String(offset),limit:'25'}),scope);
    if(Array.isArray(raw)){if(!allowArray||offset!==0||raw.length>100)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');for(const r of raw){const v=convert(r);if(rows.some(x=>x.id===v.id))throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');rows.push(v);}return rows;}
-   if(!raw||!Array.isArray(raw.data)||raw.data.length>25||typeof raw.hasMore!=='boolean'||!Number.isSafeInteger(raw.totalCount)||raw.totalCount<0||raw.hasMore&&raw.data.length!==25||total!==undefined&&total!==raw.totalCount)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');
-   total=raw.totalCount;for(const r of raw.data){const v=convert(r);if(rows.some(x=>x.id===v.id))throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');rows.push(v);}
+   // Only the refund endpoint may explicitly represent an empty first page with data:null.
+   const items=allowEmptyRefundPage&&offset===0&&rows.length===0&&raw&&typeof raw==='object'&&Object.prototype.hasOwnProperty.call(raw,'data')&&raw.data===null&&Object.prototype.hasOwnProperty.call(raw,'hasMore')&&raw.hasMore===false&&Object.prototype.hasOwnProperty.call(raw,'totalCount')&&raw.totalCount===0?[]:raw?.data;
+   if(!raw||!Array.isArray(items)||items.length>25||typeof raw.hasMore!=='boolean'||!Number.isSafeInteger(raw.totalCount)||raw.totalCount<0||raw.hasMore&&items.length!==25||total!==undefined&&total!==raw.totalCount)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');
+   total=raw.totalCount;for(const r of items){const v=convert(r);if(rows.some(x=>x.id===v.id))throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');rows.push(v);}
    if(!raw.hasMore){if(rows.length!==total)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');return rows;}
   }
   throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');
@@ -64,7 +66,7 @@ export class SalesAdjustmentCheckAdapter {
  async check(source:CheckSource,params:any,scope:'CHECK'|'COMMAND'='CHECK'):Promise<CheckEvidence>{
   if(source.kind==='REFUND_PAYMENT'){
    identifier(source.remoteId,'pay_');const payment=checkedPayment(await this.get('/payments/'+source.remoteId,scope),source);
-   let refunds:any[];try{refunds=await this.enumerate('/payments/'+source.remoteId+'/refunds',x=>checkedRefund(x,source.remoteId),true,scope);}catch(error){return {complete:false,blockers:['REFUNDS_INCOMPLETE',queryDiagnostic(error)],payment};}
+   let refunds:any[];try{refunds=await this.enumerate('/payments/'+source.remoteId+'/refunds',x=>checkedRefund(x,source.remoteId),true,scope,true);}catch(error){return {complete:false,blockers:['REFUNDS_INCOMPLETE',queryDiagnostic(error)],payment};}
    const blockers:string[]=[];const refundedCents=refunds.filter(x=>x.status==='DONE').reduce((n,x)=>n+x.valueCents,0);
    if(JSON.stringify(checkedPayment(await this.get('/payments/'+source.remoteId,scope),source))!==JSON.stringify(payment))blockers.push('REMOTE_SOURCE_CHANGED');
    if(payment.deleted||payment.status!=='RECEIVED')blockers.push('PAYMENT_NOT_RECEIVED');
