@@ -40,9 +40,9 @@ export function checkedAffectedPayment(raw:any,s:{id:string;customer:string}){
 @Injectable()
 export class SalesAdjustmentCheckAdapter {
  constructor(private readonly config:ConfigService){}
- private async get(path:string){
+ private async get(path:string,scope:'CHECK'|'COMMAND'='CHECK'){
   const key=this.config.get<string>('SALES_ASAAS_SANDBOX_API_KEY');
-  if(this.config.get('SALES_ADJUSTMENT_CHECKS_ENABLED')!=='true'||this.config.get('SALES_ADJUSTMENT_CHECK_CALLS_ENABLED')!=='true'||this.config.get('SALES_ASAAS_SANDBOX_ENABLED')!=='true'||this.config.get('SALES_ASAAS_BASE_URL')!==SANDBOX_URL||!key||key.length<20)throw new AdjustmentQueryError('QUERY_CONFIG_INVALID');
+  if(this.config.get(scope==='COMMAND'?'SALES_ADJUSTMENT_COMMANDS_ENABLED':'SALES_ADJUSTMENT_CHECKS_ENABLED')!=='true'||this.config.get(scope==='COMMAND'?'SALES_ADJUSTMENT_COMMAND_CALLS_ENABLED':'SALES_ADJUSTMENT_CHECK_CALLS_ENABLED')!=='true'||this.config.get('SALES_ASAAS_SANDBOX_ENABLED')!=='true'||this.config.get('SALES_ASAAS_BASE_URL')!==SANDBOX_URL||!key||key.length<20)throw new AdjustmentQueryError('QUERY_CONFIG_INVALID');
   let r:Response;try{r=await fetch(SANDBOX_URL+path,{method:'GET',headers:{access_token:key,'User-Agent':'EnergyOS-Sandbox-4J'},redirect:'error',signal:AbortSignal.timeout(10000)});}catch(error){throw new AdjustmentQueryError(error instanceof Error&&['TimeoutError','AbortError'].includes(error.name)?'QUERY_TIMEOUT':'QUERY_NETWORK_ERROR');}
   if(!r.ok)throw new AdjustmentQueryError('QUERY_HTTP_ERROR');if(!r.body)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');const reader=r.body.getReader(),parts:Uint8Array[]=[];let size=0;
   try{while(true){const x=await reader.read();if(x.done)break;size+=x.value.byteLength;if(size>131072)throw new AdjustmentQueryError('QUERY_RESPONSE_LIMIT');parts.push(x.value);}}catch(error){if(error instanceof AdjustmentQueryError)throw error;throw new AdjustmentQueryError(error instanceof Error&&['TimeoutError','AbortError'].includes(error.name)?'QUERY_TIMEOUT':'QUERY_NETWORK_ERROR');}finally{await reader.cancel().catch(()=>{});}
@@ -50,10 +50,10 @@ export class SalesAdjustmentCheckAdapter {
  }
  // Only documented list envelopes or a complete bounded refunds array are accepted.
  // Unsupported schemas, duplicates and truncated enumeration never prove completeness.
- private async enumerate(path:string,convert:(x:any)=>any,allowArray=false){
+ private async enumerate(path:string,convert:(x:any)=>any,allowArray=false,scope:'CHECK'|'COMMAND'='CHECK'){
   const rows:any[]=[];let total:number|undefined;
   for(let offset=0;offset<100;offset+=25){
-   const raw=await this.get(path+(path.includes('?')?'&':'?')+new URLSearchParams({offset:String(offset),limit:'25'}));
+   const raw=await this.get(path+(path.includes('?')?'&':'?')+new URLSearchParams({offset:String(offset),limit:'25'}),scope);
    if(Array.isArray(raw)){if(!allowArray||offset!==0||raw.length>100)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');for(const r of raw){const v=convert(r);if(rows.some(x=>x.id===v.id))throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');rows.push(v);}return rows;}
    if(!raw||!Array.isArray(raw.data)||raw.data.length>25||typeof raw.hasMore!=='boolean'||!Number.isSafeInteger(raw.totalCount)||raw.totalCount<0||raw.hasMore&&raw.data.length!==25||total!==undefined&&total!==raw.totalCount)throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');
    total=raw.totalCount;for(const r of raw.data){const v=convert(r);if(rows.some(x=>x.id===v.id))throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');rows.push(v);}
@@ -61,12 +61,12 @@ export class SalesAdjustmentCheckAdapter {
   }
   throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');
  }
- async check(source:CheckSource,params:any):Promise<CheckEvidence>{
+ async check(source:CheckSource,params:any,scope:'CHECK'|'COMMAND'='CHECK'):Promise<CheckEvidence>{
   if(source.kind==='REFUND_PAYMENT'){
-   identifier(source.remoteId,'pay_');const payment=checkedPayment(await this.get('/payments/'+source.remoteId),source);
-   let refunds:any[];try{refunds=await this.enumerate('/payments/'+source.remoteId+'/refunds',x=>checkedRefund(x,source.remoteId),true);}catch(error){return {complete:false,blockers:['REFUNDS_INCOMPLETE',queryDiagnostic(error)],payment};}
+   identifier(source.remoteId,'pay_');const payment=checkedPayment(await this.get('/payments/'+source.remoteId,scope),source);
+   let refunds:any[];try{refunds=await this.enumerate('/payments/'+source.remoteId+'/refunds',x=>checkedRefund(x,source.remoteId),true,scope);}catch(error){return {complete:false,blockers:['REFUNDS_INCOMPLETE',queryDiagnostic(error)],payment};}
    const blockers:string[]=[];const refundedCents=refunds.filter(x=>x.status==='DONE').reduce((n,x)=>n+x.valueCents,0);
-   if(JSON.stringify(checkedPayment(await this.get('/payments/'+source.remoteId),source))!==JSON.stringify(payment))blockers.push('REMOTE_SOURCE_CHANGED');
+   if(JSON.stringify(checkedPayment(await this.get('/payments/'+source.remoteId,scope),source))!==JSON.stringify(payment))blockers.push('REMOTE_SOURCE_CHANGED');
    if(payment.deleted||payment.status!=='RECEIVED')blockers.push('PAYMENT_NOT_RECEIVED');
    if(!['PIX','CREDIT_CARD'].includes(payment.billingType))blockers.push('METHOD_UNSUPPORTED');
    if(payment.splitPresent)blockers.push('SPLIT_REVIEW_REQUIRED');
@@ -75,11 +75,11 @@ export class SalesAdjustmentCheckAdapter {
    return {complete:true,blockers,payment,refunds,refundedCents,remainingCents:Math.max(0,payment.grossCents-refundedCents)};
   }
   if(source.kind!=='CANCEL_SUBSCRIPTION')throw new AdjustmentQueryError('QUERY_SCHEMA_INVALID');identifier(source.remoteId,'sub_');executedSubscriptionEvidence(source);
-  const subscription=checkedSubscription(await this.get('/subscriptions/'+source.remoteId),source);
-  let payments:any[];try{payments=await this.enumerate('/subscriptions/'+source.remoteId+'/payments',x=>checkedAffectedPayment(x,subscription));}catch(error){return {complete:false,blockers:['PAYMENTS_INCOMPLETE',queryDiagnostic(error)],subscription};}
+  const subscription=checkedSubscription(await this.get('/subscriptions/'+source.remoteId,scope),source);
+  let payments:any[];try{payments=await this.enumerate('/subscriptions/'+source.remoteId+'/payments',x=>checkedAffectedPayment(x,subscription),false,scope);}catch(error){return {complete:false,blockers:['PAYMENTS_INCOMPLETE',queryDiagnostic(error)],subscription};}
   const blockers:string[]=[];if(subscription.deleted||subscription.status!=='ACTIVE')blockers.push('SUBSCRIPTION_NOT_ACTIVE');
   // API state is read twice; concurrent changes invalidate the snapshot.
-  if(JSON.stringify(checkedSubscription(await this.get('/subscriptions/'+source.remoteId),source))!==JSON.stringify(subscription))blockers.push('REMOTE_SOURCE_CHANGED');
+  if(JSON.stringify(checkedSubscription(await this.get('/subscriptions/'+source.remoteId,scope),source))!==JSON.stringify(subscription))blockers.push('REMOTE_SOURCE_CHANGED');
   return {complete:true,blockers,subscription,payments};
  }
 }

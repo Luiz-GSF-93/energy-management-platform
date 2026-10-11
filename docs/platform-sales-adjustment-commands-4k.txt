@@ -1,0 +1,13 @@
+Etapa 4K — comandos controlados somente sandbox
+
+Entrega com SALES_ADJUSTMENT_COMMANDS_ENABLED e SALES_ADJUSTMENT_COMMAND_CALLS_ENABLED desligados por padrão. Não habilitar na implantação.
+Owner prepara e confirma impactos. Financeiro autorizado apenas consulta por solicitação, com paginação e histórico. Sem acesso de organizações/Portal.
+
+Migração aditiva 20261011_platform_sales_adjustment_commands.sql: comandos e eventos privados imutáveis, RLS e RPC exclusiva do backend. Nenhum backfill, alteração de preços, consolidados ou licenças.
+
+Execução: autorização -> reserva -> GET de pré-conferência com comparação exata -> DISPATCH persistido -> única operação DELETE da assinatura ou POST refund da cobrança -> registro da resposta. Não há repetição automática.
+Resposta ausente, falha de persistência ou timeout mantém reserva. Recuperação faz somente GET. Estorno exige ID da resposta original e resultado DONE; ausência de atribuição permanece pendente. Cancelamento exige registro excluído e conferência das cobranças afetadas. 404 não comprova exclusão.
+Nova operação após resultado confirmado exige consulta posterior. Evidência/autorizações expiram em cinco minutos; pré-conferência em 30 segundos.
+
+Validação: tipos backend e build frontend webpack; 219 testes de regressão em seis suítes; banco descartável com migração reaplicada, concorrência, isolamento, atribuição exata, reserva, renomeação e indisponibilidade cadastral, sem alteração financeira/licenças.
+Nenhuma chamada real ao Asaas executada. Homologação externa e habilitação ficam para autorização específica.
