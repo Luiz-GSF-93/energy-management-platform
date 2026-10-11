@@ -18,7 +18,7 @@ export function signatureOperation(c:SignatureClaim){
  }
  const party=c.source?.parties?.[c.step.includes('SUPPLIER')?'supplier':'customer'];
  if(!party||typeof party.signatory!=='string'||party.signatory.trim().length<3||party.signatory.length>200||/[\x00-\x1f\x7f]/.test(party.signatory)||typeof party.email!=='string'||party.email.length>254||!/^\S+@[^\s@]+\.[^\s@]+$/.test(party.email))throw new Error('Invalid signer');
- if(c.step==='SUPPLIER'||c.step==='CUSTOMER')return {path:path+'/signers',body:{data:{type:'signers',attributes:{name:party.signatory,email:party.email,has_documentation:false,refusable:true}}}};
+ if(c.step==='SUPPLIER'||c.step==='CUSTOMER')return {path:path+'/signers',body:{data:{type:'signers',attributes:{name:party.signatory,email:party.email,has_documentation:false,refusable:true,group:1,communicate_events:{signature_request:'email',signature_reminder:'none',document_signed:'email'}}}}};
  const doc=c.dependencies.document,signer=c.dependencies[c.step.includes('SUPPLIER')?'supplier':'customer'];
  if(!doc||!signer||!uuid.test(doc)||!uuid.test(signer))throw new Error('Invalid requirement relationship');
  return {path:path+'/requirements',body:{data:{type:'requirements',attributes:c.step.startsWith('QUAL_')?{action:'agree',role:'sign'}:{action:'provide_evidence',auth:'email'},relationships:{document:{data:{type:'documents',id:doc}},signer:{data:{type:'signers',id:signer}}}}}};

@@ -43,4 +43,4 @@ const concurrent=String.raw`
  }finally{await c1.query('ROLLBACK');await c1.end();await c2.end();}
  console.log('PASS',checks,'PostgreSQL signature/original checks, including simultaneous sessions; disposable local fixture only');await db.close();
 `;
-new Function('require',source.replace(marker,concurrent))(requireFixture);
+new Function('require',source.replace(marker,()=>concurrent))(requireFixture);

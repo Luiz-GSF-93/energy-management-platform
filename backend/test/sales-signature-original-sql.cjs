@@ -48,4 +48,4 @@ const cases=String.raw`
  assert.equal((await db.query('select md5(to_jsonb(d)::text) h from platform_sales_contract_drafts d where id=$1',[draft])).rows[0].h,sourceBefore);checks++;
  console.log('PASS',checks,'signature/original SQL checks; no network or shared database');await db.close();
 `;
-new Function('require',baseline.replace(marker,cases))(require);
+new Function('require',baseline.replace(marker,()=>cases))(require);
