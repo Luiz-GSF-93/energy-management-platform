@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../app/backoffice/platform-sales/contractSelection.ts'),'utf8');
+const sandbox={exports:{}};vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,sandbox);
+const eligible=sandbox.exports.eligibleOfferTerms;
+const make=(revision,expired,...statuses)=>({revision,expired,events:statuses.map((status,i)=>({status,version:i+1}))});
+const valid=make(2,false,'DRAFT','CHECKED','APPROVED_INTERNAL');
+assert.equal(eligible([valid])[0],valid);
+for(const r of [make(1,false,'DRAFT'),make(1,false,'CHECKED'),make(1,true,'APPROVED_INTERNAL'),make(1,null,'APPROVED_INTERNAL'),make(1,false),make(1,false,'APPROVED_INTERNAL','CHECKED'),make(1,undefined,'APPROVED_INTERNAL')])assert.equal(eligible([r]).length,0);
+const selected=eligible([make(1,true,'APPROVED_INTERNAL'),valid]);assert.equal(selected.length,1);assert.equal(selected[0].revision,2);
+assert.equal(eligible([]).length,0);console.log('11 contract selection regression checks passed');
