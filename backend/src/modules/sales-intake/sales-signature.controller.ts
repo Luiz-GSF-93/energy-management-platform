@@ -6,9 +6,12 @@ import {SALES_OWNER} from './sales-finance.service';
 import {SalesSignatureService} from './sales-signature.service';
 import {SalesSignatureDispatchService} from './sales-signature-dispatch.service';
 import {SalesSignatureRecoveryService} from './sales-signature-recovery.service';
+import {SalesSignatureOriginalService} from './sales-signature-original.service';
 @Controller('admin/sales/signatures') @PlatformScope() @RequirePermission([SALES_OWNER])
 export class SalesSignatureController {
- constructor(private readonly service:SalesSignatureService,private readonly dispatch:SalesSignatureDispatchService,private readonly recovery:SalesSignatureRecoveryService){}
+ constructor(private readonly service:SalesSignatureService,private readonly dispatch:SalesSignatureDispatchService,private readonly recovery:SalesSignatureRecoveryService,private readonly original:SalesSignatureOriginalService){}
+ @Get(':id/original') @RequirePermission([SALES_OWNER]) @Header('Cache-Control','no-store') originalRead(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string,@Query() q:Record<string,unknown>){return this.original.read(r.authenticatedUser.userId,id,q);}
+ @Post('original/check') @RequirePermission([SALES_OWNER]) @Header('Cache-Control','no-store') originalCheck(@Req() r:RequestWithAuthenticatedUser,@Body() b:unknown){return this.original.check(r.authenticatedUser.userId,b);}
  @Get(':id/recovery') @RequirePermission([SALES_OWNER]) @Header('Cache-Control','no-store') recoveryRead(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string,@Query() q:Record<string,unknown>){return this.recovery.read(r.authenticatedUser.userId,id,q);}
  @Post('recovery/check') @RequirePermission([SALES_OWNER]) @Header('Cache-Control','no-store') recoveryCheck(@Req() r:RequestWithAuthenticatedUser,@Body() b:unknown){return this.recovery.check(r.authenticatedUser.userId,b);}
  @Get(':id/creation') @RequirePermission([SALES_OWNER]) @Header('Cache-Control','no-store') creation(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string){return this.dispatch.read(r.authenticatedUser.userId,id);}

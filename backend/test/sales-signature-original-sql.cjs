@@ -1,0 +1,51 @@
+// Extend the existing disposable fixture in its own scope; shared databases are never used.
+const fs=require('node:fs');
+const baseline=fs.readFileSync('test/sales-signature-recovery-sql.cjs','utf8');
+const marker=" console.log('PASS',checks,'signature SQL checks; no network or shared database');await db.close();";
+if(!baseline.includes(marker))throw Error('Fixture insertion point changed');
+const cases=String.raw`
+ const m4=fs.readFileSync('src/database/migrations/20261018_platform_sales_signature_original.sql','utf8');
+ await db.exec('BEGIN;'+m4.replace(/^BEGIN;/,'').replace(/COMMIT;\s*$/,'')+'ROLLBACK;');
+ assert.equal((await db.query("select to_regclass('platform_sales_signature_original_checks') x")).rows[0].x,null);checks++;
+ await db.exec(m4);
+ const original=async(action,b,actor=owner)=>(await db.query('select platform_sales_signature_original_action($1,$2,$3) v',[actor,action,JSON.stringify(b)])).rows[0].v;
+ const originalBody={id:request2,lease:docLease,candidateId:id(400),requestId:id(401),justification:'Compare actual remote original PDF bytes.'};
+ for(const action of ['read','begin','complete'])await reject(()=>original(action,{id:request2},other),'42501');
+ await reject(()=>original('begin',{...originalBody,lease:lease2}),'23505');
+ await reject(()=>original('begin',{...originalBody,id:request}),'23505');
+ await reject(()=>original('begin',{...originalBody,url:'https://attacker.test'}),'22023');
+ await db.query("update platform_sales_contract_events set status='DRAFT' where draft_id=$1",[draft2]);
+ await reject(()=>original('begin',originalBody),'23505');
+ await db.query("update platform_sales_contract_events set status='APPROVED_INTERNAL' where draft_id=$1",[draft2]);
+ const originalContext=await original('begin',originalBody);
+ assert.equal(originalContext.envelopeId,check.candidateId);assert.equal(originalContext.documentId,originalBody.candidateId);assert.equal(originalContext.draftSha256,hash);checks+=3;
+ assert.equal((await original('begin',originalBody)).state,'PENDING');checks++;
+ await reject(()=>original('begin',{...originalBody,candidateId:id(402)}),'23505');
+ await reject(()=>original('begin',{...originalBody,requestId:id(403)}),'23505');
+ assert.equal((await original('complete',{id:request2,requestId:originalBody.requestId,result:null})).state,'INCOMPLETE');checks++;
+ assert.equal((await dispatch('read',{id:request2})).blocked,true);checks++;
+ const retryBody={...originalBody,requestId:id(404)};await original('begin',retryBody);
+ const originalProof={externalId:originalBody.candidateId,type:'documents',envelopeId:check.candidateId,sha256:hash,byteLength:pdf.length,environment:'SANDBOX',realActivationEligible:false};
+ const done={id:request2,requestId:retryBody.requestId,result:originalProof};
+ for(const patch of [{sha256:'b'.repeat(64)},{externalId:id(402)},{envelopeId:id(402)},{environment:'PRODUCTION'},{realActivationEligible:true},{byteLength:pdf.length+1},{byteLength:0},{byteLength:'210'},{url:'https://attacker.test'},{sha256:null}])await reject(()=>original('complete',{...done,result:{...originalProof,...patch}}),patch.byteLength===pdf.length+1?'23505':'22023');
+ await reject(()=>original('complete',{...done,id:request}),'23505');
+ assert.equal((await original('complete',done)).state,'VERIFIED');assert.equal((await original('complete',done)).replayed,true);checks+=2;
+ await reject(()=>original('complete',{...done,result:null}),'23505');
+ assert.equal((await dispatch('read',{id:request2})).blocked,false);assert.equal((await dispatch('read',{id:request2})).nextOrdinal,3);checks+=2;
+ assert.deepEqual((await db.query('select state from platform_sales_signature_attempt_events where lease=$1 order by version',[docLease])).rows.map(v=>v.state),['CLAIMED','RESERVED','UNKNOWN','VERIFIED']);checks++;
+ await reject(()=>original('begin',{...retryBody,requestId:id(405),candidateId:id(402)}),'23505');
+ await db.query("update user_profiles set full_name='Current renamed Owner'");
+ const history=await original('read',{id:request2,page:0});assert.equal(history.total,2);assert.equal(history.realActivationEligible,false);assert.equal(history.rows[0].actor_name,null);assert.equal(history.rows[0].currentActorName,'Current renamed Owner');assert.equal(JSON.stringify(history).includes('pdfHex'),false);assert.equal(JSON.stringify(history).includes('http'),false);checks+=6;
+ await db.query('update user_profiles set full_name=null');assert.equal((await original('read',{id:request2,page:0})).rows[0].currentActorName,null);checks++;
+ assert.equal((await original('read',{id:request2,page:1})).rows.length,0);checks++;
+ await reject(()=>original('read',{id:request2,page:-1}),'22023');await reject(()=>original('read',{id:request2,page:1001}),'22023');
+ await db.query('update platform_team_members set active=false');await reject(()=>original('read',{id:request2,page:0}),'42501');await db.query('update platform_team_members set active=true');
+ for(const table of ['platform_sales_signature_original_checks','platform_sales_signature_original_results']){
+  await reject(()=>db.exec('update '+table+" set actor_name='fake'"),'42501');await reject(()=>db.exec('delete from '+table),'42501');
+  await db.exec('SET ROLE service_role');await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');
+  assert.equal((await db.query('select relrowsecurity v from pg_class where relname=$1',[table])).rows[0].v,true);checks++;
+ }
+ assert.equal((await db.query('select md5(to_jsonb(d)::text) h from platform_sales_contract_drafts d where id=$1',[draft])).rows[0].h,sourceBefore);checks++;
+ console.log('PASS',checks,'signature/original SQL checks; no network or shared database');await db.close();
+`;
+new Function('require',baseline.replace(marker,cases))(require);
