@@ -49,10 +49,18 @@ export class SalesEvidenceAdapter {
     if(offset!==0||raw.length>100)throw new EvidenceQueryError('HISTORY_TRUNCATED');
     for(const row of raw){const r=evidenceRefund(row,source);if(refunds.some(x=>x.id===r.id))throw new EvidenceQueryError('DUPLICATE_ITEMS');refunds.push(r);}refundsComplete=true;break;
    }
-   if(!raw||!Array.isArray(raw.data)||raw.data.length>25||typeof raw.hasMore!=='boolean'||!Number.isSafeInteger(raw.totalCount)||raw.totalCount<0||raw.hasMore&&raw.data.length!==25)throw new EvidenceQueryError('REFUNDS_ENVELOPE_INVALID');
+   if(!raw||typeof raw!=='object')throw new EvidenceQueryError('REFUNDS_NOT_OBJECT');
+   if(!Object.prototype.hasOwnProperty.call(raw,'data'))throw new EvidenceQueryError('REFUNDS_DATA_MISSING');
+   if(!Array.isArray(raw.data))throw new EvidenceQueryError('REFUNDS_DATA_INVALID');
+   if(raw.data.length>25)throw new EvidenceQueryError('REFUNDS_PAGE_OVERSIZED');
+   if(!Object.prototype.hasOwnProperty.call(raw,'hasMore'))throw new EvidenceQueryError('REFUNDS_HAS_MORE_MISSING');
+   if(typeof raw.hasMore!=='boolean')throw new EvidenceQueryError('REFUNDS_HAS_MORE_INVALID');
+   if(!Object.prototype.hasOwnProperty.call(raw,'totalCount'))throw new EvidenceQueryError('REFUNDS_TOTAL_MISSING');
+   if(!Number.isSafeInteger(raw.totalCount)||raw.totalCount<0)throw new EvidenceQueryError('REFUNDS_TOTAL_INVALID');
+   if(raw.hasMore&&raw.data.length!==25)throw new EvidenceQueryError('REFUNDS_INTERMEDIATE_INCOMPLETE');
    if(total!==undefined&&total!==raw.totalCount)throw new EvidenceQueryError('PAGINATION_CHANGED');
    total=raw.totalCount;for(const row of raw.data){const r=evidenceRefund(row,source);if(refunds.some(x=>x.id===r.id))throw new EvidenceQueryError('DUPLICATE_ITEMS');refunds.push(r);}
-   if(!raw.hasMore){if(refunds.length!==total)throw new EvidenceQueryError('REFUNDS_ENVELOPE_INVALID');refundsComplete=true;break;}
+   if(!raw.hasMore){if(refunds.length!==total)throw new EvidenceQueryError('REFUNDS_FINAL_TOTAL_MISMATCH');refundsComplete=true;break;}
   }
   if(refunds.filter(x=>x.status==='DONE').reduce((n,x)=>n+x.valueCents,0)>p.payment.grossCents)throw new EvidenceQueryError('REFUND_ROW_INVALID');
   if(!refundsComplete)diagnostics.push({scope:'REFUNDS',code:'HISTORY_TRUNCATED'});

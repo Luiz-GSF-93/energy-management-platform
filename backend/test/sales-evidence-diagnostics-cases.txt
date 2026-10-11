@@ -1,9 +1,13 @@
 const diagBefore=(await db.query("select jsonb_agg(to_jsonb(r) order by attempt_id) rows from platform_sales_evidence_revisions r")).rows[0].rows;
 const diagMigration=fs.readFileSync('src/database/migrations/20261011_platform_sales_evidence_safe_diagnostics.sql','utf8');
 await db.exec(diagMigration);await db.exec(diagMigration);
+const fieldMigration=fs.readFileSync('src/database/migrations/20261011_platform_sales_refunds_field_diagnostics.sql','utf8');
+const actionBefore=(await db.query("select pg_get_functiondef('platform_sales_evidence_action(uuid,text,jsonb)'::regprocedure) def")).rows[0].def;
+await db.exec(fieldMigration);await db.exec(fieldMigration);
+assert.equal((await db.query("select pg_get_functiondef('platform_sales_evidence_action(uuid,text,jsonb)'::regprocedure) def")).rows[0].def,actionBefore);checks++;
 assert.deepEqual((await db.query("select jsonb_agg(to_jsonb(r) order by attempt_id) rows from platform_sales_evidence_revisions r")).rows[0].rows,diagBefore);checks++;
 const diagnosticValidate=d=>db.query('select platform_sales_evidence_validate_diagnostics($1)',[JSON.stringify(d)]);
-for(const code of ['QUERY_FAILED','CONFIG_INVALID','TIMEOUT','NETWORK_ERROR','HTTP_ERROR','RESPONSE_LIMIT','JSON_INVALID','PAYMENT_SCHEMA_INVALID','REFUNDS_ENVELOPE_INVALID','REFUND_ROW_INVALID','INVOICES_ENVELOPE_INVALID','INVOICE_ROW_INVALID','BINDING_MISMATCH','DUPLICATE_ITEMS','HISTORY_TRUNCATED','PAGINATION_CHANGED','COLLECTION_DEADLINE','SOURCE_CHANGED']){await diagnosticValidate([{scope:'REFUNDS',code}]);checks++;}
+for(const code of ['QUERY_FAILED','CONFIG_INVALID','TIMEOUT','NETWORK_ERROR','HTTP_ERROR','RESPONSE_LIMIT','JSON_INVALID','PAYMENT_SCHEMA_INVALID','REFUNDS_ENVELOPE_INVALID','REFUNDS_NOT_OBJECT','REFUNDS_DATA_MISSING','REFUNDS_DATA_INVALID','REFUNDS_PAGE_OVERSIZED','REFUNDS_HAS_MORE_MISSING','REFUNDS_HAS_MORE_INVALID','REFUNDS_TOTAL_MISSING','REFUNDS_TOTAL_INVALID','REFUNDS_INTERMEDIATE_INCOMPLETE','REFUNDS_FINAL_TOTAL_MISMATCH','REFUND_ROW_INVALID','INVOICES_ENVELOPE_INVALID','INVOICE_ROW_INVALID','BINDING_MISMATCH','DUPLICATE_ITEMS','HISTORY_TRUNCATED','PAGINATION_CHANGED','COLLECTION_DEADLINE','SOURCE_CHANGED']){await diagnosticValidate([{scope:'REFUNDS',code}]);checks++;}
 for(const status of [300,400,401,403,429,500,599]){await diagnosticValidate([{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:status}]);checks++;}
 for(const bad of [null,{},'secret',[null],[{}],[{scope:'REFUNDS',code:'TOKEN_SECRET'}],[{scope:'TOKEN_SECRET',code:'TIMEOUT'}],[{scope:'REFUNDS',code:'TIMEOUT',message:'secret'}],[{scope:'REFUNDS',code:'TIMEOUT',httpStatus:500}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:'403'}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:299}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:600}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:403.1}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:null}],[{scope:'REFUNDS',code:'TIMEOUT'},{scope:'REFUNDS',code:'NETWORK_ERROR'}],['PAYMENT','REFUNDS','INVOICES','RECHECK','COLLECTION'].map(scope=>({scope,code:'TIMEOUT'}))])await reject(()=>diagnosticValidate(bad),'22023');
 for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await reject(()=>diagnosticValidate([]),'42501');await db.exec('RESET ROLE');}
@@ -11,6 +15,7 @@ const diagClaim={kind:'ONCE',id:onceBinding.id,justification:'Diagnostic fixture
 const diagFull={payment:onceSummary,refunds:[],invoices:[],refundsComplete:true,invoicesComplete:true};
 const diagResults=[
  [null,'REVIEW'],[diagFull,'COMPLETE'],
+ ...["REFUNDS_NOT_OBJECT", "REFUNDS_DATA_MISSING", "REFUNDS_DATA_INVALID", "REFUNDS_PAGE_OVERSIZED", "REFUNDS_HAS_MORE_MISSING", "REFUNDS_HAS_MORE_INVALID", "REFUNDS_TOTAL_MISSING", "REFUNDS_TOTAL_INVALID", "REFUNDS_INTERMEDIATE_INCOMPLETE", "REFUNDS_FINAL_TOTAL_MISMATCH"].map(code=>[{...diagFull,refundsComplete:false,diagnostics:[{scope:'REFUNDS',code}]},'PARTIAL']),
  [{...diagFull,diagnostics:[]},'COMPLETE'],
  [{diagnostics:[{scope:'PAYMENT',code:'HTTP_ERROR',httpStatus:401}]},'REVIEW'],
  [{...diagFull,refundsComplete:false,diagnostics:[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:403}]},'PARTIAL'],
