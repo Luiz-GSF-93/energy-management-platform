@@ -7,5 +7,7 @@ import {SalesFinanceService,SALES_FINANCE_READ,SALES_OWNER} from './sales-financ
 export class SalesFinanceController {
  constructor(private readonly service:SalesFinanceService){}
  @Get() @RequirePermission([SALES_OWNER,SALES_FINANCE_READ]) @Header('Cache-Control','no-store') list(@Req() r:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){return this.service.read(r.authenticatedUser.userId,q);}
+ @Get('consolidated') @RequirePermission([SALES_OWNER,SALES_FINANCE_READ]) @Header('Cache-Control','no-store') consolidated(@Req() r:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){return this.service.read(r.authenticatedUser.userId,q,undefined,true);}
+ @Get('consolidated/:id') @RequirePermission([SALES_OWNER,SALES_FINANCE_READ]) @Header('Cache-Control','no-store') consolidatedDetail(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string){return this.service.read(r.authenticatedUser.userId,{},id,true);}
  @Get(':id') @RequirePermission([SALES_OWNER,SALES_FINANCE_READ]) @Header('Cache-Control','no-store') detail(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string){return this.service.read(r.authenticatedUser.userId,{},id);}
 }
