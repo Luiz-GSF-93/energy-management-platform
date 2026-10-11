@@ -1,0 +1,10 @@
+4H refund history correction — 2026-10-11
+
+The financial evidence adapter obtains complete refunds from the dedicated sandbox GET /payments/{id}/refunds endpoint. The payment's embedded refunds field alone never establishes completeness in new adapter results.
+Accepted responses: a bounded complete array (up to 100 rows), or list envelopes with data, hasMore and consistent totalCount (25 rows per page, up to four pages). Invalid rows, duplicate IDs, mismatched payment, changed totals, truncation and failures cannot prove absence of refunds.
+Persisted evidence retains the original payment/refunds/refundsComplete/invoices/invoicesComplete contract; IDs are used for collection validation, then removed from the existing refund shape. No old snapshot is rewritten. No migration or frontend change.
+Re-read the strictly bound payment after collecting refunds and invoices; changed gross/net/status/deletion/source or an unsuccessful recheck prevents accepting the snapshot. At most ten GET requests share a 70-second deadline, within the existing 90-second evidence lease. No retry, scheduling or mutation.
+Existing 4H flags, sandbox URL, backend-only credential and Owner authorization remain required. Existing Finance read permission is unchanged. No flags are enabled by this change.
+Official contract: https://docs.asaas.com/reference/listar-estornos-de-uma-cobranca
+Approved impacts: outputs/ENERGYOS-SALES-4H-HISTORICO-ESTORNOS-CORRECAO-IMPACTOS.txt
+External homologation requires separate authorization. No refunds, cancellation, invoice issue, new payment or provisioning are authorized by this delivery.
