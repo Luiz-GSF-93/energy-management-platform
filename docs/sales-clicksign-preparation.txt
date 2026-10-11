@@ -1,0 +1,16 @@
+Clicksign — 3C1: preparação privada, entregue desligada
+Base: main 90a6b366d97fb32e28255ba32a197f6a32d440fb.
+Fornecedor atualizado para Clicksign por escolha do usuário; conta existente é produção. Nenhuma credencial ou chamada de produção usada.
+SALES_SIGNATURE_PREPARATION_ENABLED ausente/false desliga todas as rotas. Não há transporte externo ou endpoint de webhook nesta entrega.
+Novas solicitações vinculadas à minuta e proposta aprovadas, hash e partes preservados, ambiente SANDBOX fixo, sem notificações. Rotas privadas para Owner ativo revalidado no banco. Tabelas/RPC aditivas, RLS, sem acesso direto nem alteração/exclusão, tentativas idempotentes e retirada versionada. Uma solicitação por minuta; retirada não reabre a solicitação nem apaga o histórico. Correção exige nova minuta.
+Tela colapsada, filtros, paginação e modais na gestão comercial do Owner. Não gera links nem declara assinatura. Preserva autor registrado e nome atual separadamente, com ausência explícita.
+Helpers sem rede para formato JSON API do envelope, normalização estrita de resposta, HMAC dos bytes originais e hash do PDF. Testes locais com respostas simuladas, nunca gravadas como assinatura aceita.
+Importação manual e fontes 5A/5B não foram alteradas. Não há evidência automática de assinatura ou nova rota de ativação. realActivationEligible=false; aplicação de licença permanece no bloqueio existente.
+Migração 20261014_platform_sales_signature_preparation.sql: duas tabelas privadas e uma RPC. Validar com PostgreSQL descartável antes de aplicar em compartilhado. Não aplicada ao banco compartilhado nesta entrega.
+Próximos incrementos: persistir cada operação externa e recuperação por referência; criar envelope/documento/signatários/requisitos sem duplicação; confirmar participantes autorizados de teste; webhook HMAC com corpo bruto e consulta de confirmação; download privado com origem validada; conferência documental explícita e ponte sandbox à 5A/5B. Entregar capacidades desligadas antes da homologação externa.
+Conta e token sandbox Clicksign necessários apenas à homologação externa. Não inserir chave no chat. Produção, envio e assinatura por terceiros não autorizados.
+Documentação consultada em 11/10/2026:
+https://developers.clicksign.com/docs/primeiros-passos
+https://developers.clicksign.com/reference/api-criar-envelope
+https://developers.clicksign.com/docs/faq-duvidas-e-problemas-comuns
+https://developers.clicksign.com/v2.0/docs/seguranca-de-webhooks
