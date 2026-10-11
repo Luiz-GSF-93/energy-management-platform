@@ -1,0 +1,15 @@
+4H — private sandbox financial evidence
+Baseline: b9983ed / PR344. Approved impacts: outputs/ENERGYOS-SALES-4H-PROPOSTA-IMPACTOS.txt.
+No changes to existing financial readers, webhook handling, pricing, licenses or organization permissions.
+
+Flags (default off): SALES_EVIDENCE_ENABLED, SALES_EVIDENCE_CALLS_ENABLED.
+Existing sandbox flag, strict sandbox base URL and backend key are also required for external GET.
+No external calls during implementation. Owner creates a private read attempt; existing authorized Finance can only read snapshots. PlatformScope and database authorization both apply.
+Endpoints: GET /api/v1/admin/sales/evidence-sandbox/:kind/:id?page=0; POST same /check with justification only. kind ONCE = avulso binding ID, CYCLE = recurring binding ID. Evidence is never accepted from the browser.
+Database: two append-only RLS tables, source helper callable only by the private action, SECURITY DEFINER search_path pg_catalog. Service role has action execution but no direct table access. Source revalidated before and after bounded GET. 90-second lease covers at most five requests, each 10-second timeout; no network retry. Fiscal pagination stops at 100 and is explicitly partial if more exist or a page fails.
+Adapter: minimal payment/refund/invoice allowlist; no raw payload, receipts, credentials, contact details or unrestricted URLs persisted. Refund absence is incomplete; explicit [] is complete. Only DONE represents a completed return; no snapshot-to-snapshot summation. Original gross/net remain preserved. Gross-minus-net is a difference, not a fee breakdown. No deduction of refunds from net or changes to consolidated totals.
+UI: row action on recurring and avulso tables, details modal, paginated preserved snapshots, explicit partial/review states and recorded/current author names plus original ID. Missing registry leaves history readable and Owner command capability false.
+No refunds, cancellation, invoicing, new billing, credentials/grants or provisioning commands in this increment.
+Official API contracts checked 2026-10-11: https://docs.asaas.com/docs/estornos and https://docs.asaas.com/reference/listar-notas-fiscais
+Test commands (backend): npx jest sales-evidence.spec.ts sales-cycle.spec.ts sales-subscription.spec.ts sales-recurrence.spec.ts --runInBand; node test/sales-evidence-sql.cjs; npx tsc --noEmit. Frontend: npm run build -- --webpack (shared Codespace dependency links prevent Turbopack resolution).
+Homologation activation requires separate approval after disabled delivery. Production and live fiscal setup remain later stages.
