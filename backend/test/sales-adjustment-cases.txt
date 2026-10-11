@@ -1,0 +1,72 @@
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_preparation.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_preparation.sql','utf8'));
+const adj=(action,body,actor=owner)=>db.query('select platform_sales_adjustment_action($1,$2,$3) result',[actor,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
+const anote='Fixture private adjustment review and evidence.';
+const refundBody={id:id(1200),origin:'ONCE',sourceId:onceBinding.id,parameters:{amountCents:500},justification:anote};
+for(const actor of [null,finance,other,id(40),id(41),id(42),id(43)])await reject(()=>adj('prepare',refundBody,actor),'42501');
+for(const actor of [null,other,id(40),id(41),id(42),id(43)])await reject(()=>adj('list',{page:0,search:'',state:''},actor),'42501');
+assert.equal((await adj('source',{origin:'ONCE',id:onceBinding.id},finance)).canWrite,false);checks++;
+await reject(()=>adj('source',{origin:'SUBSCRIPTION',id:id(1299)}),'P3700');await reject(()=>adj('source',{origin:'OTHER',id:onceBinding.id}),'22023');
+for(const amount of [0,-1,1.5,'500',Number(onceBinding.gross_cents)+1])await reject(()=>adj('prepare',{...refundBody,parameters:{amountCents:amount}}),'22023');
+await reject(()=>adj('prepare',{...refundBody,environment:'PRODUCTION'}),'22023');
+await reject(()=>adj('prepare',{...refundBody,parameters:{amountCents:500,refundsComplete:true}}),'22023');
+const beforeAdjustmentTotals=(await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,''])).rows[0].result.totals;
+const prepRace=await Promise.allSettled([adj('prepare',refundBody),adj('prepare',{...refundBody,id:id(1201)})]);assert.equal(prepRace.filter(r=>r.status==='fulfilled').length,1);checks++;
+assert.equal((await adj('prepare',refundBody)).replayed,true);checks++;
+await reject(()=>adj('prepare',{...refundBody,justification:'Different private preparation replay.'}),'P3701');
+let ad=await adj('read',{id:refundBody.id,page:0},finance);assert.equal(ad.latest.state,'PREPARED');assert.equal(ad.canWrite,false);checks++;
+const change=(idNumber,expectedVersion)=>({id:refundBody.id,commandId:id(idNumber),expectedVersion,justification:anote});
+await reject(()=>adj('confirm',change(1202,1),finance),'42501');
+const confirmRace=await Promise.allSettled([adj('confirm',change(1202,1)),adj('confirm',change(1203,1))]);assert.equal(confirmRace.filter(r=>r.status==='fulfilled').length,1);checks++;
+assert.equal((await adj('confirm',change(1202,1))).replayed,true);checks++;
+await reject(()=>adj('confirm',{...change(1202,1),justification:'Changed internal review replay.'}),'P3701');
+await reject(()=>adj('confirm',change(1204,2)),'P3701');
+await adj('revise',{...change(1205,2),parameters:{amountCents:400}});ad=await adj('read',{id:refundBody.id,page:0});assert.equal(ad.latest.state,'PREPARED');assert.equal(ad.events.length,3);assert.equal(ad.events[2].parameters.amountCents,500);checks++;
+await adj('withdraw',change(1206,3));await reject(()=>adj('revise',{...change(1207,4),parameters:{amountCents:100}}),'P3701');
+await adj('prepare',{...refundBody,id:id(1208)});checks++;
+await adj('reject',{id:id(1208),commandId:id(1209),expectedVersion:1,justification:anote});
+// Current 4H cycle fixture includes a pending refund; cannot approve another refund.
+const cycleRefund={...refundBody,id:id(1210),origin:'CYCLE',sourceId:cy.id,parameters:{amountCents:100}};
+assert.equal((await adj('prepare',cycleRefund)).state,'WAITING_EVIDENCE');ad=await adj('read',{id:cycleRefund.id,page:0});assert.ok(ad.latest.blockers.includes('REFUND_PENDING'));checks++;
+await reject(()=>adj('confirm',{id:cycleRefund.id,commandId:id(1211),expectedVersion:1,justification:anote}),'P3701');
+// Match real homologation: absent refund array is not zero; preserve request but block eligibility.
+await ev('claim',{...eb,lease:id(1212)});await ev('finish',{lease:id(1212),evidence:{...er,refunds:[],refundsComplete:false}});
+await adj('revise',{id:cycleRefund.id,commandId:id(1213),expectedVersion:1,parameters:{amountCents:100},justification:anote});
+ad=await adj('read',{id:cycleRefund.id,page:0});assert.ok(ad.latest.blockers.includes('REFUNDS_INCOMPLETE'));checks++;
+await reject(()=>adj('confirm',{id:cycleRefund.id,commandId:id(1214),expectedVersion:2,justification:anote}),'P3701');
+await ev('claim',{...eb,lease:id(1215)});await ev('finish',{lease:id(1215),evidence:{...er,refunds:[{status:'DONE',valueCents:84950,date:'2030-01-20'}]}});
+await adj('revise',{id:cycleRefund.id,commandId:id(1216),expectedVersion:2,parameters:{amountCents:100},justification:anote});ad=await adj('read',{id:cycleRefund.id,page:0});assert.ok(ad.latest.blockers.includes('REFUND_EXCEEDS_EVIDENCE'));checks++;
+// New source must be explicitly revised, never silently substituted on confirmation.
+await ev('claim',{...eb,lease:id(1217)});await ev('finish',{lease:id(1217),evidence:{...er,refunds:[]}});
+await reject(()=>adj('confirm',{id:cycleRefund.id,commandId:id(1218),expectedVersion:3,justification:anote}),'P3701');
+await adj('revise',{id:cycleRefund.id,commandId:id(1219),expectedVersion:3,parameters:{amountCents:100},justification:anote});
+await adj('confirm',{id:cycleRefund.id,commandId:id(1220),expectedVersion:4,justification:anote});checks++;
+await adj('withdraw',{id:cycleRefund.id,commandId:id(1221),expectedVersion:5,justification:anote});
+// Payment pending cannot be treated as received even with complete refund information.
+await cycle('claim',{...cy,lease:id(1222)});await cycle('finish',{lease:id(1222),summary:verified});
+assert.equal((await adj('source',{origin:'CYCLE',id:cy.id})).source.evidenceMatches,false);checks++;
+await ev('claim',{...eb,lease:id(1223)});await ev('finish',{lease:id(1223),evidence:{...er,payment:verified,refunds:[]}});
+const pendingBody={...cycleRefund,id:id(1224)};await adj('prepare',pendingBody);ad=await adj('read',{id:pendingBody.id,page:0});assert.ok(ad.latest.blockers.includes('PAYMENT_NOT_RECEIVED'));checks++;
+await reject(()=>adj('confirm',{id:pendingBody.id,commandId:id(1225),expectedVersion:1,justification:anote}),'P3701');await adj('reject',{id:pendingBody.id,commandId:id(1226),expectedVersion:1,justification:anote});
+// Return previous reader fixtures to their expected state before late-event regression.
+await cycle('claim',{...cy,lease:id(1227)});await cycle('finish',{lease:id(1227),summary:{...verified,status:'RECEIVED'}});
+const cancelDate=(await db.query("select ((clock_timestamp() AT TIME ZONE 'America/Sao_Paulo')::date+31)::text d")).rows[0].d;
+const cp={requestedDate:cancelDate,noticeDays:30,conditionsReviewed:false,conditionsEvidence:''};
+const cancelBody={id:id(1230),origin:'SUBSCRIPTION',sourceId:b.id,parameters:cp,justification:anote};
+assert.equal((await adj('prepare',cancelBody)).state,'WAITING_EVIDENCE');checks++;
+await reject(()=>adj('confirm',{id:cancelBody.id,commandId:id(1231),expectedVersion:1,justification:anote}),'P3701');
+await reject(()=>adj('revise',{id:cancelBody.id,commandId:id(1232),expectedVersion:1,parameters:{...cp,requestedDate:'2026-99-99'},justification:anote}),'22008');
+await adj('revise',{id:cancelBody.id,commandId:id(1233),expectedVersion:1,parameters:{...cp,requestedDate:'2000-01-01',conditionsReviewed:true,conditionsEvidence:'Fixture clause requires thirty days notice.'},justification:anote});ad=await adj('read',{id:cancelBody.id,page:0});assert.ok(ad.latest.blockers.includes('NOTICE_PERIOD_PENDING'));checks++;
+await adj('revise',{id:cancelBody.id,commandId:id(1234),expectedVersion:2,parameters:{...cp,conditionsReviewed:true,conditionsEvidence:'Fixture clause requires thirty days notice.'},justification:anote});
+await adj('confirm',{id:cancelBody.id,commandId:id(1235),expectedVersion:3,justification:anote});ad=await adj('read',{id:cancelBody.id,page:0});assert.equal(ad.latest.state,'CONFIRMED_INTERNAL');assert.equal(ad.request.source_id,b.id);checks++;
+await reject(()=>adj('prepare',{...cancelBody,id:id(1236)}),'P3701');
+await db.query('update user_profiles set full_name=$1 where user_id=$2',['Renamed adjustment Owner',owner]);ad=await adj('read',{id:cancelBody.id,page:0},finance);assert.notEqual(ad.events[0].actor_name,ad.events[0].current_actor_name);assert.equal(ad.events[0].actor_id,owner);checks++;
+await db.exec('ALTER TABLE user_profiles RENAME TO profiles_unavailable');ad=await adj('read',{id:cancelBody.id,page:0},finance);assert.equal(ad.events[0].current_actor_name,null);assert.ok(ad.events[0].actor_name);assert.equal(ad.canWrite,false);await reject(()=>adj('withdraw',{id:cancelBody.id,commandId:id(1237),expectedVersion:4,justification:anote}),'42P01');await db.exec('ALTER TABLE profiles_unavailable RENAME TO user_profiles');checks++;
+for(const action of ['execute','refund','cancel','delete'])await reject(()=>adj(action,{id:cancelBody.id,justification:anote}),'22023');
+assert.equal((await adj('list',{page:0,search:'absent',state:''},finance)).total,0);assert.equal((await adj('list',{page:1,search:'',state:''},finance)).rows.length,0);assert.equal((await adj('read',{id:cancelBody.id,page:1},finance)).events.length,0);checks++;
+await reject(()=>adj('list',{page:1001,search:'',state:''}),'22023');await reject(()=>adj('read',{id:cancelBody.id,page:0},other),'42501');
+for(const table of ['platform_sales_adjustment_requests','platform_sales_adjustment_events']){await reject(()=>db.query('delete from '+table),'42501');for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');}}
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>adj('list',{page:0,search:'',state:''}),'42501');await db.exec('RESET ROLE');}
+await db.exec('SET ROLE service_role');await reject(()=>db.query('select platform_sales_adjustment_source($1,$2,$3)',[owner,'ONCE',onceBinding.id]),'42501');await adj('list',{page:0,search:'',state:''},finance);await db.exec('RESET ROLE');
+const afterAdjustmentTotals=(await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,''])).rows[0].result.totals;assert.deepEqual(afterAdjustmentTotals,beforeAdjustmentTotals);assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,0);checks++;
+console.log('4I private adjustment preparation: isolation, versions, retries, concurrency, incomplete refunds, notice, identity and preserved totals passed.');

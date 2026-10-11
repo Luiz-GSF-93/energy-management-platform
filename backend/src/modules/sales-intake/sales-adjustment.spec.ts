@@ -1,0 +1,25 @@
+import {SalesAdjustmentService} from './sales-adjustment.service';
+import {SalesAdjustmentController} from './sales-adjustment.controller';
+import {BadRequestException,ConflictException,ForbiddenException,NotFoundException,ServiceUnavailableException} from '@nestjs/common';
+import {PERMISSIONS_KEY} from '../../common/decorators/require-permission.decorator';
+import {SALES_OWNER,SALES_FINANCE_READ} from './sales-finance.service';
+const id='00000000-0000-4000-8000-000000000001';
+describe('private adjustment preparation',()=>{
+ let rpc:jest.Mock;let service:SalesAdjustmentService;let flag:unknown;
+ const prepare=()=>({id,origin:'ONCE',sourceId:id,parameters:{amountCents:100},justification:'Preserve this private preparation for review.'});
+ beforeEach(()=>{flag='true';rpc=jest.fn().mockResolvedValue({data:{id},error:null});service=new SalesAdjustmentService({getClient:()=>({rpc})} as any,{get:()=>flag} as any);});
+ test.each([undefined,false,'false',true])('default-off blocks %s',async v=>{flag=v;await expect(service.prepare(id,prepare())).rejects.toBeInstanceOf(ServiceUnavailableException);expect(rpc).not.toHaveBeenCalled();});
+ test('only private RPC, authenticated actor and supplied source IDs',async()=>{await service.prepare(id,prepare());expect(rpc).toHaveBeenCalledWith('platform_sales_adjustment_action',{p_actor:id,p_action:'prepare',p_body:prepare()});});
+ test.each([0,-1,1.1,NaN,Infinity,10000000000,'100'])('reject invalid cents %s',async amount=>{await expect(service.prepare(id,{...prepare(),parameters:{amountCents:amount}})).rejects.toBeInstanceOf(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ test.each([{actorId:id},{environment:'PRODUCTION'},{remoteId:'pay_other'},{source:{verified:true}}])('reject authority/provider injection %s',async extra=>{await expect(service.prepare(id,{...prepare(),...extra})).rejects.toBeInstanceOf(BadRequestException);});
+ test.each([{amountCents:100,refundsComplete:true},{amountCents:100,requestedDate:'2026-10-11'},[],null])('reject parameter injection',async parameters=>{await expect(service.prepare(id,{...prepare(),parameters})).rejects.toBeInstanceOf(BadRequestException);});
+ test('cancellation fields explicit, no inferred days',async()=>{const b={...prepare(),origin:'SUBSCRIPTION',parameters:{requestedDate:'2026-12-31',conditionsReviewed:false,noticeDays:30,conditionsEvidence:''}};await service.prepare(id,b);expect(rpc.mock.calls[0][1].p_body).toEqual(b);});
+ test.each([{noticeDays:-1},{noticeDays:366},{noticeDays:1.5},{conditionsReviewed:'true'},{requestedDate:'bad'},{conditionsEvidence:1}])('reject cancellation invalid fields',async extra=>{await expect(service.prepare(id,{...prepare(),origin:'SUBSCRIPTION',parameters:{requestedDate:'2026-12-31',conditionsReviewed:false,noticeDays:30,conditionsEvidence:'',...extra}})).rejects.toBeInstanceOf(BadRequestException);});
+ test.each(['execute','refund','cancel','delete','pay'])('no external action %s',async action=>{await expect(service.transition(id,id,action,{})).rejects.toBeInstanceOf(BadRequestException);expect(rpc).not.toHaveBeenCalled();});
+ test.each([{page:'-1'},{page:'1001'},{page:['1']},{page:'1.1'},{actor:id},{search:'x'.repeat(101)},{state:'REFUNDED'}])('invalid list',async q=>{await expect(service.list(id,q)).rejects.toBeInstanceOf(BadRequestException);});
+ test.each([['42501',ForbiddenException],['P3700',NotFoundException],['P3701',ConflictException],['23505',ConflictException],['22008',BadRequestException],['unknown',ServiceUnavailableException]])('SQL error mapping %s',async(code,expected)=>{rpc.mockResolvedValue({error:{code}});await expect(service.list(id,{})).rejects.toBeInstanceOf(expected as any);});
+ test('indisponibility preserves error without automatic retry',async()=>{rpc.mockRejectedValue(new Error('private database details'));await expect(service.list(id,{})).rejects.toThrow('Solicitações indisponíveis');expect(rpc).toHaveBeenCalledTimes(1);});
+ test('controller never trusts body actor',()=>{const stub={prepare:jest.fn()};new SalesAdjustmentController(stub as any).prepare({authenticatedUser:{userId:id}} as any,{actorId:'untrusted'});expect(stub.prepare).toHaveBeenCalledWith(id,{actorId:'untrusted'});});
+ test('mutation routes Owner only; read routes preserve Finance authority',()=>{for(const m of ['prepare','transition'] as const)expect(Reflect.getMetadata(PERMISSIONS_KEY,SalesAdjustmentController.prototype[m])).toEqual([SALES_OWNER]);for(const m of ['list','read','source'] as const)expect(Reflect.getMetadata(PERMISSIONS_KEY,SalesAdjustmentController.prototype[m])).toEqual([SALES_OWNER,SALES_FINANCE_READ]);});
+ test('no provider network call during preparation',async()=>{const old=global.fetch;try{global.fetch=jest.fn();await service.prepare(id,prepare());expect(global.fetch).not.toHaveBeenCalled();}finally{global.fetch=old;}});
+});
