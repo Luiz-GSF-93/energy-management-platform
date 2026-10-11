@@ -1,0 +1,32 @@
+EnergyOS - Clicksign production connection (OFF delivery)
+
+This increment checks authentication only. It does not verify the declared account identity or accept a signature. It adds no Clicksign write transport and does not change sandbox signing or real license eligibility.
+
+Backend variables (false/blank by default):
+SALES_CLICKSIGN_CONNECTION_ENABLED=false
+SALES_CLICKSIGN_CONNECTION_CALLS_ENABLED=false
+SALES_CLICKSIGN_PRODUCTION_TOKEN=
+The production token must be entered directly into the backend secret store by the user. Never use NEXT_PUBLIC, frontend inputs, chat, URL parameters or the sandbox probe. A production token can have broader provider permissions than this GET-only service.
+
+Owner-only internal routes:
+GET /api/v1/admin/sales/clicksign-connection?accountId=<declared ID>&page=0
+POST /api/v1/admin/sales/clicksign-connection/check
+The internal command persists a UUID request before a single fixed external GET:
+https://app.clicksign.com/api/v3/envelopes?page[size]=1
+Authorization uses the raw production token; redirects are rejected. Timeout: 10 seconds. Response limit: 64 KiB. Only HTTP category and result are retained. Resource IDs, document names, signed URLs and raw response data are discarded.
+
+Migration: 20261017_platform_sales_clicksign_connection.sql
+Two private append-only tables, RLS, no direct service-role/anon/authenticated table privileges, SECURITY DEFINER RPC with pg_catalog search_path. Owner and active team membership are rechecked in SQL. Existing signing, proposals and licenses are untouched.
+Same UUID/exact input replays the stored outcome or PENDING without another GET. Conflicting inputs are rejected. Production checks serialize globally while an unresolved attempt is less than 60 seconds old. After that interval a new explicitly requested UUID may proceed; old evidence remains unchanged. A database failure after the GET leaves a pending attempt and is not automatically resent.
+
+Frontend: platform sales, collapsed Clicksign production connection section, declared account filter, 25-row pagination, historical/current names separated and explicit missing names. The declared account filter separates history, not tenant access: only global Owners may see these records.
+
+Validation commands (backend cwd):
+npm test -- --runInBand sales-clicksign-connection sales-signature-document-proof sales-signature-recovery sales-signature-dispatch sales-signature.spec signed-documents sales-activation sales-provisioning
+node test/sales-clicksign-connection-sql.cjs
+node test/sales-signature-recovery-sql.cjs
+npm run build
+Frontend cwd: npm run build
+
+Delivery scope: code and review PR only. No shared migration, deployment, token generation, flags enabled or real Clicksign requests in this increment. Apply the reviewed migration/deployment separately; enabling the external GET requires a later explicit authorization.
+Official authentication/environment reference: https://developers.clicksign.com/docs/ambientes-autenticacao-e-formato
