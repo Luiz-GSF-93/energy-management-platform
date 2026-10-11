@@ -1,0 +1,90 @@
+const {PGlite}=require('@electric-sql/pglite'),fs=require('fs'),assert=require('node:assert/strict');
+(async()=>{
+ const db=new PGlite();let checks=0;const id=n=>'11111111-1111-4111-8111-'+String(n).padStart(12,'0');
+ const owner=id(1),other=id(2),draft=id(10),proposal=id(11),request=id(12),pdf=Buffer.from('%PDF-1.7'+'.'.repeat(200)+'%%EOF'),hash=require('node:crypto').createHash('sha256').update(pdf).digest('hex');
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE user_roles(user_id text,role_id text);CREATE TABLE roles(id text,scope text,name text,organization_id text,permissions jsonb);
+ CREATE TABLE platform_team_members(user_id uuid,active boolean,profile text);CREATE TABLE user_profiles(user_id uuid,full_name text);
+ CREATE TABLE platform_sales_proposals(id uuid PRIMARY KEY);CREATE TABLE platform_sales_proposal_events(proposal_id uuid,version int,status text);
+ CREATE TABLE platform_sales_contract_drafts(id uuid PRIMARY KEY,proposal_id uuid,snapshot jsonb,sha256 text,pdf bytea);
+ CREATE TABLE platform_sales_contract_events(draft_id uuid,version int,status text);
+ CREATE FUNCTION platform_sales_commercial_immutable() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'immutable' USING ERRCODE='42501';END$$;`);
+ const team=fs.readFileSync('src/database/migrations/20261010_platform_team.sql','utf8');await db.exec(team.slice(team.indexOf('CREATE OR REPLACE FUNCTION public.platform_team_owner('),team.indexOf('CREATE OR REPLACE FUNCTION public.platform_team_lock(')));
+ const names=fs.readFileSync('src/database/migrations/20261010_platform_sales_finance_read.sql','utf8').match(/CREATE OR REPLACE FUNCTION public.platform_sales_finance_name[\s\S]*?END \$\$;/)[0];await db.exec(names);
+ await db.query('insert into roles values($1,$2,$3,$4,$5)',['owner','global','admin_platform','platform',JSON.stringify(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841'])]);
+ await db.query('insert into user_roles values($1,$2)',[owner,'owner']);await db.query('insert into platform_team_members values($1,true,$2)',[owner,'OWNER']);await db.query('insert into user_profiles values($1,$2)',[owner,'Original Owner']);
+ const snapshot={parties:{supplier:{name:'Fixture supplier',signatory:'Test Supplier',email:'test@example.com'},customer:{name:'Fixture customer',signatory:'Test Customer',email:'test@example.com'}},terms:{status:'APPROVED_INTERNAL',definition:{validUntil:'2099-12-31'}}};
+ await db.query('insert into platform_sales_proposals values($1)',[proposal]);await db.query('insert into platform_sales_proposal_events values($1,1,$2)',[proposal,'APPROVED_INTERNAL']);
+ await db.query('insert into platform_sales_contract_drafts values($1,$2,$3,$4,$5)',[draft,proposal,JSON.stringify(snapshot),hash,pdf]);await db.query('insert into platform_sales_contract_events values($1,1,$2)',[draft,'APPROVED_INTERNAL']);
+ const sourceBefore=(await db.query('select md5(to_jsonb(d)::text) h from platform_sales_contract_drafts d')).rows[0].h;
+ const migration=fs.readFileSync('src/database/migrations/20261014_platform_sales_signature_preparation.sql','utf8');
+ await db.exec('BEGIN;'+migration.replace(/^BEGIN;/,'').replace(/COMMIT;\s*$/,'')+'ROLLBACK;');assert.equal((await db.query("select to_regclass('platform_sales_signature_requests') x")).rows[0].x,null);checks++;
+ await db.exec(migration);
+ const call=async(action,body,actor=owner)=>(await db.query('select platform_sales_signature_action($1,$2,$3) v',[actor,action,JSON.stringify(body)])).rows[0].v;
+ const reject=async(f,code)=>{await assert.rejects(f,e=>e.code===code);checks++;};
+ const prepare={id:request,draftId:draft,draftSha256:hash,justification:'Private sandbox fixture preparation.'};
+ for(const action of ['list','read','prepare','withdraw'])await reject(()=>call(action,{},other),'42501');
+ await reject(()=>call('prepare',{...prepare,environment:'PRODUCTION'}),'22023');
+ await reject(()=>call('prepare',{...prepare,draftSha256:'b'.repeat(64)}),'23505');
+ await db.query("update platform_sales_contract_events set status='DRAFT'");await reject(()=>call('prepare',prepare),'23505');await db.query("update platform_sales_contract_events set status='APPROVED_INTERNAL'");
+ assert.equal((await call('prepare',prepare)).replayed,false);checks++;
+ assert.equal((await call('prepare',prepare)).replayed,true);checks++;
+ await reject(()=>call('prepare',{...prepare,justification:'Altered retry should be rejected.'}),'23505');
+ await reject(()=>call('prepare',{...prepare,id:id(13)}),'23505');
+ const detail=await call('read',{id:request});assert.equal(detail.request.snapshot.environment,'SANDBOX');assert.equal(detail.realActivationEligible,false);assert.equal(detail.events[0].actor_name,'Original Owner');assert.equal(detail.request.snapshot.automaticNotifications,false);checks+=4;
+ await db.query("update user_profiles set full_name='Renamed Owner'");assert.equal((await call('read',{id:request})).events[0].currentActorName,'Renamed Owner');assert.equal((await call('read',{id:request})).events[0].actor_name,'Original Owner');checks+=2;
+ await db.query('update user_profiles set full_name=null');assert.equal((await call('read',{id:request})).events[0].currentActorName,null);checks++;
+ await db.query('update platform_team_members set active=false');await reject(()=>call('read',{id:request}),'42501');await db.query('update platform_team_members set active=true');
+ for(const [action,b] of [['list',{page:0,search:'',status:'SIGNED'}],['withdraw',{id:request,requestId:id(14),expectedVersion:0,justification:'Withdraw private fixture request.'}],['read',{id:id(88)}]])await reject(()=>call(action,b),action==='list'?'22023':action==='read'?'P3620':'23505');
+ assert.equal((await call('list',{page:0,search:'CUSTOMER',status:'PREPARED'})).total,1);assert.equal((await call('list',{page:1,search:'',status:''})).rows.length,0);assert.equal((await call('list',{page:0,search:'not found',status:''})).total,0);checks+=3;
+ const m2=fs.readFileSync('src/database/migrations/20261015_platform_sales_signature_dispatch.sql','utf8');
+ await db.exec('BEGIN;'+m2.replace(/^BEGIN;/,'').replace(/COMMIT;\s*$/,'')+'ROLLBACK;');
+ assert.equal((await db.query("select to_regclass('platform_sales_signature_attempts') x")).rows[0].x,null);checks++;
+ await db.exec(m2);
+ const dispatch=async(action,body,actor=owner)=>(await db.query('select platform_sales_signature_dispatch_action($1,$2,$3) v',[actor,action,JSON.stringify(body)])).rows[0].v;
+ for(const action of ['read','claim','reserve','finish','abort'])await reject(()=>dispatch(action,{id:request},other),'42501');
+ const claimBody={id:request,lease:id(100),expectedOrdinal:1,justification:'Controlled private sandbox fixture.'};
+ assert.equal((await dispatch('claim',claimBody)).step,'ENVELOPE');checks++;
+ await reject(()=>dispatch('claim',{...claimBody,lease:id(101)}),'23505');
+ await reject(()=>dispatch('finish',{id:request,lease:id(100),result:null}),'23505');
+ await db.query("update platform_sales_contract_events set status='DRAFT'");
+ await reject(()=>dispatch('reserve',{id:request,lease:id(100)}),'23505');
+ await db.query("update platform_sales_contract_events set status='APPROVED_INTERNAL'");
+ assert.equal((await dispatch('abort',{id:request,lease:id(100)})).state,'ABORTED');checks++;
+ for(let ordinal=1;ordinal<=8;ordinal++){
+  const lease=id(100+ordinal),b={...claimBody,lease,expectedOrdinal:ordinal};
+  const c=await dispatch('claim',b);assert.equal(c.ordinal,ordinal);checks++;
+  if(ordinal===2){assert.equal(c.source.pdfHex,pdf.toString('hex'));checks++;}
+  else{assert.equal(c.source.pdfHex,undefined);checks++;}
+  await reject(()=>dispatch('reserve',{id:request,lease},other),'42501');
+  assert.equal((await dispatch('reserve',{id:request,lease})).state,'RESERVED');checks++;
+  await reject(()=>dispatch('reserve',{id:request,lease}),'23505');
+  await reject(()=>dispatch('abort',{id:request,lease}),'23505');
+  const type=ordinal===1?'envelopes':ordinal===2?'documents':ordinal<=4?'signers':'requirements';
+  await reject(()=>dispatch('finish',{id:request,lease,result:{externalId:id(200+ordinal),type:'wrong'}}),'22023');
+  const finish={id:request,lease,result:{externalId:id(200+ordinal),type}};
+  assert.equal((await dispatch('finish',finish)).state,'VERIFIED');assert.equal((await dispatch('finish',finish)).replayed,true);checks+=2;
+ }
+ const creation=await dispatch('read',{id:request});assert.equal(creation.completed,true);assert.equal(creation.envelopeActivated,false);assert.equal(creation.realActivationEligible,false);assert.equal(JSON.stringify(creation).includes('pdfHex'),false);checks+=4;
+ await reject(()=>dispatch('claim',{...claimBody,lease:id(120)}),'23505');
+ for(const table of ['platform_sales_signature_attempts','platform_sales_signature_attempt_events','platform_sales_signature_resources']){
+  await reject(()=>db.exec('delete from '+table),'42501');await db.exec('SET ROLE service_role');await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');
+ }
+ await reject(()=>call('withdraw',{id:request,requestId:id(14),expectedVersion:1,justification:'Cannot withdraw after creation starts.'}),'23505');
+ await reject(()=>call('execute',{id:request}),'22023');
+ for(const table of ['platform_sales_signature_requests','platform_sales_signature_events']){await reject(()=>db.exec('update '+table+" set justification='tamper'"),'42501');await reject(()=>db.exec('delete from '+table),'42501');await db.exec('SET ROLE service_role');await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');}
+ assert.equal((await db.query('select md5(to_jsonb(d)::text) h from platform_sales_contract_drafts d')).rows[0].h,sourceBefore);checks++;
+ assert.equal((await db.query('select count(*) n from platform_sales_signature_requests')).rows[0].n,1);checks++;
+  const draft2=id(310),request2=id(311),lease2=id(312);
+ await db.query('insert into platform_sales_contract_drafts select $1,proposal_id,snapshot,sha256,pdf from platform_sales_contract_drafts where id=$2',[draft2,draft]);
+ await db.query("insert into platform_sales_contract_events values($1,1,'APPROVED_INTERNAL')",[draft2]);
+ await call('prepare',{...prepare,id:request2,draftId:draft2});
+ await dispatch('claim',{...claimBody,id:request2,lease:lease2});
+ await dispatch('reserve',{id:request2,lease:lease2});
+ await dispatch('finish',{id:request2,lease:lease2,result:null});
+ assert.equal((await dispatch('read',{id:request2})).blocked,true);checks++;
+ await reject(()=>dispatch('claim',{...claimBody,id:request2,lease:id(313)}),'23505');
+ await reject(()=>dispatch('finish',{id:request2,lease:lease2,result:{type:'envelopes',externalId:id(314)}}),'23505');
+ await reject(()=>call('withdraw',{id:request2,requestId:id(315),expectedVersion:1,justification:'Unknown POST blocks withdrawal.'}),'23505');
+ console.log('PASS',checks,'signature SQL checks; no network or shared database');await db.close();
+})().catch(e=>{console.error(e);process.exit(1);});

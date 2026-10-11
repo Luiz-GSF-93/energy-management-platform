@@ -14,3 +14,16 @@ https://developers.clicksign.com/docs/primeiros-passos
 https://developers.clicksign.com/reference/api-criar-envelope
 https://developers.clicksign.com/docs/faq-duvidas-e-problemas-comuns
 https://developers.clicksign.com/v2.0/docs/seguranca-de-webhooks
+
+3C2 — criação controlada de recursos em rascunho, 11/10/2026
+Extensão do PR358, entregue desligada. Migração aditiva 20261015_platform_sales_signature_dispatch.sql não aplicada ao banco compartilhado.
+Três tabelas privadas e imutáveis: tentativas, eventos e recursos externos; RPC exclusiva do Owner ativo. Reserva persistida antes de cada POST, passo esperado e trava por solicitação. Falhas antes da reserva não enviam; resultado incerto ou falha na persistência posterior bloqueiam novo POST. Recuperação por GET ainda pendente, sem reenvio automático. Retirada bloqueada após início da criação, inclusive em resultado incerto.
+Sequência: envelope, PDF preservado/hash, dois signatários, qualificação e autenticação por e-mail de cada um. A resposta valida tipo, ID, campos e relacionamentos; grava somente identificador/tipo, nunca token ou resposta bruta. Envelope continua draft; não há PATCH de ativação ou endpoint de notificações.
+SALES_SIGNATURE_PREPARATION_ENABLED, SALES_SIGNATURE_COMMANDS_ENABLED, SALES_SIGNATURE_CALLS_ENABLED: false por padrão. URL sandbox fixa, redirect bloqueado, timeout 10s, resposta limitada a 128KiB, token somente no backend. Nenhuma chamada externa nos testes. Credencial/conta de produção não usada.
+Interface: consulta explícita do histórico e próximo passo em seção colapsada do modal. Botão externo aparece somente quando o backend confirmar capacidade habilitada. Resultado incerto exige reconferência; nenhuma ação de repetição automática.
+Validação: builds Nest e Next (44 rotas), 131 testes Jest de preparação/criação/importação/ativação/provisionamento, 134 verificações SQL de criação e regressão e 38 da preparação em banco descartável. Migração testada com rollback. Não executado teste concorrente em PostgreSQL remoto; proteção transacional validada por tentativas sequenciais e advisory lock no código.
+Pendências: recuperação por consulta estrita, ativação/notificações, webhook e reconferência, download do PDF final com evidências, conferência explícita e ponte apenas sandbox à cadeia 5A/5B. Nada desta entrega declara assinatura concluída ou aplica licença.
+Fontes oficiais consultadas:
+https://developers.clicksign.com/docs/veja-como-funciona-na-pr%C3%A1tica
+https://developers.clicksign.com/reference/api-criar-signatario
+https://developers.clicksign.com/reference/criar-requisito-de-autenticacao
