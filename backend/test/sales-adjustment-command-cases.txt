@@ -1,0 +1,79 @@
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_commands.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_commands.sql','utf8'));
+const kact=(action,body,actor=owner)=>db.query('select platform_sales_adjustment_command_action($1,$2,$3) result',[actor,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
+const kbefore=(await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,''])).rows[0].result.totals;
+// Close the earlier fixture request, without changing its CHECKING event.
+await adj('withdraw',{id:id(1370),commandId:id(1400),expectedVersion:1,justification:anote});
+const kr={...refundBody,id:id(1401)};await adj('prepare',kr);await adj('confirm',{id:kr.id,commandId:id(1402),expectedVersion:1,justification:anote});
+const kc={id:id(1403),requestId:kr.id,expectedVersion:2,justification:'Fixture fresh command evidence for a reviewed refund.'};await chk('prepare',kc);const kclaim={id:kc.id,commandId:id(1404)};await chk('claim',kclaim);await chk('finish',{...kclaim,evidence:je});
+const kp={id:id(1410),operationId:id(1411),requestId:kr.id,expectedVersion:2,checkId:kc.id,justification:anote};
+for(const actor of [null,finance,other,id(40),id(41),id(42),id(43)])await reject(()=>kact('prepare',kp,actor),'42501');
+for(const actor of [null,other,id(40),id(41),id(42),id(43)])await reject(()=>kact('read',{requestId:kr.id,page:0},actor),'42501');
+assert.equal((await kact('read',{requestId:kr.id,page:0},finance)).canWrite,false);checks++;
+await reject(()=>kact('prepare',{...kp,environment:'PRODUCTION'}),'22023');
+await reject(()=>kact('prepare',{...kp,expectedVersion:1}),'P3721');
+await reject(()=>kact('prepare',{...kp,checkId:jc.id}),'P3721');
+await reject(()=>kact('prepare',{...kp,requestId:id(1999)}),'P3720');
+const krace=await Promise.allSettled([kact('prepare',kp),kact('prepare',{...kp,id:id(1412),operationId:id(1413)})]);assert.equal(krace.filter(x=>x.status==='fulfilled').length,1);checks++;
+assert.equal((await kact('prepare',kp)).replayed,true);checks++;
+await reject(()=>kact('prepare',{...kp,justification:'Changed command preparation replay.'}),'P3721');
+const ka={id:kp.id,operationId:id(1414),expectedVersion:1,justification:anote,impactsAccepted:true};
+await reject(()=>kact('authorize',{...ka,impactsAccepted:false}),'22023');
+await reject(()=>kact('authorize',ka,finance),'42501');
+assert.equal((await kact('authorize',ka)).state,'AUTHORIZED');checks++;
+assert.equal((await kact('authorize',ka)).replayed,true);checks++;
+await reject(()=>kact('authorize',{...ka,impactsAccepted:false}),'22023');
+const kl={id:kp.id,operationId:id(1415),expectedVersion:2,justification:anote};
+const kclaimrace=await Promise.allSettled([kact('claim',kl),kact('claim',{...kl,operationId:id(1416)})]);assert.equal(kclaimrace.filter(x=>x.status==='fulfilled').length,1);checks++;
+assert.equal((await kact('claim',kl)).execute,false);checks++;
+// Change in fresh external evidence blocks dispatch before any mutation.
+assert.equal((await kact('dispatch',{id:kp.id,operationId:id(1417),expectedVersion:3,justification:anote,evidence:{...je,blockers:['REFUND_PENDING']}})).state,'BLOCKED');checks++;
+await reject(()=>kact('finish',{id:kp.id,operationId:id(1418),expectedVersion:4,justification:anote,evidence:{accepted:true}}),'P3721');
+await kact('withdraw',{id:kp.id,operationId:id(1419),expectedVersion:4,justification:anote});
+// A bound receipt plus completed refund is required to release a dispatched target.
+const ks={...kp,id:id(1460),operationId:id(1461)};await kact('prepare',ks);await kact('authorize',{...ka,id:ks.id,operationId:id(1462)});await kact('claim',{...kl,id:ks.id,operationId:id(1463)});
+await kact('dispatch',{id:ks.id,operationId:id(1464),expectedVersion:3,justification:anote,evidence:je});
+await kact('finish',{id:ks.id,operationId:id(1465),expectedVersion:4,justification:anote,evidence:{accepted:true,refundId:'receipt_refund'}});
+const boundProof={kind:'REFUND_PAYMENT',remoteId:js.remoteId,verified:true,refund:{id:'receipt_refund',status:'DONE',valueCents:500}};
+await reject(()=>kact('recover_finish',{id:ks.id,operationId:id(1466),expectedVersion:5,justification:anote,evidence:{...boundProof,refund:{...boundProof.refund,id:'unrelated_refund'}}}),'P3721');
+assert.equal((await kact('recover_finish',{id:ks.id,operationId:id(1467),expectedVersion:5,justification:anote,evidence:boundProof})).state,'CONFIRMED_EXTERNAL');checks++;
+await reject(()=>kact('prepare',{...kp,id:id(1468),operationId:id(1469)}),'P3721');
+const kfresh={...kc,id:id(1470)};await chk('prepare',kfresh);await chk('claim',{id:kfresh.id,commandId:id(1471)});
+const kfreshje={...je,refunds:[boundProof.refund],refundedCents:500,remainingCents:je.remainingCents-500};
+await chk('finish',{id:kfresh.id,commandId:id(1471),evidence:kfreshje});
+const kp2={...kp,id:id(1420),operationId:id(1421),checkId:kfresh.id};await kact('prepare',kp2);await kact('authorize',{...ka,id:kp2.id,operationId:id(1422)});await kact('claim',{...kl,id:kp2.id,operationId:id(1423)});
+assert.equal((await kact('dispatch',{id:kp2.id,operationId:id(1424),expectedVersion:3,justification:anote,evidence:kfreshje})).execute,true);checks++;
+await reject(()=>kact('withdraw',{id:kp2.id,operationId:id(1425),expectedVersion:4,justification:anote}),'P3721');
+await reject(()=>kact('prepare',{...kp,id:id(1426),operationId:id(1427)}),'P3721');
+const kfin={id:kp2.id,operationId:id(1428),expectedVersion:4,justification:anote,evidence:null,diagnostic:'QUERY_TIMEOUT'};
+assert.equal((await kact('finish',kfin)).state,'INDETERMINATE');checks++;
+assert.equal((await kact('finish',kfin)).replayed,true);checks++;
+await reject(()=>kact('finish',{...kfin,evidence:{accepted:true},diagnostic:undefined}),'P3721');
+await reject(()=>kact('finish',{...kfin,operationId:id(1429),expectedVersion:5,diagnostic:'private key=abc'}),'22023');
+await reject(()=>kact('claim',{...kl,id:kp2.id,operationId:id(1430),expectedVersion:5}),'P3721');
+await reject(()=>kact('withdraw',{...kl,id:kp2.id,operationId:id(1431),expectedVersion:5}),'P3721');
+assert.equal((await kact('recover',{id:kp2.id,operationId:id(1432),justification:anote})).execute,true);checks++;
+// An observed refund without the original response ID cannot prove attribution.
+const kproof={kind:'REFUND_PAYMENT',remoteId:js.remoteId,verified:true,refund:{id:'new_refund',status:'DONE',valueCents:500}};
+await reject(()=>kact('recover_finish',{id:kp2.id,operationId:id(1433),expectedVersion:5,justification:anote,evidence:kproof}),'P3721');
+await kact('recover_finish',{id:kp2.id,operationId:id(1434),expectedVersion:5,justification:anote,evidence:{...kproof,verified:false}});
+await reject(()=>kact('prepare',{...kp,id:id(1435),operationId:id(1436)}),'P3721');
+// Withdraw old internal request; indeterminate command reservation is still retained.
+await adj('withdraw',{id:kr.id,commandId:id(1440),expectedVersion:2,justification:anote});
+const kr2={...kr,id:id(1441)};await adj('prepare',kr2);await adj('confirm',{id:kr2.id,commandId:id(1442),expectedVersion:1,justification:anote});
+const kc2={...kc,id:id(1443),requestId:kr2.id};await chk('prepare',kc2);await chk('claim',{id:kc2.id,commandId:id(1444)});await chk('finish',{id:kc2.id,commandId:id(1444),evidence:je});
+await reject(()=>kact('prepare',{...kp,id:id(1445),operationId:id(1446),requestId:kr2.id,checkId:kc2.id}),'P3721');
+// Contract/date impediments cannot be bypassed by using the old cancellation check.
+await reject(()=>kact('prepare',{...kp,id:id(1450),operationId:id(1451),requestId:cancelBody.id,expectedVersion:4,checkId:jcancel.id}),'P3721');
+let kd=await kact('read',{requestId:kr.id,page:0},finance);const kname=kd.commands[0].actor_name;
+await db.query('update user_profiles set full_name=$1 where user_id=$2',['Renamed command author',owner]);kd=await kact('read',{requestId:kr.id,page:0},finance);assert.equal(kd.commands[0].actor_name,kname);assert.equal(kd.commands[0].current_actor_name,'Renamed command author');checks++;
+await db.exec('ALTER TABLE user_profiles RENAME TO profiles_unavailable');kd=await kact('read',{requestId:kr.id,page:0},finance);assert.equal(kd.commands[0].current_actor_name,null);assert.equal(kd.commands[0].actor_name,kname);checks++;await db.exec('ALTER TABLE profiles_unavailable RENAME TO user_profiles');
+for(const table of ['platform_sales_adjustment_commands','platform_sales_adjustment_command_events']){
+ await reject(()=>db.query('delete from '+table),'42501');
+ for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');}
+}
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>kact('read',{requestId:kr.id,page:0}),'42501');await db.exec('RESET ROLE');}
+await db.exec('SET ROLE service_role');await reject(()=>db.query('select platform_sales_adjustment_command_guard($1,$2,2,$3)',[owner,kr.id,kc.id]),'42501');await db.exec('RESET ROLE');
+assert.deepEqual((await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,''])).rows[0].result.totals,kbefore);checks++;
+assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,0);checks++;
+console.log('4K private commands: isolation, independent authorization, one-use dispatch, target reservation, ambiguous recovery, identity and finance preservation passed.');
