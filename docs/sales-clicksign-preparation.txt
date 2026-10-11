@@ -1,4 +1,11 @@
 Clicksign — 3C1: preparação privada, entregue desligada
+
+3C4 — validação pura do PDF original, 11/10/2026
+Implementado originalDocumentProof, sem transporte ou persistência: contexto preservado com IDs e hash, envelope draft/nome da solicitação, documento com ID/tipo/nome esperado, PDF até 1 MiB e SHA-256 exato. Retorna apenas IDs/hash/tamanho e inelegibilidade para ativação real; nunca URL, credencial ou conteúdo. Não altera a aceitação de PDFs existentes ou registros históricos.
+Alternativa expressamente prevista na proposta aprovada: a documentação consultada confirma GET de detalhes, mas não foi possível estabelecer contrato atual de origem de download sandbox e política segura de armazenamento. Não adotar URLs/domínios de exemplos antigos como allowlist de produção. Download permanece sem implementação; recuperação DOCUMENT continua bloqueada tanto na RPC quanto no serviço/interface. Nenhuma migração necessária para este subescopo, pois não há novas evidências persistidas. Não conectar o helper isoladamente à RPC: bytes de upload local não equivalem a bytes remotos autenticados pelo transporte seguro.
+22 novos testes de comparação; 179 testes totais com assinatura/importação/ativação/provisionamento. Build backend. Sem chamadas externas, alterações de flags compartilhadas, envio, assinatura ou licença. Incremento para revisão no PR358; não implantado no backend.
+Restante da 3C4: confirmar campo/origens de download original atuais com Clicksign; implementar transporte sandbox restrito e proteção de resolução/conexão; testar timeout/redirecionamentos/credenciais e origens proibidas; prova privada/migração/RPC com verificação do hash preservado; integração visual e homologação autorizada. A aprovação técnica 3C4 permanece válida para esses trabalhos; execução externa exige autorização separada.
+
 Base: main 90a6b366d97fb32e28255ba32a197f6a32d440fb.
 Fornecedor atualizado para Clicksign por escolha do usuário; conta existente é produção. Nenhuma credencial ou chamada de produção usada.
 SALES_SIGNATURE_PREPARATION_ENABLED ausente/false desliga todas as rotas. Não há transporte externo ou endpoint de webhook nesta entrega.
