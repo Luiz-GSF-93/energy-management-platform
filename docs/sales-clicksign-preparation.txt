@@ -27,3 +27,21 @@ Fontes oficiais consultadas:
 https://developers.clicksign.com/docs/veja-como-funciona-na-pr%C3%A1tica
 https://developers.clicksign.com/reference/api-criar-signatario
 https://developers.clicksign.com/reference/criar-requisito-de-autenticacao
+
+3C3 — reconferência Clicksign por GET, entregue desligada (11/10/2026)
+Base: 0a1fc4fada20b0e9a2de72beaedc0505f9f8031a, PR358 em rascunho.
+Arquitetura: serviço privado separado do transporte de criação; habilitação de reconferência e consultas externas independente do POST. Owner ativo revalidado na RPC, funções SECURITY DEFINER com search_path pg_catalog e bloqueio por solicitação. Nenhuma concessão a Financeiro, Suporte ou clientes.
+Modelo: duas tabelas imutáveis (platform_sales_signature_checks e platform_sales_signature_check_results), vinculadas à solicitação e à tentativa original. Nomes registrados e atuais separados. Fonte e resultado anterior não sobrescritos; resultado incerto original é preservado antes de evento de recurso reconhecido.
+Fluxo: Owner indica ID do recurso sandbox e justifica; consulta é persistida antes do GET. Envelope exige nome único da solicitação e estado draft. Signatários/requisitos exigem também consulta do envelope preservado e GET no caminho desse envelope, identidade e relacionamentos compatíveis. Sucesso registra apenas ID/tipo e associa o recurso existente; falha registra INCOMPLETE e preserva o bloqueio. Não repete POST. Repetição do mesmo requestId não repete GET e retorna resultado preservado ou PENDING. Falha de persistência após GET exige nova reconferência explícita, sem criação.
+Limite deliberado: recuperação do documento não é aceita somente pelo nome do PDF. Bytes/hash remotos serão validados em incremento próprio de download seguro; ordinal DOCUMENT bloqueado na RPC e no serviço. Recurso reconhecido não significa assinatura comprovada ou contrato aceito. Eventual duplicação remota não é removida ou resolvida por este incremento; haverá conferência completa antes de ativar envelope.
+Interface: seção colapsada no modal de criação, histórico de consultas em páginas de 25, ID da consulta preservado, ausência de nome explícita. Botão de GET depende de backend habilitado; sem campos de token, links de assinatura ou notificações.
+Flags: SALES_SIGNATURE_RECOVERY_ENABLED=false e SALES_SIGNATURE_RECOVERY_CALLS_ENABLED=false por padrão. Requer preparação/comandos habilitados, URL sandbox fixa e token no backend. Não depende de habilitar POST. Redirecionamentos bloqueados, 10s por GET, limite de 128KiB por resposta. Nenhuma resposta bruta ou credencial no histórico.
+Migração aditiva: 20261016_platform_sales_signature_recovery.sql, não aplicada ao banco compartilhado. Regressões 3C1/3C2, rollback, fontes preservadas, conflito de prova, concorrência de conclusões sequenciada, isolamento, nomes e indisponibilidade do nome conferidos em PGlite descartável. Concorrência real em PostgreSQL remoto e formatos reais Clicksign ainda exigem homologação.
+Validação: builds Nest e Next (44 rotas); 157 testes Jest nos fluxos assinatura/importação/ativação/provisionamento; 173 verificações SQL incluindo regressões anteriores e nova recuperação. Diff check.
+Não houve alteração de flags do Railway, chamadas reais, transmissão de minuta, convites, assinatura por terceiro ou aplicação de licença. PR em revisão, sem merge/deploy de backend.
+Próximos incrementos: download/identificação do PDF remoto, reconferência completa dos recursos e duplicações antes de ativação, webhook/consulta de estado e evidência documental; vínculo explícito sandbox à cadeia 5A/5B; conta/token sandbox e homologação externa autorizada.
+Documentação oficial verificada:
+https://developers.clicksign.com/reference/api-detalhes-do-envelope
+https://developers.clicksign.com/reference/api-signatarios
+https://developers.clicksign.com/reference/api-requisitos
+https://developers.clicksign.com/reference/detalhes-do-documento
