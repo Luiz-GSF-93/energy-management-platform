@@ -1,3 +1,6 @@
+import {SalesSubscriptionController} from './sales-subscription.controller';
+import {SalesSubscriptionService} from './sales-subscription.service';
+import {SalesSubscriptionAdapter} from './sales-subscription.adapter';
 import {SalesRecurrenceController} from './sales-recurrence.controller';
 import {SalesRecurrenceService} from './sales-recurrence.service';
 import {Module} from '@nestjs/common';
@@ -19,5 +22,5 @@ import {SalesCreationService} from './sales-creation.service';
 import {SalesCreationAdapter} from './sales-creation.adapter';
 import {SalesSignedDocumentsController} from './sales-signed-documents.controller';
 import {SalesSignedDocumentsService} from './sales-signed-documents.service';
-@Module({controllers:[SalesRecurrenceController,SalesSignedDocumentsController,AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController,SalesCreationController],providers:[SalesRecurrenceService,SalesSignedDocumentsService,SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService,SalesCreationService,SalesCreationAdapter]})
+@Module({controllers:[SalesSubscriptionController,SalesRecurrenceController,SalesSignedDocumentsController,AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController,SalesCreationController],providers:[SalesSubscriptionService, SalesSubscriptionAdapter,SalesRecurrenceService,SalesSignedDocumentsService,SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService,SalesCreationService,SalesCreationAdapter]})
 export class SalesIntakeModule{}
