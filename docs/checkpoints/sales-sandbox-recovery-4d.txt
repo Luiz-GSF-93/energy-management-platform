@@ -1,0 +1,16 @@
+Asaas sandbox: preflight and one-use recovery (approved 10/10/2026)
+
+Cause: customer notificationDisabled=false blocked the existing adapter before POST, while the old service persisted an ambiguous RECONCILIATION. UI notification channels and the API-level flag are distinct. The sandbox payer was corrected through authorized API update and GET verification; no charge was created.
+
+Implementation
+- Append phase to immutable creation events, default LEGACY; preserve all earlier fields and records.
+- Persist PREFLIGHT, PREFLIGHT_FAILED, POST_RESERVED; a failed GET preflight never reaches POST. A reserved POST interruption remains GET-only.
+- Private immutable one-use recovery authorization, Owner revalidation, justified review, current zero-match GET and disabled-notification payer; consume under advisory lock, repeat GET proof immediately before POST.
+- Ordinary legacy ambiguity remains blocked. Explicit sandbox exception restricted to intent47f866fd-1170-4e80-9d5a-351e351c007c, proposal21c17af2-f514-4612-bfbe-f66f05aad880, customer cus_000009420032, R$2600 and due20/10/2026. Acknowledgment of missing historical POST marker is mandatory. Do not extrapolate to production.
+- SALES_ASAAS_RECOVERY_ENABLED exacttrue and existing independent external flags required; defaultoff. No enablement or external payment creation in this delivery.
+- Owner modal shows technical phases and separate authorize/execute recovery actions, disabled when flags off.
+- No new roles, organization/portal permissions, auto-jobs, contracts, recurrence, fiscal or licenses.
+
+Validation: 115 Jest tests (creation/Asaas/finance); 158 disposable SQL checks including concurrency, immutable legacy events, one-use exception and isolation; backend TypeScript and full Next webpack build passed. Migration rehearsed with ROLLBACK and audited against16 protected table fingerprints; RLS/grants checked.
+
+Next: verify production deploy and off UI. Enabling recovery/creation and an actual recovery POST require separate action-time authorization. Do not reset or replace the existing intention, alter its preserved parameters or reuse the old received charge.
