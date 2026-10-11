@@ -1,0 +1,12 @@
+4I — solicitações internas exclusivamente sandbox
+SALES_ADJUSTMENT_PREPARATION_ENABLED precisa ser exatamente true. Default off; não habilitar na entrega.
+Sem adaptador externo, scheduler, envio, cobrança, devolução ou provisionamento.
+Owner prepara/revisa/confere/rejeita/retira. Financeiro existente lê. RPC revalida autoridade e origens.
+Versão esperada, UUID do comando, trava transacional e uma solicitação ativa por tipo/referência impedem repetição e concorrência divergentes.
+Solicitação e eventos imutáveis, RLS, leitura direta negada. Migração aditiva.
+REFUND_PAYMENT: valor inteiro positivo em centavos, até bruto original. Conferência interna requer pagamento recebido, origem/evidência atuais compatíveis, lista completa de estornos, nenhum estorno pendente e limite compatível com devoluções concluídas. Não calcula líquido novo ou disponibilidade bancária. Evidência incompleta nunca vira saldo zero.
+CANCEL_SUBSCRIPTION: fonte assinatura criada/vinculada no sistema. Data desejada, dias de aviso explicitamente conferidos contra a condição preservada, referência da cláusula e confirmação do Owner. Não inferir prazo contratual de texto ou encerrar contrato automaticamente; 30 dias na tela é sugestão a conferir, sem autoridade calculada no frontend. Valida aviso desde a data da preparação em America/Sao_Paulo.
+Conferência significa apenas decisão interna. Futura execução externa precisa de nova pré-validação e autorização; este incremento não cria rota de execução.
+Revisar evidência quando a origem mudar antes de confirmar; rejeição/retirada interna permanecem possíveis mesmo com cadastro da origem indisponível, desde que autoridade do Owner seja confirmada. Financeiro mantém leitura histórica mesmo se nome atual faltar.
+Lista e eventos paginados em 25, detalhes em modal. IDs originais e nomes registrados/atuais separados.
+Homologação, ativação da flag e comandos externos não cobertos pela entrega desligada.
