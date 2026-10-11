@@ -1,0 +1,19 @@
+EnergyOS stage4B — read-only sandbox financial follow-up
+
+Default off: SALES_ASAAS_FINANCE_READ_ENABLED=true is required in addition to SALES_ASAAS_SANDBOX_ENABLED. Do not enable during delivery. Asaas GET-only adapter and Owner mutations are unchanged. No remote calls are performed by this reader.
+
+GET /api/v1/admin/sales/finance-sandbox and /:bindingId. Global scope, existing Owner permission or new platform.sales.finance.read c767190a-5ec0-4d89-8675-688415e967b1. Database freshly validates active team profile and matching global role/permission. Migration registers permission without assigning to roles or people. Finance needs explicit later grant + flag approval. Administrator/support/org/portal cannot read.
+
+Private read_platform_sales_finance RPC, service_role execution only, no direct table grants. Additive migration does not write existing bindings/inbox/checks or licenses. Trigger fills missing actor_name on new financial rows only, using first/last name then profile.name then full_name. Existing sales resolver uses full_name, while platform team writes name; isolated fallback avoids changing commercial/contract history globally.
+
+Names are split: original actor ID, recorded name at event time, current team/profile name. Current name is resolved only for authors in authorized financial records. Missing/unavailable name stays null; no role-as-name or invented identity. Existing immutable historical rows are not backfilled.
+
+One row per binding/payment; no sum of event values. Status shown is the latest successful API summary whose payment/customer/reference/gross matches binding, with consultation timestamp. A review caused by mismatch with an old event can still have a compatible current API summary; this is marked review, never labelled final reconciliation. Failed later queries retain the dated prior compatible observation and review warning. New webhook after observation warns of pending confirmation. Arrival order does not overwrite status with raw event data. DELETED/unavailable/unknown do not become received or refunded.
+
+Expected amount, consulted gross/net (null stays absent), no inferred fee breakdown/ISS/production revenue. Details show events and all check versions with original ID/recorded/current names. Private source snapshots, contacts, secrets and provider links are not returned.
+
+UI: Owner Interest commercial accordion; Finance/Owner Conciliação accordion inside existing protected shell. Paginated list, filters by company/payment/proposal, status and binding creation dates, details in modal. Reader has no mutation/network action buttons.
+
+Validation: Jest reader flags/input/guards/error minimization, disposable SQL tests reuse 4A regression and add Finance denial/revocation/inactive/global scope, no auto-grant, isolation, no direct grants, one payment/multiple events, out-of-order event vs current query, failures, names/renaming/missing directory, historical integrity. No production/sandbox calls in automated tests.
+
+Deployment: validate current remote HEAD, test/typecheck, migration rollback rehearsal and review role grants/counts, production migration only with new flag unset/false. Verify anonymous endpoints denied and off UI; record checkpoint. Do not enable feature, grant users or simulate payment in this delivery. 4C external operations require separate approval.
