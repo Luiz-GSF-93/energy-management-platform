@@ -18,6 +18,8 @@ Fluxo
    no EnergyOS nem aplica licença. Notificação é outro comando, com outra flag.
 5. Notificar: exige running e ativação verificada, reserva antes da consulta e
    um único POST. HTTP200 registra ACKNOWLEDGED, não prova entrega/leitura.
+   A conferência manual antes da primeira notificação não depende de webhook;
+   após envio, as consultas normais precisam de evento recebido. Não há polling.
    Resultado incerto não permite reenvio. Ativação incerta pode ser reconhecida
    por uma nova prova GET running/signed; notificação incerta continua bloqueada.
 6. Webhook valida Content-Hmac sha256 sobre bytes originais, conta sandbox
@@ -92,10 +94,10 @@ Eventos GET: JSON:API data[]/type events/attributes.name/occurred_at e
 attributes.data.signer.key para sign; confirmar o contrato na homologação.
 
 Validação executada
-295 suítes / 4.914 testes backend aprovados.
-44 testes específicos de fluxo/HMAC incluídos, com quatro testes HTTP Nest
+295 suítes / 4.915 testes backend aprovados.
+45 testes específicos de fluxo/HMAC incluídos, com quatro testes HTTP Nest
 em loopback que conferem bytes UTF8 originais e limite de corpo preservado.
-308 verificações SQL PGlite; 317 em PostgreSQL17 descartável, incluindo
+309 verificações SQL PGlite; 318 em PostgreSQL17 descartável, incluindo
 sessões simultâneas: reserva única, conclusão idempotente e redelivery único.
 Regressões 5A, 5B e importação manual aprovadas; sandbox bloqueado na 5B.
 Interface do Owner testada com cliente HTTP real em memória: confirmação

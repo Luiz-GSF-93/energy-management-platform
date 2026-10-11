@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {SignatureClaim,signatureOperation} from './sales-signature.adapter';
 export const signatureUuid=/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-export type SignatureContext={id:string;requestId:string;draftSha256:string;parties:SignatureClaim['source']['parties'];resources:{ordinal:number;external_id:string;type:string}[];replayed?:boolean};
+export type SignatureContext={id:string;requestId:string;draftSha256:string;parties:SignatureClaim['source']['parties'];resources:{ordinal:number;external_id:string;type:string}[];replayed?:boolean;activationConfirmed?:boolean};
 export type SignatureProof={envelopeId:string;documentId:string;status:'DRAFT'|'RUNNING'|'SIGNED'|'CANCELED';signedAt:string|null;signers:string[];log:{id:string;name:string;occurredAt:string;signerId:string|null}[];environment:'SANDBOX';realActivationEligible:false};
 export function signatureResources(c:SignatureContext){
  if(!signatureUuid.test(c.id)||!Array.isArray(c.resources)||c.resources.length!==8)throw Error('Incomplete resources');

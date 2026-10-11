@@ -32,7 +32,8 @@ const cases=String.raw`
  const second={...begin,requestId:id(512)};await life('check_begin',second);await life('check_finish',{id:request,requestId:second.requestId,result:{proof:{...proof,status:'RUNNING'},pdfHex:null}});
  await life('reconcile',{id:request,requestId:activate.requestId,checkId:second.requestId,justification:'API confirmed uncertain activation without PATCH.'});
  assert.equal((await life('reconcile',{id:request,requestId:activate.requestId,checkId:second.requestId,justification:'API confirmed uncertain activation without PATCH.'})).replayed,true);checks++;
- const notify={...activate,requestId:id(513),checkId:second.requestId,kind:'NOTIFY'};await life('command_reserve',notify);await life('command_finish',{id:request,requestId:notify.requestId,state:'ACKNOWLEDGED'});
+ const beforeNotify={...begin,requestId:id(514)};assert.equal((await life('check_begin',beforeNotify)).activationConfirmed,true);checks++;await life('check_finish',{id:request,requestId:beforeNotify.requestId,result:{proof:{...proof,status:'RUNNING'},pdfHex:null}});
+ const notify={...activate,requestId:id(513),checkId:beforeNotify.requestId,kind:'NOTIFY'};await life('command_reserve',notify);await life('command_finish',{id:request,requestId:notify.requestId,state:'ACKNOWLEDGED'});
  await reject(()=>life('command_reserve',{...notify,requestId:id(999)}),'23505');
  await reject(()=>life('check_begin',{...begin,requestId:id(999)}),'23505');
  const time=new Date().toISOString(),evt={account:id(600),documentId:id(202),name:'document_closed',occurredAt:time,signerId:null,eventHash:'a'.repeat(64),rawHash:'b'.repeat(64)};

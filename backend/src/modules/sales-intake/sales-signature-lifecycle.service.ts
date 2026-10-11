@@ -45,6 +45,7 @@ export class SalesSignatureLifecycleService{
   try{
    if(c.id!==b.id||c.requestId!==b.requestId)throw Error('Divergent reservation');
    const {proof,document}=await this.observe(c,token);let pdfHex:string|null=null;
+   if(c.activationConfirmed&&proof.status==='DRAFT')throw Error('Activation state divergent');
    if(proof.status==='SIGNED'){
     const original=await signatureDownloadPdf(signatureDownloadUrl(document.data.links?.files?.original,origins));
     if(signaturePdfHash(original)!==c.draftSha256)throw Error('Remote original changed');

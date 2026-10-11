@@ -59,7 +59,7 @@ BEGIN
  OR NOT EXISTS(SELECT 1 FROM public.platform_sales_signature_original_checks c JOIN public.platform_sales_signature_original_results z USING(request_id) WHERE c.signature_id=entity AND z.state='VERIFIED' AND c.draft_sha256=r.draft_sha256 AND c.document_id=(resources->1->>'external_id')::uuid AND c.envelope_id=(resources->0->>'external_id')::uuid)
  THEN RAISE EXCEPTION 'Incomplete configured resources' USING ERRCODE='23505';END IF;
  data:=jsonb_build_object('id',entity,'draftSha256',r.draft_sha256,'parties',r.snapshot->'parties','resources',resources);
- RETURN data||jsonb_build_object('sourceHash',encode(sha256(convert_to(data::text,'UTF8')),'hex'));
+ RETURN data||jsonb_build_object('sourceHash',encode(sha256(convert_to(data::text,'UTF8')),'hex'),'activationConfirmed',EXISTS(SELECT 1 FROM public.platform_sales_signature_lifecycle_commands cmd JOIN public.platform_sales_signature_lifecycle_events ev ON ev.command_id=cmd.request_id WHERE cmd.signature_id=entity AND cmd.kind='ACTIVATE' AND ev.state='VERIFIED'));
 END$$;
 REVOKE ALL ON FUNCTION public.platform_sales_signature_lifecycle_context(uuid) FROM PUBLIC,anon,authenticated,service_role;
 
@@ -135,8 +135,8 @@ BEGIN
   IF p_body->>'eventHash' IS NOT NULL THEN
    IF NOT EXISTS(SELECT 1 FROM public.platform_sales_signature_inbox WHERE event_hash=p_body->>'eventHash' AND signature_id=entity) OR EXISTS(SELECT 1 FROM public.platform_sales_signature_observations x JOIN public.platform_sales_signature_observation_results y USING(request_id) WHERE x.event_hash=p_body->>'eventHash' AND y.proof IS NOT NULL) THEN RAISE EXCEPTION 'Event already confirmed or unavailable' USING ERRCODE='23505';END IF;
   ELSE
-   -- No background polling: manual checks are only for draft preflight and uncertain activation recovery.
-   IF EXISTS(SELECT 1 FROM public.platform_sales_signature_lifecycle_commands WHERE signature_id=entity AND kind='ACTIVATE') AND NOT EXISTS(SELECT 1 FROM public.platform_sales_signature_lifecycle_commands c CROSS JOIN LATERAL(SELECT ev.state FROM public.platform_sales_signature_lifecycle_events ev WHERE ev.command_id=c.request_id ORDER BY version DESC LIMIT 1)e WHERE c.signature_id=entity AND c.kind='ACTIVATE' AND e.state IN ('RESERVED','UNKNOWN','NOT_SENT')) THEN RAISE EXCEPTION 'Confirmed activation requires webhook event' USING ERRCODE='23505';END IF;
+   -- Explicit preflight before first notification and uncertain activation recovery; no background polling.
+   IF EXISTS(SELECT 1 FROM public.platform_sales_signature_lifecycle_commands cmd CROSS JOIN LATERAL(SELECT ev.state FROM public.platform_sales_signature_lifecycle_events ev WHERE ev.command_id=cmd.request_id ORDER BY version DESC LIMIT 1)e WHERE cmd.signature_id=entity AND cmd.kind='NOTIFY' AND e.state<>'NOT_SENT') THEN RAISE EXCEPTION 'Notification already dispatched; webhook event required' USING ERRCODE='23505';END IF;
   END IF;
   context:=public.platform_sales_signature_lifecycle_context(entity);
   INSERT INTO public.platform_sales_signature_observations VALUES(req,entity,p_body->>'eventHash',context->>'sourceHash',p_actor,author,note,p_body,clock_timestamp());
