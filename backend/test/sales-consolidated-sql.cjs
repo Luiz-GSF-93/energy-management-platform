@@ -1,0 +1,45 @@
+const fs=require('fs');
+const old=fs.readFileSync('test/sales-asaas-sql.cjs','utf8').match(/^const cases=String.raw`([\s\S]*?)`;/m)[1];
+const finance=fs.readFileSync('test/sales-finance-sql.cjs','utf8').match(/^const cases=String.raw`([\s\S]*?)`;/m)[1];
+const cases=String.raw`{
+const before=await db.query("select (select count(*) from licenses) licenses,(select count(*) from platform_sales_asaas_inbox) inbox,(select count(*) from platform_sales_asaas_checks) checks");
+const migration=fs.readFileSync('src/database/migrations/20261011_platform_sales_finance_consolidated.sql','utf8');await db.exec(migration);await db.exec(migration);
+assert.deepEqual((await db.query("select (select count(*) from licenses) licenses,(select count(*) from platform_sales_asaas_inbox) inbox,(select count(*) from platform_sales_asaas_checks) checks")).rows,before.rows);checks++;
+const read=(a=owner,q={},binding=null)=>db.query('select read_platform_sales_finance_consolidated($1,$2,$3,$4,$5,$6,$7,$8) result',[a,q.page??0,q.search??'',q.status??'',q.from??null,q.to??null,q.review===undefined?false:q.review,binding]).then(x=>x.rows[0].result);
+const run=(action,body,a=owner)=>db.query('select platform_sales_asaas_action($1,$2,$3) result',[a,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
+await reject(()=>read(null),'42501');await reject(()=>read(other),'42501');
+await db.query('update roles set permissions=$1 where id=$2',[JSON.stringify(['c767190a-5ec0-4d89-8675-688415e967b1']),'f']);
+await read(other);checks++;
+for(const profile of ['ADMINISTRATOR','SUPPORT','OPERATOR']){await db.query('update platform_team_members set profile=$1 where user_id=$2',[profile,other]);await reject(()=>read(other),'42501');}
+await db.query("update platform_team_members set profile='FINANCE' where user_id=$1",[other]);
+const binding=id(600),summary={id:'pay_4b',customer:'cus_4b',reference:binding,grossCents:85000,netCents:84901,status:'RECEIVED'};
+let serial=700;
+const inbox=async(summary,event='PAYMENT_RECEIVED')=>{await new Promise(r=>setTimeout(r,5));serial++;return run('inbox',{event:{id:'evt_4e_'+serial,event,payment:summary},hash:String(serial).padStart(64,'0')},null);};
+const verify=async(event,summary)=>{await new Promise(r=>setTimeout(r,5));const lease=id(++serial);await run('claim',{id:event.id,lease});await new Promise(r=>setTimeout(r,5));await run('finish',{id:event.id,lease,summary});};
+let event=await inbox(summary);await verify(event,summary);
+let view=await read(other,{search:'pay_4b'});assert.equal(view.rows[0].status,'RECEIVED');assert.equal(view.totals.receivedCount,1);assert.equal(view.totals.receivedGrossCents,'85000');assert.equal(view.totals.receivedKnownNetCents,'84901');assert.equal(view.totals.reviewCount,0);checks++;
+const historyCount=(await read(other,{},binding)).history.events.length;assert(historyCount>1);checks++;
+await inbox(summary);view=await read(other,{search:'pay_4b'});assert.equal(view.rows[0].status,'UNKNOWN');assert.equal(view.rows[0].reason,'EVENT_AFTER_CHECK');assert.equal(view.totals.receivedGrossCents,'0');checks++;
+event=await inbox(summary);await verify(event,summary);view=await read(other,{search:'pay_4b'});assert.equal(view.totals.receivedCount,1);assert.equal(view.totals.receivedGrossCents,'85000');assert.equal(view.total,1);checks++;
+const page=await read(other,{search:'pay_4b',page:1});assert.equal(page.rows.length,0);assert.deepEqual(page.totals,view.totals);assert.equal(page.total,1);checks++;
+assert.equal((await read(other,{search:'pay_4b',review:true})).total,0);assert.equal((await read(other,{search:'pay_4b',status:'RECEIVED'})).total,1);checks++;
+event=await inbox({...summary,status:'PENDING'},'PAYMENT_UPDATED');await verify(event,summary);view=await read(other,{search:'pay_4b'});assert.equal(view.rows[0].status,'UNKNOWN');assert.equal(view.rows[0].reason,'CHECK_REQUIRES_REVIEW');assert.equal(view.totals.receivedCount,0);assert.equal((await read(other,{search:'pay_4b',review:true})).total,1);checks++;
+event=await inbox(summary);await verify(event,null);view=await read(other,{search:'pay_4b'});assert.equal(view.rows[0].requiresReview,true);assert.equal(view.rows[0].grossCents,null);checks++;
+event=await inbox(summary);await verify(event,{...summary,reference:id(999)});assert.equal((await read(other,{search:'pay_4b'})).totals.receivedCount,0);checks++;
+event=await inbox({...summary,netCents:null});await verify(event,{...summary,netCents:null});view=await read(other,{search:'pay_4b'});assert.equal(view.totals.receivedNetMissingCount,1);assert.equal(view.totals.receivedKnownNetCents,'0');assert.equal(view.rows[0].netCents,null);checks++;
+event=await inbox({...summary,status:'CONFIRMED'},'PAYMENT_CONFIRMED');await verify(event,{...summary,status:'CONFIRMED'});view=await read(other,{search:'pay_4b'});assert.equal(view.totals.confirmedCount,1);assert.equal(view.totals.receivedCount,0);checks++;
+event=await inbox({...summary,status:'REFUNDED'},'PAYMENT_REFUNDED');await verify(event,{...summary,status:'REFUNDED'});view=await read(other,{search:'pay_4b'});assert.equal(view.totals.refundedCount,1);assert.equal(view.totals.receivedGrossCents,'0');assert.equal(view.refundAmountsStatus,'NOT_INTEGRATED');assert.equal(view.fiscalStatus,'NOT_INTEGRATED');checks++;
+event=await inbox({...summary,status:'REFUND_REQUESTED'},'PAYMENT_UPDATED');await verify(event,{...summary,status:'REFUND_REQUESTED'});view=await read(other,{search:'pay_4b'});assert.equal(view.rows[0].status,'UNKNOWN');assert.equal(view.totals.refundedCount,0);assert.equal(view.totals.reviewCount,1);checks++;
+await db.exec("INSERT INTO platform_sales_asaas_checks(event_id,version,status,lease,actor_id,actor_name,note,summary,created_at) SELECT event_id,version+100,status,lease,actor_id,actor_name,note,summary,'2035-01-01T00:00:00Z' FROM platform_sales_asaas_checks WHERE id IN (SELECT c.id FROM platform_sales_asaas_checks c JOIN platform_sales_asaas_inbox i ON i.id=c.event_id WHERE i.payment_id='pay_4b' ORDER BY c.created_at DESC,c.id DESC LIMIT 2)");view=await read(other,{search:'pay_4b'});assert.equal(view.rows[0].reason,'AMBIGUOUS_CHECK_ORDER');assert.equal(view.totals.receivedCount,0);checks++;
+await db.exec('ALTER TABLE user_profiles RENAME TO unavailable_profiles');view=await read(other,{},binding);assert.equal(view.history.binding.currentName,null);await db.exec('ALTER TABLE unavailable_profiles RENAME TO user_profiles');checks++;
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>read(),'42501');await db.exec('RESET ROLE');}
+await db.exec('SET ROLE service_role');await read(other);await reject(()=>db.query('select * from platform_sales_asaas_checks'),'42501');await db.exec('RESET ROLE');
+await db.query('update platform_team_members set active=false where user_id=$1',[other]);await reject(()=>read(other),'42501');await db.query('update platform_team_members set active=true where user_id=$1',[other]);
+await db.query("update roles set scope='organization' where id='f'");await reject(()=>read(other),'42501');await db.query("update roles set scope='global',permissions='[]' where id='f'");await reject(()=>read(other),'42501');
+await reject(()=>read(owner,{review:null}),'22023');await reject(()=>read(owner,{page:1001}),'22023');await reject(()=>read(owner,{status:'PAID'}),'22023');await reject(()=>read(owner,{},id(999)),'P3610');
+const empty=await read(owner,{search:'absent'});assert.equal(empty.total,0);assert.equal(empty.totals.receivedCount,0);assert.equal(empty.totals.receivedGrossCents,'0');checks++;
+assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,0);checks++;
+console.log('4E consolidation: no duplicate revenue, stale/ambiguous states excluded, role isolation and historical preservation passed.');
+}`;
+const fixture=fs.readFileSync('test/sales-offer-terms-sql.cjs','utf8').replace('await db.close();console.log(',()=>old+'\n'+finance+'\n'+cases+'\nawait db.close();console.log(');
+new Function('require',fixture)(require);
