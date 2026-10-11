@@ -1,0 +1,70 @@
+Clicksign 3C4 — conferência restrita do original, entregue desligada
+
+Extensão aditiva da implementação sandbox; não altera a conexão GET de produção,
+aceitação de contratos ou provisionamento. O helper de comparação agora recebe
+bytes exclusivamente do serviço de transporte restrito, nunca de upload do cliente.
+
+Migração 20261018_platform_sales_signature_original.sql:
+duas tabelas append-only privadas e RPC platform_sales_signature_original_action.
+Owner ativo revalidado pela RPC existente, locks de papel e advisory lock por
+solicitação, corpo estrito, ID de requisição imutável, reserva antes de GET.
+Uma consulta pendente bloqueia outra; repetição retorna estado sem rede.
+Resultado incerto não permite reenvio automático. Evidência incompleta preserva
+o bloqueio. Sucesso pode reconhecer o documento de uma tentativa RESERVED/UNKNOWN,
+sem mudar ou apagar o histórico da tentativa anterior. Fonte/minuta aprovada,
+hash do PDF, envelope e IDs exatos revalidados; divergência preserva bloqueios.
+
+Transporte:
+- Dois GET de metadados ao endpoint sandbox fixo, com token somente nesses GET.
+- Envelope/documento precisam ser draft com IDs e nomes exatos da solicitação.
+- links.files.original proveniente dessa resposta autenticada; URL não é entrada
+  do usuário nem é persistida/exposta. Confirmar esse formato no ensaio real.
+- SALES_CLICKSIGN_SANDBOX_DOWNLOAD_ORIGINS é uma lista explícita de até cinco
+  origens HTTPS exatas aprovadas, sem caminho, credencial, porta ou wildcard.
+  Sem origem configurada não há reserva nem consulta. Não há bucket predefinido.
+- DNS limitado pelo timeout, rejeição de qualquer endereço não global IPv4,
+  pinagem da conexão ao endereço verificado e TLS no hostname original.
+  Origens com IPv6 no DNS são bloqueadas nesta versão, inclusive misturadas.
+- Download sem Authorization, cookies ou redirects, limite 1MiB, MIME PDF,
+  encoding identity, comprimento/stream conferidos e timeout total10s por operação.
+- SHA-256 dos bytes remotos e tamanho precisam coincidir com a minuta preservada.
+  Persistência só de IDs, hash, tamanho, estado e autores; PDF original já está
+  preservado no cadastro de minuta. Não prova assinatura ou poderes legais.
+
+Flags novas entregues ausentes/false:
+SALES_SIGNATURE_ORIGINAL_ENABLED (consulta privada);
+SALES_SIGNATURE_ORIGINAL_CALLS_ENABLED (GET/download externos).
+Dependências: SALES_SIGNATURE_PREPARATION_ENABLED, SALES_SIGNATURE_COMMANDS_ENABLED,
+SALES_CLICKSIGN_BASE_URL=https://sandbox.clicksign.com/api/v3,
+SALES_CLICKSIGN_SANDBOX_TOKEN e origens explicitamente homologadas.
+Não reutilizar SALES_CLICKSIGN_PRODUCTION_TOKEN.
+
+Frontend:
+Seção colapsada Conferir PDF original no detalhe de criação. Filtros/consulta
+e histórico paginados, nomes registrados/atuais separados, ausência explícita.
+Botão depende de capacidade do backend. Input pending preserva o mesmo requestId.
+Correção de transporte nos comandos existentes de preparação/retirada,
+criação e reconferência: objeto passado ao apiRequest, serializado uma vez.
+
+Validação técnica:
+169 testes em seis suítes de assinatura; 227 verificações SQL incluindo
+regressão de preparação/criação/recuperação no banco descartável PGlite.
+Build Nest e Next aprovados. Teste de tela com cliente HTTP real em memória:
+seis comandos, corpo objeto, repetição idêntica e downloads desligados.
+Sem chamadas reais, credenciais, migração compartilhada ou alteração de flags
+durante desenvolvimento. Ensaio adicional em PostgreSQL17 descartável:
+233 verificações, incluindo duas sessões simultâneas, espera observada no
+advisory lock, reserva única e conclusão repetida idempotente. Container local
+sem volume compartilhado; cliente temporário, sem alterar dependências do produto.
+
+Não confundir com conclusão integral da assinatura:
+Ainda faltam conferência completa dos recursos antes de ativação, comandos de
+ativar/notificar, webhook autenticado/consulta de confirmação, PDF final/log,
+conferência do Owner e ponte sandbox à 5A/5B. Esses incrementos estão cobertos
+pela proposta completa aprovada em11/10/2026 e serão validados por incremento.
+Execução externa continua exigindo documento/destinatários/ambiente concretos.
+
+Fontes oficiais:
+https://developers.clicksign.com/reference/detalhes-do-documento
+https://developers.clicksign.com/v2.0/docs/visualizar-documento-
+O exemplo antigo não valida host atual nem deve configurar uma allowlist.

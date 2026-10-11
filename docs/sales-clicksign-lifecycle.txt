@@ -1,0 +1,122 @@
+Clicksign — fluxo documental completo sandbox, entregue desligado
+
+Escopo técnico aprovado em 11/10/2026 e retomado explicitamente pelo usuário.
+Completa 3C4, ativação/notificação, webhook, arquivo final e conferência do Owner
+integrada à preparação 5A e ao núcleo 5B. Sem adapter de escrita de produção.
+A conexão GET da conta de produção1116892 continua separada.
+
+Fluxo
+1. Owner prepara assinatura da minuta aprovada; criação sequencial de oito
+   recursos permanece separada. Rascunho com auto_close=false.
+2. Original remoto conferido por hash com transporte restrito da 3C4.
+3. Conferir envelope, lista completa de documentos, signatários e requisitos,
+   IDs, nomes, e-mails, grupo1, comunicação por e-mail e lembretes desligados.
+   Falta de contrato de paginação ou divergência mantém bloqueio.
+4. Ativar: reserva persistida, nova conferência GET e reconferência de Owner
+   e fonte antes de um PATCH para running/auto_close=true. A Clicksign poderá
+   concluir o envelope após as assinaturas exigidas; isso não aceita contrato
+   no EnergyOS nem aplica licença. Notificação é outro comando, com outra flag.
+5. Notificar: exige running e ativação verificada, reserva antes da consulta e
+   um único POST. HTTP200 registra ACKNOWLEDGED, não prova entrega/leitura.
+   A conferência manual antes da primeira notificação não depende de webhook;
+   após envio, as consultas normais precisam de evento recebido. Não há polling.
+   Resultado incerto não permite reenvio. Ativação incerta pode ser reconhecida
+   por uma nova prova GET running/signed; notificação incerta continua bloqueada.
+6. Webhook valida Content-Hmac sha256 sobre bytes originais, conta sandbox
+   configurada e documento/signatário vinculados. Persiste apenas metadados
+   sanitizados e hashes; nunca segue URLs do webhook nem grava o payload bruto.
+   Evento repetido é deduplicado e não altera o estado confirmado do contrato.
+7. Owner confirma o evento por consulta autenticada; nenhuma rotina de polling.
+   Webhook isolado não comprova assinatura. Envelope fechado exige documento
+   fechado, os dois eventos sign vinculados, sem cancelamento/recusa/prazo
+   adverso e histórico completo. Formato desconhecido permanece bloqueado.
+8. Conferir novamente o hash do original remoto, depois baixar PDF assinado
+   pela origem explícita aprovada. Hash final deve diferir do original; ambos
+   permanecem separados. Download restrito da 3C4: até1MiB, PDF, timeout10s,
+   DNS público IPv4 fixado, TLS, sem redirect nem credencial no storage.
+9. Owner preserva o arquivo na importação privada existente, depois registra
+   CHECKED e ACCEPTED com checklist e justificativa. Rejeição preserva histórico.
+   O endpoint manual de revisão também respeita a prova API para documentos
+   vinculados. Novo evento pendente, prova incompleta, cancelamento ou hash
+   final alterado bloqueiam a conferência/5A, sem apagar uma aceitação anterior.
+10. ID do contrato aceito entra na 5A com proposta, organização, financeiro,
+    vigência e cota de IA. A 5A acrescenta a procedência API e revalida o estado.
+    A 5B reaproveita essa fonte e mantém o bloqueio já existente de execução
+    quando environment não é PRODUCTION ou realActivationEligible não é true.
+    Nenhum caminho sandbox pode aplicar licença real.
+
+Falhas e auditoria
+IDs de requisição imutáveis; repetição retorna o estado sem novas chamadas.
+Reserva, resultado e reconferência append-only, locks por solicitação e por
+papel; Owner revogado perde acesso. Resultado perdido após efeito conserva
+a reserva. Falha de prova conserva um resultado incompleto.
+Owner pode encerrar uma consulta GET pendente há mais de5min como incompleta,
+com justificativa/autoria separadas; não cria prova, comando ou efeito externo.
+Histórico paginado, nomes registrados e atuais separados; falta de nome
+explícita. Indisponibilidade da identidade autoritativa falha fechada.
+PDF e log sanitizado de eventos são attachments privados, no-store/nosniff.
+O log JSON não é apresentado como laudo criptográfico independente do fornecedor.
+
+Migrações
+20261018_platform_sales_signature_original.sql: duas tabelas privadas.
+20261019_platform_sales_signature_lifecycle.sql: oito tabelas privadas,
+RPCs de Owner e capacidade restrita de inbox, trigger da revisão documental.
+Dois helpers antigos são renomeados, com corpos preservados, para wrappers
+compatíveis: signed_document_action e activation_source. Grants anteriores
+dos RPCs públicos são preservados; helpers antigos ficam privados.
+Fontes manuais não vinculadas retornam os resultados anteriores da 5A.
+Nenhum histórico é alterado, nenhuma permissão de pessoa é concedida.
+
+Flags novas: ausência ou valor diferente de true mantém desligado
+SALES_SIGNATURE_LIFECYCLE_ENABLED: consultas/comandos privados do fluxo.
+SALES_SIGNATURE_LIFECYCLE_READ_CALLS_ENABLED: consultas e downloads de prova.
+SALES_SIGNATURE_ACTIVATION_CALLS_ENABLED: PATCH de ativação.
+SALES_SIGNATURE_NOTIFICATION_CALLS_ENABLED: POST de notificação.
+SALES_SIGNATURE_WEBHOOK_ENABLED: receber eventos autenticados do sandbox.
+Dependência interna: SALES_SIGNATURE_PREPARATION_ENABLED.
+Criação dos recursos e conferência 3C4 mantêm suas próprias flags existentes.
+SALES_SIGNED_IMPORT_ENABLED não é necessário para a ponte interna, mas mantém
+separado o upload manual. A ponte utiliza as validações e o RPC privado existente.
+
+Credenciais/configuração — exclusivamente no backend
+SALES_CLICKSIGN_BASE_URL=https://sandbox.clicksign.com/api/v3
+SALES_CLICKSIGN_SANDBOX_TOKEN — não reutilizar token de produção.
+SALES_CLICKSIGN_SANDBOX_ACCOUNT_KEY — UUID do campo account.key do fornecedor;
+não confundir com o número da conta no painel.
+SALES_CLICKSIGN_SANDBOX_WEBHOOK_SECRET — HMAC separado, mínimo16 caracteres.
+SALES_CLICKSIGN_SANDBOX_DOWNLOAD_ORIGINS — até cinco origens HTTPS exatas
+explicitamente verificadas, sem wildcard, portas, paths ou bucket inferido.
+POST /api/v1/public/sales/clicksign-sandbox/webhook
+Parser HTTP conserva o limite atual de100KiB; não amplia limites globais.
+Formato implementado do webhook: event.name/occurred_at/data.account.key e
+document.key/account_key. Formatos divergentes requerem homologação concreta.
+Eventos GET: JSON:API data[]/type events/attributes.name/occurred_at e
+attributes.data.signer.key para sign; confirmar o contrato na homologação.
+
+Validação executada
+295 suítes / 4.915 testes backend aprovados.
+45 testes específicos de fluxo/HMAC incluídos, com quatro testes HTTP Nest
+em loopback que conferem bytes UTF8 originais e limite de corpo preservado.
+309 verificações SQL PGlite; 318 em PostgreSQL17 descartável, incluindo
+sessões simultâneas: reserva única, conclusão idempotente e redelivery único.
+Regressões 5A, 5B e importação manual aprovadas; sandbox bloqueado na 5B.
+Interface do Owner testada com cliente HTTP real em memória: confirmação
+explícita de participantes, comandos separados, evento, ponte e duas revisões,
+repetição com mesmoID e chamadas desligadas. Builds Next/Nest aprovados.
+Ensaio compartilhado com rollback: dados de59 tabelas e corpos de534 funções
+preservados, duas renomeações esperadas, dez novas tabelas vazias com RLS,
+acesso direto dos papéis da API negado e ator nulo bloqueado.
+
+Homologação externa ainda separada
+Exige configurar credenciais sandbox, HMAC, conta e origens atuais, conferir
+documento de teste e dois participantes controlados que assinam pessoalmente.
+Não usar a minuta Savegnago para envio a destinatários sem autorização
+específica. Não transmite PDF nem envia convite nesta implementação.
+Produção de escrita e aplicação real de licença continuam fora dessa entrega.
+
+Fontes oficiais consultadas
+https://developers.clicksign.com/docs/veja-como-funciona-na-pr%C3%A1tica
+https://developers.clicksign.com/docs/notificacoes
+https://developers.clicksign.com/docs/disparos-de-webhooks
+https://developers.clicksign.com/reference/eventos-de-um-documento
+https://developers.clicksign.com/docs/evento-document-closed
