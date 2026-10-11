@@ -1,5 +1,7 @@
 await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_checks.sql','utf8'));
 await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_checks.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_check_diagnostics.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_adjustment_check_diagnostics.sql','utf8'));
 const chk=(action,body,actor=owner)=>db.query('select platform_sales_adjustment_check_action($1,$2,$3) result',[actor,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
 const beforeCheckTotals=(await db.query('select read_platform_sales_finance_consolidated($1,0,$2,$2,NULL,NULL,false,NULL) result',[finance,''])).rows[0].result.totals;
 const jr={...refundBody,id:id(1300)};await adj('prepare',jr);
@@ -29,6 +31,16 @@ await reject(()=>chk('claim',{...jcmd,commandId:id(1315)}),'P3711');
 assert.equal((await adj('read',{id:jr.id,page:0})).latest.state,'PREPARED');checks++;
 const j2={...jc,id:id(1320)};await chk('prepare',j2);await chk('claim',{id:j2.id,commandId:id(1321)});
 assert.equal((await chk('finish',{id:j2.id,commandId:id(1321),evidence:null})).state,'INCOMPLETE');checks++;
+// Safe diagnostic is appended without fabricated evidence or mutable history.
+const jdiag={...jc,id:id(1325)};await chk('prepare',jdiag);await chk('claim',{id:jdiag.id,commandId:id(1326)});
+for(const diagnostic of ['SECRET_KEY=private','OTHER_REASON',null,{}])await reject(()=>chk('finish',{id:jdiag.id,commandId:id(1326),evidence:null,diagnostic}),'22023');
+await reject(()=>chk('finish',{id:jdiag.id,commandId:id(1326),evidence:je,diagnostic:'QUERY_TIMEOUT'}),'22023');
+const df={id:jdiag.id,commandId:id(1326),evidence:null,diagnostic:'QUERY_BINDING_MISMATCH'};
+assert.equal((await chk('finish',df)).state,'INCOMPLETE');checks++;
+assert.equal((await chk('finish',df)).replayed,true);checks++;
+await reject(()=>chk('finish',{...df,diagnostic:'QUERY_TIMEOUT'}),'P3711');
+await reject(()=>chk('finish',{id:df.id,commandId:df.commandId,evidence:null}),'P3711');
+const dr=(await readj()).checks.find(x=>x.id===jdiag.id);assert.equal(dr.latest.evidence,null);assert.deepEqual(dr.latest.blockers,['QUERY_INCOMPLETE','QUERY_BINDING_MISMATCH']);checks++;
 const j3={...jc,id:id(1330)};await chk('prepare',j3);await chk('claim',{id:j3.id,commandId:id(1331)});
 const jb={...je,payment:{...jp,billingType:'BOLETO'},blockers:[]};assert.equal((await chk('finish',{id:j3.id,commandId:id(1331),evidence:jb})).state,'BLOCKED');checks++;
 const j4={...jc,id:id(1340)};await chk('prepare',j4);await chk('claim',{id:j4.id,commandId:id(1341)});
@@ -39,7 +51,7 @@ await adj('withdraw',{id:jr.id,commandId:id(1351),expectedVersion:2,justificatio
 assert.equal((await chk('claim',{id:j5.id,commandId:id(1352)})).execute,false);checks++;
 await reject(()=>chk('prepare',{...j5,id:id(1353),expectedVersion:3}),'P3711');
 await reject(()=>chk('read',{requestId:id(1399),page:0}),'P3710');await reject(()=>chk('read',{requestId:jr.id,page:1001}),'22023');
-jd=await readj();assert.equal(jd.total,5);assert.equal(jd.checks[0].events.length,2);checks++;
+jd=await readj();assert.equal(jd.total,6);assert.equal(jd.checks[0].events.length,2);checks++;
 const beforeName=jd.checks[0].actor_name;await db.exec("ALTER TABLE user_profiles RENAME TO profiles_unavailable");jd=await readj();assert.equal(jd.checks[0].current_actor_name,null);assert.equal(jd.checks[0].actor_name,beforeName);checks++;await db.exec('ALTER TABLE profiles_unavailable RENAME TO user_profiles');
 const jcancel={id:id(1360),requestId:cancelBody.id,expectedVersion:4,justification:jc.justification};await chk('prepare',jcancel);const jcc=await chk('claim',{id:jcancel.id,commandId:id(1361)});assert.equal(jcc.execute,true);checks++;
 const jsub={id:jcc.source.remoteId,customer:jcc.source.parameters.customer,reference:jcc.source.parameters.externalReference,status:'ACTIVE',deleted:false};

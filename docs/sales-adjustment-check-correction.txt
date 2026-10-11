@@ -1,0 +1,7 @@
+4J correction — executed evidence and safe diagnostics
+Approved 11 October 2026. External calls remain disabled.
+Subscription validation anchors identity, payer, reference, price, cycle, payment method and end date to the previously verified executed subscription. Planned end dates remain unchanged and may differ from the executed limit. Missing or mismatched evidence never falls back to planned terms.
+Safe allowlisted diagnostic codes identify configuration, network/timeout, HTTP, size, schema, binding and missing executed evidence failures. Provider payloads, URLs, keys and private messages are not persisted as diagnostics. Null evidence remains null; no zero amounts or fabricated remote records. Existing incomplete events remain immutable.
+Additive replacement of private RPC accepts an optional safe diagnostic only for null finish evidence; divergent replay is denied. Original migration preserved, no table/backfill or permission expansion. Existing clients without diagnostics remain compatible.
+Unit and disposable SQL tests cover planned/executed dates, unknown/mismatched sources, network errors, safe payloads, permissions, concurrency, replay, unavailable names, immutable records and unchanged finances/licenses. Deployment rehearsal compares hashes of protected tables and RPC privileges before COMMIT.
+No new GET/provider test, financial mutation, license activation or invitation in this delivery. A future external test needs new explicit preparation and authorization.
