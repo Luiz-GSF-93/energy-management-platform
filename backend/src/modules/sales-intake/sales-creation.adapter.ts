@@ -29,11 +29,21 @@ export class SalesCreationAdapter {
   if(s.customer!==p.customer||s.reference!==p.externalReference||s.grossCents!==Math.round(p.value*100))throw new ServiceUnavailableException('Resultado divergente; requer reconciliacao.');
   return s;
  }
- async create(p:CreationParameters){
+ async preflight(p:CreationParameters){
   this.valid(p);const customer=await this.request('/customers/'+p.customer,'GET');
   if(customer.id!==p.customer||customer.deleted!==false||customer.notificationDisabled!==true)throw new ServiceUnavailableException('Pagador sandbox nao confirmado.');
-  // One POST only. No retry, customer creation, subscription, payment or license operations.
+ }
+ async dispatch(p:CreationParameters){
+  this.valid(p);
+  // Caller must persist POST_RESERVED before this single POST. Never retry.
   return this.compatible(await this.request('/payments','POST',p),p);
+ }
+ async create(p:CreationParameters){await this.preflight(p);return this.dispatch(p);}
+ async recoveryProof(p:CreationParameters){
+  await this.preflight(p);
+  const page=await this.request('/payments?externalReference='+encodeURIComponent(p.externalReference)+'&customer='+encodeURIComponent(p.customer)+'&limit=2','GET');
+  if(!page||!Array.isArray(page.data)||page.data.length!==0||page.totalCount!==0||page.hasMore!==false)throw new ServiceUnavailableException('Ausencia de cobranca nao confirmada; reconciliar sem criar.');
+  return {customer:p.customer,reference:p.externalReference,notificationDisabled:true,totalCount:0,hasMore:false};
  }
  async reconcile(p:CreationParameters){
   this.valid(p);const page=await this.request('/payments?externalReference='+encodeURIComponent(p.externalReference)+'&customer='+encodeURIComponent(p.customer)+'&limit=2','GET');

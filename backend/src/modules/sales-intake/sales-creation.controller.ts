@@ -12,4 +12,6 @@ export class SalesCreationController {
  @Post() @RequirePermission(owner) @Header('Cache-Control','no-store') prepare(@Req() r:RequestWithAuthenticatedUser,@Body() b:unknown){return this.service.prepare(r.authenticatedUser.userId,b);}
  @Post(':id/execute') @RequirePermission(owner) @Header('Cache-Control','no-store') execute(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string){return this.service.execute(r.authenticatedUser.userId,id);}
  @Post(':id/reconcile') @RequirePermission(owner) @Header('Cache-Control','no-store') reconcile(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string){return this.service.execute(r.authenticatedUser.userId,id,true);}
+ @Post(':id/recovery-authorization') @RequirePermission(owner) @Header('Cache-Control','no-store') authorizeRecovery(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string,@Body() b:unknown){return this.service.authorizeRecovery(r.authenticatedUser.userId,id,b);}
+ @Post(':id/recover') @RequirePermission(owner) @Header('Cache-Control','no-store') recover(@Req() r:RequestWithAuthenticatedUser,@Param('id') id:string){return this.service.execute(r.authenticatedUser.userId,id,false,true);}
 }
