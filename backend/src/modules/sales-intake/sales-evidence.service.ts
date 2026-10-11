@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {commercialInput} from './sales-commercial.service';
 import {SalesEvidenceAdapter} from './sales-evidence.adapter';
+import {failedEvidence} from './sales-evidence-diagnostics';
 @Injectable()
 export class SalesEvidenceService {
  constructor(private readonly db:SupabaseService,private readonly config:ConfigService,private readonly adapter:SalesEvidenceAdapter){}
@@ -16,7 +17,7 @@ export class SalesEvidenceService {
  read(actor:string,kind:string,id:string,q:Record<string,unknown>){const origin=this.origin(kind,id);if(Object.entries(q).some(([k,v])=>k!=='page'||typeof v!=='string')||!/^\d{1,4}$/.test(String(q.page??'0'))||Number(q.page??0)>1000)throw new BadRequestException('Página inválida.');return this.rpc(actor,'read',{...origin,page:Number(q.page??0)}).then(r=>({...r,externalCallsEnabled:this.config.get('SALES_EVIDENCE_CALLS_ENABLED')==='true'}));}
  async check(actor:string,kind:string,id:string,body:unknown){const origin=this.origin(kind,id),b=commercialInput(body,['justification'],[]);if(typeof b.justification!=='string'||b.justification.trim().length<20||b.justification.length>500)throw new BadRequestException('Justificativa inválida.');if(this.config.get('SALES_EVIDENCE_CALLS_ENABLED')!=='true')throw new ServiceUnavailableException('Consultas externas de evidências desligadas.');
   const lease=randomUUID(),claim=await this.rpc(actor,'claim',{...origin,lease,justification:b.justification});let evidence;
-  try{evidence=await this.adapter.evidence(claim.source);}catch{await this.rpc(actor,'finish',{lease,evidence:null});throw new ServiceUnavailableException('Consulta não concluída; tentativa preservada.');}
+  try{evidence=await this.adapter.evidence(claim.source);}catch(error){await this.rpc(actor,'finish',{lease,evidence:failedEvidence(error)});throw new ServiceUnavailableException('Consulta não concluída; tentativa preservada.');}
   return this.rpc(actor,'finish',{lease,evidence});
  }
 }

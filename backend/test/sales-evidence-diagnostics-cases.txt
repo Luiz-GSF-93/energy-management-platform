@@ -1,0 +1,34 @@
+const diagBefore=(await db.query("select jsonb_agg(to_jsonb(r) order by attempt_id) rows from platform_sales_evidence_revisions r")).rows[0].rows;
+const diagMigration=fs.readFileSync('src/database/migrations/20261011_platform_sales_evidence_safe_diagnostics.sql','utf8');
+await db.exec(diagMigration);await db.exec(diagMigration);
+assert.deepEqual((await db.query("select jsonb_agg(to_jsonb(r) order by attempt_id) rows from platform_sales_evidence_revisions r")).rows[0].rows,diagBefore);checks++;
+const diagnosticValidate=d=>db.query('select platform_sales_evidence_validate_diagnostics($1)',[JSON.stringify(d)]);
+for(const code of ['QUERY_FAILED','CONFIG_INVALID','TIMEOUT','NETWORK_ERROR','HTTP_ERROR','RESPONSE_LIMIT','JSON_INVALID','PAYMENT_SCHEMA_INVALID','REFUNDS_ENVELOPE_INVALID','REFUND_ROW_INVALID','INVOICES_ENVELOPE_INVALID','INVOICE_ROW_INVALID','BINDING_MISMATCH','DUPLICATE_ITEMS','HISTORY_TRUNCATED','PAGINATION_CHANGED','COLLECTION_DEADLINE','SOURCE_CHANGED']){await diagnosticValidate([{scope:'REFUNDS',code}]);checks++;}
+for(const status of [300,400,401,403,429,500,599]){await diagnosticValidate([{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:status}]);checks++;}
+for(const bad of [null,{},'secret',[null],[{}],[{scope:'REFUNDS',code:'TOKEN_SECRET'}],[{scope:'TOKEN_SECRET',code:'TIMEOUT'}],[{scope:'REFUNDS',code:'TIMEOUT',message:'secret'}],[{scope:'REFUNDS',code:'TIMEOUT',httpStatus:500}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:'403'}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:299}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:600}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:403.1}],[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:null}],[{scope:'REFUNDS',code:'TIMEOUT'},{scope:'REFUNDS',code:'NETWORK_ERROR'}],['PAYMENT','REFUNDS','INVOICES','RECHECK','COLLECTION'].map(scope=>({scope,code:'TIMEOUT'}))])await reject(()=>diagnosticValidate(bad),'22023');
+for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await reject(()=>diagnosticValidate([]),'42501');await db.exec('RESET ROLE');}
+const diagClaim={kind:'ONCE',id:onceBinding.id,justification:'Diagnostic fixture with preserved source.'};
+const diagFull={payment:onceSummary,refunds:[],invoices:[],refundsComplete:true,invoicesComplete:true};
+const diagResults=[
+ [null,'REVIEW'],[diagFull,'COMPLETE'],
+ [{...diagFull,diagnostics:[]},'COMPLETE'],
+ [{diagnostics:[{scope:'PAYMENT',code:'HTTP_ERROR',httpStatus:401}]},'REVIEW'],
+ [{...diagFull,refundsComplete:false,diagnostics:[{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:403}]},'PARTIAL'],
+ [{...diagFull,invoicesComplete:false,diagnostics:[{scope:'INVOICES',code:'HISTORY_TRUNCATED'}]},'PARTIAL'],
+ [{...diagFull,diagnostics:[{scope:'RECHECK',code:'SOURCE_CHANGED'}]},'REVIEW']
+];
+for(let n=0;n<diagResults.length;n++){
+ const lease=id(1600+n),[evidence,status]=diagResults[n];await ev('claim',{...diagClaim,lease});
+ for(const actor of [finance,other,id(40),id(41)])await reject(()=>ev('finish',{lease,evidence},actor),'42501');
+ assert.equal((await ev('finish',{lease,evidence})).status,status);checks++;
+ assert.equal((await ev('finish',{lease,evidence})).replayed,true);checks++;
+ await reject(()=>ev('finish',{lease,evidence:{diagnostics:[{scope:'COLLECTION',code:'TIMEOUT'}]}}),'P3691');
+}
+await ev('claim',{...diagClaim,lease:id(1620)});
+for(const evidence of [{diagnostics:[]},{diagnostics:null},{diagnostics:[{scope:'COLLECTION',code:'TIMEOUT',raw:'secret'}]},{...diagFull,diagnostics:[{scope:'REFUNDS',code:'TIMEOUT'}]},{...diagFull,diagnostics:[{scope:'INVOICES',code:'TIMEOUT'}]}])await reject(()=>ev('finish',{lease:id(1620),evidence}),'22023');
+await ev('finish',{lease:id(1620),evidence:{diagnostics:[{scope:'COLLECTION',code:'NETWORK_ERROR'}]}});
+const diagRead=await ev('read',{kind:'ONCE',id:onceBinding.id,page:0},finance);
+assert.equal(diagRead.rows[0].status,'REVIEW');assert.deepEqual(diagRead.rows[0].evidence,{diagnostics:[{scope:'COLLECTION',code:'NETWORK_ERROR'}]});checks++;
+await reject(()=>ev('read',{kind:'ONCE',id:onceBinding.id,page:0},other),'42501');
+assert.deepEqual((await db.query('select * from platform_sales_evidence_revisions where attempt_id=$1',[id(1183)])).rows[0].evidence,{payment:onceSummary,refunds:[],invoices:[],refundsComplete:true,invoicesComplete:true});checks++;
+console.log('Safe diagnostics: additive replay, redaction allowlists, strict status types, owner isolation, historical snapshots preserved.');
