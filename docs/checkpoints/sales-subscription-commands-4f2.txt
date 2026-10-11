@@ -1,0 +1,7 @@
+4F2: private subscription commands and isolated sandbox adapter.
+Delivered with SALES_SUBSCRIPTION_COMMANDS_ENABLED and SALES_SUBSCRIPTION_CALLS_ENABLED unset/off.
+Owner commands; existing Finance capability reads only. Two append-only RLS tables; one command per approved agreement.
+Backend revalidates preserved source; GET verifies notification suppression and absence, durable POST_RESERVED allows one POST. Timeout or process interruption blocks repeat creation; only unique full-match GET reconciliation is permitted.
+Subscription metadata is not payment confirmation, fiscal competence or license activation. No existing webhook was changed. Recurring payment binding and subscription lifecycle events require the next increment.
+Tests: 58 Jest including prior preparation; 178 disposable SQL checks; backend types and 44-route webpack frontend build passed. No calls to Asaas, charges or licenses created.
+Official references: https://docs.asaas.com/reference/criar-nova-assinatura https://docs.asaas.com/reference/listar-assinaturas
