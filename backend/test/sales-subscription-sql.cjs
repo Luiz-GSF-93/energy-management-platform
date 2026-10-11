@@ -47,6 +47,7 @@ assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,
 
 await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_subscription_commands.sql','utf8'));
 await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_subscription_commands.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_subscription_preview_bound.sql','utf8'));
 const command=(action,body,actor=owner)=>db.query('select platform_sales_subscription_command_action($1,$2,$3) result',[actor,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
 const cb={id:id(970),agreementId:b.id,justification:'Fixture approved recurrence command preparation.'};
 await reject(()=>command('prepare',{...cb,agreementId:annualBody.id}),'P3671');
@@ -54,7 +55,7 @@ for(const actor of [finance,other,id(40),id(41),id(42),id(43),null])await reject
 const commands=await Promise.allSettled([command('prepare',cb),command('prepare',{...cb,id:id(971)})]);assert.equal(commands.filter(x=>x.status==='fulfilled').length,1);checks++;
 assert.equal((await command('prepare',cb)).replayed,true);await reject(()=>command('prepare',{...cb,justification:'Changed fixture justification text.'}),'P3671');
 await reject(()=>command('prepare',{...cb,value:1}),'22023');
-const sd=await command('read',{agreementId:b.id},finance);assert.equal(sd.command.parameters.value,850);assert.equal(sd.command.actor_id,owner);assert.equal(sd.externalCallsEnabled,false);checks++;
+const sd=await command('read',{agreementId:b.id},finance);assert.equal(sd.command.parameters.value,850);assert.equal(sd.command.parameters.endDate,'2030-12-31');assert.equal(sd.command.actor_id,owner);assert.equal(sd.externalCallsEnabled,false);checks++;
 const proof={customer:'cus_recurrence',reference:b.id,notificationDisabled:true,totalCount:0,hasMore:false,checkedAt:new Date().toISOString()};
 const reserved={agreementId:b.id,requestId:id(972),evidence:proof,justification:'Fixture durable reservation before one POST.'};
 await reject(()=>command('reserve',{...reserved,evidence:{...proof,notificationDisabled:false}}),'P3671');
