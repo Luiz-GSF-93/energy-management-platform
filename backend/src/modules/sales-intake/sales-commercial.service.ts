@@ -14,8 +14,8 @@ export class SalesCommercialService{
   const {data,error}=await this.db.getClient().rpc(name,args);
   if(error){
    if(error.code==='42501')throw new ForbiddenException('Acesso exclusivo a Owner ativo.');
-   if(error.code==='P3611'||error.code==='23505')throw new ConflictException('Versão ou solicitação alterada. Atualize antes de continuar.');
-   if(error.code==='P3610')throw new NotFoundException('Plano, política ou solicitação indisponível.');
+   if(error.code==='P3621'||error.code==='P3611'||error.code==='23505')throw new ConflictException('Versão ou solicitação alterada. Atualize antes de continuar.');
+   if(error.code==='P3620'||error.code==='P3610')throw new NotFoundException('Plano, política ou solicitação indisponível.');
    if(['22023','22007','22008','22P02','23514','22003'].includes(error.code))throw new BadRequestException('Condições comerciais inválidas ou incompatíveis com o cadastro.');
    throw new ServiceUnavailableException('Ambiente comercial indisponível. Nenhuma licença ou cobrança foi criada.');
   }
