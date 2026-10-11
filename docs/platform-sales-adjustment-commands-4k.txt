@@ -9,5 +9,5 @@ Execução: autorização -> reserva -> GET de pré-conferência com comparaçã
 Resposta ausente, falha de persistência ou timeout mantém reserva. Recuperação faz somente GET. Estorno exige ID da resposta original e resultado DONE; ausência de atribuição permanece pendente. Cancelamento exige registro excluído e conferência das cobranças afetadas. 404 não comprova exclusão.
 Nova operação após resultado confirmado exige consulta posterior. Evidência/autorizações expiram em cinco minutos; pré-conferência em 30 segundos.
 
-Validação: tipos backend e build frontend webpack; 219 testes de regressão em seis suítes; banco descartável com migração reaplicada, concorrência, isolamento, atribuição exata, reserva, renomeação e indisponibilidade cadastral, sem alteração financeira/licenças.
+Validação: tipos backend e build frontend webpack; 219 testes de regressão em seis suítes; 459 verificações SQL em banco descartável com migração reaplicada, concorrência, isolamento, atribuição exata, reserva, renomeação e indisponibilidade cadastral, sem alteração financeira/licenças.
 Nenhuma chamada real ao Asaas executada. Homologação externa e habilitação ficam para autorização específica.

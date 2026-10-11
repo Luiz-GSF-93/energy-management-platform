@@ -55,4 +55,3 @@ describe('4K persisted boundary, isolation and failure handling',()=>{
  test('explicit impact acknowledgement required',async()=>{expect(()=>service.transition(id,id,'authorize',{...body,impactsAccepted:false})).toThrow();expect(rpc).not.toHaveBeenCalled();});
  test('controller exposes finance read but mutations Owner-only',()=>{const p=SalesAdjustmentCommandController.prototype;expect(Reflect.getMetadata(PERMISSIONS_KEY,p.read)).toEqual([SALES_OWNER,SALES_FINANCE_READ]);for(const action of ['prepare','authorize','withdraw','execute','recover'] as const)expect(Reflect.getMetadata(PERMISSIONS_KEY,p[action])).toEqual([SALES_OWNER]);});
 });
-
