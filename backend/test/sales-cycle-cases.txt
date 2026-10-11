@@ -1,0 +1,27 @@
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_recurring_checks.sql','utf8'));
+await db.exec(fs.readFileSync('src/database/migrations/20261011_platform_sales_recurring_checks.sql','utf8'));
+const cycle=(action,body,actor=owner)=>db.query('select platform_sales_cycle_action($1,$2,$3) result',[actor,action,JSON.stringify(body)]).then(x=>x.rows[0].result);
+const inbox=await db.query("insert into platform_sales_asaas_inbox(id,provider_id,event,payment_id,summary,hash) values($1,'evt_cycle','PAYMENT_CREATED','pay_cycle',$2,repeat('a',64)) returning id",[id(980),JSON.stringify({id:'pay_cycle',customer:'cus_recurrence',reference:b.id,grossCents:85000,status:'PENDING',netCents:84901})]);
+const cy={id:id(981),agreementId:b.id,sequence:2,eventId:inbox.rows[0].id,lease:id(982),justification:'Fixture verified recurring cycle association.'};
+for(const actor of [finance,other,id(40),id(41),null])await reject(()=>cycle('claim',cy,actor),'42501');
+await reject(()=>cycle('claim',{...cy,sequence:0}),'P3681');
+const claimed=await Promise.allSettled([cycle('claim',cy),cycle('claim',{...cy,lease:id(983)})]);assert.equal(claimed.filter(x=>x.status==='fulfilled').length,1);checks++;
+assert.equal((await db.query('select count(*)::int n from platform_sales_cycle_bindings')).rows[0].n,0);checks++;
+const verified={id:'pay_cycle',customer:'cus_recurrence',reference:b.id,subscription:'sub_fixture',dueDate:next,grossCents:85000,netCents:84901,status:'PENDING'};
+await cycle('finish',{lease:cy.lease,summary:{...verified,dueDate:'2030-02-02'}});
+assert.equal((await db.query('select count(*)::int n from platform_sales_cycle_bindings')).rows[0].n,0);checks++;
+await cycle('claim',{...cy,lease:id(984)});assert.equal((await cycle('finish',{lease:id(984),summary:verified})).status,'VERIFIED');
+assert.equal((await cycle('finish',{lease:id(984),summary:verified})).replayed,true);await reject(()=>cycle('finish',{lease:id(984),summary:{...verified,grossCents:1}}),'P3681');
+const readCycles=()=>cycle('read',{agreementId:b.id,page:0,search:'',state:''},finance);
+let cd=await readCycles();assert.equal(cd.rows.length,1);assert.equal(cd.rows[0].state,'PENDING');assert.equal(cd.totals.receivedGrossCents,'0');checks++;
+await cycle('claim',{...cy,lease:id(985)});await cycle('finish',{lease:id(985),summary:{...verified,status:'RECEIVED'}});cd=await readCycles();assert.equal(cd.totals.receivedGrossCents,'85000');assert.equal(cd.totals.receivedKnownNetCents,'84901');checks++;
+await db.query("insert into platform_sales_asaas_inbox(id,provider_id,event,payment_id,summary,hash,received_at) values($1,'evt_cycle_late','PAYMENT_UPDATED','pay_cycle',$2,repeat('b',64),clock_timestamp()+interval '1 second')",[id(986),JSON.stringify({id:'pay_cycle',customer:'cus_recurrence',reference:b.id,grossCents:85000,status:'PENDING',netCents:84901})]);cd=await readCycles();assert.equal(cd.rows[0].state,'UNKNOWN');assert.equal(cd.totals.receivedGrossCents,'0');checks++;
+await cycle('claim',{...cy,lease:id(987)});await cycle('finish',{lease:id(987),summary:{...verified,subscription:'sub_wrong'}});cd=await readCycles();assert.equal(cd.rows[0].state,'UNKNOWN');checks++;
+await cycle('claim',{...cy,lease:id(988)});await cycle('finish',{lease:id(988),summary:null});cd=await readCycles();assert.equal(cd.history[0].status,'REVIEW');checks++;
+await cycle('claim',{...cy,sequence:3,id:id(990),lease:id(989)});assert.equal((await cycle('finish',{lease:id(989),summary:{...verified,dueDate:'2030-02-28'}})).status,'REVIEW');assert.equal((await db.query('select count(*)::int n from platform_sales_cycle_bindings')).rows[0].n,1);checks++;
+await db.query("insert into platform_sales_asaas_bindings(id,proposal_id,payment_id,customer_id,company,gross_cents,source,actor_id,actor_name,justification) select $1,proposal_id,'pay_cycle',customer_id,company,gross_cents,source,actor_id,actor_name,'Fixture conflicting origin' from platform_sales_asaas_bindings limit 1",[id(991)]);cd=await readCycles();assert.equal(cd.rows[0].reason,'DUPLICATE_ORIGIN');assert.equal(cd.totals.receivedGrossCents,'0');await reject(()=>cycle('claim',{...cy,lease:id(992)}),'P3681');checks++;
+await db.exec('ALTER TABLE user_profiles RENAME TO profiles_unavailable');cd=await readCycles();assert.equal(cd.history[0].current_actor_name,null);assert.ok(cd.history[0].actor_name);await db.exec('ALTER TABLE profiles_unavailable RENAME TO user_profiles');checks++;
+for(const table of ['platform_sales_cycle_bindings','platform_sales_cycle_attempts','platform_sales_cycle_checks']){await reject(()=>db.query('delete from '+table),'42501');for(const role of ['anon','authenticated','service_role']){await db.exec('SET ROLE '+role);await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');}}
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await reject(()=>cycle('read',{page:0,search:'',state:''}),'42501');await db.exec('RESET ROLE');}
+assert.equal((await db.query('select count(*)::int n from licenses')).rows[0].n,0);checks++;
+console.log('4G cycle checks: wrong cycle rollback, concurrency, GET failure, no double count, late events and Finance isolation passed.');

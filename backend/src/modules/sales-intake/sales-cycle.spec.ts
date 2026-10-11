@@ -1,0 +1,33 @@
+import {ConfigService} from '@nestjs/config';
+import {SalesCycleAdapter} from './sales-cycle.adapter';
+import {SalesCycleService} from './sales-cycle.service';
+import {SalesCycleController} from './sales-cycle.controller';
+import {PERMISSIONS_KEY} from '../../common/decorators/require-permission.decorator';
+import {SALES_OWNER,SALES_FINANCE_READ} from './sales-finance.service';
+import {SANDBOX_URL} from './sales-asaas.adapter';
+const uid='00000000-0000-4000-8000-000000000001';
+const flags={SALES_CYCLE_CHECKS_ENABLED:'true',SALES_CYCLE_CHECKS_CALLS_ENABLED:'true',SALES_ASAAS_SANDBOX_ENABLED:'true',SALES_ASAAS_BASE_URL:SANDBOX_URL,SALES_ASAAS_SANDBOX_API_KEY:'fixture-never-real-key-123'};
+const config=(change={})=>({get:(k:string)=>({...flags,...change} as Record<string,string>)[k]}) as ConfigService;
+const raw={id:'pay_fixture',subscription:'sub_fixture',customer:'cus_fixture',externalReference:uid,value:2600,netValue:2599.01,status:'PENDING',dueDate:'2030-11-20',privateContact:'never persist'};
+const original=global.fetch;afterEach(()=>{global.fetch=original;jest.restoreAllMocks();});
+describe('cycle GET adapter',()=>{
+ for(const flag of ['SALES_CYCLE_CHECKS_ENABLED','SALES_CYCLE_CHECKS_CALLS_ENABLED','SALES_ASAAS_SANDBOX_ENABLED'])it('blocks disabled '+flag,async()=>{global.fetch=jest.fn();await expect(new SalesCycleAdapter(config({[flag]:'false'})).payment('pay_fixture')).rejects.toThrow();expect(global.fetch).not.toHaveBeenCalled();});
+ it('blocks production and malformed ID',async()=>{global.fetch=jest.fn();await expect(new SalesCycleAdapter(config({SALES_ASAAS_BASE_URL:'https://api.asaas.com/v3'})).payment('pay_fixture')).rejects.toThrow();await expect(new SalesCycleAdapter(config()).payment('../secret')).rejects.toThrow();expect(global.fetch).not.toHaveBeenCalled();});
+ it('only GET, bounded request and minimal allowlist',async()=>{global.fetch=jest.fn().mockResolvedValue(new Response(JSON.stringify(raw)));const r=await new SalesCycleAdapter(config()).payment(raw.id);expect(r).toEqual({id:raw.id,subscription:raw.subscription,customer:raw.customer,reference:uid,grossCents:260000,netCents:259901,status:'PENDING',dueDate:raw.dueDate});expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({method:'GET',redirect:'error'});});
+ it.each([{subscription:null},{dueDate:'2030-02-31'},{dueDate:'yesterday'},{id:'pay_other'},{netValue:2601},{value:2600.001}])('rejects incompatible schema %p',async change=>{global.fetch=jest.fn().mockResolvedValue(new Response(JSON.stringify({...raw,...change})));await expect(new SalesCycleAdapter(config()).payment(raw.id)).rejects.toThrow();});
+ it('redacts timeout without retry',async()=>{global.fetch=jest.fn().mockRejectedValue(new Error('secret'));await expect(new SalesCycleAdapter(config()).payment(raw.id)).rejects.toThrow('preservado');expect(global.fetch).toHaveBeenCalledTimes(1);});
+ it('bounds response bytes',async()=>{global.fetch=jest.fn().mockResolvedValue(new Response('x'.repeat(65537)));await expect(new SalesCycleAdapter(config()).payment(raw.id)).rejects.toThrow();});
+ it('deleted payment remains explicit',async()=>{global.fetch=jest.fn().mockResolvedValue(new Response(JSON.stringify({...raw,deleted:true})));expect((await new SalesCycleAdapter(config()).payment(raw.id)).status).toBe('DELETED');});
+});
+describe('cycle orchestration',()=>{
+ const body={id:uid,eventId:uid,sequence:2,justification:'Fixture authorized cycle check.'};
+ const setup=(change={},failure?:string)=>{const actions:string[]=[];const rpc=jest.fn(async(_n,b)=>{actions.push(b.p_action);return b.p_action===failure?{error:{code:'P3681'}}:{data:b.p_action==='claim'?{paymentId:'pay_fixture'}:{status:'VERIFIED'}};});const adapter={payment:jest.fn().mockResolvedValue({id:'pay_fixture'})};return {rpc,adapter,actions,service:new SalesCycleService({getClient:()=>({rpc})} as any,config(change),adapter as any)};};
+ it('persists attempt before GET and finish',async()=>{const x=setup();await x.service.check('owner',uid,body);expect(x.actions).toEqual(['claim','finish']);expect(x.adapter.payment).toHaveBeenCalledTimes(1);});
+ it('disabled calls block persistence/network',async()=>{const x=setup({SALES_CYCLE_CHECKS_CALLS_ENABLED:'false'});await expect(x.service.check('owner',uid,body)).rejects.toThrow();expect(x.rpc).not.toHaveBeenCalled();expect(x.adapter.payment).not.toHaveBeenCalled();});
+ it('disabled feature blocks read',async()=>{const x=setup({SALES_CYCLE_CHECKS_ENABLED:'false'});await expect(x.service.read('owner',uid,{})).rejects.toThrow();expect(x.rpc).not.toHaveBeenCalled();});
+ it('claim failure blocks GET',async()=>{const x=setup({},'claim');await expect(x.service.check('owner',uid,body)).rejects.toThrow();expect(x.adapter.payment).not.toHaveBeenCalled();});
+ it('GET failure records review without retry',async()=>{const x=setup();x.adapter.payment.mockRejectedValue(new Error('secret'));await expect(x.service.check('owner',uid,body)).rejects.toThrow('preservada');expect(x.actions).toEqual(['claim','finish']);expect(x.rpc.mock.calls[1][1].p_body.summary).toBeNull();});
+ it('lost finish does not retry GET',async()=>{const x=setup({},'finish');await expect(x.service.check('owner',uid,body)).rejects.toThrow();expect(x.adapter.payment).toHaveBeenCalledTimes(1);});
+ it('rejects caller evidence/price and invalid filters',async()=>{const x=setup();await expect(x.service.check('owner',uid,{...body,summary:raw})).rejects.toThrow();expect(()=>x.service.read('owner',uid,{page:'-1'})).toThrow();expect(x.rpc).not.toHaveBeenCalled();});
+ it('only Owner checks; existing Finance reads',()=>{expect(Reflect.getMetadata(PERMISSIONS_KEY,SalesCycleController.prototype.check)).toEqual([SALES_OWNER]);for(const method of ['list','read'] as const)expect(Reflect.getMetadata(PERMISSIONS_KEY,SalesCycleController.prototype[method])).toEqual([SALES_OWNER,SALES_FINANCE_READ]);});
+});

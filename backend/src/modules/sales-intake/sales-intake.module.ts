@@ -1,3 +1,6 @@
+import {SalesCycleController} from './sales-cycle.controller';
+import {SalesCycleService} from './sales-cycle.service';
+import {SalesCycleAdapter} from './sales-cycle.adapter';
 import {SalesSubscriptionController} from './sales-subscription.controller';
 import {SalesSubscriptionService} from './sales-subscription.service';
 import {SalesSubscriptionAdapter} from './sales-subscription.adapter';
@@ -22,5 +25,5 @@ import {SalesCreationService} from './sales-creation.service';
 import {SalesCreationAdapter} from './sales-creation.adapter';
 import {SalesSignedDocumentsController} from './sales-signed-documents.controller';
 import {SalesSignedDocumentsService} from './sales-signed-documents.service';
-@Module({controllers:[SalesSubscriptionController,SalesRecurrenceController,SalesSignedDocumentsController,AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController,SalesCreationController],providers:[SalesSubscriptionService, SalesSubscriptionAdapter,SalesRecurrenceService,SalesSignedDocumentsService,SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService,SalesCreationService,SalesCreationAdapter]})
+@Module({controllers:[SalesCycleController,SalesSubscriptionController,SalesRecurrenceController,SalesSignedDocumentsController,AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController,SalesCreationController],providers:[SalesCycleService,SalesCycleAdapter,SalesSubscriptionService, SalesSubscriptionAdapter,SalesRecurrenceService,SalesSignedDocumentsService,SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService,SalesCreationService,SalesCreationAdapter]})
 export class SalesIntakeModule{}
