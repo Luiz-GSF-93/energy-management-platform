@@ -10,5 +10,7 @@ import {SalesContractDraftsController} from './sales-contract-drafts.controller'
 import {SalesAsaasController,SalesAsaasWebhookController} from './sales-asaas.controller';
 import {SalesAsaasService} from './sales-asaas.service';
 import {SalesAsaasAdapter} from './sales-asaas.adapter';
-@Module({controllers:[AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController],providers:[SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter]})
+import {SalesFinanceController} from './sales-finance.controller';
+import {SalesFinanceService} from './sales-finance.service';
+@Module({controllers:[AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController],providers:[SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService]})
 export class SalesIntakeModule{}
