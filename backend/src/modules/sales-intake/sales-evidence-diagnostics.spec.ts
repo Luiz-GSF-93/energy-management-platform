@@ -11,6 +11,23 @@ const config={get:(k:string)=>(flags as Record<string,string>)[k]} as ConfigServ
 const original=global.fetch;afterEach(()=>{global.fetch=original;jest.restoreAllMocks();});
 function setup(response:()=>Promise<Response>){global.fetch=jest.fn(async(url:string)=>url.includes('/refunds?')?response():new Response(JSON.stringify(url.includes('/invoices?')?{data:[],hasMore:false}:raw))) as any;return new SalesEvidenceAdapter(config);}
 describe('safe evidence diagnostics',()=>{
+ it('accepts only an explicitly empty null first page without retaining arbitrary response fields',async()=>{const e=await setup(async()=>new Response(JSON.stringify({data:null,hasMore:false,totalCount:0,secret:'private-contact'}))).evidence(source);expect(e.refunds).toEqual([]);expect(e.refundsComplete).toBe(true);expect(e.diagnostics).toEqual([]);expect(JSON.stringify(e)).not.toMatch(/secret|private-contact/);expect(global.fetch).toHaveBeenCalledTimes(4);});
+ it.each([
+  {hasMore:false,totalCount:0},
+  {data:{},hasMore:false,totalCount:0},
+  {data:'',hasMore:false,totalCount:0},
+  {data:null,totalCount:0},
+  {data:null,hasMore:null,totalCount:0},
+  {data:null,hasMore:'false',totalCount:0},
+  {data:null,hasMore:true,totalCount:0},
+  {data:null,hasMore:false},
+  {data:null,hasMore:false,totalCount:null},
+  {data:null,hasMore:false,totalCount:'0'},
+  {data:null,hasMore:false,totalCount:1},
+  {data:null,hasMore:false,totalCount:-1},
+ ])('keeps ambiguous null or non-list response blocked: %p',async(body)=>{const e=await setup(async()=>new Response(JSON.stringify(body))).evidence(source);expect(e.refundsComplete).toBe(false);expect(e.refunds).toEqual([]);expect(e.diagnostics).toHaveLength(1);expect(global.fetch).toHaveBeenCalledTimes(4);});
+ it('rejects null on a later page and clears incomplete accumulated rows',async()=>{let page=0;const e=await setup(async()=>new Response(JSON.stringify(page++===0?{data:Array.from({length:25},(_,i)=>({...refund,id:'ref_'+i})),hasMore:true,totalCount:25}:{data:null,hasMore:false,totalCount:0}))).evidence(source);expect(e.refunds).toEqual([]);expect(e.refundsComplete).toBe(false);expect(e.diagnostics).toEqual([{scope:'REFUNDS',code:'REFUNDS_DATA_INVALID'}]);expect(global.fetch).toHaveBeenCalledTimes(5);});
+ it('still rejects a changed payment after the explicit empty null page',async()=>{let reads=0;setup(async()=>new Response(JSON.stringify({data:null,hasMore:false,totalCount:0})));const fetch=global.fetch;global.fetch=jest.fn(async(url:string,...args:any[])=>url.includes('/payments/')&&!url.includes('/refunds?')&&++reads===2?new Response(JSON.stringify({...raw,status:'REFUNDED'})):(fetch as any)(url,...args)) as any;await expect(new SalesEvidenceAdapter(config).evidence(source)).rejects.toMatchObject({code:'SOURCE_CHANGED'});});
  it.each([[null, "REFUNDS_NOT_OBJECT"], [{}, "REFUNDS_DATA_MISSING"], [{"data": null}, "REFUNDS_DATA_INVALID"], [{"data": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]}, "REFUNDS_PAGE_OVERSIZED"], [{"data": []}, "REFUNDS_HAS_MORE_MISSING"], [{"data": [], "hasMore": null}, "REFUNDS_HAS_MORE_INVALID"], [{"data": [], "hasMore": false}, "REFUNDS_TOTAL_MISSING"], [{"data": [], "hasMore": false, "totalCount": "0"}, "REFUNDS_TOTAL_INVALID"], [{"data": [], "hasMore": true, "totalCount": 1}, "REFUNDS_INTERMEDIATE_INCOMPLETE"], [{"data": [], "hasMore": false, "totalCount": 1}, "REFUNDS_FINAL_TOTAL_MISMATCH"]])('classifies field failure %p as %s without relaxing acceptance',async(body,code)=>{const e=await setup(async()=>new Response(JSON.stringify(body))).evidence(source);expect(e.diagnostics).toEqual([{scope:'REFUNDS',code}]);expect(e.refundsComplete).toBe(false);expect(e.refunds).toEqual([]);expect(global.fetch).toHaveBeenCalledTimes(4);});
 
  it.each([400,401,403,404,429,500,503])('captures HTTP %s without response or headers',async(status)=>{const e=await setup(async()=>new Response('private-key-and-contact',{status,headers:{secret:'do not persist'}})).evidence(source);expect(e.diagnostics).toEqual([{scope:'REFUNDS',code:'HTTP_ERROR',httpStatus:status}]);expect(e.refundsComplete).toBe(false);expect(JSON.stringify(e)).not.toMatch(/private-key|contact|secret|persist/);expect(global.fetch).toHaveBeenCalledTimes(4);});

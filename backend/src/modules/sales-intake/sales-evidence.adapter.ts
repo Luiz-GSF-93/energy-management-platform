@@ -51,15 +51,17 @@ export class SalesEvidenceAdapter {
    }
    if(!raw||typeof raw!=='object')throw new EvidenceQueryError('REFUNDS_NOT_OBJECT');
    if(!Object.prototype.hasOwnProperty.call(raw,'data'))throw new EvidenceQueryError('REFUNDS_DATA_MISSING');
-   if(!Array.isArray(raw.data))throw new EvidenceQueryError('REFUNDS_DATA_INVALID');
-   if(raw.data.length>25)throw new EvidenceQueryError('REFUNDS_PAGE_OVERSIZED');
+   // The sandbox returns null for an explicitly empty first page; never infer emptiness from null alone.
+   const rows=raw.data===null&&offset===0&&refunds.length===0&&Object.prototype.hasOwnProperty.call(raw,'hasMore')&&raw.hasMore===false&&Object.prototype.hasOwnProperty.call(raw,'totalCount')&&raw.totalCount===0?[]:raw.data;
+   if(!Array.isArray(rows))throw new EvidenceQueryError('REFUNDS_DATA_INVALID');
+   if(rows.length>25)throw new EvidenceQueryError('REFUNDS_PAGE_OVERSIZED');
    if(!Object.prototype.hasOwnProperty.call(raw,'hasMore'))throw new EvidenceQueryError('REFUNDS_HAS_MORE_MISSING');
    if(typeof raw.hasMore!=='boolean')throw new EvidenceQueryError('REFUNDS_HAS_MORE_INVALID');
    if(!Object.prototype.hasOwnProperty.call(raw,'totalCount'))throw new EvidenceQueryError('REFUNDS_TOTAL_MISSING');
    if(!Number.isSafeInteger(raw.totalCount)||raw.totalCount<0)throw new EvidenceQueryError('REFUNDS_TOTAL_INVALID');
-   if(raw.hasMore&&raw.data.length!==25)throw new EvidenceQueryError('REFUNDS_INTERMEDIATE_INCOMPLETE');
+   if(raw.hasMore&&rows.length!==25)throw new EvidenceQueryError('REFUNDS_INTERMEDIATE_INCOMPLETE');
    if(total!==undefined&&total!==raw.totalCount)throw new EvidenceQueryError('PAGINATION_CHANGED');
-   total=raw.totalCount;for(const row of raw.data){const r=evidenceRefund(row,source);if(refunds.some(x=>x.id===r.id))throw new EvidenceQueryError('DUPLICATE_ITEMS');refunds.push(r);}
+   total=raw.totalCount;for(const row of rows){const r=evidenceRefund(row,source);if(refunds.some(x=>x.id===r.id))throw new EvidenceQueryError('DUPLICATE_ITEMS');refunds.push(r);}
    if(!raw.hasMore){if(refunds.length!==total)throw new EvidenceQueryError('REFUNDS_FINAL_TOTAL_MISMATCH');refundsComplete=true;break;}
   }
   if(refunds.filter(x=>x.status==='DONE').reduce((n,x)=>n+x.valueCents,0)>p.payment.grossCents)throw new EvidenceQueryError('REFUND_ROW_INVALID');
