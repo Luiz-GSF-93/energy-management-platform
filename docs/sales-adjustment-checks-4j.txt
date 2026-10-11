@@ -1,0 +1,15 @@
+4J: pré-validação privada de solicitações, sem comandos financeiros.
+Flags SALES_ADJUSTMENT_CHECKS_ENABLED e SALES_ADJUSTMENT_CHECK_CALLS_ENABLED false por padrão.
+Owner prepara e consulta fontes; Financeiro autorizado lê. Sem permissões novas a pessoas.
+Fonte resolvida pelos IDs e versões preservados da4I; pedidos encerrados só mostram histórico.
+Preparação, claim antes de GET e resultado append-only. Replay não repete consulta; resultado incerto permanece explícito.
+Somente GET em URL sandbox fixa; métodos de cancelamento, suspensão e estorno não implementados.
+Lista de estornos vem de /payments/{id}/refunds; ausência, schema desconhecido, truncamento e erro não equivalem a vazio.
+Paginação limitada a100 registros; ultrapassar limite mantém incompleto. Listas completas são validadas por IDs únicos e total.
+Pix/cartão recebidos sem split ou estorno pendente podem ter limite da cobrança apurado; não comprova saldo financeiro de conta. Forma não suportada fica bloqueada.
+Pré-validação de cancelamento lista todas as cobranças vinculadas e destaca pendentes/vencidas afetadas por remoção de assinatura; nenhuma é removida.
+Condições não conferidas, data futura ou fonte alterada bloqueiam compatibilidade. Não modifica cláusulas preservadas.
+COMPATIBLE significa apenas compatibilidade na data consultada. Futura execução requer nova proposta e pré-validação recente; não autoriza licença, pagamento, emissão fiscal ou encerramento contratual.
+Histórico imutável: nomes registrados e atuais separados, IDs originais e horários. Cadastro indisponível tolerado na leitura; comandos sem autoridade comprovada bloqueados.
+Reaplicar migração aditiva em banco descartável, testar isolamento/concorrência/replays/erros/fontes alteradas e preservar consolidados antes de deploy.
+Entregar capacidades desligadas. Habilitação e homologação externa GET exigem autorização posterior.

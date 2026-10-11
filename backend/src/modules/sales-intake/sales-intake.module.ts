@@ -1,3 +1,6 @@
+import {SalesAdjustmentCheckAdapter} from './sales-adjustment-check.adapter';
+import {SalesAdjustmentCheckService} from './sales-adjustment-check.service';
+import {SalesAdjustmentCheckController} from './sales-adjustment-check.controller';
 import {SalesEvidenceController} from './sales-evidence.controller';
 import {SalesEvidenceService} from './sales-evidence.service';
 import {SalesEvidenceAdapter} from './sales-evidence.adapter';
@@ -30,5 +33,5 @@ import {SalesSignedDocumentsController} from './sales-signed-documents.controlle
 import {SalesSignedDocumentsService} from './sales-signed-documents.service';
 import {SalesAdjustmentController} from './sales-adjustment.controller';
 import {SalesAdjustmentService} from './sales-adjustment.service';
-@Module({controllers:[SalesAdjustmentController,SalesEvidenceController,SalesCycleController,SalesSubscriptionController,SalesRecurrenceController,SalesSignedDocumentsController,AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController,SalesCreationController],providers:[SalesAdjustmentService,SalesEvidenceService,SalesEvidenceAdapter,SalesCycleService,SalesCycleAdapter,SalesSubscriptionService, SalesSubscriptionAdapter,SalesRecurrenceService,SalesSignedDocumentsService,SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService,SalesCreationService,SalesCreationAdapter]})
+@Module({controllers:[SalesAdjustmentCheckController,SalesAdjustmentController,SalesEvidenceController,SalesCycleController,SalesSubscriptionController,SalesRecurrenceController,SalesSignedDocumentsController,AdminSalesController,PublicSalesController,SalesCommercialController,SalesContractDraftsController,SalesAsaasController,SalesAsaasWebhookController,SalesFinanceController,SalesCreationController],providers:[SalesAdjustmentCheckAdapter,SalesAdjustmentCheckService,SalesAdjustmentService,SalesEvidenceService,SalesEvidenceAdapter,SalesCycleService,SalesCycleAdapter,SalesSubscriptionService, SalesSubscriptionAdapter,SalesRecurrenceService,SalesSignedDocumentsService,SupabaseService,SalesIntakeService,SalesAdvisorService,SalesCommercialService,SalesContractDraftsService,SalesAsaasService,SalesAsaasAdapter,SalesFinanceService,SalesCreationService,SalesCreationAdapter]})
 export class SalesIntakeModule{}
