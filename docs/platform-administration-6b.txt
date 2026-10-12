@@ -1,0 +1,50 @@
+EnergyOS — operação administrativa 6B
+
+Base: PR 362 / main 1c6fe2f. Autorização: continuar 6B do escopo apresentado.
+Novas rotas GET privadas sob admin/platform-administration; rotas e comandos
+anteriores permanecem compatíveis. Cache-Control: no-store; identidade do ator
+obtida do usuário autenticado, nunca de filtro/corpo. Não há novas concessões.
+
+Equipe: busca literal por nome/e-mail/ID, perfil e ativo/inativo no servidor.
+Auditoria: consulta independente por período UTC, nome registrado/ID/justificativa,
+25 registros por página; nomes atuais separados dos snapshots históricos.
+Atendimento: pesquisa por assunto/ID, situação, organização, prioridade,
+responsável e intervalo de prazo. Suporte continua limitado ao responsável atual,
+inclusive no detalhe e no histórico; a troca de responsável revoga sua consulta.
+Conciliação: fornecedor/referência/ID, situação, competência e organização.
+Históricos de chamados/conciliações: consulta separada sob demanda, 25 revisões
+por página, ordenadas por revisão; lista/detalhe não baixam o histórico inteiro.
+Financeiro comercial sandbox: vínculo e conferência consolidados preservados;
+eventos/conferências em linha do tempo paginada, com fonte explícita, valores
+registrados, ID original e nomes da época/atual. Eventos não são novas receitas.
+As flags de sandbox, leitura financeira e consolidado continuam obrigatórias.
+
+Custos: empresas filtradas/paginadas no SQL e transmitidas em páginas de 25;
+opções de atribuição carregam somente ID/nome, não todas as métricas. Totais,
+infraestrutura e projeções continuam globais da competência, independentes da
+página. O método de cálculo anterior foi extraído para project sem alterar a
+metodologia. Receita informada na licença não equivale a recebimento no Asaas.
+
+Migração 20261021_platform_admin_reads_6b.sql: uma RPC SECURITY DEFINER com
+search_path=pg_catalog e autorização própria por escopo/ator ativo, executável
+somente por service_role; três índices aditivos. Nenhuma tabela nova, comando,
+grant para pessoas, alteração de histórico, licença ou credencial.
+Migrations anteriores e funções de cálculo não são substituídas. Aplicar uma
+única vez após testes e auditoria; não executar novamente se já instalada.
+
+Validação: testes de guardas/filtros e preservação das flags; JSDOM de filtros
+no servidor, histórico independente, nomes distintos e indisponibilidade;
+39 verificações SQL em PGlite e PostgreSQL 17 descartável, incluindo páginas,
+isolamento, troca de responsável, renomeação, falta de nome, revogação e
+histórico imutável. Builds backend/frontend e regressão completa do backend.
+Auditoria dryrun antes da aplicação: 90 tabelas e 542 funções preservadas.
+
+Limites: páginas de 25, offset limitado a 1000 páginas como os fluxos comerciais.
+Não há benchmark de grande volume nem homologação móvel completa. A projeção
+de custos reutiliza o snapshot global no banco; a tabela paginada limita a
+transferência e renderização, não torna todo o cálculo global O(25). A prévia
+consolidada reutiliza a apuração antiga e remove seu histórico do payload; a
+consulta paginada própria atende à navegação. Otimizações internas futuras
+exigem medir desempenho e preservar a metodologia, sem alegar que os cálculos
+globais passaram a considerar somente a página.
+Pendências Asaas PIX e Clicksign UNKNOWN/account.key permanecem intactas.

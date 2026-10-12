@@ -17,6 +17,9 @@ export class PlatformCostsService {
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new BadRequestException('Informe a competência AAAA-MM.');
   const {data,error}=await this.db.getClient().rpc('platform_cost_snapshot',{p_month:month+'-01'});
   if(error||!data)throw new ServiceUnavailableException('Não foi possível carregar os custos completos.');
+  return this.project(data,month);
+ }
+ project(data:any,month:string){
   const fx=data.policy.usd_brl_rate==null?null:Number(data.policy.usd_brl_rate);
   const estimated=Number(data.totals.actual_micro_usd??0),reserved=Number(data.totals.reserved_micro_usd??0),projection=monthlyProjection(estimated,month);
   const companies=(data.companies??[]).map((row:any)=>{

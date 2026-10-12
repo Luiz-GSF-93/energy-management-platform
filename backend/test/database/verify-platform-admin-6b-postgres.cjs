@@ -1,0 +1,6 @@
+// Only this disposable fixture; no environment connection string or production host.
+const fs=require('node:fs'),pg=require('pg');pg.types.setTypeParser(20,Number);
+const config={host:'127.0.0.1',port:55437,user:'energyos_fixture',database:'energyos_fixture',password:'disposable_fixture',application_name:'energyos_admin_6b_disposable'};
+class Fixture{constructor(){this.client=new pg.Client(config);this.ready=this.client.connect();}async exec(s){await this.ready;return this.client.query(s);}async query(s,a){await this.ready;return this.client.query(s,a);}async close(){return this.client.end();}}
+let source=fs.readFileSync('test/database/verify-platform-admin-6b.mjs','utf8').replace("import {PGlite} from '@electric-sql/pglite';","const PGlite=Fixture;").replace("import {readFileSync} from 'node:fs';","const {readFileSync}=require('node:fs');").replace("import assert from 'node:assert/strict';","const assert=require('node:assert/strict');").replace("new URL('../../src/database/migrations/'+file,import.meta.url)","'src/database/migrations/'+file");
+new Function('require','Fixture','return (async()=>{'+source+'})()')(require,Fixture).catch(e=>{console.error(e.code||e.message);process.exitCode=1;});
