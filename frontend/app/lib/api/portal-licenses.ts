@@ -1,6 +1,6 @@
 import type {Identity} from '../../components/AuditIdentity';
 import {ApiError,apiRequest} from './client';
-export const portalModules=[['reports','Relatórios publicados'],['forecasts','Previsão de consumo'],['energy_prices','Preços de energia'],['acl','Adesão ACL'],['documents','Documentos'],['bot','Bot-Energy'],['agenda','Agenda e prazos'],['notifications','Notificações'],['map','Mapa das unidades'],['trading','Decisões de cotação']] as const;
+export const portalModules=[['reports','Relatórios publicados'],['forecasts','Previsão de consumo'],['energy_prices','Preços de energia'],['acl','Adesão ACL'],['documents','Documentos'],['bot','EVA'],['agenda','Agenda e prazos'],['notifications','Notificações'],['map','Mapa das unidades'],['trading','Decisões de cotação']] as const;
 export type PortalModule=typeof portalModules[number][0];
 export type PortalLicense={id:string;customer_id:string;customers?:{company_name:string};status:'ACTIVE'|'SUSPENDED'|'CANCELLED';starts:string;ends:string;modules:PortalModule[];max_users:number;max_units:number;revision:number};
 export type ClientAddition={id:string;slots:number;starts:string;ends:string;status:'ACTIVE'|'CANCELLED';reference:string;revision:number};

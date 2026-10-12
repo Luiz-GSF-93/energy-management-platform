@@ -13,7 +13,7 @@ export class ReportAiService {
  async interpret(t:TenantContext,question:string,evidence:AiEvidence[],audience:'client'|'backoffice'){
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(audience==='client'?(t.role!=='consulta'||!!t.accessMode||!t.roleId):(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')))return {state:'NOT_AUTHORIZED',message:'Contexto de IA não autorizado.'};
   if(!this.connector.available(t.organizationId))return {state:'NOT_CONFIGURED',message:'Interpretação indisponível. Consulte os resultados e as fontes publicadas.'};
-  if(!await this.licenses.available(t.organizationId))return {state:'NOT_AUTHORIZED',message:'Bot-Energy exige licença vigente e cota disponível.'};
+  if(!await this.licenses.available(t.organizationId))return {state:'NOT_AUTHORIZED',message:'EVA exige licença vigente e cota disponível.'};
   const key=t.organizationId+':'+t.userId,now=Date.now();
   for(const [k,v] of this.recent)if(!v.some(n=>now-n<60000))this.recent.delete(k);
   const times=(this.recent.get(key)??[]).filter(n=>now-n<60000);

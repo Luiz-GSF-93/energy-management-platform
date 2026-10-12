@@ -28,7 +28,7 @@ export class BackofficeAiService {
   try{
    // Fail closed before transmission if the existing durable audit cannot record intent.
    if(!this.budget)throw new Error('BUDGET_UNAVAILABLE');
-   if(process.env.BOT_ENERGY_LICENSE_MODE==='true'&&(!this.licenses||!await this.licenses.available(t.organizationId)))return {state:'NOT_AUTHORIZED',message:'Bot-Energy + RAG não incluído em licença vigente ou cota indisponível.',checkedAt};
+   if(process.env.BOT_ENERGY_LICENSE_MODE==='true'&&(!this.licenses||!await this.licenses.available(t.organizationId)))return {state:'NOT_AUTHORIZED',message:'EVA + RAG não incluído em licença vigente ou cota indisponível.',checkedAt};
    const reservation=await this.budget.reserve(t.organizationId,t.userId,requestId,'conversation',{inputTokens:60000,outputTokens:2200},module);
    await log('REQUESTED');
    const result=await this.connector.interpret(t.organizationId,question,evidence);

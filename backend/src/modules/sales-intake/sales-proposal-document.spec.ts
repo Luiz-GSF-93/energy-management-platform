@@ -19,3 +19,10 @@ describe('Private approved proposal documents',()=>{
  it('requires permission and no-store on both handlers',()=>{const r=new Reflector();for(const method of ['preview','pdf'] as const){expect(r.get(PERMISSIONS_KEY,SalesCommercialController.prototype[method])).toEqual(['82e7fc71-479a-4dd6-8b22-4fba6eaa6841']);expect(r.get('__headers__',SalesCommercialController.prototype[method])).toContainEqual({name:'Cache-Control',value:'no-store'});}});
  it('renders long Portuguese text into a PDF without mutating the model',async()=>{const model=proposalDocumentModel({...fixture,snapshot:{...fixture.snapshot,extras:Array.from({length:20},(_,i)=>({label:`Adicional ${i} - análises e interpretação de operações energéticas`,cents:22000,recurrence:'MONTHLY'})),policy:{...fixture.snapshot.policy,taxTerms:'Condição preservada de serviços, impostos e interpretação. '.repeat(30)}}});const before=JSON.stringify(model);const pdf=await renderProposalPdf(model);expect(pdf.subarray(0,4).toString()).toBe('%PDF');expect(pdf.length).toBeGreaterThan(5000);expect(JSON.stringify(model)).toBe(before);});
 });
+
+ describe('EVA document brand compatibility',()=>{
+  it.each([['2026-10-11T12:00:00Z','Bot-Energy + RAG'],[undefined,'Bot-Energy + RAG'],['2026-10-12T06:16:38Z','Bot-Energy + RAG'],['2026-10-12T06:16:39Z','EVA + RAG']])('preserves proposal brand for %s',(createdAt,label)=>{
+   const original={...fixture,createdAt,snapshot:{...fixture.snapshot,modules:{bot_energy_rag:true}}};const before=JSON.stringify(original);
+   const model=proposalDocumentModel(original);expect(model.sections[1].rows.find(row=>row.label==='Módulos selecionados')?.value).toBe(label);expect(JSON.stringify(original)).toBe(before);
+  });
+ });

@@ -13,6 +13,18 @@ describe('Azure backoffice generative boundary (synthetic transport only)',()=>{
 });
 
 describe('Isolated published report prompt',()=>{
- it('uses a client prompt without weakening numeric, source or tool guards',async()=>{const fetcher=jest.fn(async()=>response({...output,fields:[]}));const r=await new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Consumo?',evidence,'client');const [,init]=fetcher.mock.calls[0] as any;const b=JSON.parse(init.body);expect(b.messages[0].content).toContain('o cliente vinculado');expect(b.messages[0].content).not.toContain('Não atenda clientes');expect(r.promptVersion).toBe('published-report-client-v1');expect(b.store).toBe(false);expect(b.tools).toBeUndefined();});
+ it('uses a client prompt without weakening numeric, source or tool guards',async()=>{const fetcher=jest.fn(async()=>response({...output,fields:[]}));const r=await new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Consumo?',evidence,'client');const [,init]=fetcher.mock.calls[0] as any;const b=JSON.parse(init.body);expect(b.messages[0].content).toContain('o cliente vinculado');expect(b.messages[0].content).not.toContain('Não atenda clientes');expect(r.promptVersion).toBe('published-report-client-v2-eva');expect(b.store).toBe(false);expect(b.tools).toBeUndefined();});
  it('never accepts a write suggestion in a report answer',async()=>{const fetcher=jest.fn(async()=>response(output));await expect(new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Consumo?',evidence,'client')).rejects.toThrow('UNGROUNDED_FIELD');});
+});
+
+describe('EVA identity preserves evidence boundaries',()=>{
+ it.each([undefined,'backoffice','client'] as const)('identifies EVA without removing safeguards for %s',async audience=>{
+  const fetcher=jest.fn(async()=>response({...output,fields:[]}));
+  const result=await new AzureBackofficeAiConnector(cfg,fetcher as any).interpret('org-a','Qual consumo?',evidence,audience);
+  const [,init]=fetcher.mock.calls[0] as any;const body=JSON.parse(init.body);const prompt=body.messages[0].content;
+  expect(prompt).toContain('EVA, a Analista Virtual do EnergyOS');expect(prompt).not.toMatch(/bot-energy/i);
+  expect(prompt).toContain('dados não confiáveis');expect(prompt).toMatch(/backend calcula/);expect(prompt).toContain('Sem evidência suficiente');
+  expect(body.store).toBe(false);expect(body.tools).toBeUndefined();expect(result.promptVersion).toContain('eva');
+  if(audience==='client')expect(prompt).toContain('O cliente nunca recebe notas internas');
+ });
 });

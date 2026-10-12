@@ -17,7 +17,7 @@ type Data={plans:Plan[];policies:Policy[];proposals:Proposal[]};
 const endpoint='/api/v1/admin/sales/commercial';
 const money=(c:number)=>(c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const grid={display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16};
-const moduleLabels:Record<string,string>={trading_hub:'Trading Hub',energy_map:'Mapa energético',document_management:'Documentos',advanced_analytics:'Análises avançadas / OCR + IA',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'Bot-Energy + RAG',client_portal:'Portal do cliente',ccee_registrations:'Registros CCEE (avulso)'};
+const moduleLabels:Record<string,string>={trading_hub:'Trading Hub',energy_map:'Mapa energético',document_management:'Documentos',advanced_analytics:'Análises avançadas / OCR + IA',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'EVA + RAG',client_portal:'Portal do cliente',ccee_registrations:'Registros CCEE (avulso)'};
 const labels:Record<string,string>={DRAFT:'Rascunho',CHECKED:'Conferida',APPROVED_INTERNAL:'Aprovada internamente'};
 const errorText=(e:unknown)=>e instanceof ApiError?e.message:'Consulta comercial indisponível. Tente atualizar.';
 function PolicyForm({plan,policy,onSaved}:{plan:Plan;policy?:Policy;onSaved:()=>void}){

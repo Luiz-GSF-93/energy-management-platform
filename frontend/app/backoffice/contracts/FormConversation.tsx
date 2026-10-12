@@ -27,8 +27,8 @@ export default function FormConversation({context, fields, disabled, onApply,rev
     finally {lock.current = false; if(alive.current)setBusy(false);}
   }
   if(!authorized) return null;
-  return <section className="ds-card" aria-label="Bot-Energy · acompanhamento do preenchimento">
-    <h3>Bot-Energy · preencher em conversa</h3><p>{context}</p>
+  return <section className="ds-card" aria-label="EVA · acompanhamento do preenchimento">
+    <h3>EVA · preencher em conversa</h3><p>{context}</p>
     {!open ? <><p>Confira primeiro os dados preenchidos pela fatura e pelos cadastros vigentes. O bot solicita apenas os complementos pendentes; você também pode selecionar um campo para corrigir com justificativa. Validação e aprovação seguem as permissões do seu perfil.</p><Button type="button" disabled={disabled} onClick={() => setOpen(true)}>Iniciar preenchimento acompanhado</Button></> : <>
       {reviewBeforeSave?<p>As respostas completam o formulário. Confira os valores, marque “OK” e salve o rascunho ao concluir.</p>:<label><input type="checkbox" checked={autoSave} disabled={disabled || busy} onChange={e => setAutoSave(e.target.checked)}/> Salvar respostas automaticamente em rascunho</label>}
       <p>Dados informados pelo operador permanecem como informação do Expert para conferência; não se tornam evidência oficial ou confirmação OCR.</p>

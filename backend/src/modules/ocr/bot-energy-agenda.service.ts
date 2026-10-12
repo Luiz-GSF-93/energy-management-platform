@@ -22,6 +22,6 @@ export class BotEnergyAgendaService {
    const stage=days<0?'OVERDUE':days===0?'TODAY':days<=1?'ONE_DAY':days<=3?'THREE_DAYS':'SEVEN_DAYS';
    return [{key:r.id+':'+r.revision+':'+stage,id:r.id,title:r.title,deadline,days,stage,responsibleId:r.responsible_id,customerId:r.customer_id,unitId:r.consumer_unit_id,source:'Agenda registrada da organização · revisão '+r.revision,href:'/backoffice/operation/agenda'}];
   }).sort((a:any,b:any)=>a.deadline.localeCompare(b.deadline));
-  return {organizationId:t.organizationId,checkedAt:now.toISOString(),reminders,disclosure:'Bot-Energy acompanha prazos registrados por cliente e unidade. Confira a fonte e o calendário oficial CCEE; marcar um aviso como lido não conclui o fechamento nem comprova cumprimento. Este aviso interno não envia mensagens externas.'};
+  return {organizationId:t.organizationId,checkedAt:now.toISOString(),reminders,disclosure:'EVA acompanha prazos registrados por cliente e unidade. Confira a fonte e o calendário oficial CCEE; marcar um aviso como lido não conclui o fechamento nem comprova cumprimento. Este aviso interno não envia mensagens externas.'};
  }
 }

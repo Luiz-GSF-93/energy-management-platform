@@ -1,25 +1,12 @@
-.avatar {
-  transform-origin: center;
-  animation: greet 20s ease-in-out infinite;
-}
-
-.eyes {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: blink 8s ease-in-out 2s infinite;
-}
-
-@keyframes greet {
-  0%, 90%, 100% { transform: translateY(0) rotate(0); }
-  93% { transform: translateY(-2px) rotate(-4deg); }
-  96% { transform: translateY(0) rotate(3deg); }
-}
-
-@keyframes blink {
-  0%, 92%, 96%, 100% { transform: scaleY(1); }
-  94% { transform: scaleY(0.12); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .avatar, .eyes { animation: none; }
-}
+.avatar {position:relative;display:inline-block;flex-shrink:0;isolation:isolate;pointer-events:none;}
+.sphere {position:absolute;inset:6%;animation:float 6s ease-in-out infinite;}
+.image {display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 2px #42dfff80);}
+.orbit {position:absolute;inset:10%;animation:orbit 18s linear infinite;}
+.ribbon {position:absolute;inset:0;border:1px solid #54e4f4b3;border-radius:50%;transform:rotateX(65deg) rotateY(18deg);box-shadow:0 0 3px #48c7ffa6;}
+.ribbon::after {content:'';position:absolute;width:3px;height:3px;border-radius:50%;top:12%;left:12%;background:#c5fcff;box-shadow:0 0 4px #5cecff;}
+.second {inset:5%;animation-direction:reverse;animation-duration:24s;}
+.second .ribbon {border-color:#a18bffb3;transform:rotateY(65deg) rotateX(24deg);box-shadow:0 0 3px #8372ff80;}
+.avatar[data-active='false'] .sphere,.avatar[data-active='false'] .orbit {animation-play-state:paused;}
+@keyframes float {0%,100%{transform:translateY(0);}50%{transform:translateY(-4%);}}
+@keyframes orbit {from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+@media(prefers-reduced-motion:reduce){.sphere,.orbit{animation:none;}}

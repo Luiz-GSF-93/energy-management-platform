@@ -5,7 +5,7 @@ import {apiRequest,ApiError} from '@/app/lib/api/client';
 import WorkflowModal from '../contracts/WorkflowModal';
 const endpoint='/api/v1/admin/sales/provisioning';
 const labels:Record<string,string>={PREPARED:'Preparado',AUTHORIZED:'Comando privado autorizado',WITHDRAWN:'Retirado',APPLIED:'Licença aplicada'};
-const modules:Record<string,string>={document_management:'Documentos',advanced_analytics:'Análises avançadas',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'Bot-Energy + RAG',trading_hub:'Trading Hub',ccee_registrations:'Registros CCEE',client_portal:'Portal do cliente'};
+const modules:Record<string,string>={document_management:'Documentos',advanced_analytics:'Análises avançadas',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'EVA + RAG',trading_hub:'Trading Hub',ccee_registrations:'Registros CCEE',client_portal:'Portal do cliente'};
 const reasons:Record<string,string>={ACTIVATION_NOT_CHECKED:'Conferência 5A pendente',LICENSE_DATES_MISSING:'Informe a vigência da licença',AI_QUOTA_MISSING:'Informe a cota de IA; zero não significa ilimitado',COMPLEMENT_CONTRACT_REVIEW:'Confira o complemento com o contrato',BILLING_SCOPE_UNSUPPORTED:'Periodicidade ou preço recorrente exigem implementação específica',PLAN_NAME_MISSING:'Nome do plano ausente na proposta',SCOPE_INCOMPLETE:'Escopo contratado incompleto'};
 type Preview={payload:Record<string,any>;payloadHash:string;blockers:string[]};
 type Row={id:string;organization_id:string;activation_id:string;state:string;version:number};
