@@ -1,0 +1,30 @@
+EnergyOS — operação administrativa 6A
+
+Base: main 6eb7941e316771b98544c9e4798e203c1de2e70d (PR 361).
+Escopo aprovado: organização da apresentação e navegação; sem banco, autorização ou integração externa.
+
+A tela Comercial mantém as solicitações em primeiro plano e separa políticas,
+contratos/assinaturas, financeiro/ciclos e ativação/provisionamento. As rotas e
+componentes existentes são preservados. AdministrativeSection monta cada área
+na primeira abertura e mantém sua instância quando recolhida, preservando
+rascunhos, IDs de comandos pendentes e evidências de resultados incertos.
+As áreas financeiras da Conciliação e os modelos Meta seguem o mesmo padrão.
+
+Comunicações abre um registro em WorkflowModal, sem expandir a tabela; exibe
+somente dados já autorizados. Modelo histórico e custo ausentes permanecem
+explicitamente não apurados. Nenhuma nova consulta ao fornecedor é executada.
+Equipe, chamados e comunicações limpam resultados anteriores ao atualizar.
+Detalhes financeiros e de chamados invalidam respostas atrasadas ao trocar
+lista/filtros ou sair da tela. Os filtros existentes e as páginas são mantidos.
+A descrição dos perfis acompanha as capacidades já aprovadas; não concede acesso.
+
+Validação: frontend/test/admin-6a.cjs (JSDOM) verifica montagem sob demanda,
+preservação de rascunho/ID, modal de comunicação, modelos Meta sob demanda e
+respostas atrasadas em Financeiro/Suporte. signature-transport.cjs preserva os
+seis comandos de assinatura e o comportamento de tentativa incerta/desligada.
+Next build: 44 rotas, TypeScript aprovado. Banco/fornecedores não consultados.
+
+Não implementado nesta fase: filtros novos no backend, histórico paginado da
+equipe/chamados/conciliações e paginação de custos (6B). Não retirar bloqueios
+Clicksign UNKNOWN ou Asaas PIX. Nenhuma flag, credencial, permissão ou licença
+é alterada. Reversão: reverter somente este incremento de frontend.
