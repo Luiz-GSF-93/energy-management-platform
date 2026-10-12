@@ -41,7 +41,7 @@ export default function TariffLibrary({customerId,units,onApplied,autofill,initi
   application(found);setOpen(true);setCip('0');setOther('0');setUnitId(initialContext.unitId);setStart(initialContext.month+'-01');setEnd(new Date(Date.UTC(Number(initialContext.month.slice(0,4)),Number(initialContext.month.slice(5,7)),0)).toISOString().slice(0,10));
   setTaxes(codes.map(code=>({code,rate:autofill.taxes.find(t=>t.code===code)?.rate||'',mode:'',included:found.profile.items.filter(i=>code!=='ICMS'||i.component!=='TUSD_DEMAND_UNUSED').map(key)})));
   setWhy(autofill.source+' · tabela compatível com a competência. Bases e tratamento tributário selecionados em tela para conferência.');
-  setMessage('Tarifas e alíquotas preenchidas pelo bot-energy. Confira tratamento tributário, incidências e valores do cenário ACR antes de salvar. CIP ACL não é copiada para ACR.');
+  setMessage('Tarifas e alíquotas preenchidas pela EVA. Confira tratamento tributário, incidências e valores do cenário ACR antes de salvar. CIP ACL não é copiada para ACR.');
  // A source change remounts this scoped form; reloading the catalogue must not erase operator edits.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[autofill,initialContext,customerId,rows]);

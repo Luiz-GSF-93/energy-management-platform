@@ -44,7 +44,7 @@ export class OcrAssistantProgressService {
       if((automaticFill as any)?.state==='FILLED_DRAFT')automaticFill={...(automaticFill as object),message:'Campos preenchidos e salvos. As observações da IA não foram salvas; confira as dúvidas exibidas antes de validar.'};
      }
     }
-    job.plan={...plan,aiReview,automaticFill,automaticPreparation};job.completed.push('interpretation','ready');job.state='READY';job.message=aiReview?.state==='READY'?'bot-energy: interpretação concluída; confira os preenchimentos e as dúvidas. A aprovação financeira permanece com o gestor.':aiReview?.message;job.elapsedMs=Date.now()-Date.parse(job.startedAt);})
+    job.plan={...plan,aiReview,automaticFill,automaticPreparation};job.completed.push('interpretation','ready');job.state='READY';job.message=aiReview?.state==='READY'?'EVA: interpretação concluída; confira os preenchimentos e as dúvidas. A aprovação financeira permanece com o gestor.':aiReview?.message;job.elapsedMs=Date.now()-Date.parse(job.startedAt);})
    .catch(()=>{job.state='FAILED';job.message='A conferência não foi concluída. Atualize para consultar novamente. Confira os rascunhos salvos antes de repetir.';job.elapsedMs=Date.now()-Date.parse(job.startedAt);});
   return this.present(job);
  }

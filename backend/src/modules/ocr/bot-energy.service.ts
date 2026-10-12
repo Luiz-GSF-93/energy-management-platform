@@ -14,11 +14,11 @@ import {questionEvidence,questionIntent,questionMonth,questionMonths,questionReg
 
 export const botEnergyTopics = [
  {key:'regulation',question:'Como conferir as regras regulatórias da fatura?',answer:'Confira distribuidora, enquadramento e vigência na tabela oficial correspondente. As tarifas de energia e demanda têm unidades diferentes. PIS e Cofins variam por mês; use a alíquota identificada na fatura e confirme a base de incidência. As referências oficiais abaixo apoiam a revisão, mas não comprovam por si só a correção desta fatura ou contrato.',reference:'Base regulatória controlada v1 · fontes oficiais consultadas em 03/10/2026'},
- {key:'workflow',question:'Quem valida e quem aprova?',answer:'O operador confere os campos e as fontes e valida os preenchimentos. O bot-energy prepara somente os rascunhos permitidos. A aprovação financeira é exclusiva do gestor/administrador autorizado; a publicação segue o fluxo financeiro existente.',reference:'ocr-assistant.service.ts · validate; financial-settlements.service.ts · canManage'},
+ {key:'workflow',question:'Quem valida e quem aprova?',answer:'O operador confere os campos e as fontes e valida os preenchimentos. A EVA prepara somente os rascunhos permitidos. A aprovação financeira é exclusiva do gestor/administrador autorizado; a publicação segue o fluxo financeiro existente.',reference:'ocr-assistant.service.ts · validate; financial-settlements.service.ts · canManage'},
  {key:'confidence',question:'100% significa apuração publicada?',answer:'O progresso de configuração conta verificações atendidas para preparar apuração. 100% não comprova aprovação nem publicação. A confiança OCR mede a leitura e não aumenta por confirmação pelo Expert; campo ausente não é zero.',reference:'contract-readiness.ts · verificações; homologation-progress.ts; invoice-readout.ts'},
  {key:'fees',question:'Como são conferidos os honorários híbridos?',answer:'O fixo é integral por unidade. A regra mensal confirma o rateio somente da parcela variável. A memória isolada da unidade aguarda a consolidação do cliente para calcular o variável; isso não exige recadastrar uma regra já confirmada. O progresso só reconhece essa etapa quando a prévia financeira do backend está disponível com o mesmo contrato, versão da regra, mês e unidade, sem bloqueios.',reference:'management-fee-memory.ts; customer-financial-preview.ts; contract-readiness.ts'},
  {key:'taxes',question:'Como evitar cobrar tributos novamente?',answer:'Tributos já incluídos na tarifa bruta não são somados novamente. Informação tributária ausente exige revisão; não significa isenção nem alíquota zero. Toda correção deve preservar a fonte, o autor, o motivo e a versão.',reference:'ocr-tusd-integration.service.ts; ocr-cde-tax-integration.service.ts; ocr-demand-tax-integration.service.ts'},
- {key:'access',question:'Quais dados o bot-energy pode consultar?',answer:'Esta assistência consulta somente regras implementadas e o contexto autorizado da fatura selecionada, com licença, organização e permissões verificadas no backend. Não aprova valores, não executa instruções de arquivos e não consulta dados de outra organização. O atendimento ao cliente ainda não está habilitado.',reference:'TenantGuard; ocr-assistant.service.ts · allowed; bot-energy.service.ts · authorize'},
+ {key:'access',question:'Quais dados a EVA pode consultar?',answer:'Esta assistência consulta somente regras implementadas e o contexto autorizado da fatura selecionada, com licença, organização e permissões verificadas no backend. Não aprova valores, não executa instruções de arquivos e não consulta dados de outra organização. O atendimento ao cliente ainda não está habilitado.',reference:'TenantGuard; ocr-assistant.service.ts · allowed; bot-energy.service.ts · authorize'},
 ] as const;
 const contextualTopics = [
  {key:'status',question:'Qual o status do preenchimento?'},
@@ -32,13 +32,13 @@ type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;
 export class BotEnergyService {
  constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService,@Optional() private readonly ai?:BackofficeAiService,@Optional() private readonly progress?:OcrAssistantProgressService,@Optional() private readonly rag?:BotEnergyRagService,@Optional() private readonly contexts?:BotEnergyContextService){}
  private async authorize(t:TenantContext){
-  if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('O bot-energy está disponível somente no backoffice autorizado.');
+  if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('A EVA está disponível somente no backoffice autorizado.');
   await this.assistant.authorize(t);
  }
  async context(t:TenantContext){await this.authorize(t);if(!this.contexts)throw new BadRequestException('Seleção de contexto indisponível.');return this.contexts.list(t);}
  async topics(t:TenantContext){
   await this.authorize(t);
-  return {name:'bot-energy',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
+  return {name:'EVA',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
  }
  async answer(t:TenantContext,body:unknown,document?:string):Promise<SupportAnswer>{
   await this.authorize(t);
@@ -48,7 +48,7 @@ export class BotEnergyService {
   const normalized=(v:string)=>v.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[?!.]+$/,'');
   const topics=[...botEnergyTopics,...contextualTopics];
   const topic=topics.find(v=>b.topic===v.key||typeof b.question==='string'&&normalized(b.question)===normalized(v.question));
-  const base={name:'bot-energy',mode:'CONTROLLED_SUPPORT',checkedAt:new Date().toISOString(),canApprove:false,canPublish:false};
+  const base={name:'EVA',mode:'CONTROLLED_SUPPORT',checkedAt:new Date().toISOString(),canApprove:false,canPublish:false};
   const inputQuestion=typeof b.question==='string'?b.question:'';
   const denied=/ignore|ignorar|publique|senha|chave privada|token|outra organizacao|execute|executar|apague|deletar/.test(normalized(inputQuestion));
   if(denied)return {...base,status:'NO_EVIDENCE',answer:'Posso explicar regras e registros autorizados do backoffice. Não executo comandos nem altero permissões, validações ou aprovações por uma conversa.',items:[],sources:[]};

@@ -14,8 +14,8 @@ export default function BotEnergyAgenda({organizationId}:{organizationId:string}
   return()=>{abort.abort();clearInterval(timer);window.removeEventListener('operations-updated',refresh);};
  },[organizationId]);
  if(!error&&!data?.reminders.length)return null;
- return <section aria-label="Avisos de agenda Bot-Energy" style={{width:320,maxWidth:'calc(100vw - 32px)',background:'#101b2c',color:'#f0f5ff',border:'1px solid #405873',borderRadius:12,padding:10,marginBottom:8}}>
-  <Button variant="secondary" onClick={()=>setOpen(v=>!v)} aria-expanded={open}>{error?'Agenda: consulta indisponível':'Bot-Energy · '+data!.reminders.length+' prazos de clientes'}</Button>
+ return <section aria-label="Avisos de agenda EVA" style={{width:320,maxWidth:'calc(100vw - 32px)',background:'#101b2c',color:'#f0f5ff',border:'1px solid #405873',borderRadius:12,padding:10,marginBottom:8}}>
+  <Button variant="secondary" onClick={()=>setOpen(v=>!v)} aria-expanded={open}>{error?'Agenda: consulta indisponível':'EVA · '+data!.reminders.length+' prazos de clientes'}</Button>
   {open&&<>{error?<p>Não foi possível conferir os avisos. Consulte a agenda da organização.</p>:<><ul>{data!.reminders.map(r=><li key={r.key}><Link href={r.href}>{r.title}</Link><p>{new Date(r.deadline).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})} · {r.days<0?'Prazo vencido':r.days===0?'Hoje':'Em '+r.days+' dia(s)'}</p><small>{r.source}</small></li>)}</ul><small>{data!.disclosure}</small></>}<Link href="/backoffice/operation/agenda">Abrir agenda</Link></>}
  </section>;
 }

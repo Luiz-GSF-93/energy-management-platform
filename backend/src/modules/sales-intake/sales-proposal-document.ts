@@ -12,7 +12,8 @@ const date=(v:unknown)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}/.test(v)?v.slic
 export function proposalDocumentModel(data:any):ProposalDocumentModel{
  if(!data||data.status!=='APPROVED_INTERNAL'||!data.snapshot||typeof data.snapshot!=='object'||data.snapshot.currency!=='BRL'||typeof data.id!=='string'||typeof data.receipt!=='string')throw new ServiceUnavailableException('Documento interno indisponível.');
  const s=data.snapshot,p=s.policy??{},row=(label:string,value:string)=>({label,value});
- const modules=s.modules&&typeof s.modules==='object'?Object.keys(s.modules).filter(k=>s.modules[k]===true).map(k=>labels[k]??k).join(', '):'';
+ const currentLabels=Number.isFinite(Date.parse(data.createdAt))&&Date.parse(data.createdAt)>=Date.parse('2026-10-12T06:16:39Z')?{...labels,bot_energy_rag:'EVA + RAG'}:labels;
+ const modules=s.modules&&typeof s.modules==='object'?Object.keys(s.modules).filter(k=>s.modules[k]===true).map(k=>currentLabels[k]??k).join(', '):'';
  return {id:data.id,receipt:data.receipt,title:'Proposta comercial interna',notice:'Documento interno - não constitui contrato nem comprovação de pagamento.',sections:[
  {title:'Referência preservada',rows:[row('Proposta',data.id),row('Protocolo',data.receipt),row('Situação','Aprovada internamente'),row('Plano',text(s.planName)),row('Versões',`Catálogo: ${count(s.planVersion)} / Política: ${count(s.policyVersion)}`),row('Motor',text(s.engineVersion)),row('Criada em',date(data.createdAt)),row('Aprovada em',date(data.approvedAt))]},
  {title:'Composição da oferta',rows:[row('Unidades',count(s.units)),row('Usuários',count(s.users)),row('Documentos (limite total)',s.documentsLimit===null?'Ilimitado':count(s.documentsLimit)),row('Módulos selecionados',modules||missing),...(Array.isArray(s.extras)?s.extras.slice(0,20).map((x:any)=>row(text(x.label),`${money(x.cents)} - ${x.recurrence==='MONTHLY'?'mensal':x.recurrence==='ONCE'?'único':missing}`)):[])]},

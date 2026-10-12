@@ -42,7 +42,7 @@ export function conversationValue(field: ConversationField, reply: string): stri
 }
 
 export function conversationNote(notes: string, field: ConversationField, value: string, evidence: string, max = 2000) {
-  const line = `Bot-Energy · resposta do operador · ${field.label}: ${field.value ?? 'não informado'} → ${value}. Evidência declarada: ${evidence.trim() || 'conferir fonte do formulário'}.`;
+  const line = `EVA · resposta do operador · ${field.label}: ${field.value ?? 'não informado'} → ${value}. Evidência declarada: ${evidence.trim() || 'conferir fonte do formulário'}.`;
   const next = [notes.trim(), line].filter(Boolean).join('\n');
   if (next.length > max) throw Error('O histórico desta sessão excedeu o espaço das observações. Salve a etapa e revise as observações antes de continuar; nenhuma evidência será cortada.');
   return next;

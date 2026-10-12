@@ -10,7 +10,7 @@ const usd=(micro:unknown)=>micro==null?'Não disponível':new Intl.NumberFormat(
 const brl=(cents:unknown)=>cents==null?'Não informado':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents)/100);
 const number=(v:unknown)=>v==null?'Não disponível':Number(v).toLocaleString('pt-BR');
 const bytes=(v:unknown)=>v==null?'Não conectado':(Number(v)/1024**3).toFixed(2)+' GB';
-const moduleNames:Record<string,string>={OCR:'OCR + interpretação IA',BOT_ENERGY:'Bot-Energy',CHAT:'Chat',AUDITORIA:'Auditoria',ANALISES:'Análises',RAG:'Busca RAG',INDEXACAO:'Indexação da base',UNCLASSIFIED:'Histórico sem módulo identificado'};
+const moduleNames:Record<string,string>={OCR:'OCR + interpretação IA',BOT_ENERGY:'EVA',CHAT:'Chat',AUDITORIA:'Auditoria',ANALISES:'Análises',RAG:'Busca RAG',INDEXACAO:'Indexação da base',UNCLASSIFIED:'Histórico sem módulo identificado'};
 const cell={textAlign:'left' as const,padding:'12px',borderBottom:'1px solid #334155'};
 function Table({head,rows}:{head:string[];rows:(string|number)[][]}){return <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{head.map(h=><th key={h} scope="col" style={cell}>{h}</th>)}</tr></thead><tbody>{rows.length?rows.map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j} style={cell}>{v}</td>)}</tr>):<tr><td style={cell} colSpan={head.length}>Sem registros para esta competência.</td></tr>}</tbody></table></div>;}
 function Costs(){

@@ -12,7 +12,7 @@ export function prefillMeasurements<T extends Record<string,string|null>>(curren
  return {measurements,filled,conflicts};
 }
 export function ocrReviewNote(notes:string,proposal:OcrAutofill){
- const result=[notes.trim(),'Bot-Energy · OK do operador: preenchimentos e fontes conferidos · '+proposal.source+' · validação e publicação permanecem separadas.'].filter(Boolean).join('\n');
+ const result=[notes.trim(),'EVA · OK do operador: preenchimentos e fontes conferidos · '+proposal.source+' · validação e publicação permanecem separadas.'].filter(Boolean).join('\n');
  if(result.length>2000)throw Error('As observações excedem o limite. Revise o texto antes de salvar; a conferência não será cortada.');
  return result;
 }

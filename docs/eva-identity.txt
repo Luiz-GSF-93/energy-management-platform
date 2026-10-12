@@ -1,0 +1,11 @@
+EVA - Analista Virtual do EnergyOS
+
+Approved branding only. Licensed bot_energy_rag key, routes, RPCs, provider deployment names, quota accounting and permissions remain compatible. Backoffice and published client report prompts have independent new audited versions; no training, fine-tuning or provider configuration change.
+
+Current UI labels use EVA and the plan catalog uses EVA + RAG. Existing snapshots and conversations are not rewritten. The proposal formatter retains Bot-Energy for offers created before 2026-10-12T06:16:39Z or without a reliable timestamp; newer proposals use EVA. Prices and contract data remain unchanged.
+
+The shared avatar uses the generated transparent 256px WebP (31,382 bytes) and independent CSS orbit layers. Decorative imagery is hidden from assistive technology; surrounding controls retain accessible EVA labels. IntersectionObserver and visibilitychange pause motion offscreen/inactive; reduced-motion disables animation.
+
+Image generation: built-in image_gen, reference EVA v1.png; isolated holographic blue/cyan/violet sphere with EVA lettering, real alpha, no floor or background. Image resized/encoded with sharp for delivery; original retained in local outputs/EVA-esfera-transparente.png. No per-user image-generation calls.
+
+Dedicated specialist training structure is future scope. Vendor Clicksign/Asaas homologation blockers are unchanged. No migrations, credential/flag changes or provider calls required.

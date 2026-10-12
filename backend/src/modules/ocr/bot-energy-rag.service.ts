@@ -33,7 +33,7 @@ export class BotEnergyRagService {
   return this.retrieveAuthorized(t,question,period);
  }
  private async retrieveAuthorized(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>){
-  if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('Bot-Energy + RAG exige licença vigente.');
+  if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('EVA + RAG exige licença vigente.');
   if(!question.trim()||question.length>500)throw new Error('INVALID_RAG_QUESTION');
   const query={...period,embeddingModel:KNOWLEDGE_EMBEDDING_MODEL,embeddingVersion:KNOWLEDGE_EMBEDDING_VERSION};
   selectKnowledge([],query); // Validate period before any paid call.

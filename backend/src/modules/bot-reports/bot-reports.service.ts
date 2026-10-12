@@ -22,8 +22,8 @@ export function reportPeriod(from:unknown,to:unknown){
 export class BotReportsService {
  constructor(private db:SupabaseService,private reports:ReportsService,private financial:FinancialSettlementsService,private licenses:BotEnergyLicenseService,private rag:BotEnergyRagService,private ai:ReportAiService,private clientForecast:PublishedClientForecastService,private config:ConfigService){}
  private async permission(t:TenantContext,audience:'client'|'backoffice'){
-  if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(audience==='client'?(t.role!=='consulta'||!!t.accessMode||!t.roleId):(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')))throw new ForbiddenException('Bot-Energy exige acesso de relatórios e IA no contexto autorizado.');
-  if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('Bot-Energy exige licença vigente e cota disponível.');
+  if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(audience==='client'?(t.role!=='consulta'||!!t.accessMode||!t.roleId):(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')))throw new ForbiddenException('EVA exige acesso de relatórios e IA no contexto autorizado.');
+  if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('EVA exige licença vigente e cota disponível.');
  }
  private async client(t:TenantContext,period:{from:string;to:string},unit?:string){
   const r=await this.db.getClient().rpc('bot_energy_client_reports',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_from:period.from,p_to:period.to,p_unit:unit??null});

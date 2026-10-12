@@ -3,7 +3,7 @@ import {useRef,useState,useEffect} from 'react';
 import {Alert,Button,Card} from '@/app/components/ui';
 import {apiRequest} from '@/app/lib/api/client';
 type Result={receipt:string;evaluatedAt:string;engineVersion:string;status:string;selectionRule:string;requiredModules:string[];reasons:string[];warnings:string[];plan:{id:string;name:string;version:number;maxUnits:number;maxUsers:number}|null};
-const modules:Record<string,string>={document_management:'Documentos',advanced_analytics:'Análises avançadas',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'Bot-Energy + RAG',trading_hub:'Trading Hub'};
+const modules:Record<string,string>={document_management:'Documentos',advanced_analytics:'Análises avançadas',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'EVA + RAG',trading_hub:'Trading Hub'};
 export default function PlanRecommendation({receipt,page,search}:{receipt:string;page:number;search:string}){
  const [result,setResult]=useState<Result|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const live=useRef(true);useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
