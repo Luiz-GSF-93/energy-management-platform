@@ -1,0 +1,65 @@
+const fs=require('node:fs');
+const source=fs.readFileSync('test/sales-signature-recovery-sql.cjs','utf8');
+const marker=' for(let ordinal=1;ordinal<=8;ordinal++)';
+if(!source.includes(marker))throw Error('Fixture insertion point changed');
+const extra=String.raw`
+ const m=fs.readFileSync('src/database/migrations/20261020_platform_sales_signature_absence.sql','utf8');
+ await db.exec('BEGIN;'+m.replace(/^BEGIN;/,'').replace(/COMMIT;\s*$/,'')+'ROLLBACK;');
+ assert.equal((await db.query("select to_regclass('platform_sales_signature_absence_checks') x")).rows[0].x,null);checks++;
+ await db.exec(m);
+ const absence=async(action,body,actor=owner)=>(await db.query('select platform_sales_signature_absence_action($1,$2,$3) v',[actor,action,JSON.stringify(body)])).rows[0].v;
+ const uncertainLease=id(500),account=id(501),checkId=id(502),resolutionId=id(503),executionId=id(504),newLease=id(505);
+ await dispatch('claim',{...claimBody,lease:uncertainLease});await dispatch('reserve',{id:request,lease:uncertainLease});await dispatch('finish',{id:request,lease:uncertainLease,result:null});
+ const b={id:request,lease:uncertainLease,requestId:checkId,accountKey:account,justification:'Confirm absence only in disposable sandbox.'};
+ const empty={state:'EMPTY',pages:1,candidateIds:[],reason:null};
+ for(const action of ['read','begin','complete','authorize','reject','executionCheck','consume','diagnostic'])await reject(()=>absence(action,{},other), '22023');
+ await reject(()=>absence('begin',b,other),'42501');
+ for(const key of Object.keys(b)) {const bad={...b};delete bad[key];await reject(()=>absence('begin',bad),'22023');}
+ assert.equal((await absence('begin',b)).accountKey,account);checks++;
+ await reject(()=>absence('begin',b),'23505');
+ await reject(()=>absence('complete',{id:request,requestId:checkId,proof:{...empty,state:null}}),'22023');
+ await reject(()=>absence('complete',{id:request,requestId:checkId,proof:{...empty,pages:0}}),'22023');
+ await reject(()=>absence('complete',{id:request,requestId:checkId,proof:{...empty,candidateIds:[id(510)]}}),'22023');
+ assert.equal((await absence('complete',{id:request,requestId:checkId,proof:empty})).state,'EMPTY');checks++;
+ const auth={id:request,checkId,resolutionId,accountKey:account,providerReference:'FIXTURE-CLICK-123',justification:'Owner reviewed written vendor confirmation.'};
+ await reject(()=>absence('authorize',auth,other),'42501');
+ await reject(()=>absence('authorize',{...auth,providerReference:''}),'23505');
+ await db.exec("BEGIN;ALTER TABLE platform_sales_signature_absence_checks DISABLE TRIGGER commercial_immutable;UPDATE platform_sales_signature_absence_checks SET created_at=clock_timestamp()-interval '11 minutes';ALTER TABLE platform_sales_signature_absence_checks ENABLE TRIGGER commercial_immutable;");
+ await reject(()=>absence('authorize',auth),'23505');await db.exec('ROLLBACK;');
+ await reject(()=>absence('authorize',{...auth,accountKey:id(599)}),'23505');
+ assert.equal((await absence('authorize',auth)).state,'AUTHORIZED');checks++;
+ await db.exec("BEGIN;ALTER TABLE platform_sales_signature_absence_resolutions DISABLE TRIGGER commercial_immutable;UPDATE platform_sales_signature_absence_resolutions SET created_at=clock_timestamp()-interval '11 minutes';ALTER TABLE platform_sales_signature_absence_resolutions ENABLE TRIGGER commercial_immutable;");
+ await reject(()=>absence('executionCheck',{id:request,resolutionId,requestId:id(600),justification:'Expired authorization cannot begin an execution.'}),'23505');await db.exec('ROLLBACK;');
+ await reject(()=>absence('authorize',{...auth,resolutionId:id(511)}),'23505');
+ await reject(()=>dispatch('claim',{...claimBody,lease:id(512)}),'23505');
+ assert.equal((await dispatch('read',{id:request})).blocked,true);checks++;
+ const before=(await db.query('select count(*) n from platform_sales_signature_attempt_events where lease=$1',[uncertainLease])).rows[0].n;
+ const exec={id:request,resolutionId,requestId:executionId,justification:'Immediate reconference before unique retry.'};
+ await absence('executionCheck',exec);
+ await reject(()=>absence('executionCheck',{...exec,requestId:id(513)}),'23505');
+ await absence('complete',{id:request,requestId:executionId,proof:empty});
+ const consume={id:request,resolutionId,requestId:executionId,lease:newLease,justification:'Consume exceptional Owner authorization once.'};
+ await reject(()=>absence('consume',consume,other),'42501');
+ await db.exec("BEGIN;ALTER TABLE platform_sales_signature_absence_checks DISABLE TRIGGER commercial_immutable;UPDATE platform_sales_signature_absence_checks SET created_at=clock_timestamp()-interval '31 seconds';ALTER TABLE platform_sales_signature_absence_checks ENABLE TRIGGER commercial_immutable;");
+ await reject(()=>absence('consume',consume),'23505');await db.exec('ROLLBACK;');
+ await db.query("update platform_sales_contract_events set status='DRAFT'");
+ await reject(()=>absence('consume',consume),'23505');
+ assert.equal((await db.query('select count(*) n from platform_sales_signature_attempt_events where lease=$1',[uncertainLease])).rows[0].n,before);checks++;
+ await db.query("update platform_sales_contract_events set status='APPROVED_INTERNAL'");
+ // CONCURRENCY_POINT
+ assert.equal((await absence('consume',consume)).lease,newLease);checks++;
+ await reject(()=>absence('consume',{...consume,lease:id(514)}),'23505');
+ const events=(await db.query('select state from platform_sales_signature_attempt_events where lease=$1 order by version',[uncertainLease])).rows.map(x=>x.state);
+ assert.deepEqual(events,['CLAIMED','RESERVED','UNKNOWN','ABORTED']);checks++;
+ await dispatch('reserve',{id:request,lease:newLease});await dispatch('finish',{id:request,lease:newLease,result:null});
+ await absence('diagnostic',{id:request,lease:newLease,reason:'HTTP',httpStatus:401});
+ const h=await absence('read',{id:request,page:0});assert.equal(h.rows.length,2);assert.equal(h.diagnostics[0].http_status,401);assert.equal(h.rows.find(x=>x.id===checkId).resolution.events.at(-1).state,'USED');assert.equal(h.realActivationEligible,false);checks+=4;
+ for(const table of ['platform_sales_signature_absence_checks','platform_sales_signature_absence_results','platform_sales_signature_absence_resolutions','platform_sales_signature_absence_resolution_events','platform_sales_signature_dispatch_diagnostics']){
+  await reject(()=>db.exec('delete from '+table),'42501');await reject(()=>db.exec('update '+table+" set actor_name='tamper'"),'42501');
+  await db.exec('SET ROLE service_role');await reject(()=>db.query('select * from '+table),'42501');await db.exec('RESET ROLE');
+ }
+ assert.equal((await db.query('select md5(to_jsonb(d)::text) h from platform_sales_contract_drafts d')).rows[0].h,sourceBefore);checks++;
+ console.log('PASS',checks,'absence SQL checks; immutable history and unique recovery; no network or shared database');await db.close();
+})().catch(e=>{console.error(e);process.exitCode=1;});
+`;
+new Function('require',source.slice(0,source.indexOf(marker))+extra)(require);

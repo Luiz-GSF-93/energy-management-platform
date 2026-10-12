@@ -1,0 +1,28 @@
+Clicksign — recuperação sandbox sem candidato
+
+Entrega desligada. As três novas flags exigem valor literal true:
+SALES_SIGNATURE_ABSENCE_ENABLED: consultas privadas, preparação e conferência.
+SALES_SIGNATURE_ABSENCE_CALLS_ENABLED: somente GET de reconferência.
+SALES_SIGNATURE_ABSENCE_APPLICATION_ENABLED: consumo excepcional e criação de um envelope.
+O POST também exige SALES_SIGNATURE_CALLS_ENABLED e as habilitações anteriores. Não habilitar nenhuma flag nesta entrega.
+
+GET /admin/sales/signatures/:id/absence?page=0
+POST /admin/sales/signatures/absence/check, /authorize, /reject, /execute
+Owner ativo exclusivo. Organização, Financeiro, Suporte e comprador não ganham permissões.
+
+Somente primeira criação de envelope UNKNOWN, sem recurso reconhecido ou outra tentativa aberta. A busca usa o nome completo da referência preservada, sem filtro de status. Cada página deve confirmar links.next, inclusive null no término. Endpoints/paginação fora da origem sandbox, repetidos, truncados, sem filtro ou inconclusivos mantêm bloqueio. Limites: 20 páginas, 100 candidatos, 128KiB/página, 15 segundos na rodada. Candidato encontrado deve seguir o recuperador existente por UUID; nunca é reenvio automático.
+
+Ausência de resultados não comprova ausência de efeito: renomeação, conta incorreta ou consistência podem esconder um envelope. Exigir confirmação escrita do fornecedor abrangendo a tentativa original e a conta. O Owner registra a referência dessa confirmação e a conta UUID conferida. A plataforma registra a atestação; não consulta automaticamente o sistema de atendimento da Clicksign nem verifica a autenticidade do protocolo. Sem confirmação suficiente, manter bloqueio.
+
+A autorização expira em 10 minutos, tem uso único por tentativa, pode ser retirada e não altera a tentativa original até o consumo. Antes do consumo, uma nova reconferência GET é persistida e deve terminar EMPTY em até 30 segundos; se houver candidato ou erro, não há POST. Um único executionCheck por autorização evita concorrência ou retomada automática após resposta perdida.
+
+No consumo transacional, o histórico UNKNOWN é preservado e recebe novo evento ABORTED com vínculo da evidência/resolução; a nova tentativa CLAIMED é criada no mesmo lock/transação e a autorização recebe USED. ABORTED neste contexto significa resolução excepcional documentada, não prova retrospectiva de que nenhum envio ocorreu. A reserva do POST continua separada e obrigatória. Falha ou incerteza nunca dispara outro POST; novo UNKNOWN exige nova avaliação.
+
+Migração aditiva 20261020: cinco tabelas privadas com RLS e gatilhos imutáveis, uma RPC restrita a service_role que reconfirma Owner. Não modifica corpos de funções antigas, dados de contrato, licenças, usuários, cobranças ou permissões.
+
+Diagnósticos de futuras criações: HTTP/status, NETWORK, TIMEOUT ou FORMAT; nenhum corpo bruto ou credencial persistido. Históricos distinguem nome registrado e nome atual, inclusive ausência explícita.
+
+Testes sem fornecedor: protocolo e transporte simulados, SQL PGlite, PostgreSQL descartável com duas sessões concorrentes, transporte real do frontend. Não apontar os testes PostgreSQL ao banco compartilhado.
+
+Fonte do filtro por nome completo: https://developers.clicksign.com/reference/api-listar-envelopes
+O critério de paginação explícita é uma decisão conservadora da aplicação. A consulta diagnóstica anterior não tinha links.next explícito e, portanto, não é uma evidência elegível para esta resolução.

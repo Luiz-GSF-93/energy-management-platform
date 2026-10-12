@@ -47,12 +47,17 @@ export class SalesSignatureAdapter {
  // Exactly one POST. The caller must persist reservation before reaching this method.
  async dispatch(c:SignatureClaim){
   const token=this.assertEnabled(),op=signatureOperation(c);
+  let reason:'HTTP'|'NETWORK'|'TIMEOUT'|'FORMAT'='NETWORK',httpStatus:number|null=null;
   try{
    const response=await fetch(CLICKSIGN_SANDBOX_API+op.path,{method:'POST',headers:{Authorization:token,Accept:'application/vnd.api+json','Content-Type':'application/vnd.api+json'},body:JSON.stringify(op.body),redirect:'error',signal:AbortSignal.timeout(10000)});
-   if(response.status!==201||!response.body)throw new Error('Unexpected HTTP');
+   if(response.status!==201){reason='HTTP';httpStatus=response.status;throw new Error('Unexpected HTTP');}
+   reason='FORMAT';if(!response.body)throw new Error('Missing body');
    const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
    try{for(;;){const r=await reader.read();if(r.done)break;size+=r.value.length;if(size>131072)throw new Error('Response too large');chunks.push(r.value);}}finally{await reader.cancel();}
    return signatureOperationResult(c,JSON.parse(Buffer.concat(chunks).toString('utf8')));
-  }catch{throw new ServiceUnavailableException('Resultado Clicksign incerto; criação bloqueada para reconferência, sem reenvio automático.');}
+  }catch(e){if(e instanceof Error&&['TimeoutError','AbortError'].includes(e.name)){reason='TIMEOUT';httpStatus=null;}throw new SignatureDispatchFailure(reason,httpStatus);}
  }
+}
+export class SignatureDispatchFailure extends ServiceUnavailableException {
+ constructor(readonly diagnosticReason:'HTTP'|'NETWORK'|'TIMEOUT'|'FORMAT',readonly diagnosticHttpStatus:number|null){super('Resultado Clicksign incerto; criação bloqueada para reconferência, sem reenvio automático.');}
 }
