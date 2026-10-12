@@ -56,7 +56,7 @@ function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return {
  assert.equal(document.querySelector('[role=dialog]'),null,'a late detail must not reopen after refresh');
  const pendingCase=deferred();
  const ticket={id:'case-one',revision:1,status:'OPEN',title:'Assigned case',organizationName:'Organization A',requesterName:'Requester',assigneeName:'Support',deadline:'2026-10-20',priority:'NORMAL',history:[]};
- request=async(url)=>url.includes('?id=')?pendingCase.promise:{rows:[ticket],total:1,profile:'SUPPORT',supportMembers:[],organizations:[]};
+ request=async(url)=>url.endsWith('/case-one')?pendingCase.promise:{rows:[ticket],total:1,profile:'SUPPORT',supportMembers:[],organizations:[]};
  await render(require('../app/backoffice/platform-workflows/Workspace.tsx').default,{kind:'support'});
  await click('Conferir');
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));

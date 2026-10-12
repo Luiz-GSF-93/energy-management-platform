@@ -1,4 +1,5 @@
 import {SalesIntakeModule} from './modules/sales-intake/sales-intake.module';
+import {PlatformAdministrationModule} from './modules/platform-administration/platform-administration.module';
 import {PlatformTeamModule} from './modules/platform-team/platform-team.module';
 import {PlatformWorkflowsModule} from './modules/platform-workflows/platform-workflows.module';
 import {PortalLicenseModule} from './modules/client-portal-licenses/portal-license.module';
@@ -43,6 +44,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
+    PlatformAdministrationModule,
     PlatformTeamModule,
     SalesIntakeModule,
     PlatformWorkflowsModule,
