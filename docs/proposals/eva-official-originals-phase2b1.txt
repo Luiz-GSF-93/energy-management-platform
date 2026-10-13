@@ -1,0 +1,77 @@
+EVA — FASE 2B1: PRESERVAÇÃO DE DOCUMENTOS ORIGINAIS
+Avaliação e proposta de 13/10/2026. Somente leitura e planejamento; nenhuma implementação ou configuração externa executada.
+
+OBJETIVO E RECORTE
+Preparar o recebimento privado e a preservação de originais oficiais vinculados ao cadastro 2A. Não chamar um upload de conhecimento revisado. A 2B será composta de preservação (este incremento) e extração/revisão documental (incremento seguinte), antes da busca 2C e das respostas 2D.
+A referência ANEEL está confirmada com duas versões e seis eventos. Os oito guias publicados continuam disponíveis. Não converter as quatro versões legadas DRAFT em normas elegíveis.
+
+ARQUITETURA E INTEGRAÇÃO
+Acrescentar Documentos originais ao Conhecimento EVA existente: filtros, paginação limitada, detalhes em modal, histórico e prévia de elegibilidade para armazenamento. Reutilizar o padrão visual, autenticação global e conferência Owner já existentes.
+Backend recebe o arquivo pelo fluxo privado; navegador não recebe credencial Azure ou permissão direta de gravação no contêiner. Fonte, revisão cadastral e hash esperado serão reconferidos no servidor antes da reserva e da conclusão.
+Conector específico para Azure Blob Storage, com endpoint e contêiner fixados pela configuração do backend. Não aceitar endpoint, contêiner, caminho arbitrário ou SAS enviados pelo formulário. O conector terá interface substituível por armazenamento simulado nos testes.
+O backend Railway é externo ao Azure: não presumir disponibilidade de identidade gerenciada. Preparar autorização Entra ID com identidade de aplicação restrita ao contêiner; a definição de federação ou credencial, concessão de acesso e configuração real ficam para proposta de infraestrutura. Não reutilizar chaves de OpenAI/OCR.
+Não há transação atômica entre PostgreSQL e Blob: usar reserva persistida, objeto com identificador exclusivo, escrita condicional sem sobrescrita e confirmação posterior. Falha incerta não produzirá reenvio automático; reconferência do objeto e integridade terá estado e histórico próprios.
+Inventário de leitura do checkout canônico: nenhum pacote Azure listado nas dependências backend, nenhum arquivo de conector Blob/Storage encontrado por nome, padrão ocr-queue.service existente. A fila OCR de clientes não será compartilhada com o corpus oficial neste incremento.
+
+FLUXO
+1 Owner escolhe fonte confirmada e preenche título, identificação da edição, URL documental declarada, datas de publicação/vigência quando conhecidas e justificativa de procedência.
+2 Preparar revisão documental DRAFT. Datas desconhecidas permanecem explicitamente pendentes; nenhuma data é inferida do nome do arquivo ou da data do upload.
+3 Validar PDF proposto de até 25 MiB: limite antes da alocação integral, assinatura/formato real, rejeição de arquivos vazios, ilegíveis ou protegidos por senha e nome seguro. Limite é proposta operacional, não capacidade máxima do Azure.
+4 Calcular SHA-256 no servidor; reservar tentativa com versão esperada, autoria e chave de idempotência. Repetição não cria duplicação ou substitui versão existente.
+5 Quando o armazenamento estiver especificamente habilitado, preservar o original no contêiner privado, sem sobrescrever. Reconferir bytes e hash antes de declarar original preservado; metadado remoto isolado não comprova integridade.
+6 Registrar resultado e evidência privada. Arquivo permanece não elegível para busca/resposta até extração e revisão normativa posteriores. Arquivos são conteúdo não confiável: não executar scripts, seguir instruções embutidas ou renderizar PDF ativo automaticamente.
+7 Falha/timeout/objeto divergente bloqueiam conclusão. Histórico anterior permanece. Recuperação será reconferência controlada, sem exclusão automática ou sucesso presumido.
+O primeiro incremento usa upload manual do Owner. Download automático de sites, redirects, DNS e crawler ficam fora: a validação cadastral de URL não é proteção suficiente para um downloader.
+
+MODELO DE DADOS PROPOSTO
+Quatro tabelas aditivas privadas, a confirmar contra o catálogo vivo antes da migração:
+eva_official_documents: identidade documental e vínculo com fonte;
+eva_official_document_revisions: metadados versionados, procedência, datas, hash/tamanho e referência privada do original;
+eva_official_storage_operations: reservas/tentativas e estados de confirmação/reconferência;
+eva_official_document_events: histórico imutável de comandos e resultados.
+Separar estado documental DRAFT de estado de armazenamento (preparado, reservado, preservado, falho ou resultado incerto). Não acrescentar estado PUBLISHED/REVIEWED funcional neste incremento.
+PDF e credenciais não serão gravados nas tabelas de eventos nem nos logs. Eventos preservam identificadores e diagnósticos sanitizados. Referência do objeto não é URL pública.
+RPCs privadas, RLS forçada, autor derivado da sessão, parâmetros limitados, controle de concorrência e idempotência. A aplicação faz as operações externas; RPC não chama Azure.
+
+PERMISSÕES
+Comandos e leitura global dos originais limitados aos Owners existentes. Não conceder novos perfis ou curadores. Financeiro, Suporte, administrador da organização, operador e Portal não recebem essa nova gestão.
+Revisão especializada e separação entre autor e revisor serão implementadas na fase documental seguinte; não simular segundo revisor nem permitir autoaprovação normativa por ausência de curador.
+Licenças, cotas e bot_energy_rag permanecem compatíveis. Conversas EVA não executam comandos de ingestão.
+
+DEPENDÊNCIAS E MIGRAÇÃO
+Avaliar SDKs oficiais @azure/storage-blob e @azure/identity com versões compatíveis e fixadas no lockfile, mantendo os conectores atuais. Não atualizar dependências não relacionadas.
+Migração somente aditiva, sem aplicar o SQL genérico da Fase 0. Testar em PostgreSQL descartável, auditar dados/funções/ACL/RLS existentes, executar dry-run com rollback e só depois aplicar a migração específica revisada.
+Nenhum processamento de arquivo de cliente será redirecionado para a biblioteca global. Não alterar tabelas bot_energy_knowledge_versions/chunks nem o leitor publicado.
+
+ENTREGA E TESTES
+Entregar a gestão documental e as chamadas de armazenamento com flags separadas, ambas ausentes/desligadas por padrão. Desligar chamada externa deve impedir PUT/GET/HEAD Azure antes de iniciar a tentativa, mantendo consulta privada conforme configuração própria.
+Testar acesso indevido, falsificação de autoria/contexto, fonte suspensa ou revisão alterada, upload fora do limite/formato inválido, duplicação, concorrência, hash divergente, timeout, resultado incerto, objeto já existente e reconferência sem reenvio automático. Provar preservação de histórico e ausência de publicação normativa.
+Usar PDF sintético e Blob simulado durante implementação. Não transmitir norma, documento de cliente ou arquivo real ao Azure.
+Build backend/frontend, testes SQL, componentes de interface com listagem/modal/histórico e regressão dos guias/fontes. Homologação externa posterior terá arquivo, conta, contêiner e permissões explicitamente definidos.
+
+INFRAESTRUTURA E CUSTOS — FORA DA EXECUÇÃO DESTA PROPOSTA
+Preparação de código com testes simulados não provisiona Azure nem gera chamadas pagas aos novos serviços. Continua utilizando o backend e banco existentes.
+Antes de configurar Blob real: atualizar inventário Azure, escolher assinatura/grupo/região, validar acesso do Railway, identidade e rede, capacidade, redundância, recuperação/retencão e orçamento. Contêiner privado não equivale a endpoint de rede privado; ambos serão avaliados separadamente.
+Bloquear acesso anônimo, exigir HTTPS e limitar a identidade ao escopo necessário. Não prometer identidade gerenciada para Railway sem suporte comprovado.
+Orçamento depende de GB ativos, versões/recuperação, operações, saída de dados, monitoramento e opções de segurança/rede. Não usar preços ilustrativos da documentação como preço real e não estabelecer retenção destrutiva automática nesta aprovação.
+Esta etapa não contrata Azure AI Search, recursos Foundry ou novo deployment OpenAI. Extração por Document Intelligence, embeddings e geração continuam fora desta implementação.
+
+RISCOS E CRITÉRIOS DE ACEITE
+Original incorreto ou não oficial: procedência declarada não implica autenticidade; manter DRAFT e exigir revisão posterior.
+Arquivo malicioso: processamento isolado e sem execução; nenhuma extração automática ou publicação nesta fase.
+Falha entre DB e Blob: operações persistidas, bloqueio e recuperação por reconferência; nenhum sucesso fictício.
+Fonte modificada durante envio: travar referência e reconferir estado/hash antes da conclusão.
+Vazamento de corpus privado: somente originais oficiais, acesso Owner e armazenamento privado; não misturar dados de organizações.
+Custos sem controle: chamadas e recursos não serão ativados pela entrega técnica; orçamento antes da infraestrutura.
+
+AUTORIZAÇÃO SOLICITADA
+Aprovar implementação técnica 2B1 com quatro tabelas privadas propostas, interface de originais, conector Blob, testes e migração aditiva auditada, entregue desligada. Não autoriza criar recursos/identidades Azure, configurar credenciais, conceder acesso, habilitar chamadas externas, importar norma real ou publicá-la para RAG.
+Motivo da validação: seção 48 do prompt mestre exige apresentar arquitetura/modelo/permissões/migração/testes/riscos antes do código e determina Não avance automaticamente para a próxima fase. A autorização de homologação 2A não abrangia essas novas tabelas nem o conector de arquivos.
+
+REFERÊNCIAS MICROSOFT CONSULTADAS
+https://learn.microsoft.com/en-us/azure/storage/blobs/security-recommendations
+https://learn.microsoft.com/en-us/azure/storage/common/authorize-data-access
+https://learn.microsoft.com/en-us/azure/storage/blobs/blob-storage-estimate-costs
+As recomendações de segurança e componentes de custo foram usadas para esta proposta. Não constituem cotação de infraestrutura ou comprovação de recursos já existentes na assinatura.
+
+IMPLEMENTAÇÃO: SDK Blob 12.34.0, Identity 4.13.3, pdf-lib 1.17.1. Validação PDF isolada em worker, 25 MiB, 1.000 páginas, timeout 5 s. Operações Blob limitadas por abortSignal 20 s e uma tentativa de transporte; reconferência privada após 60 s. Contêiner com acesso público é bloqueado antes do envio. Flags: EVA_OFFICIAL_DOCUMENTS_ENABLED e EVA_OFFICIAL_BLOB_CALLS_ENABLED, ambas ausentes/desligadas na entrega. SDK não cria conta/contêiner ou concede acesso.
