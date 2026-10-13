@@ -1,0 +1,18 @@
+{
+  "backendTests": 197,
+  "backendSuites": 5,
+  "officialSourceSqlChecks": 89,
+  "guideSqlChecks": 70,
+  "domChecks": [
+    "sources",
+    "guide-publications"
+  ],
+  "builds": [
+    "NestJS",
+    "Next production/types"
+  ],
+  "deliveryFlag": "EVA_OFFICIAL_SOURCE_REGISTRY_ENABLED absent/false",
+  "externalProviderCalls": 0,
+  "productionSourceRowsCreated": 0,
+  "syntheticVisualReviewed": true
+}

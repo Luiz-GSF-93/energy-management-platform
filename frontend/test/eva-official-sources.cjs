@@ -1,0 +1,28 @@
+// Real components with synthetic metadata only; no network, account or database calls.
+const fs=require('node:fs'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLTextAreaElement','Event','MouseEvent','FormData'])global[k]=dom.window[k];
+global.IS_REACT_ACT_ENVIRONMENT=true;dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false};
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+let api;const original=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:(...x)=>api(...x)};if(n==='@/app/components/ui')return Object.assign({},...['Button','Card','Input','Alert'].map(x=>require('../app/components/ui/'+x+'.tsx')));return original.call(this,n,p,m)};
+const Sources=require('../app/backoffice/eva-knowledge/OfficialSources.tsx').default,root=createRoot(document.getElementById('root'));
+const id='00000000-0000-4000-8000-000000000001',hash='a'.repeat(64),metadata={title:'Synthetic source',authority:'ANEEL',family:'PRORET',url:'https://www.gov.br/aneel/pt-br',markets:['COMMON'],scopeNote:'Declared source only.',cadenceDays:30};
+const detail={id,state:'DRAFT',metadata,version:1,revisionHash:hash,eventId:id,historyPage:0,historyTotal:11,history:[{id,action:'create',state:'DRAFT',actor_id:id,revision_id:id,created_at:'2026-10-13T00:00:00Z',justification:'Synthetic metadata registration.'}]};
+const click=async name=>act(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent===name);assert.ok(b,name);b.click()});
+const field=label=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(label));return l?.querySelector('input,textarea,select')??document.getElementById(l?.htmlFor)};
+const fill=async(label,value)=>act(async()=>{const el=field(label);assert.ok(el,label);Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value').set.call(el,value);el.dispatchEvent(new dom.window.Event(el.tagName==='SELECT'?'change':'input',{bubbles:true}))});
+const submit=async()=>act(async()=>document.querySelector('dialog form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+(async()=>{try{
+ const calls=[];let fail=false;api=async(p,o)=>{calls.push([p,o]);if(o?.method==='POST'){if(fail)throw Error('Unconfirmed synthetic attempt');return {state:'DRAFT'}}return p.includes('/'+id)?detail:{rows:[{id,title:metadata.title,authority:'ANEEL',family:'PRORET',state:'DRAFT',version:1}],total:12,page:0,pageSize:10}};
+ await act(async()=>root.render(React.createElement(Sources)));assert.ok(document.body.textContent.includes('não significa documento revisado'));fs.writeFileSync('/tmp/eva-official-sources-preview-list.html',document.getElementById('root').innerHTML);
+ await click('Próximas fontes');assert.ok(calls.at(-1)[0].includes('page=1'));await click('Fontes anteriores');
+ await click('Detalhes da fonte');assert.ok(document.querySelector('dialog').open);assert.ok(document.body.textContent.includes(hash));await click('Próximo histórico');assert.ok(calls.at(-1)[0].includes('page=1'));await click('Histórico anterior');
+ await fill('Justificativa do cadastro','Synthetic justification preserving original metadata.');await act(async()=>[...document.querySelectorAll('dialog input[type="checkbox"]')].at(-1).click());
+ await fill('Operação cadastral','confirm');await submit();const decision=calls.filter(x=>x[1]?.method==='POST').at(-1);assert.ok(decision[0].endsWith('/confirm'));assert.equal(decision[1].body.expectedEventId,id);assert.equal(decision[1].body.expectedRevisionHash,hash);assert.ok(!('metadata' in decision[1].body));
+ await click('Cadastrar fonte');await submit();assert.equal(calls.filter(x=>x[1]?.method==='POST').length,1);
+ await fill('Título da fonte','Synthetic new source');await fill('URL de origem declarada','https://www.gov.br/aneel/pt-br');await fill('Justificativa do cadastro','Synthetic new declared origin, not a reviewed document.');await act(async()=>[...document.querySelectorAll('dialog input[type="checkbox"]')].at(-1).click());
+ fs.writeFileSync('/tmp/eva-official-sources-preview-modal.html',document.getElementById('root').innerHTML);fail=true;await submit();assert.ok(document.body.textContent.includes('Unconfirmed synthetic attempt'));const attempt=calls.filter(x=>x[1]?.method==='POST').at(-1)[1].body;
+ await click('Fechar');assert.ok(document.querySelector('dialog'));await submit();assert.deepEqual(calls.filter(x=>x[1]?.method==='POST').at(-1)[1].body,attempt);
+ await fill('Justificativa do cadastro','Different justification cannot overwrite an unknown attempt.');const before=calls.filter(x=>x[1]?.method==='POST').length;await submit();assert.equal(calls.filter(x=>x[1]?.method==='POST').length,before);
+ await fill('Justificativa do cadastro',attempt.justification);fail=false;await submit();assert.equal(document.querySelector('dialog'),null);
+ await act(async()=>root.unmount());console.log('PASS: official sources pagination, modal/history, version binding, metadata-only decisions and uncertain-request recovery');
+ }catch(e){console.error(e);process.exitCode=1}})();
