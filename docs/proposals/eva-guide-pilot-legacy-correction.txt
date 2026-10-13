@@ -1,0 +1,7 @@
+EVA: correção isolada de listagem e piloto legado
+
+Quando um guia era publicado, o detalhe e o histórico mostravam a publicação, mas a lista permanecia em rascunho. A consulta PL/pgSQL utilizava aliases que colidiam com registros locais sob variable_conflict use_variable. A migração compatível substitui somente esses aliases, sem reescrever publicações, eventos, autorizações ou assinaturas de RPC.
+
+O piloto aceita explicitamente org_default, usado por uma organização legada, além dos UUID válidos já permitidos. Inclusão exata na configuração, vínculo autenticado, perfil, permissões e licença continuam obrigatórios. Identificadores arbitrários e curingas permanecem bloqueados.
+
+Validação: 138 testes em quatro suítes do backend; 70 verificações SQL em PostgreSQL descartável; build NestJS aprovado. O teste SQL reproduz a falha anterior e verifica publicação, quarentena, histórico, idempotência e oito registros após a migração. Nenhuma chamada paga de IA ou alteração de licença.

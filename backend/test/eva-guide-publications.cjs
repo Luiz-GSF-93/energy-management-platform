@@ -22,6 +22,13 @@ let checks=0;const ok=v=>{assert.ok(v);checks++},id=n=>`00000000-0000-4000-8000-
  await db.query('UPDATE platform_team_members SET profile=\'OWNER\' WHERE user_id=$1',[id(1)]);
  const hash='a'.repeat(64),body={requestId:id(20),expectedEventId:null,expectedDocumentHash:hash,justification:'Synthetic Owner review of the guide version.',key:'guide-client-units',version:'1',release:'energyos-product-guides-v1',documentHash:hash,contentHash:'b'.repeat(64),snapshot:{key:'guide-client-units',content:{title:'Synthetic'},roles:['admin_org'],permissions:[],modules:[],codeSnapshots:[]}};
  ok((await call(id(1),'list',{})).length===0);ok((await call(id(1),'publish',body)).state==='PUBLISHED');ok((await call(id(1),'publish',body)).replayed===true);
+ // Reproduce the deployed legacy alias collision before applying the compatible fix.
+ ok((await call(id(1),'list',{})).length===0);
+ const before=(await db.query('SELECT to_jsonb(p) AS data FROM eva_product_guide_publications p')).rows;
+ await db.exec(fs.readFileSync(path.resolve(__dirname,'../src/database/migrations/20261023_eva_product_guide_list_aliases.sql'),'utf8'));
+ assert.deepEqual((await db.query('SELECT to_jsonb(p) AS data FROM eva_product_guide_publications p')).rows,before);checks++;
+ const listed=await call(id(1),'list',{});ok(listed.length===1);ok(listed[0].guide_key===body.key&&listed[0].version==='1'&&listed[0].state==='PUBLISHED');
+ ok(listed[0].event_id===body.requestId&&listed[0].actor_id===id(1));
  await deny(()=>call(id(1),'publish',{...body,justification:'A different justification conflicts with prior input.'}),'23505');
  const read=()=>db.query('SELECT eva_product_guide_read_publication($1,$2,$3) AS data',[body.key,body.version,hash]).then(r=>r.rows[0].data);
  ok((await read()).actor_id===id(1));ok((await call(id(1),'detail',{key:body.key,version:'1',page:0})).historyTotal===1);
@@ -35,5 +42,9 @@ let checks=0;const ok=v=>{assert.ok(v);checks++},id=n=>`00000000-0000-4000-8000-
  await deny(()=>call(id(1),'publish',{...body,requestId:id(25),expectedEventId:id(23)}),'23505');
  await db.query('UPDATE platform_team_members SET active=false WHERE user_id=$1',[id(1)]);await deny(()=>call(id(1),'list',{}),'42501');await db.query('UPDATE platform_team_members SET active=true WHERE user_id=$1',[id(1)]);
  for(const patch of [{key:'unknown'},{justification:'short'},{expectedDocumentHash:'c'.repeat(64)},{requestId:12},{actorId:id(2)}])await deny(()=>call(id(1),'publish',{...body,...patch,requestId:typeof patch.requestId==='number'?12:id(30)}),'22023');
+ const keys=['guide-documents','guide-ocr','guide-investments','guide-reports','guide-portal','guide-environment','guide-eva'];
+ for(let n=0;n<keys.length;n++)await call(id(1),'publish',{...body,key:keys[n],requestId:id(100+n),snapshot:{...body.snapshot,key:keys[n]}});
+ const all=await call(id(1),'list',{});ok(all.length===8);ok(new Set(all.map(r=>r.guide_key)).size===8);ok(all.filter(r=>r.state==='PUBLISHED').length===7);ok(all.find(r=>r.guide_key===body.key).state==='QUARANTINED');
+ ok((await call(id(1),'detail',{key:body.key,version:'1',page:0})).historyTotal===2);
  console.log(JSON.stringify({checks,result:'PASS',tables:2,productionCalls:0}));
  }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
