@@ -20,7 +20,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]
 const MODULES=['bot_energy_rag','document_management','free_market_management','advanced_analytics','report_generation','client_portal'] as const;
 export function productGuidePilotConfig(env:NodeJS.ProcessEnv):ProductGuidePilot {
  const organizations=(env.EVA_PRODUCT_GUIDES_ORGANIZATIONS??'').split(',').map(x=>x.trim()).filter(Boolean);
- return {enabled:env.EVA_PRODUCT_GUIDES_ENABLED==='true',organizations:organizations.every(x=>UUID.test(x))?[...new Set(organizations)]:[]};
+ return {enabled:env.EVA_PRODUCT_GUIDES_ENABLED==='true',organizations:organizations.every(x=>x==='org_default'||UUID.test(x))?[...new Set(organizations)]:[]};
 }
 
 @Injectable()
