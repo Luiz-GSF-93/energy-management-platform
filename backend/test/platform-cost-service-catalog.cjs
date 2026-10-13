@@ -1,0 +1,46 @@
+// Disposable PostgreSQL; uses real authorization helpers, no application credentials.
+const {PGlite}=require('@electric-sql/pglite'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+let checks=0;const ok=v=>{assert.ok(v);checks++},id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+(async()=>{const db=new PGlite();try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE roles(id uuid,scope text,name text,organization_id text,permissions jsonb);CREATE TABLE user_roles(user_id uuid,role_id uuid);CREATE TABLE platform_team_members(user_id uuid,profile text,active boolean,first_name text,last_name text);CREATE TABLE user_profiles(user_id uuid,name text);
+ CREATE TABLE platform_infrastructure_costs(id uuid PRIMARY KEY,month date,provider text,service text,category text,organization_id text,amount_minor bigint,currency text,basis text,source text);
+ INSERT INTO roles VALUES('${id(11)}','global','admin_platform','${id(9)}','["82e7fc71-479a-4dd6-8b22-4fba6eaa6841","e23a5c98-8b68-4ed2-aef8-70a7166407e4","af285642-16b0-405a-982c-58de1a10f987"]'),('${id(12)}','global','platform_finance','${id(9)}','["699703af-10ba-43a3-8eb8-9f0d9e477498"]');
+ INSERT INTO user_roles VALUES('${id(1)}','${id(11)}'),('${id(2)}','${id(12)}');INSERT INTO platform_team_members VALUES('${id(1)}','OWNER',true,'Test','Owner'),('${id(2)}','FINANCE',true,'Test','Finance');INSERT INTO user_profiles VALUES('${id(1)}','Owner'),('${id(2)}','Finance');
+ INSERT INTO platform_infrastructure_costs VALUES('${id(501)}','2026-10-01','Azure','Synthetic Blob','STORAGE',NULL,249,'BRL','ESTIMATE','Synthetic calculator'),('${id(502)}','2026-10-01','Azure','Synthetic Blob','STORAGE',NULL,300,'BRL','INVOICE','Synthetic invoice'),('${id(503)}','2026-11-01','Azure','Synthetic Blob','STORAGE',NULL,400,'BRL','INVOICE','Next month'),('${id(504)}','2026-10-01','Provider','Synthetic API','OTHER',NULL,1000,'USD','INVOICE','Synthetic API invoice');`);
+ const root=path.resolve(__dirname,'../src/database/migrations');
+ const extract=(file,name)=>{const s=fs.readFileSync(root+'/'+file,'utf8'),b=s.indexOf('CREATE OR REPLACE FUNCTION public.'+name+'('),delimiter=s.indexOf('$$',b),end=s.indexOf('$$;',delimiter+2);assert.ok(b>=0&&end>delimiter);return s.slice(b,end+3)};
+ await db.exec(extract('20261010_platform_team.sql','platform_team_owner'));
+ for(const n of ['platform_workflow_actor','platform_workflow_name'])await db.exec(extract('20261010_platform_workflows.sql',n));
+ await db.exec(fs.readFileSync(root+'/20261026_platform_cost_service_catalog.sql','utf8'));
+ const call=(actor,action,key,body)=>db.query('SELECT platform_cost_service_action($1,$2,$3,$4) AS data',[actor,action,key,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const deny=async(fn,code)=>{let e;try{await fn()}catch(x){e=x}assert.equal(e?.code,code,e?.message);checks++};
+ const filters={page:0,month:'2026-10',search:'',provider:'',category:'',environment:'',state:'',costSource:''};
+ const definition={code:'synthetic-blob',name:'Synthetic Blob',provider:'Azure',category:'STORAGE',environment:'SANDBOX',state:'ACTIVE',costSource:'MANUAL_ESTIMATE',resourceReference:'Synthetic test only',sourceUrl:'https://example.test/costs',notes:'Synthetic metadata, no provider calls or resource changes.',checkedOn:'2026-10-13',budgetMinor:5000,budgetCurrency:'BRL',expenseIds:[id(501)]};
+ const command=(n,expected=null,d=definition)=>({requestId:id(n),expectedRevisionId:expected,justification:'Synthetic Owner review of cost source and selection.',definition:d});
+ const tables=['platform_cost_service_revisions','platform_cost_service_events'];
+ for(const t of tables){const r=(await db.query('SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[t])).rows[0];ok(r.relrowsecurity&&r.relforcerowsecurity);for(const role of ['anon','authenticated','service_role'])for(const priv of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) AS p',[role,t,priv])).rows[0].p)}
+ for(const role of ['anon','authenticated'])ok(!(await db.query('SELECT has_function_privilege($1,\'platform_cost_service_action(uuid,text,uuid,jsonb)\',\'EXECUTE\') AS p',[role])).rows[0].p);
+ await deny(()=>call(null,'list',null,filters),'42501');await deny(()=>call(id(2),'create',null,command(20)),'42501');
+ for(const profile of ['ADMINISTRATOR','SUPPORT']){await db.query('UPDATE platform_team_members SET profile=$1 WHERE user_id=$2',[profile,id(1)]);await deny(()=>call(id(1),'list',null,filters),'42501')};await db.query("UPDATE platform_team_members SET profile='OWNER' WHERE user_id=$1",[id(1)]);
+ ok((await call(id(1),'create',null,command(20))).version===1);ok((await call(id(1),'create',null,command(20))).replayed);await deny(()=>call(id(1),'create',null,{...command(20),justification:'Conflicting input for same immutable request.'}),'23505');
+ let d=await call(id(2),'detail',id(20),{page:0,month:'2026-10'});ok(!d.canManage&&d.version===1&&d.expenses.length===1&&d.history[0].actorName==='Test Owner');
+ let list=await call(id(2),'list',null,filters);ok(list.total===1&&list.subtotals[0].amount_minor==='249'&&list.rows[0].definition.budgetMinor===5000);ok(list.subtotals[0].basis==='ESTIMATE');
+ for(const patch of [{actorId:id(2)},{definition:{...definition,extra:true}},{definition:{...definition,expenseIds:[id(501),id(502)]}},{definition:{...definition,expenseIds:[id(999)]}},{definition:{...definition,expenseIds:[id(501),id(501)]}},{definition:{...definition,sourceUrl:'https://example.test/?token=secret'}},{definition:{...definition,checkedOn:'2026-02-29'}},{definition:{...definition,budgetMinor:null}},{definition:{...definition,budgetMinor:-1}}])await deny(()=>call(id(1),'create',null,{...command(30),...patch}),'22023');
+ await deny(()=>call(id(1),'create',null,command(30,null,{...definition,code:'duplicate-ledger'})),'23505');
+ await deny(()=>call(id(1),'revise',id(20),command(31,id(99))),'23505');await deny(()=>call(id(1),'revise',id(20),command(31,id(20),{...definition,code:'changed-code'})),'22023');
+ const updated={...definition,expenseIds:[id(502),id(503)],costSource:'PROVIDER_INVOICE'};
+ const competition=await Promise.allSettled([call(id(1),'revise',id(20),command(32,id(20),updated)),call(id(1),'revise',id(20),command(33,id(20),updated))]);ok(competition.filter(x=>x.status==='fulfilled').length===1);ok(competition.filter(x=>x.status==='rejected'&&x.reason.code==='23505').length===1);
+ d=await call(id(1),'detail',id(20),{page:0,month:'2026-10'});ok(d.version===2&&d.historyTotal===2&&d.history.find(h=>h.version===1).definition.expenseIds[0]===id(501));list=await call(id(1),'list',null,filters);ok(list.subtotals[0].amount_minor==='300'&&list.subtotals[0].basis==='INVOICE');ok((await call(id(1),'list',null,{...filters,month:'2026-11'})).subtotals[0].amount_minor==='400');
+ await call(id(1),'create',null,command(40,null,{...definition,code:'synthetic-usd',name:'Synthetic API',expenseIds:[id(504)],budgetMinor:null,budgetCurrency:null}));
+ for(let n=100;n<126;n++)await call(id(1),'create',null,command(n,null,{...definition,code:'service-'+n,name:'Service '+n,expenseIds:[],state:'PLANNED',budgetMinor:null,budgetCurrency:null}));
+ list=await call(id(1),'list',null,filters);const second=await call(id(1),'list',null,{...filters,page:1});ok(list.rows.length===25&&list.total===28&&second.rows.length===3);ok(new Set([...list.rows,...second.rows].map(x=>x.id)).size===28);ok(list.unpriced===26&&list.subtotals.length===2);ok(second.subtotals.find(s=>s.currency==='BRL').amount_minor==='300');
+ ok((await call(id(1),'list',null,{...filters,search:'%'})).total===0);ok((await call(id(1),'list',null,{...filters,state:'PLANNED'})).total===26);
+ for(const patch of [{page:-1},{page:1001},{month:'2200-01'},{category:'OWNER'},{actorId:id(2)}])await deny(()=>call(id(1),'list',null,{...filters,...patch}),'22023');
+ for(let n=200;n<212;n++){await call(id(1),'revise',id(20),command(n,d.revisionId,{...updated,notes:'Versioned source evidence '+n+' preserved privately.'}));d=await call(id(1),'detail',id(20),{page:0,month:'2026-10'})}const history2=await call(id(1),'detail',id(20),{page:1,month:'2026-10'});ok(d.historyTotal===14&&d.history.length===10&&history2.history.length===4);ok(new Set([...d.history,...history2.history].map(x=>x.id)).size===14);
+ await db.query("UPDATE platform_team_members SET first_name='Changed' WHERE user_id=$1",[id(1)]);ok((await call(id(1),'detail',id(20),{page:1,month:'2026-10'})).history[0].actorName==='Test Owner');
+ for(const t of tables)await deny(()=>db.query('DELETE FROM '+t),'42501');await deny(()=>db.query("UPDATE platform_cost_service_revisions SET definition='{}'"),'42501');
+ await db.query("UPDATE roles SET permissions='[]' WHERE id=$1",[id(12)]);await deny(()=>call(id(2),'list',null,filters),'42501');await db.query('UPDATE platform_team_members SET active=false WHERE user_id=$1',[id(1)]);await deny(()=>call(id(1),'list',null,filters),'42501');
+ ok((await db.query('SELECT count(*) AS n FROM platform_infrastructure_costs')).rows[0].n===4);
+ console.log(JSON.stringify({checks,result:'PASS',tables:2,externalCalls:0}));
+ }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

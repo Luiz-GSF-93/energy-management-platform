@@ -3,5 +3,7 @@ import {CommonModule} from '../../common/common.module';
 import {PlatformCostsService} from './platform-costs.service';
 import {PlatformCostsController} from './platform-costs.controller';
 import {PlatformCostsWorker} from './platform-costs.worker';
-@Module({imports:[CommonModule],providers:[PlatformCostsService,PlatformCostsWorker],controllers:[PlatformCostsController],exports:[PlatformCostsWorker,PlatformCostsService]})
+import {CostServiceCatalogService} from './service-catalog.service';
+import {CostServiceCatalogController} from './service-catalog.controller';
+@Module({imports:[CommonModule],providers:[CostServiceCatalogService,PlatformCostsService,PlatformCostsWorker],controllers:[CostServiceCatalogController,PlatformCostsController],exports:[PlatformCostsWorker,PlatformCostsService]})
 export class PlatformCostsModule {}
