@@ -1,0 +1,603 @@
+/** Inventory is not authorization or a declaration of tenant availability. No guide content is published. */
+export const MODULE_CATALOG_RELEASE="655b82103efd331ba940c0da7f1c1c5d3521eec8";
+export const MODULE_GUIDE_CATALOG = [
+  {
+    "key": "acl-admissions",
+    "title": "Adesão ACL",
+    "implementationState": "CONFIGURATION_REQUIRED",
+    "backendPath": "backend/src/modules/acl-admissions",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Etapas de adesão e evidências; integração externa depende de homologação.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "admin",
+    "title": "Administração e cadastros",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/admin",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Contexto autorizado, empresas, usuários e perfis.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "auth",
+    "title": "Identidade e segurança",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/auth",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Convites, login, MFA opcional e preferências; segredos excluídos do conhecimento.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "bot-reports",
+    "title": "EVA e RAG",
+    "implementationState": "CONFIGURATION_REQUIRED",
+    "backendPath": "backend/src/modules/bot-reports",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Resposta com evidências; não equivale a base curada completa.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "ccee",
+    "title": "CCEE",
+    "implementationState": "EXTERNAL_BLOCKER",
+    "backendPath": "backend/src/modules/ccee",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Homologação externa pendente; não declarar API plenamente homologada.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "client-portal-licenses",
+    "title": "Portal do cliente",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/client-portal-licenses",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Vínculos autorizados e resultados publicados; cota compartilhada.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "consumer-units",
+    "title": "Unidades consumidoras",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/consumer-units",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Cadastro e acesso dentro da carteira autorizada.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "contracts",
+    "title": "Contratos e investimentos",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/contracts",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Versões, tarifas e apuração determinística; não alterar pelo chat.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "customer-notices",
+    "title": "Informes aos clientes",
+    "implementationState": "CONFIGURATION_REQUIRED",
+    "backendPath": "backend/src/modules/customer-notices",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Canal, contexto, prazo e destinatário autorizado.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "customers",
+    "title": "Clientes",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/customers",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Cadastro com organização e vínculos de unidade.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "dashboard",
+    "title": "Dashboard",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/dashboard",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Indicadores dependem de evidências autorizadas.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "documents",
+    "title": "Documentos",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/documents",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Upload, classificação, evidência e limites contratados.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "energy-forecast",
+    "title": "Previsões",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/energy-forecast",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Estimativas versionadas; Portal somente após publicação.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "energy-map",
+    "title": "Mapa energético",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/energy-map",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Carteira e unidade autorizadas; disponibilidade conforme licença.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "energy-prices",
+    "title": "Preços de energia",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/energy-prices",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "ACR: TE ponderada; ACL: fornecedor; PLD por mês/submercado. R$/MWh.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "licenses",
+    "title": "Licenças",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/licenses",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Vigência, cotas e módulos sob governança do Owner.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "ocr",
+    "title": "Auditoria OCR",
+    "implementationState": "CONFIGURATION_REQUIRED",
+    "backendPath": "backend/src/modules/ocr",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Extração e divergências exigem revisão; não publicar automaticamente.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "operations",
+    "title": "Operação",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/operations",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Agenda, solicitações, eventos, prazos e notificações.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "plans",
+    "title": "Catálogo de planos",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/plans",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "EVA usa a chave comercial compatível bot_energy_rag.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "platform-administration",
+    "title": "Consultas da plataforma",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/platform-administration",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Filtros, paginação e detalhes conforme perfil.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "platform-costs",
+    "title": "Consumo e custos",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/platform-costs",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Escopo privado da plataforma; custos não são dados públicos.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "platform-team",
+    "title": "Equipe da plataforma",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/platform-team",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Owner, Administrador, Financeiro e Suporte; sem elevação pela EVA.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "platform-workflows",
+    "title": "Atendimento e conciliação",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/platform-workflows",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Atribuição e conferência segundo permissões específicas.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "reports",
+    "title": "Relatórios",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/reports",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Rascunho, validação e publicação são estados distintos.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "sales-intake",
+    "title": "Motor comercial e integrações",
+    "implementationState": "PARTIAL",
+    "backendPath": "backend/src/modules/sales-intake",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Asaas PIX pendente; Clicksign account.key e recuperação UNKNOWN pendentes; não liberar licença por inferência.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "sms-delivery",
+    "title": "Entrega SMS",
+    "implementationState": "CONFIGURATION_REQUIRED",
+    "backendPath": "backend/src/modules/sms-delivery",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Não é canal de MFA aprovado; serviço de comunicação depende de configuração.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "trading-hub",
+    "title": "Trading Hub",
+    "implementationState": "IMPLEMENTED",
+    "backendPath": "backend/src/modules/trading-hub",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Cotações e decisões explícitas; EVA não negocia nem aprova automaticamente.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "whatsapp-delivery",
+    "title": "Entrega WhatsApp",
+    "implementationState": "CONFIGURATION_REQUIRED",
+    "backendPath": "backend/src/modules/whatsapp-delivery",
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Modelos, eventos e custos; ajustes e credenciais exclusivos dos perfis autorizados.",
+    "guideRequirements": [
+      "screens",
+      "fields",
+      "workflow",
+      "permissions",
+      "license",
+      "errors",
+      "sources",
+      "syntheticExamples",
+      "evaluationCases"
+    ]
+  },
+  {
+    "key": "gd",
+    "title": "Gestão GD",
+    "implementationState": "PLANNED",
+    "backendPath": null,
+    "guideState": "DRAFT",
+    "reviewed": false,
+    "release": "655b82103efd331ba940c0da7f1c1c5d3521eec8",
+    "limitation": "Conhecimento regulatório não comprova existência do módulo operacional.",
+    "guideRequirements": []
+  }
+] as const;

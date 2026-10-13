@@ -1,0 +1,60 @@
+EVA — Fase 0: fundação preparada para revisão
+Base canônica: 655b82103efd331ba940c0da7f1c1c5d3521eec8
+Data de inventário: 12/10/2026
+
+ESCOPO DA ENTREGA
+Contratos puros para busca, armazenamento e ingestão; prévia de elegibilidade; catálogo de descoberta de fontes; inventário de módulos e guias em rascunho; matriz de governança; desenho SQL aditivo e testes isolados. Não há controller, provider, chamada de rede, registro em AppModule ou alteração do fluxo ativo da EVA. O SQL permanece em docs/proposals, fora do diretório automático de migrations, e não deve ser aplicado ao banco compartilhado nesta fase.
+
+INVENTÁRIO CONFIRMADO
+Código: 28 diretórios de módulos backend anteriores à fundação e 41 arquivos de páginas frontend rastreados no commit-base. O inventário separa situação de implementação de disponibilidade efetiva: licença, RBAC, configuração e evidências continuam obrigatórios. A presença de arquivos não comprova disponibilidade para uma organização. GD fica explicitamente planejado. Os arquivos eva-knowledge-phase0-inventory.json, eva-knowledge-phase0-routes.json e module-catalog.ts vinculam cada descritor ao commit-base; nenhum guia está revisado ou publicado.
+
+Inventários operacionais do banco e do Azure: concluídos somente por leitura e mantidos em relatório local privado. Metadados da instalação real, contagens do corpus, contas, recursos e capacidade não integram este PR público. Nenhum recurso, conteúdo ou configuração foi alterado. Provisionamento de novos serviços e escolha de regiões/capacidade dependem da etapa seguinte.
+
+FONTES E CONHECIMENTO
+Fontes de descoberta: ANEEL, PRORET, PRODIST, Planalto, CCEE, ONS, distribuidoras, produto, especialistas e dados operacionais autorizados. URLs são pontos de descoberta, não normas verificadas. Distribuidoras exigem registro específico; materiais internos não se tornam públicos por omissão. A classificação de URL não é downloader nem proteção SSRF completa. Qualquer futuro download exige validação de origem, DNS, redirecionamento, endereço privado, tamanho e tipo de arquivo.
+Os portais ANEEL/PRORET/PRODIST, CCEE e ONS foram conferidos como descoberta em 12/10/2026. Endereço, conteúdo e vigência efetivos de cada documento serão conferidos no momento da curadoria. Não houve download/importação para o RAG.
+https://www.gov.br/aneel/pt-br/centrais-de-conteudos/procedimentos-regulatorios/proret
+https://www.gov.br/aneel/pt-br/centrais-de-conteudos/procedimentos-regulatorios/prodist
+https://www.ccee.org.br/web/guest/mercado/regras-de-comercializacao
+https://www.ccee.org.br/web/guest/mercado/procedimentos-de-comercializacao
+https://www.ons.org.br/paginas/sobre-o-ons/procedimentos-de-rede/vigentes
+
+MATRIZ DE ACESSO PROPOSTA, SEM CONCESSÃO
+Usuário Backoffice: AI_USE, EVA licenciada e licença vigente; recurso privado exige organização correta, permissões e, para unidade, vínculo verificado pelo backend.
+Cliente Portal: os mesmos requisitos, com empresa/unidade vinculadas, público PORTAL e publicação. Rascunho, revisão sem publicação e manual interno são recusados.
+Plataforma: somente corpus explicitamente autorizado ao perfil (allowedPlatformProfiles, inclusive nos guias), nunca acesso implícito às unidades dos clientes.
+Owner: preparar/revisar/publicar e configurar índice global; administração continua explícita, sem comandos pelo texto da EVA.
+Administrador: preparar/revisar somente com delegação explícita e ativa do Owner; não publicar nem configurar índice.
+Financeiro: consulta de custos privados; não curadoria global.
+Suporte: consulta técnica permitida ao perfil e aos recursos autorizados; sem curadoria por atribuição automática.
+Curador da organização: preparar/revisar apenas sua organização mediante delegação explícita do Owner; não publicar globalmente.
+AI_MANAGE atual, sozinho, não concede nenhuma dessas novas capacidades. Essas regras são funções puras de prévia, sem endpoints e sem grant.
+
+VERSÕES E EVIDÊNCIAS
+Uma revisão deve conter origem, hash do documento e do conteúdo, seção/página, revisor, datas, público, escopo, permissões e módulos necessários. Vigência cobre todo o período perguntado; valid_to é exclusivo. Guias de produto exigem release correspondente. Uma pergunta atravessando mudança normativa requer seleção segmentada em fase posterior, não escolher uma versão incompatível silenciosamente.
+Scores COSINE, RRF e SEMANTIC_RERANK mantêm suas escalas; não reutilizar 0,72 de cosseno como limiar universal nem apresentar score como certeza jurídica.
+Contexto verified/unitBinding é produzido pelo backend autenticado e não pode vir do corpo da requisição. A prévia não substitui autorização de recursos, filtros obrigatórios no provedor nem reconferência após recuperar conteúdo. Nenhum adapter concreto é entregue nesta fase.
+
+SQL RASCUNHO
+Dez tabelas propostas: fontes, documentos, revisões, reviews, jobs, checkpoints, guias, casos, resultados e métricas. Escopo nunca tem default público. FKs, hashes, datas, unicidade de jobs, custo plataforma/organização separados e aprovação vinculada ao mesmo conteúdo. Reviews e revisões são append-only; publicação exige aprovação de revisor distinto do autor. RLS forçada, sem policies ou grants de runtime: acesso direto negado a anon/authenticated/service_role. As funções novas são prefixadas eva_phase0; nenhum objeto anterior é alterado.
+Quarentena/retirada precisa prevalecer sobre uma publicação antiga no futuro read model. Vínculo de guias exige release e público compatíveis; indexação exige escopo de custo correspondente ao documento. Na próxima implementação, acrescentar RPCs transacionais, referências ao cadastro efetivo de tenants, máquina de estados/lease, orçamento/reserva, retenção e autorização explícita. O rascunho não é uma migração pronta para ativação. A fundação atual não lê esse schema nem publica revisões.
+
+MODELO DE GUIA PARA A PRÓXIMA FASE
+Identificador da funcionalidade; release/commit; estado real; público; telas/rotas e backend de origem; perfis/permissões e módulos; pré-requisitos; campos e validações; fluxo de inclusão/revisão/publicação; APIs de leitura permitidas; erros e limitações; fontes e vigência; exemplos sintéticos; perguntas/recusas esperadas; autor/revisor/hash. Criar versões por público: um guia administrativo não será reutilizado no Portal.
+Publicação de feature deverá abrir revisão do guia correspondente; não gerar ou publicar aprendizado automaticamente a partir de chats, uploads ou alterações de código.
+
+HOMOLOGAÇÃO FUTURA
+Casos previstos: dúvida de cadastro, contrato, OCR, relatório publicado, previsão, mapa, Trading, PLD, regra histórica, ausência de fonte, documento conflitante, prompt malicioso em trecho, cliente de outra organização, unidade desvinculada e módulo desativado. Testar resposta e citação com evidência sintética esperada antes de conteúdo real.
+Medir separadamente autorização, busca, geração e validação; p50/p95 por tipo de pergunta e concorrência; tokens/custo por escopo. Fase 0 não mede velocidade do modelo nem prova qualidade do RAG em produção. Não há garantia de latência sem benchmark de ponta a ponta.
+
+PENDÊNCIAS PRESERVADAS
+As integrações CCEE, Asaas PIX e Clicksign possuem pendências de homologação externa registradas privadamente. Nenhuma chamada desses provedores foi executada nesta fase. Guias não poderão declarar essas integrações homologadas para produção.
+
+CRITÉRIOS PARA FASE 1
+Validar esta fundação e a matriz; definir curadores e responsáveis; conferir capacidade/região/modelos do Azure; apresentar custo e configuração de Search/Storage antes de criar; selecionar corpus público inicial e guias prioritários; rever SQL/RPCs com o cadastro vivo; testar revisão/publicação/quarentena e isolamento. Ativação real, permissões, importação, criação de infraestrutura e chamadas pagas terão seu incremento concreto e validação conforme o prompt mestre.
+
+VERIFICAÇÃO REPRODUZÍVEL
+No backend: node node_modules/jest/bin/jest.js src/modules/eva-knowledge-foundation/knowledge-policy.spec.ts --runInBand
+No backend: node test/eva-knowledge-phase0.cjs
+No backend: node node_modules/@nestjs/cli/bin/nest.js build
+Testes SQL usam PGlite descartável sem credenciais. O inventário do banco de produção é somente READ ONLY e não executa o arquivo SQL proposto.
