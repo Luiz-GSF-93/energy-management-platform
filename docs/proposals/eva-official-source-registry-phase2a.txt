@@ -1,0 +1,9 @@
+EVA — Fase 2A, cadastro versionado de origens oficiais
+
+Gestão exclusiva do Owner por RPC privada; origens declaradas não constituem documentos revisados ou normas publicadas. Três tabelas aditivas com RLS forçada, histórico imutável e decisões com versão esperada/idempotência.
+
+A implementação é entregue atrás de EVA_OFFICIAL_SOURCE_REGISTRY_ENABLED, ausente/desligada. Nenhuma habilitação cadastra fontes automaticamente. Sem downloads, arquivos, índice, geração/embeddings, migração do corpus legado, grants de usuários ou alteração do leitor dos oito guias.
+
+Estados: DRAFT, REGISTERED e SUSPENDED; confirmação cadastral não certifica autenticidade do documento ou vigência. Fontes DISTRIBUTOR permanecem em rascunho até a admissão específica. Suspensão vale para futura ingestão ligada ao novo cadastro; não modifica o corpus legado.
+
+Testar filtros/paginação/modal, autorização Owner, RLS/ACL, autoria, versões, concorrência, replay, falhas, fontes inválidas, corpus preservado e regressão dos guias. Migração depende da função imutável da Fase 1B e do helper platform_team_owner existente; não aplicar o SQL genérico da Fase 0.
