@@ -27,22 +27,24 @@ const actions={display:'flex',gap:8,flexWrap:'wrap' as const,marginTop:12};
 export default function OfficialSources(){
  const [filters,setFilters]=useState({search:'',authority:'',family:'',state:''}),[page,setPage]=useState(0),[refresh,setRefresh]=useState(0),[data,setData]=useState<Catalog|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [id,setId]=useState<string|null>(null),[open,setOpen]=useState(false),[detail,setDetail]=useState<Detail|null>(null),[historyPage,setHistoryPage]=useState(0),[metadata,setMetadata]=useState<Metadata>(empty),[action,setAction]=useState('create'),[justification,setJustification]=useState(''),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[detailError,setDetailError]=useState('');
+ const baseline=useRef<{eventId:string;revisionHash:string}|null>(null);
  const generation=useRef(0),initialized=useRef(false),attempt=useRef<{action:string;body:any}|null>(null);
  useEffect(()=>()=>{generation.current++},[]);
  useEffect(()=>{let active=true;setData(null);setError('');void apiRequest<Catalog>(prefix+'?'+new URLSearchParams({...filters,page:String(page)})).then(d=>{if(active)setData(d)}).catch(e=>{if(active)setError(e instanceof Error?e.message:'Cadastro indisponível.')});return()=>{active=false}},[filters,page,refresh]);
- useEffect(()=>{let active=true;setDetail(null);if(open&&id)void apiRequest<Detail>(prefix+'/'+id+'?page='+historyPage).then(d=>{if(!active)return;setDetail(d);if(!initialized.current){setMetadata(d.metadata);initialized.current=true}}).catch(e=>{if(active)setDetailError(e instanceof Error?e.message:'Fonte indisponível.')});return()=>{active=false}},[open,id,historyPage,refresh]);
- function show(source:string|null){generation.current++;attempt.current=null;initialized.current=false;setId(source);setDetail(null);setDetailError('');setAction(source?'update':'create');setMetadata(empty());setJustification('');setConfirmed(false);setHistoryPage(0);setOpen(true)}
+ useEffect(()=>{let active=true;setDetail(null);if(open&&id)void apiRequest<Detail>(prefix+'/'+id+'?page='+historyPage).then(d=>{if(!active)return;setDetail(d);if(!initialized.current){baseline.current={eventId:d.eventId,revisionHash:d.revisionHash};setMetadata(d.metadata);initialized.current=true}}).catch(e=>{if(active)setDetailError(e instanceof Error?e.message:'Fonte indisponível.')});return()=>{active=false}},[open,id,historyPage,refresh]);
+ function show(source:string|null){generation.current++;attempt.current=null;initialized.current=false;baseline.current=null;setId(source);setDetail(null);setDetailError('');setAction(source?'update':'create');setMetadata(empty());setJustification('');setConfirmed(false);setHistoryPage(0);setOpen(true)}
  function close(){if(busy)return;if(attempt.current){setDetailError('Há uma tentativa não confirmada. Reenvie os mesmos dados ou reconfira o estado antes de fechar.');return}generation.current++;setOpen(false)}
  async function recheck(){
   if(busy)return;const target=id??attempt.current?.body.requestId;if(!target)return;
   const token=generation.current;setBusy(true);setDetailError('');
-  try{const d=await apiRequest<Detail>(prefix+'/'+target+'?page=0');if(token!==generation.current)return;attempt.current=null;initialized.current=true;setId(d.id);setDetail(d);setMetadata(d.metadata);setAction('update');setHistoryPage(0);setConfirmed(false);setJustification('');setRefresh(x=>x+1)}
+  try{const d=await apiRequest<Detail>(prefix+'/'+target+'?page=0');if(token!==generation.current)return;attempt.current=null;initialized.current=true;baseline.current={eventId:d.eventId,revisionHash:d.revisionHash};setId(d.id);setDetail(d);setMetadata(d.metadata);setAction('update');setHistoryPage(0);setConfirmed(false);setJustification('');setRefresh(x=>x+1)}
   catch(e){if(token===generation.current)setDetailError(e instanceof Error?e.message:'Estado não confirmado. Preserve a tentativa.')}
   finally{if(token===generation.current)setBusy(false)}
  }
  async function command(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(busy||!confirmed||justification.trim().length<20||id&&!detail)return;
-  const body={requestId:attempt.current?.body.requestId??crypto.randomUUID(),expectedEventId:detail?.eventId??null,expectedRevisionHash:detail?.revisionHash??null,justification:justification.trim(),...(['create','update'].includes(action)?{metadata}:{})};
+  if(id&&(!baseline.current||detail?.eventId!==baseline.current.eventId||detail?.revisionHash!==baseline.current.revisionHash)){setDetailError('Fonte alterada durante a consulta. Reconfira o estado antes de registrar a decisão.');return}
+  const body={requestId:attempt.current?.body.requestId??crypto.randomUUID(),expectedEventId:baseline.current?.eventId??null,expectedRevisionHash:baseline.current?.revisionHash??null,justification:justification.trim(),...(['create','update'].includes(action)?{metadata}:{})};
   if(attempt.current&&(attempt.current.action!==action||JSON.stringify({...attempt.current.body,requestId:null})!==JSON.stringify({...body,requestId:null}))){setDetailError('Há uma tentativa não confirmada. Preserve seus dados e reconfira o estado antes de alterar.');return}
   attempt.current={action,body};const token=generation.current;setBusy(true);setDetailError('');
   try{const suffix=action==='create'?'':action==='update'?'/'+id+'/revisions':'/'+id+'/'+action;const result=await apiRequest<{state:string}>(prefix+suffix,{method:'POST',body});if(token!==generation.current)return;attempt.current=null;setNotice('Fonte registrada: '+(labels[result.state]??result.state));setOpen(false);setRefresh(x=>x+1)}
