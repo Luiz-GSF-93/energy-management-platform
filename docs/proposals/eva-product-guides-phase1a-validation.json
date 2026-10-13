@@ -1,0 +1,17 @@
+{
+  "backendTests": 133,
+  "backendSuites": 5,
+  "backendBuild": "PASS",
+  "frontendGuideDom": "PASS",
+  "frontendRegressionDom": "PASS",
+  "frontendTypes": "PASS",
+  "frontendBuild": "PASS",
+  "visualFixture": {
+    "buttons": 8,
+    "horizontalOverflow": false,
+    "liveActivation": false
+  },
+  "productionMigration": false,
+  "realAiCalls": 0,
+  "shippedGuides": "8 DRAFT"
+}

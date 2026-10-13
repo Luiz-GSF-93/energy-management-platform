@@ -1,5 +1,6 @@
 import {BotEnergyContextService} from './bot-energy-context.service';
 import {BotEnergyRagService} from './bot-energy-rag.service';
+import {EvaProductGuideService} from './eva-product-guide.service';
 import {BadRequestException, ForbiddenException, Injectable,Optional} from '@nestjs/common';
 import {AiEvidence} from './azure-backoffice-ai.connector';
 import {BackofficeAiService,assistantAiEvidence} from './backoffice-ai.service';
@@ -30,7 +31,7 @@ type Item = {label:string;value:string;source:string};
 type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[];actions?:CompletionAction[];interpretationState?:string;contextDocumentId?:string};
 @Injectable()
 export class BotEnergyService {
- constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService,@Optional() private readonly ai?:BackofficeAiService,@Optional() private readonly progress?:OcrAssistantProgressService,@Optional() private readonly rag?:BotEnergyRagService,@Optional() private readonly contexts?:BotEnergyContextService){}
+ constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService,@Optional() private readonly ai?:BackofficeAiService,@Optional() private readonly progress?:OcrAssistantProgressService,@Optional() private readonly rag?:BotEnergyRagService,@Optional() private readonly contexts?:BotEnergyContextService,@Optional() private readonly guides?:EvaProductGuideService){}
  private async authorize(t:TenantContext){
   if(!t?.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('A EVA está disponível somente no backoffice autorizado.');
   await this.assistant.authorize(t);
@@ -38,7 +39,8 @@ export class BotEnergyService {
  async context(t:TenantContext){await this.authorize(t);if(!this.contexts)throw new BadRequestException('Seleção de contexto indisponível.');return this.contexts.list(t);}
  async topics(t:TenantContext){
   await this.authorize(t);
-  return {name:'EVA',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
+  const guides=await this.guides?.topics(t);
+  return {name:'EVA',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],...(guides?.length?{productGuides:guides}:{}),message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
  }
  async answer(t:TenantContext,body:unknown,document?:string):Promise<SupportAnswer>{
   await this.authorize(t);
@@ -52,6 +54,8 @@ export class BotEnergyService {
   const inputQuestion=typeof b.question==='string'?b.question:'';
   const denied=/ignore|ignorar|publique|senha|chave privada|token|outra organizacao|execute|executar|apague|deletar/.test(normalized(inputQuestion));
   if(denied)return {...base,status:'NO_EVIDENCE',answer:'Posso explicar regras e registros autorizados do backoffice. Não executo comandos nem altero permissões, validações ou aprovações por uma conversa.',items:[],sources:[]};
+  const guide=await this.guides?.answer(t,{topic:typeof b.topic==='string'?b.topic:undefined,question:inputQuestion});
+  if(guide)return guide;
   if(topic?.key==='status'||/\b(status|andamento|processando|preenchendo|terminou)\b/.test(normalized(inputQuestion))){
   if(!topic&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
    if(!document)return {...base,status:'CONTEXT_REQUIRED',answer:'Abra a fatura em Auditoria OCR para consultar o status da preparação nesta sessão.',items:[],sources:[]};

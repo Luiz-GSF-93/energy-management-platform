@@ -1,0 +1,47 @@
+/* Mocked authenticated DOM only. No real API, publication, identity change or AI call. */
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLTextAreaElement','Event','MouseEvent'])global[k]=dom.window[k];
+global.IS_REACT_ACT_ENVIRONMENT=true;
+global.IntersectionObserver=class{constructor(callback){this.callback=callback;}observe(target){this.callback([{target,isIntersecting:true}]);}disconnect(){}};
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+let api;const original=Module._load;
+Module._load=function(name,parent,main){
+ if(name==='./BotEnergyAvatar.module.css')return {__esModule:true,default:{avatar:'avatar'}};
+ if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};
+ return original.call(this,name,parent,main);
+};
+const Help=require('../app/components/BotEnergyHelp.tsx').default;
+const {safeEvaGuideTopics}=require('../app/components/EvaProductGuides.tsx');
+const root=createRoot(document.getElementById('root'));
+const click=async label=>act(async()=>{const button=[...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')===label||b.textContent.includes(label));assert.ok(button,label);button.click();});
+const topic={key:'guide-documents',question:'Como organizar os documentos da unidade?',version:'1'};
+const reply={name:'EVA',mode:'PRODUCT_GUIDE',status:'SUPPORTED',answer:'Guia de teste <script>private()</script>',canApprove:false,canPublish:false,items:[],sources:[{label:'Documentos',reference:'Guia de teste · v1',url:'/backoffice/documents'}],checkedAt:'2026-10-13T12:00:00Z'};
+(async()=>{try{
+ const calls=[];
+ api=async(p,o)=>{calls.push([p,o]);return o?.method==='POST'?reply:{canAsk:true,canGenerate:false,productGuides:[topic]};};
+ await act(async()=>root.render(React.createElement(Help,{key:'guide',documentId:'selected-private-invoice'})));
+ await click('Perguntar à EVA');assert.ok(document.querySelector('[aria-label="Guias do EnergyOS"]'));
+ assert.equal(document.querySelector('[aria-label="Guias do EnergyOS"] small').style.whiteSpace,'nowrap');
+ await click(topic.question);
+ assert.equal(calls[1][0],'/api/v1/documents/bot-energy/help','A general guide does not submit a selected invoice identifier');
+ assert.deepEqual(calls[1][1].body,{topic:'guide-documents'});
+ assert.equal(document.querySelectorAll('script').length,0,'Guide text is escaped');
+ assert.ok(document.body.textContent.includes('Guia de uso do EnergyOS'));
+ assert.ok(!document.body.textContent.includes('Abrir preenchimentos, conferir propostas'),'A manual is not shown as an invoice preparation command');
+ assert.equal(document.querySelector('[aria-label="Resposta da EVA"] a').getAttribute('href'),'/backoffice/documents');
+ let finish,signal;
+ api=async(_p,o)=>{signal=o.signal;return new Promise(r=>finish=r);};
+ await click(topic.question);assert.ok([...document.querySelectorAll('button')].find(b=>b.textContent.includes(topic.question)).disabled);
+ await click('Fechar dúvidas da EVA');assert.equal(signal.aborted,true);
+ await act(async()=>finish({...reply,answer:'Obsolete guide response'}));assert.ok(!document.body.textContent.includes('Obsolete guide response'));
+ api=async()=>({canAsk:true,canGenerate:false});
+ await click('Perguntar à EVA');assert.equal(document.querySelector('[aria-label="Guias do EnergyOS"]'),null,'Missing optional capability preserves the old layout');
+ await act(async()=>root.render(React.createElement(Help,{key:'revoked',documentId:'another-invoice'})));
+ api=async()=>({canAsk:false,productGuides:[topic]});await click('Perguntar à EVA');assert.equal(document.querySelector('[aria-label="Guias do EnergyOS"]'),null);
+ assert.deepEqual(safeEvaGuideTopics([{...topic,key:'guide-owner-secrets'},topic,topic,null,{...topic,question:''},{...topic,version:''}]),[topic]);
+ assert.deepEqual(safeEvaGuideTopics({guide:topic}),[]);
+ await act(async()=>root.unmount());
+ console.log('EVA guide UI: scoped topics, generic endpoint, escaped content, no invoice commands, cancellation, disabled compatibility and permission reset passed');
+}finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
