@@ -3,13 +3,13 @@ const {PGlite}=require('@electric-sql/pglite'),fs=require('node:fs'),path=requir
 let checks=0;const ok=v=>{assert.ok(v);checks++},id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 (async()=>{const db=new PGlite();try{
  await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
- CREATE TABLE roles(id uuid,scope text,name text,organization_id text,permissions jsonb);CREATE TABLE user_roles(user_id uuid,role_id uuid);CREATE TABLE platform_team_members(user_id uuid,profile text,active boolean);CREATE TABLE user_profiles(user_id uuid);
+ CREATE TABLE roles(id uuid,scope text,name text,organization_id text,permissions jsonb);CREATE TABLE user_roles(user_id uuid,role_id uuid);CREATE TABLE platform_team_members(user_id uuid,profile text,active boolean,first_name text,last_name text);CREATE TABLE user_profiles(user_id uuid,name text);
  INSERT INTO roles VALUES('${id(11)}','global','admin_platform','${id(9)}','["82e7fc71-479a-4dd6-8b22-4fba6eaa6841"]'),('${id(12)}','global','platform_finance','${id(9)}','[]');
- INSERT INTO user_roles VALUES('${id(1)}','${id(11)}'),('${id(2)}','${id(12)}');INSERT INTO platform_team_members VALUES('${id(1)}','OWNER',true),('${id(2)}','FINANCE',true);INSERT INTO user_profiles VALUES('${id(1)}'),('${id(2)}');`);
+ INSERT INTO user_roles VALUES('${id(1)}','${id(11)}'),('${id(2)}','${id(12)}');INSERT INTO platform_team_members VALUES('${id(1)}','OWNER',true,'Test','Owner'),('${id(2)}','FINANCE',true,'Test','Finance');INSERT INTO user_profiles VALUES('${id(1)}','Owner'),('${id(2)}','Finance');`);
  const root=path.resolve(__dirname,'../src/database/migrations');const team=fs.readFileSync(root+'/20261010_platform_team.sql','utf8');const begin=team.indexOf('CREATE OR REPLACE FUNCTION public.platform_team_owner(');await db.exec(team.slice(begin,team.indexOf('END $$;',begin)+7));
  await db.exec(fs.readFileSync(root+'/20261022_eva_product_guide_publications.sql','utf8'));await db.exec(fs.readFileSync(root+'/20261023_eva_product_guide_list_aliases.sql','utf8'));await db.exec(fs.readFileSync(root+'/20261024_eva_official_source_registry.sql','utf8'));
  await db.exec(fs.readFileSync(root+'/20261025_eva_official_originals.sql','utf8'));
- const workflow=fs.readFileSync(root+'/20261010_platform_workflows.sql','utf8');const wb=workflow.indexOf('CREATE OR REPLACE FUNCTION public.platform_workflow_actor('),wd=workflow.indexOf('$$',wb),we=workflow.indexOf('$$;',wd+2);await db.exec(workflow.slice(wb,we+3));
+ const workflow=fs.readFileSync(root+'/20261010_platform_workflows.sql','utf8');for(const name of ['platform_workflow_actor','platform_workflow_name']){const wb=workflow.indexOf('CREATE OR REPLACE FUNCTION public.'+name+'('),wd=workflow.indexOf('$$',wb),we=workflow.indexOf('$$;',wd+2);await db.exec(workflow.slice(wb,we+3));}
  await db.exec(fs.readFileSync(root+'/20261027_eva_official_extraction_curation.sql','utf8'));
  await db.query("UPDATE roles SET permissions=permissions||'[\"e23a5c98-8b68-4ed2-aef8-70a7166407e4\"]'::jsonb WHERE id=$1",[id(11)]);await db.query("UPDATE roles SET permissions='[\"699703af-10ba-43a3-8eb8-9f0d9e477498\"]' WHERE id=$1",[id(12)]);
 
@@ -51,7 +51,7 @@ let checks=0;const ok=v=>{assert.ok(v);checks++},id=n=>`00000000-0000-4000-8000-
  await deny(()=>x(id(1),'correct',d.id,correct(5001,d,[{id:id(999),text:'Other version',heading:'',hash:sha('Other version'),resolvedIssues:[]}])),'22023');
  ok((await x(id(1),'correct',d.id,correct(5002,d))).state==='DRAFT');ok((await x(id(1),'correct',d.id,correct(5002,d))).replayed);await deny(()=>x(id(1),'correct',d.id,{...correct(5002,d),justification:'Different request input must be rejected by replay.'}),'23505');
  d=await detail(d.id);ok(d.version===2&&d.sections[0].origin_section_id!==null);await deny(()=>x(id(1),'review',d.id,{...command(5003,d),acknowledgedPages:[]}),'22023');
- ok((await x(id(1),'review',d.id,{...command(5004,d),acknowledgedPages:[1]})).state==='REVIEWED');d=await detail(d.id);ok(d.testOnly&&d.readyForFutureIndex===false);
+ ok((await x(id(1),'review',d.id,{...command(5004,d),acknowledgedPages:[1]})).state==='REVIEWED');d=await detail(d.id);ok(d.testOnly&&d.readyForFutureIndex===false);ok(d.history[0].actor_name==='Test Owner'&&d.processingHistory.some(h=>h.actor_name==='Worker restrito'));
  const stale=d;await x(id(1),'quarantine',d.id,command(5005,d));await deny(()=>x(id(1),'quarantine',d.id,command(5006,stale)),'23505');d=await detail(d.id);ok(d.curation==='QUARANTINED'&&d.historyTotal===4);
  const norm=await original(1001),pn=prepare(4002,norm);await x(id(1),'prepare',null,pn);lease=await worker('claim');ok(lease.id===id(4002));await worker('complete',lease.id,lease.token,result());d=await detail(lease.id);ok(!d.testOnly);
  await x(id(1),'correct',d.id,correct(5010,d));d=await detail(d.id);await deny(()=>x(id(1),'review',d.id,{...command(5011,d),acknowledgedPages:[1]}),'23505');

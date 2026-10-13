@@ -14,7 +14,7 @@ CREATE TABLE public.eva_official_extraction_job_events(
  state text NOT NULL CHECK(state IN ('QUEUED','RUNNING','SUCCEEDED','OCR_REQUIRED','BLOCKED','FAILED','WITHDRAWN')),
  token uuid,lease_until timestamptz,attempt integer NOT NULL CHECK(attempt BETWEEN 0 AND 3),
  diagnostic text NOT NULL CHECK(diagnostic IN ('NONE','VERIFIED','OCR_REQUIRED','SOURCE_CHANGED','OWNER_REVOKED','INTEGRITY','LIMIT','PDF_INVALID','NETWORK','EXTRACTION_FAILED','LEASE_EXPIRED','WITHDRAWN')),
- duration_ms integer NOT NULL DEFAULT 0 CHECK(duration_ms BETWEEN 0 AND 600000),actor_id uuid,input jsonb NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT clock_timestamp(),UNIQUE(job_id,sequence));
+ duration_ms integer NOT NULL DEFAULT 0 CHECK(duration_ms BETWEEN 0 AND 600000),actor_id uuid,actor_name text NOT NULL DEFAULT 'Worker restrito',input jsonb NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT clock_timestamp(),UNIQUE(job_id,sequence));
 CREATE TABLE public.eva_official_extraction_versions(
  id uuid PRIMARY KEY,job_id uuid NOT NULL REFERENCES public.eva_official_extraction_jobs(id),version integer NOT NULL CHECK(version>0),
  kind text NOT NULL CHECK(kind IN ('EXTRACTED','CURATED')),parent_id uuid REFERENCES public.eva_official_extraction_versions(id),
@@ -29,7 +29,7 @@ CREATE TABLE public.eva_official_extraction_sections(
 CREATE TABLE public.eva_official_curation_events(
  id uuid PRIMARY KEY,job_id uuid NOT NULL REFERENCES public.eva_official_extraction_jobs(id),version_id uuid NOT NULL,
  sequence integer NOT NULL CHECK(sequence>0),state text NOT NULL CHECK(state IN ('DRAFT','REVIEWED','QUARANTINED')),
- action text NOT NULL CHECK(action IN ('extract','correct','review','quarantine')),actor_id uuid,
+ action text NOT NULL CHECK(action IN ('extract','correct','review','quarantine')),actor_id uuid,actor_name text NOT NULL DEFAULT 'Worker restrito',
  justification text NOT NULL CHECK(length(btrim(justification)) BETWEEN 20 AND 1000 AND justification !~ '[[:cntrl:]]'),
  input jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT clock_timestamp(),UNIQUE(job_id,sequence),
  FOREIGN KEY(version_id,job_id) REFERENCES public.eva_official_extraction_versions(id,job_id));
@@ -101,8 +101,8 @@ BEGIN
    'versionId',v.id,'version',v.version,'contentHash',v.content_hash,'pageCount',v.page_count,'metadata',v.metadata,'sectionTotal',(SELECT count(*) FROM public.eva_official_extraction_sections WHERE version_id=v.id),
    'sections',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY position) FROM(SELECT id,position,page,start_offset,end_offset,heading,content,content_hash,issues,origin_section_id FROM public.eva_official_extraction_sections WHERE version_id=v.id ORDER BY position LIMIT 10 OFFSET sp*10)x),'[]'::jsonb),
    'historyTotal',(SELECT count(*) FROM public.eva_official_curation_events WHERE job_id=p_job),
-   'history',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY sequence DESC) FROM(SELECT id,version_id,sequence,state,action,actor_id,justification,created_at FROM public.eva_official_curation_events WHERE job_id=p_job ORDER BY sequence DESC LIMIT 10 OFFSET pg*10)x),'[]'::jsonb),
-   'processingHistory',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY sequence DESC) FROM(SELECT id,sequence,state,attempt,diagnostic,duration_ms,created_at FROM public.eva_official_extraction_job_events WHERE job_id=p_job ORDER BY sequence DESC LIMIT 10 OFFSET pg*10)x),'[]'::jsonb),
+   'history',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY sequence DESC) FROM(SELECT id,version_id,sequence,state,action,actor_id,actor_name,justification,created_at FROM public.eva_official_curation_events WHERE job_id=p_job ORDER BY sequence DESC LIMIT 10 OFFSET pg*10)x),'[]'::jsonb),
+   'processingHistory',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY sequence DESC) FROM(SELECT id,sequence,state,attempt,diagnostic,duration_ms,actor_name,created_at FROM public.eva_official_extraction_job_events WHERE job_id=p_job ORDER BY sequence DESC LIMIT 10 OFFSET pg*10)x),'[]'::jsonb),
    'processingHistoryTotal',(SELECT count(*) FROM public.eva_official_extraction_job_events WHERE job_id=p_job),'readyForFutureIndex',false);
  END IF;
  IF NOT p_body ?& ARRAY['requestId','justification'] OR jsonb_typeof(p_body->'requestId') IS DISTINCT FROM 'string' OR p_body->>'requestId' !~* '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$' OR jsonb_typeof(p_body->'justification') IS DISTINCT FROM 'string' OR length(btrim(p_body->>'justification')) NOT BETWEEN 20 AND 1000 OR p_body->>'justification' ~ '[[:cntrl:]]' THEN RAISE EXCEPTION 'Invalid command' USING ERRCODE='22023';END IF;
@@ -122,7 +122,7 @@ BEGIN
   IF de.id IS NULL OR de.state<>'PRESERVED' OR de.diagnostic<>'VERIFIED' OR de.id::text IS DISTINCT FROM p_body->>'expectedEventId' OR dr.metadata_hash IS DISTINCT FROM p_body->>'expectedRevisionHash' OR op.id::text IS DISTINCT FROM p_body->>'operationId' OR src.state IS DISTINCT FROM 'REGISTERED' OR src.id IS DISTINCT FROM dr.source_event_id OR sr.metadata_hash IS DISTINCT FROM dr.source_revision_hash THEN RAISE EXCEPTION 'Source or original changed' USING ERRCODE='23505';END IF;
   synthetic:=(p_body->>'testOnly')::boolean OR (dr.metadata->>'title') ~* '(HOMOLOG|SINT[EÉ]T|TEST|N[ÃA]O [ÉE] NORMA)' OR (dr.metadata->>'provenance') ~* '(sint[eé]tic|synthetic|homologa)';
   INSERT INTO public.eva_official_extraction_jobs(id,document_id,document_revision_id,operation_id,source_id,source_event_id,source_hash,file_hash,extractor,test_only,actor_id,input) VALUES(req,de.document_id,dr.id,op.id,j.source_id,src.id,sr.metadata_hash,op.file_hash,'pdfjs-6.4.299-text-v1',synthetic,p_actor,p_body);
-  INSERT INTO public.eva_official_extraction_job_events(id,job_id,sequence,state,attempt,diagnostic,actor_id) VALUES(req,req,1,'QUEUED',0,'NONE',p_actor);
+  INSERT INTO public.eva_official_extraction_job_events(id,job_id,sequence,state,attempt,diagnostic,actor_id,actor_name) VALUES(req,req,1,'QUEUED',0,'NONE',p_actor,public.platform_workflow_name(p_actor));
   RETURN jsonb_build_object('id',req,'state','QUEUED','testOnly',synthetic,'replayed',false);
  END IF;
  IF p_job IS NULL THEN RAISE EXCEPTION 'Job required' USING ERRCODE='22023';END IF;
@@ -137,7 +137,7 @@ BEGIN
   IF p_body-ARRAY['requestId','justification','expectedProcessingEventId']<>'{}'::jsonb OR je.id::text IS DISTINCT FROM p_body->>'expectedProcessingEventId' THEN RAISE EXCEPTION 'Processing changed' USING ERRCODE='23505';END IF;
   IF p_action='withdraw' AND je.state<>'QUEUED' THEN RAISE EXCEPTION 'Withdrawal blocked' USING ERRCODE='23505';END IF;
   IF p_action='retry' AND (je.state<>'FAILED' OR je.diagnostic NOT IN ('NETWORK','EXTRACTION_FAILED') OR je.attempt>=3 OR NOT public.eva_extraction_origin(p_job,true)) THEN RAISE EXCEPTION 'Retry blocked' USING ERRCODE='23505';END IF;
-  INSERT INTO public.eva_official_extraction_job_events(id,job_id,sequence,state,attempt,diagnostic,actor_id,input) VALUES(req,p_job,je.sequence+1,CASE WHEN p_action='retry' THEN 'QUEUED' ELSE 'WITHDRAWN' END,je.attempt,CASE WHEN p_action='retry' THEN 'NONE' ELSE 'WITHDRAWN' END,p_actor,jsonb_build_object('action',p_action,'body',p_body));RETURN jsonb_build_object('id',p_job,'state',CASE WHEN p_action='retry' THEN 'QUEUED' ELSE 'WITHDRAWN' END);
+  INSERT INTO public.eva_official_extraction_job_events(id,job_id,sequence,state,attempt,diagnostic,actor_id,actor_name,input) VALUES(req,p_job,je.sequence+1,CASE WHEN p_action='retry' THEN 'QUEUED' ELSE 'WITHDRAWN' END,je.attempt,CASE WHEN p_action='retry' THEN 'NONE' ELSE 'WITHDRAWN' END,p_actor,public.platform_workflow_name(p_actor),jsonb_build_object('action',p_action,'body',p_body));RETURN jsonb_build_object('id',p_job,'state',CASE WHEN p_action='retry' THEN 'QUEUED' ELSE 'WITHDRAWN' END);
  END IF;
  SELECT * INTO ce FROM public.eva_official_curation_events WHERE job_id=p_job ORDER BY sequence DESC LIMIT 1;
  SELECT * INTO v FROM public.eva_official_extraction_versions WHERE job_id=p_job ORDER BY version DESC LIMIT 1;
@@ -170,7 +170,7 @@ BEGIN
    new_version:=v.id;
   END IF;
  END IF;
- INSERT INTO public.eva_official_curation_events(id,job_id,version_id,sequence,state,action,actor_id,justification,input) VALUES(req,p_job,new_version,ce.sequence+1,CASE p_action WHEN 'review' THEN 'REVIEWED' WHEN 'quarantine' THEN 'QUARANTINED' ELSE 'DRAFT' END,p_action,p_actor,p_body->>'justification',p_body);
+ INSERT INTO public.eva_official_curation_events(id,job_id,version_id,sequence,state,action,actor_id,actor_name,justification,input) VALUES(req,p_job,new_version,ce.sequence+1,CASE p_action WHEN 'review' THEN 'REVIEWED' WHEN 'quarantine' THEN 'QUARANTINED' ELSE 'DRAFT' END,p_action,p_actor,public.platform_workflow_name(p_actor),p_body->>'justification',p_body);
  RETURN jsonb_build_object('id',p_job,'state',CASE p_action WHEN 'review' THEN 'REVIEWED' WHEN 'quarantine' THEN 'QUARANTINED' ELSE 'DRAFT' END,'versionId',new_version,'readyForFutureIndex',false,'replayed',false);
 END$$;
 REVOKE ALL ON FUNCTION public.eva_official_extraction_action(uuid,text,uuid,jsonb) FROM PUBLIC,anon,authenticated;
