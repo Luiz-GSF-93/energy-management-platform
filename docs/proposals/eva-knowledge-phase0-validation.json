@@ -1,0 +1,22 @@
+{
+  "policy": {
+    "exitCode": 0,
+    "summary": [
+      "Tests:       50 passed, 50 total"
+    ]
+  },
+  "schema": {
+    "exitCode": 0,
+    "summary": [
+      "{\"result\":\"PASS\",\"checks\":74,\"disposableDatabase\":true,\"productionWrites\":0,\"externalCalls\":0}"
+    ]
+  },
+  "build": {
+    "exitCode": 0,
+    "summary": []
+  },
+  "regression": {
+    "exitCode": 0,
+    "summary": "6 suites, 57 tests passed; mocked external providers"
+  }
+}
