@@ -1,0 +1,11 @@
+EVA Fase 1B — publicação auditada de guias, entregue desligada
+
+Gestão privada em /backoffice/eva-knowledge, com rotas /admin/eva/product-guides. Owner autenticado pela infraestrutura existente e reconferido em RPC privada no PostgreSQL. Não há novas concessões de perfil/permissão.
+
+Dois registros aditivos: eva_product_guide_publications (snapshot imutável e hashes) e eva_product_guide_publication_events (publicação/quarentena append-only). Locks transacionais, expectedEventId, hash da versão exibida e requestId protegem concorrência e reentrega. Nenhum seed publicado.
+
+EVA_GUIDE_PUBLICATIONS_ENABLED permanece ausente/desligada. EVA_PRODUCT_GUIDES_ENABLED e allowlist de organizações da Fase 1A permanecem inalteradas/desligadas. Publicação não habilita uma organização. Leitor consulta o estado preservado em cada requisição autorizada e rejeita snapshot divergente; quarentena não apaga histórico. Falhas de consulta não admitem rascunho.
+
+Somente guias de uso no Backoffice. Sem corpus regulatório, importação, editor de conteúdo, Azure AI Search/Storage, embeddings, chamadas pagas ou mudanças nas integrações externas. Oito textos preparados continuam rascunhos até conferência autenticada e publicação real pelo Owner.
+
+Validação prevista para entrega: testes Nest de governança/leitor/regressões, PostgreSQL descartável, testes DOM com componentes reais, types/builds, prévia sintética e auditoria da migração aditiva sem dados/segredos no repositório público.

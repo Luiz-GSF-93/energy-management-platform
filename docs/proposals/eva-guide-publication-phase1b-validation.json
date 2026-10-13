@@ -1,0 +1,17 @@
+{
+  "backendTests": 157,
+  "backendSuites": 5,
+  "sqlChecks": 60,
+  "domScripts": 3,
+  "backendBuild": "PASS",
+  "frontendBuildAndTypes": "PASS",
+  "utf8": "PASS",
+  "visualSyntheticFixture": {
+    "documentFits": true,
+    "dialogFits": true
+  },
+  "migrationAdditive": true,
+  "newPublications": 0,
+  "capabilitiesEnabled": false,
+  "paidAiCalls": 0
+}

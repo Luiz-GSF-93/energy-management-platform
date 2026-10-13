@@ -5,6 +5,7 @@ import {LicensesService} from '../licenses/services/licenses.service';
 import {KnowledgeReadContext} from '../eva-knowledge-foundation/knowledge-contracts';
 import {knowledgeDay} from '../eva-knowledge-foundation/knowledge-policy';
 import {ProductGuide,PRODUCT_GUIDE_RELEASE,findProductGuide,readableProductGuide} from './eva-product-guide-reader';
+import {EvaGuidePublicationService} from './eva-guide-publication.service';
 import {PRODUCT_GUIDE_DRAFTS} from './eva-product-guides';
 
 export type ProductGuidePilot={enabled:boolean;organizations:readonly string[]};
@@ -25,7 +26,7 @@ export function productGuidePilotConfig(env:NodeJS.ProcessEnv):ProductGuidePilot
 @Injectable()
 export class EvaProductGuideService {
  constructor(private licenses:Pick<LicensesService,'resolveEffectiveLicense'>,private pilot:ProductGuidePilot,
-  private guides:readonly ProductGuide[]=PRODUCT_GUIDE_DRAFTS,private clock:()=>Date=()=>new Date()){}
+  private guides:readonly ProductGuide[]=PRODUCT_GUIDE_DRAFTS,private clock:()=>Date=()=>new Date(),private publications?:Pick<EvaGuidePublicationService,'resolve'>){}
  private enabled(t:TenantContext){return this.pilot.enabled&&this.pilot.organizations.includes(t?.organizationId);}
  private permitted(t:TenantContext){
   return !!t?.userId&&!!t.organizationId&&t.scope==='organization'&&!t.accessMode&&
@@ -55,18 +56,19 @@ export class EvaProductGuideService {
   const now=this.clock();let actor:KnowledgeReadContext|null;
   try{actor=await this.context(t,now);}catch{return [];}
   if(!actor)return [];
-  return this.guides.filter(g=>this.readable(g,actor!,t,now)).map(g=>({key:g.key,question:g.content.questions[0],version:g.revision.version}));
+  try{const guides=await Promise.all(this.guides.map(g=>this.publications?this.publications.resolve(g):g));return guides.filter((g):g is ProductGuide=>!!g&&this.readable(g,actor!,t,now)).map(g=>({key:g.key,question:g.content.questions[0],version:g.revision.version}));}catch{return [];}
  }
  async answer(t:TenantContext,input:{topic?:string;question?:string}):Promise<ProductGuideAnswer|null>{
   if(!this.enabled(t))return null;
-  const guide=findProductGuide(this.guides,input);
+  let guide=findProductGuide(this.guides,input);
   if(!guide)return null;
   if(!this.permitted(t))throw new ForbiddenException('Guia de uso exige o contexto e as permissões atuais do Backoffice.');
   const now=this.clock();
   const base={name:'EVA' as const,mode:'PRODUCT_GUIDE' as const,checkedAt:now.toISOString(),canApprove:false as const,canPublish:false as const};
   let actor:KnowledgeReadContext|null;
   try{actor=await this.context(t,now);}catch{return {...base,status:'UNAVAILABLE',answer:'Não foi possível conferir a licença para consultar os guias. Tente novamente.',items:[],sources:[]};}
-  if(!actor||!this.readable(guide,actor,t,now))return {...base,status:'NO_EVIDENCE',answer:'Não há guia publicado e autorizado para esta consulta. A orientação depende da revisão do conteúdo e dos acessos atuais.',items:[],sources:[]};
+  try{if(actor&&this.publications)guide=await this.publications.resolve(guide)??undefined;}catch{return {...base,status:'UNAVAILABLE',answer:'Não foi possível conferir a publicação do guia. Tente novamente.',items:[],sources:[]};}
+  if(!actor||!guide||!this.readable(guide,actor,t,now))return {...base,status:'NO_EVIDENCE',answer:'Não há guia publicado e autorizado para esta consulta. A orientação depende da revisão do conteúdo e dos acessos atuais.',items:[],sources:[]};
   return {...base,status:'SUPPORTED',answer:[guide.content.title,...guide.content.steps.map((step,i)=>`${i+1}. ${step}`),...guide.content.limits].join('\n\n'),
    guide:{key:guide.key,version:guide.revision.version,release:PRODUCT_GUIDE_RELEASE,contentHash:guide.revision.contentHash},
    items:[{label:'Tipo da fonte',value:'Guia de uso do EnergyOS',source:'Biblioteca de guias revisados do produto; sem consulta a dados operacionais ou norma oficial.'}],
