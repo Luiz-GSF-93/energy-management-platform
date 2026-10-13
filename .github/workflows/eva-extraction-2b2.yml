@@ -1,0 +1,39 @@
+name: EVA extraction 2B2
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/**'
+      - 'backend/test/eva-official-extractions.cjs'
+      - 'backend/package*.json'
+      - '.github/workflows/eva-extraction-2b2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/**'
+      - 'backend/test/eva-official-extractions.cjs'
+      - 'backend/package*.json'
+      - '.github/workflows/eva-extraction-2b2.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npx jest src/modules/ocr/eva-extraction.spec.ts src/modules/ocr/eva-official-document.spec.ts src/modules/ocr/eva-official-source.spec.ts --runInBand
+      - run: node test/eva-official-extractions.cjs
+      - run: node test/eva-official-originals.cjs
+      - run: node test/platform-cost-service-catalog.cjs

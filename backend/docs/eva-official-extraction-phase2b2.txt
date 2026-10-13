@@ -1,0 +1,35 @@
+EVA 2B2 — extração textual e curadoria privadas
+
+Entrega desligada. As três flags devem permanecer ausentes ou false:
+EVA_OFFICIAL_EXTRACTION_ENABLED
+EVA_OFFICIAL_EXTRACTION_WORKER_ENABLED
+EVA_OFFICIAL_EXTRACTION_BLOB_CALLS_ENABLED
+EVA_OFFICIAL_BLOB_CALLS_ENABLED continua false; a leitura usa conector distinto sem upload, exclusão ou geração de SAS.
+
+Painel Conhecimento EVA: Extração e curadoria. Owner pode preparar uma tarefa a partir do original preservado, retirar tarefa ainda na fila, conferir/corrigir páginas e metadados, registrar revisão e colocar em quarentena. Corrigir gera versão imutável; revisão exige todas as páginas declaradas e uma versão CURATED. Aprovação interna não publica, indexa ou habilita resposta RAG.
+Financeiro consulta somente indicadores agregados pela seção Extração EVA de Custos e performance, com as permissões financeiras existentes. Nenhuma concessão nova. Corpus e operações de curadoria permanecem exclusivos do Owner.
+
+POST /admin/eva/official-extractions: requestId, justification, documentId, expectedEventId, expectedRevisionHash, operationId, testOnly.
+GET /admin/eva/official-extractions: page, search, state.
+GET /admin/eva/official-extractions/:id: page (histórico), sectionPage (trechos); páginas de dez itens.
+GET /admin/eva/official-extractions/:id/original: PDF privado revalidado antes/depois de baixar pelo backend; gate de leitura Blob obrigatório. Sem URL pública ou credencial no navegador.
+POST /admin/eva/official-extractions/:id/{withdraw,retry,correct,review,quarantine}: requestId e justificativa; revisão exige os identificadores/hash/evento atuais. Campos desconhecidos são rejeitados.
+GET /admin/eva/official-extractions/metrics?month=YYYY-MM: somente Owner/Financeiro já autorizados. Competência America/Sao_Paulo; tentativas, duração e páginas separados de custo monetário.
+Todas as rotas possuem prefixo /api/v1 e Cache-Control no-store.
+
+Processamento: tarefas globais isoladas das filas de faturas. Worker usa somente RPC de claim/complete/fail, job/token e lease de 180 segundos. Confere o Owner solicitante ainda ativo e o vínculo do original/fonte antes de reservar/concluir. Um processamento ativo por processo; claim serializado por banco, SKIP LOCKED e locks compatíveis com documentos/fontes existentes. Lease perdido pode retomar com novo token, até três tentativas, sem aceitar conclusão antiga. Falha transitória NETWORK/EXTRACTION_FAILED requer retry explícito e auditado do Owner; falha de integridade, limite ou fonte alterada não é liberada por retry. Operação de original tem uma identidade de tarefa, evitando duplicação.
+
+Parser PDF.js 6.4.299 fixado; Node >=22.13 ou >=24. Validação real executada em Node24.20; runtime Railway24.21 compatível. Import ESM ocorre no worker, preservando o backend CommonJS. Dados do PDF não são programas; JavaScript/XFA/eval de PDF desativados, sem seguir URLs/anexos. Fontes/CMaps/WASM são arquivos do pacote local. Não renderizar conteúdo ativo.
+Piloto: original <=25MiB, <=100 páginas por processamento, <=2MiB de texto, <=2.000 trechos, até2.800 caracteres por fragmento; 60s de parser e heap do worker256MiB. O limite de heap não é garantia de limite absoluto de RSS/native memory; monitorar Railway e homologar corpus antes de ampliar. Exceder limite bloqueia sem truncar como sucesso.
+
+Trechos preservam página, offsets do texto extraído, heading sugerido, hash e pendências. Correções conservam origin_section_id e offsets da extração anterior; não apresentá-los como offset binário do PDF. Imagens/tabelas/ordem exigem conferência humana explícita. Pendências IMAGE_PRESENT/LAYOUT_REVIEW podem ser resolvidas na versão de curadoria com justificativa e transcrição/conferência do original; EMPTY_PAGE e estado OCR_REQUIRED não são liberados para norma real nesta fase. Nenhuma chamada OCR ou OpenAI é feita.
+
+Datas de publicação e vigência são distintas; datas ausentes ou referências oficiais ausentes impedem revisão normativa real. Fonte/evento/edição alterados bloqueiam o vínculo, preservando histórico. A revisão é snapshot; disponibilidade normativa por competência e filtragem do corpus ainda serão homologadas na fase Search/RAG.
+TEST_ONLY é forçado para originais identificados como homologação/sintéticos. Uma conferência de teste não torna o original norma. Todos os documentos originais continuam DRAFT. readyForFutureIndex permanece false nesta entrega, inclusive para versão revisada; 2C/2D exigirão revalidação e publicação próprias.
+
+Cinco tabelas novas com RLS/negação de acesso direto a anon/authenticated/service_role; versões/eventos imutáveis. Quatro funções novas: helper de origem privado (não concedido nem a service_role), RPC Owner, RPC worker e RPC agregada financeira. A credencial global service_role existente não é transformada em credencial de privilégio mínimo; a redução é aplicada aos comandos do worker, tokens, RPCs e gates. Não criar perfil Owner para serviço.
+
+Custos: extração usa CPU/memória Railway e leituras/transferência Blob. Métricas não são fatura nem despesa zero. Catálogo mantém serviços, estimativas, orçamento e lançamentos existentes separados; custo por tarefa ainda não apurado. Não consumir cota de IA de clientes nem duplicar o lançamento Blob. Search, OCR, embeddings e geração permanecem fora deste incremento.
+
+Verificações: backend/src/modules/ocr/eva-extraction.spec.ts (parser real, flags, escopo, download/hash, ack e diagnósticos); backend/test/eva-official-extractions.cjs (PostgreSQL descartável, autorizações reais, RLS, versão concorrente, lease, limites, teste sintético, quarentena e paginação). Não usar exemplos descartáveis como seeds de norma em produção.
+Próxima execução: validar entrega/migração/deploy desligados; apresentar teste sintético delimitado antes de habilitar gestão, worker ou leitura. Amostra oficial real, OCR, Search, corpus e respostas serão etapas seguintes com orçamento/custo e homologação explícitos.
