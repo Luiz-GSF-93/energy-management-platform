@@ -1,0 +1,33 @@
+EVA — piloto de guias do produto, Fase 1A
+
+Entrega técnica inicialmente desligada. Oito guias genéricos do produto ficam em DRAFT, sem referência de revisão, revisor ou publicação fictícios. Preparar o motor e a apresentação não aprova o conteúdo para atendimento real.
+
+Ativação futura: EVA_PRODUCT_GUIDES_ENABLED=true e EVA_PRODUCT_GUIDES_ORGANIZATIONS com UUIDs explícitos do piloto. Ausência da flag, ausência da lista ou valor inválido mantém o recurso indisponível. Não configurar essas variáveis durante esta implementação. Habilitar a flag não transforma guias DRAFT em PUBLISHED.
+
+Publicação futura requer revisão explícita dos textos e metadados, hashes da evidência revisada, release compatível e implantação do pacote aprovado. Não foi criado endpoint de publicação, migração, nova permissão ou tela de curadoria nesta fase. A revisão do pacote piloto deve ser preservada como evidência antes de inserir metadados de publicação; não editar estados manualmente para contornar essa conferência.
+
+Backend: EvaProductGuideService é registrado no módulo OCR existente e injetado opcionalmente no serviço da EVA. Os endpoints, DTOs e chaves comerciais existentes são preservados. Quando desligado, a resposta de tópicos mantém seu formato anterior, sem campo adicional. Quando habilitado com guias publicados e autorizados, productGuides é uma capacidade opcional do resultado de tópicos.
+
+Uma consulta do guia usa o mesmo body topic/question, sem receber contexto de autorização, permissões, release, hashes ou revisão pelo navegador. Perguntas livres só são roteadas para guias quando correspondem exatamente às perguntas procedimentais do pacote. Consultas financeiras/regulatórias, perguntas parciais e ambíguas não são selecionadas como manual. Selecionar um guia no painel usa o endpoint geral e não envia o identificador de uma fatura selecionada.
+
+O caminho do guia lê uma única licença atual por consulta e não instancia conector de geração, embeddings, indexação ou gravação. A cota positiva de IA não é exigida para esse caminho determinístico; a licença da EVA e os módulos/permissões das funções ensinadas continuam obrigatórios. Os controles e custos das respostas generativas anteriores não são alterados.
+
+Preservar os requisitos atuais do atendimento: documentos, contratos, licença Documentos/Gestão do mercado livre, contexto da organização e papel Backoffice. O piloto acrescenta AI_USE/EVA e os controles do guia, sem remover dependências atuais. Contexto global, cliente do Portal e operação delegada da plataforma não participam deste piloto. Gestão do Portal é descrita apenas para administrador/gestor da organização com permissões de gestão e módulo Portal contratado.
+
+Guia precisa de release, publicação, revisão correspondente ao conteúdo, hashes, vigência atual e links para telas conhecidas. O hash do documento inclui texto, versão, release, permissões, módulos, perfis, vigência e referências de código. Uma alteração no conteúdo e um novo hash não podem reutilizar a revisão antiga. Links administrativos e normas não são substituídos por um guia de outro público. As fontes exibidas ao usuário são versões do manual e caminhos permitidos; referências de código ficam na evidência técnica.
+
+Fontes de código dos oito rascunhos têm checksums e testes de existência. Mudanças nos arquivos relacionados exigem revisar os guias afetados e seus snapshots. Isso não publica automaticamente aprendizado nem importa o repositório para o RAG.
+
+Frontend: bloco recolhível Guias do EnergyOS no componente existente da EVA, visível somente se o backend oferecer tópicos e o usuário puder perguntar. Mantém o layout anterior sem a capacidade. Respostas de manual não são apresentadas como ações da fatura e preservam escaping, cancelamento e reset do contexto.
+
+Homologação: os testes de respostas positivas usam apenas guias publicados sintéticos, com revisão explicitamente de teste. Os rascunhos efetivamente entregues continuam não elegíveis. A prévia visual, se gerada, é uma fixture de apresentação e não prova habilitação em produção. Este incremento não mede qualidade/latência da geração nem completa a cobertura dos 28 módulos.
+
+Verificações previstas no backend:
+node node_modules/jest/bin/jest.js src/modules/ocr/eva-product-guide.spec.ts --runInBand
+node node_modules/@nestjs/cli/bin/nest.js build
+No frontend:
+node test/eva-product-guides.cjs
+node test/bot-energy.cjs
+node node_modules/typescript/bin/tsc --noEmit
+
+Rollback: desabilitar a capacidade mantém o atendimento anterior. Os guias em rascunho não são fontes oficiais nem dados dos clientes. Não há SQL ou alteração de histórico para reverter.
