@@ -1,0 +1,32 @@
+{
+  "phase": "2B1",
+  "delivery": "DISABLED",
+  "tests": {
+    "backend": 106,
+    "disposableSqlOriginals": 109,
+    "disposableSqlSources": 89,
+    "disposableSqlGuides": 70,
+    "dom": [
+      "originals",
+      "sources",
+      "guides"
+    ],
+    "builds": [
+      "Nest",
+      "Next/types"
+    ]
+  },
+  "migration": {
+    "sha256": "2e80db17c22ce8f22ec784a2ccb3412dd88e9ecc056ddeba4c14bfbac7b3c2de",
+    "tables": 4,
+    "newFunctions": 1
+  },
+  "callsToAzure": 0,
+  "resourcesCreated": 0,
+  "permissionsGranted": 0,
+  "runtimeFlags": [
+    "EVA_OFFICIAL_DOCUMENTS_ENABLED",
+    "EVA_OFFICIAL_BLOB_CALLS_ENABLED"
+  ],
+  "dependencyAuditDelta": 0
+}
