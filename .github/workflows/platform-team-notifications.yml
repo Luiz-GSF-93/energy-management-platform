@@ -5,6 +5,7 @@ on:
       - 'backend/src/modules/platform-team/**'
       - 'backend/src/database/migrations/20261031_platform_team_notifications.sql'
       - 'backend/src/database/migrations/20261101_platform_team_webhook_isolation.sql'
+      - 'backend/src/database/migrations/20261102_platform_team_notification_prepare.sql'
       - 'backend/test/database/*team-notifications*'
       - 'frontend/app/backoffice/platform-team/**'
       - 'frontend/app/backoffice/platform-costs/TeamNotificationMetrics.tsx'

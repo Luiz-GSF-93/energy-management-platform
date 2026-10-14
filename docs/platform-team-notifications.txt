@@ -35,3 +35,6 @@ Referências oficiais:
 https://resend.com/docs/api-reference/templates/get-template
 https://resend.com/docs/api-reference/emails/send-email
 https://resend.com/docs/webhooks/verify-webhooks-requests
+
+Atualização aprovada: envio avulso auditado pelo Owner, vinculado à concessão original e sem alterar perfil ou convite de senha. Migração 20261102 acrescenta somente uma RPC privada; não faz backfill. Aviso existente é retornado, sem duplicação.
+Template publicado conferido e preservado em team-notification.template.ts; revisão interna energyos-team-20261014-v1, SHA-256 8a436ee6a4b27825cdbd2395b495594cfe69db7c10ca6d4fb90475d768fd9f20. Essa revisão identifica o artefato interno, não um current_version_id obtido da API. O worker não faz GET de template e utiliza somente POST /emails com credencial dedicada Sending access em notificacoes.expertenergy.com.br. Variáveis, hash e revisão são conferidos antes do POST. Alterações posteriores no dashboard não substituem o snapshot; exigem nova revisão interna conferida. Campos PLATFORM_TEAM_RESEND_TEMPLATE_VERSION/HASH fixam a revisão interna. A descrição anterior da consulta de template descreve a entrega inicial, substituída por este transporte de menor privilégio.

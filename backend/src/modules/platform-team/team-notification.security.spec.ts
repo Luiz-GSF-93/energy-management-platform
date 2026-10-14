@@ -26,3 +26,6 @@ describe('Authenticated Resend events',()=>{
   for(const change of [{from:'wrong@example.com'},{to:['test@example.com','second@example.com']}]){const bad=body(change);expect(()=>verifyTeamWebhook(bad,headers(bad),secret,now)).toThrow();}
  });
 });
+
+import {TEAM_TEMPLATE_HASH,TEAM_TEMPLATE_VERSION,TEAM_TEMPLATE_SNAPSHOT} from './team-notification.template';
+describe('Preserved Owner-reviewed template',()=>{it('pins exact content, escapes identity and never contains a password token',()=>{expect(createHash('sha256').update(TEAM_TEMPLATE_SNAPSHOT.html).digest('hex')).toBe(TEAM_TEMPLATE_HASH);const rendered=templateSnapshot(TEAM_TEMPLATE_SNAPSHOT,TEAM_TEMPLATE_VERSION,TEAM_TEMPLATE_HASH,teamVariables(row));expect(rendered.html).toContain('Luiz &lt;script&gt;&amp;');expect(rendered.html).toContain('https://app.expertenergy.com.br/auth/login');expect(rendered.html).not.toContain('ACTION_URL');expect(rendered.html).not.toContain('{{{');});});

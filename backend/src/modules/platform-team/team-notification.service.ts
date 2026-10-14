@@ -1,7 +1,8 @@
 import {BadRequestException,ForbiddenException,Injectable,OnModuleDestroy,OnModuleInit,ServiceUnavailableException} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
-import {TEAM_FROM,TEAM_SUBJECT,TEAM_TEMPLATE,teamVariables,templateSnapshot,verifyTeamWebhook} from './team-notification.security';
+import {TEAM_FROM,TEAM_SUBJECT,teamVariables,templateSnapshot,verifyTeamWebhook} from './team-notification.security';
+import {TEAM_TEMPLATE_SNAPSHOT} from './team-notification.template';
 const enabled=(key:string)=>process.env[key]==='true';
 @Injectable()
 export class TeamNotificationService implements OnModuleInit,OnModuleDestroy{
@@ -24,6 +25,7 @@ export class TeamNotificationService implements OnModuleInit,OnModuleDestroy{
   }
   return result;
  }
+ async prepare(actor:string,user:string,reason:unknown){this.gate();if(typeof reason!=='string'||reason.trim().length<20||reason.length>1000)throw new BadRequestException('Justificativa obrigatória, de 20 a 1000 caracteres.');return this.rpc('prepare_platform_team_notification',{p_actor:actor,p_user:user,p_reason:reason.trim()});}
  async retry(actor:string,id:string,reason:unknown){this.gate();if(typeof reason!=='string'||reason.trim().length<20||reason.length>1000)throw new BadRequestException('Justificativa obrigatória, de 20 a 1000 caracteres.');return this.rpc('retry_platform_team_notification',{p_actor:actor,p_id:id,p_reason:reason.trim()});}
  async metrics(actor:string,month:string){this.gate();if(!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month??''))throw new BadRequestException('Competência inválida.');return this.rpc('platform_team_notification_metrics',{p_actor:actor,p_month:month});}
  async webhook(raw:Buffer,headers:Record<string,unknown>){
@@ -42,8 +44,7 @@ export class TeamNotificationService implements OnModuleInit,OnModuleDestroy{
   this.running=true;let row:any,lease:string|undefined,posted=false,payload:any=null,version:string|null=null,hash:string|null=null;
   try{
    lease=randomUUID();row=await this.rpc('claim_platform_team_notification',{p_lease:lease});if(!row)return;
-   const variables=teamVariables(row),response=await this.provider('/templates/'+TEAM_TEMPLATE);if(!response.ok)throw Error('TEMPLATE_UNAVAILABLE');
-   const template=await response.json();const snapshot=templateSnapshot(template,process.env.PLATFORM_TEAM_RESEND_TEMPLATE_VERSION??'',process.env.PLATFORM_TEAM_RESEND_TEMPLATE_HASH??'',variables);
+   const variables=teamVariables(row);const snapshot=templateSnapshot(TEAM_TEMPLATE_SNAPSHOT,process.env.PLATFORM_TEAM_RESEND_TEMPLATE_VERSION??'',process.env.PLATFORM_TEAM_RESEND_TEMPLATE_HASH??'',variables);
    // Render the approved published version locally: later dashboard edits cannot race this send.
    payload={from:TEAM_FROM,to:[row.recipient],subject:TEAM_SUBJECT,html:snapshot.html,tags:[{name:'flow',value:'platform-team'},{name:'notification',value:row.id}]};version=snapshot.version;hash=snapshot.hash;
    const staged=await this.rpc('stage_platform_team_notification',{p_id:row.id,p_lease:lease,p_payload:payload,p_version:version,p_hash:hash});

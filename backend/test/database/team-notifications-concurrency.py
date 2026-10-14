@@ -38,4 +38,17 @@ assert query("SELECT count(*) FROM platform_team_notification_events WHERE state
 result=query(f"BEGIN;SELECT save_platform_team_member('{owner}','{third}','SUPPORT','Test','Rollback',true,null,'{third}@example.com',false,'Rollback notification fixture',null,null);ROLLBACK;")
 assert result.returncode==0,result.stderr
 assert query("SELECT count(*) FROM platform_team_notifications;").stdout.strip()=='1'
+result=query((root/'20261102_platform_team_notification_prepare.sql').read_text(encoding='utf-8'));assert result.returncode==0,result.stderr
+result=query(f"BEGIN;ALTER TABLE platform_team_audit DISABLE TRIGGER platform_team_notification_grant;SELECT save_platform_team_member('{owner}','{third}','SUPPORT','Historical','Support',true,null,'{third}@example.com',false,'Historical grant fixture',null,null);ALTER TABLE platform_team_audit ENABLE TRIGGER platform_team_notification_grant;COMMIT;")
+assert result.returncode==0,result.stderr
+result=query(f"BEGIN;SELECT prepare_platform_team_notification('{owner}','{third}','Owner approved the historical notice.');ROLLBACK;")
+assert result.returncode==0,result.stderr
+assert query('SELECT count(*) FROM platform_team_notifications;').stdout.strip()=='1'
+def prepare(n):return query(f"BEGIN;SELECT prepare_platform_team_notification('{owner}','{third}','Owner approved the historical notice.')->>'created';SELECT pg_sleep(0.5);COMMIT;")
+with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:results=list(executor.map(prepare,[1,2]))
+assert all(r.returncode==0 for r in results),[r.stderr for r in results]
+assert sum('true' in r.stdout for r in results)==1 and sum('false' in r.stdout for r in results)==1
+assert query('SELECT count(*) FROM platform_team_notifications;').stdout.strip()=='2'
+assert query("SELECT count(*) FROM platform_team_notification_events WHERE source='OWNER';").stdout.strip()=='1'
+print('PASS: manual preparation rollback and two concurrent Owner commands preserve exactly one notification/event.')
 print('PASS: PostgreSQL concurrent workers reserve one message only; grant rollback leaves no outbox or mail event.')
