@@ -1,0 +1,37 @@
+name: EVA Search 2C1
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/**'
+      - 'backend/test/eva-search-preparation.cjs'
+      - '.github/workflows/eva-search-2c1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/**'
+      - 'backend/test/eva-search-preparation.cjs'
+      - '.github/workflows/eva-search-2c1.yml'
+permissions:
+  contents: read
+jobs:
+  private-preparation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npx jest src/modules/ocr/eva-search.spec.ts src/modules/ocr/bot-energy-rag.service.spec.ts src/modules/ocr/azure-knowledge-embeddings.connector.spec.ts src/modules/ocr/bot-energy-budget.service.spec.ts --runInBand
+      - run: node test/eva-search-preparation.cjs
+      - run: node test/eva-official-extractions.cjs
+      - run: node test/platform-cost-service-catalog.cjs
