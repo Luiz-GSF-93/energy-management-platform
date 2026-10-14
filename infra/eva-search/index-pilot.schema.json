@@ -1,0 +1,19 @@
+{
+  "name": "eva-official-pilot-v1",
+  "fields": [
+    {"name":"id","type":"Edm.String","key":true,"filterable":true},
+    {"name":"chunkId","type":"Edm.String","filterable":true},
+    {"name":"releaseId","type":"Edm.String","filterable":true},
+    {"name":"revisionId","type":"Edm.String","filterable":true},
+    {"name":"contentHash","type":"Edm.String","filterable":true},
+    {"name":"scope","type":"Edm.String","filterable":true},
+    {"name":"audience","type":"Edm.String","filterable":true},
+    {"name":"published","type":"Edm.Boolean","filterable":true},
+    {"name":"text","type":"Edm.String","searchable":true,"retrievable":true},
+    {"name":"vector","type":"Collection(Edm.Single)","searchable":true,"retrievable":true,"dimensions":1536,"vectorSearchProfile":"eva-official-vector"}
+  ],
+  "vectorSearch": {
+    "algorithms":[{"name":"eva-official-hnsw","kind":"hnsw","hnswParameters":{"metric":"cosine"}}],
+    "profiles":[{"name":"eva-official-vector","algorithm":"eva-official-hnsw"}]
+  }
+}

@@ -1,0 +1,37 @@
+name: EVA Search private execution
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/eva-search*'
+      - 'backend/src/modules/ocr/ocr.module.ts'
+      - 'backend/src/database/migrations/20261030_eva_search_execution.sql'
+      - 'backend/test/eva-search-execution*'
+      - 'frontend/app/backoffice/eva-knowledge/Search*'
+      - 'frontend/app/backoffice/platform-costs/EvaSearchExecutionMetrics.tsx'
+      - 'frontend/app/backoffice/platform-costs/page.tsx'
+      - 'frontend/test/eva-search-execution.cjs'
+      - 'infra/eva-search/index-pilot.schema.json'
+      - 'docs/proposals/eva-search-execution-migration-audit.py'
+      - '.github/workflows/eva-search-execution.yml'
+permissions:
+  contents: read
+jobs:
+  private-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node test/eva-search-execution.cjs
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js src/modules/ocr/eva-search-execution.spec.ts src/modules/ocr/eva-search.spec.ts --runInBand
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/eva-search-execution.cjs
+        working-directory: frontend
