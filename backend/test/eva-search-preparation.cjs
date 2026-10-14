@@ -19,6 +19,7 @@ const ok=x=>{assert.ok(x);checks++};
  CREATE FUNCTION public.eva_extraction_origin(uuid,boolean) RETURNS boolean LANGUAGE sql AS $$SELECT coalesce((SELECT origin_current FROM public.eva_official_extraction_jobs WHERE id=$1),false)$$;`);
  const root=path.resolve(__dirname,'../src/database/migrations'),team=fs.readFileSync(root+'/20261010_platform_team.sql','utf8'),start=team.indexOf('CREATE OR REPLACE FUNCTION public.platform_team_owner(');await db.exec(team.slice(start,team.indexOf('END $$;',start)+7));
  await db.exec(fs.readFileSync(root+'/20261028_eva_search_preparation.sql','utf8'));
+ await db.exec(fs.readFileSync(root+'/20261029_eva_search_document_order.sql','utf8'));
  const call=(actor,action,release,body)=>db.query('SELECT eva_search_action($1,$2,$3,$4) AS data',[actor,action,release,JSON.stringify(body)]).then(x=>x.rows[0].data);
  const deny=async(fn,code)=>{let e;try{await fn()}catch(x){e=x}assert.equal(e?.code,code);checks++};
  const meta={topic:'Synthetic ACL source',publishedOn:'2024-12-20',validFrom:'2025-01-01',validTo:null,references:['https://www.ccee.org.br/']};
@@ -55,6 +56,22 @@ const ok=x=>{assert.ok(x);checks++};
  list=await call(id(1),'list',null,filters);const second=await call(id(1),'list',null,{...filters,page:1});ok(list.rows.length===10&&second.rows.length===2&&new Set([...list.rows,...second.rows].map(x=>x.id)).size===12);
  const racing=await call(id(1),'detail',id(100),{page:0});const race=await Promise.allSettled([call(id(2),'approve',id(100),decision(200,racing)),call(id(1),'withdraw',id(100),decision(201,racing))]);ok(race.filter(x=>x.status==='fulfilled').length===1&&race.filter(x=>x.status==='rejected'&&x.reason.code==='23505').length===1);
  const fresh=await call(id(1),'detail',id(101),{page:0});await db.query('UPDATE eva_official_extraction_jobs SET origin_current=false WHERE id=$1',[id(20)]);await deny(()=>call(id(2),'approve',id(101),decision(202,fresh)),'23505');await deny(()=>call(id(1),'candidate',null,{jobId:id(20)}),'23505');await db.query('UPDATE eva_official_extraction_jobs SET origin_current=true,test_only=true WHERE id=$1',[id(20)]);await deny(()=>call(id(1),'candidate',null,{jobId:id(20)}),'23505');await db.query('UPDATE eva_official_extraction_jobs SET test_only=false WHERE id=$1',[id(20)]);
+ // Same-page sections have deliberately reversed UUID order; pagination follows curated position.
+ const orderJob=id(500),orderVersion=id(501),orderReview=id(502),orderRelease=id(503),orderChunks=[];
+ await db.query('INSERT INTO eva_official_extraction_jobs VALUES($1,false,$2,true)',[orderJob,'b'.repeat(64)]);
+ await db.query('INSERT INTO eva_official_extraction_versions VALUES($1,$2,1,$3,1,$4)',[orderVersion,orderJob,'a'.repeat(64),JSON.stringify(meta)]);
+ await db.query("INSERT INTO eva_official_curation_events VALUES($1,$2,$3,'REVIEWED',1)",[orderReview,orderJob,orderVersion]);
+ await db.query("INSERT INTO eva_official_extraction_job_events VALUES($1,$2,'SUCCEEDED',1)",[id(504),orderJob]);
+ for(let position=0;position<12;position++){
+  const sid=id(600-position),content='Document table part '+position,h=hash(content),heading='Table '+position;
+  await db.query("INSERT INTO eva_official_extraction_sections VALUES($1,$2,1,$3,$4,$5,$6,'[]')",[sid,orderVersion,position,heading,content,h]);
+  orderChunks.push({...chunk,id:hash(['eva-semantic-v1',orderVersion,sid,0,h].join('|')),sectionId:sid,heading,text:content,end:content.length,textHash:h,parentHash:h,context:heading});
+ }
+ await call(id(1),'prepare',null,{...body,requestId:orderRelease,jobId:orderJob,expectedVersionId:orderVersion,expectedReviewEventId:orderReview,manifest:{...manifest,jobId:orderJob,versionId:orderVersion,reviewEventId:orderReview},chunks:orderChunks});
+ const orderFirst=await call(id(1),'detail',orderRelease,{page:0}),orderLast=await call(id(1),'detail',orderRelease,{page:1});
+ ok(orderFirst.chunks.map(x=>x.section_id).join(',')===orderChunks.slice(0,10).map(x=>x.sectionId).join(','));
+ ok(orderLast.chunks.map(x=>x.section_id).join(',')===orderChunks.slice(10).map(x=>x.sectionId).join(','));
+ ok(orderFirst.chunkTotal===12&&new Set([...orderFirst.chunks,...orderLast.chunks].map(x=>x.id)).size===12);
  await db.query('INSERT INTO eva_official_curation_events VALUES($1,$2,$3,\'QUARANTINED\',2)',[id(300),id(20),id(21)]);await deny(()=>call(id(2),'approve',id(101),decision(203,fresh)),'23505');
  const metrics=(actor,month)=>db.query('SELECT eva_search_metrics($1,$2) data',[actor,month]).then(x=>x.rows[0].data);for(const a of [id(1),id(3)]){const m=await metrics(a,'2026-10');ok(!('chunks'in m)&&!('manifest'in m)&&m.externalRequests===0&&m.actualCostMicroUsd===null&&m.costSource==='NOT_CONNECTED');}await deny(()=>metrics(id(4),'2026-10'),'42501');await deny(()=>metrics(id(3),'2026-99'),'22023');
  await db.query('UPDATE platform_team_members SET active=false WHERE user_id=$1',[id(1)]);await deny(()=>call(id(1),'list',null,filters),'42501');
