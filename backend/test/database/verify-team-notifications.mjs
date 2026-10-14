@@ -23,6 +23,7 @@ try{
  await db.query('insert into organization_members values($1,\'customer\',\'org\')',[tenant]);
  await db.exec(readFileSync(new URL("../../src/database/migrations/20261010_platform_team.sql",import.meta.url),"utf8"));
  await db.exec(readFileSync(new URL("../../src/database/migrations/20261031_platform_team_notifications.sql",import.meta.url),"utf8"));
+ await db.exec(readFileSync(new URL("../../src/database/migrations/20261101_platform_team_webhook_isolation.sql",import.meta.url),"utf8"));
  ok(await value('select count(*)=0 from platform_team_notifications'),'no backfill or resend of historical assignments');
  const ownerProcedure=await value("select prosrc from pg_proc where proname='save_platform_team_member'");
  await save(second,'OWNER');await save(finance,'FINANCE');await save(support,'SUPPORT');
@@ -51,6 +52,7 @@ try{
  ok(claim&&claim.lease_id===lease,'lease persisted before sending');
  const getState=()=>value('select state from platform_team_notifications where id=$1',[claim.id]);
  ok(await getState()==='SENDING','claim is separate from provider acceptance');
+ ok((await value("select record_platform_team_notification_delivery('msg_unrelated','99999999-9999-4999-8999-999999999999','DELIVERED',now())")).ignored,'unrelated provider event ignored even while own mail is sending');
  const payload={from:'EnergyOS <nao-responda@notificacoes.expertenergy.com.br>',subject:'Seu acesso à equipe da plataforma — EnergyOS',to:[claim.recipient],html:'<p>Approved test snapshot</p>'};
  const hash='a'.repeat(64);
  for(const invalid of [{...payload,from:null},{...payload,subject:null},{...payload,to:['other@example.com']},{...payload,html:''}])await denied(()=>value('select stage_platform_team_notification($1,$2,$3,\'approved-v1\',$4)',[claim.id,lease,invalid,hash]),'22023');
