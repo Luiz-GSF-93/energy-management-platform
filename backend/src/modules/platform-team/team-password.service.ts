@@ -10,8 +10,9 @@ export class TeamPasswordService{
  async read(actor:string,user:string,page=0){this.enabled();if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');const r=await this.db.getClient().rpc('read_platform_team_password',{p_actor:actor,p_user:user,p_offset:page*25});this.check(r.error);if(!r.data)throw new ServiceUnavailableException('Consulta indisponível.');return r.data;}
  async send(actor:string,user:string,key:string,reason:string){
   this.enabled();if(this.config.get<string>('PLATFORM_TEAM_PASSWORD_CALLS_ENABLED')!=='true')throw new ServiceUnavailableException('Envio de link de senha desligado.');
-  const origin=this.config.get<string>('FRONTEND_URL');
-  if(origin!=='https://app.expertenergy.com.br')throw new ServiceUnavailableException('Destino de autenticação não conferido.');
+  const declared=this.config.get<string>('FRONTEND_URL')||this.config.get<string>('CORS_ORIGIN')||'https://app.expertenergy.com.br';
+  let origin:string;
+  try{const target=new URL(declared);if(target.origin!=='https://app.expertenergy.com.br'||target.pathname!=='/'||target.search||target.hash||target.username||target.password)throw new Error('Unsafe destination');origin=target.origin;}catch{throw new ServiceUnavailableException('Destino de autenticação não conferido.');}
   const client=this.db.getClient();const r=await client.rpc('reserve_platform_team_password',{p_actor:actor,p_user:user,p_key:key,p_reason:reason.trim()});this.check(r.error);
   if(!r.data?.id)throw new ServiceUnavailableException('Reserva não confirmada; confira o histórico.');
   if(!r.data.created)return {id:r.data.id,state:r.data.state,duplicate:true};
