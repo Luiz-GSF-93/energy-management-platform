@@ -1,9 +1,9 @@
 import {Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {ClientSecretCredential} from '@azure/identity';
-import {SEARCH_DIMENSIONS} from './eva-search.model';
+import {SEARCH_DIMENSIONS,searchDocumentId} from './eva-search.model';
 import {exact,hash,uuid} from './eva-extraction.model';
-export type SearchIndexedDocument={id:string;releaseId:string;revisionId:string;contentHash:string;scope:'OFFICIAL_PUBLIC';audience:'PLATFORM';published:boolean;text:string;vector:number[]};
+export type SearchIndexedDocument={id:string;chunkId:string;releaseId:string;revisionId:string;contentHash:string;scope:'OFFICIAL_PUBLIC';audience:'PLATFORM';published:boolean;text:string;vector:number[]};
 /** Not wired to a worker or chat in 2C1. No user can issue a provider request. */
 @Injectable()
 export class EvaSearchConnector{
@@ -30,7 +30,7 @@ export class EvaSearchConnector{
  private vector(v:number[]){if(!Array.isArray(v)||v.length!==SEARCH_DIMENSIONS||v.some(x=>!Number.isFinite(x)))throw new ServiceUnavailableException('Vetor inválido.');}
  async index(documents:SearchIndexedDocument[]){
   if(!Array.isArray(documents)||!documents.length||documents.length>100)throw new ServiceUnavailableException('Lote inválido.');
-  for(const d of documents){this.vector(d.vector);if(!exact(d,['id','releaseId','revisionId','contentHash','scope','audience','published','text','vector'])||!hash(d.id)||!uuid(d.releaseId)||!uuid(d.revisionId)||!hash(d.contentHash)||d.scope!=='OFFICIAL_PUBLIC'||d.audience!=='PLATFORM'||d.published!==false||typeof d.text!=='string'||Buffer.byteLength(d.text)>20000)throw new ServiceUnavailableException('Documento de índice inválido.');}
+  for(const d of documents){this.vector(d.vector);if(!exact(d,['id','chunkId','releaseId','revisionId','contentHash','scope','audience','published','text','vector'])||!hash(d.id)||!hash(d.chunkId)||!uuid(d.releaseId)||!uuid(d.revisionId)||d.id!==searchDocumentId(d.releaseId,d.chunkId)||!hash(d.contentHash)||d.scope!=='OFFICIAL_PUBLIC'||d.audience!=='PLATFORM'||d.published!==false||typeof d.text!=='string'||Buffer.byteLength(d.text)>20000)throw new ServiceUnavailableException('Documento de índice inválido.');}
   const r=await this.request('INDEX','index',{value:documents.map(d=>({'@search.action':'upload',...d}))});
   if(!r||!Array.isArray(r.value)||r.value.length!==documents.length||r.value.some((x:any)=>!x||!documents.some(d=>d.id===x.key)||x.status!==true)||new Set(r.value.map((x:any)=>x.key)).size!==documents.length)throw new ServiceUnavailableException('Indexação parcial ou divergente.');
   return {confirmedKeys:r.value.map((x:any)=>x.key)};
@@ -38,8 +38,8 @@ export class EvaSearchConnector{
  async query(question:string,vector:number[],authorizedReleaseId:string){
   this.vector(vector);if(typeof question!=='string'||!question.trim()||question.length>500||! /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(authorizedReleaseId))throw new ServiceUnavailableException('Consulta inválida.');
   const filter=`releaseId eq '${authorizedReleaseId}' and scope eq 'OFFICIAL_PUBLIC' and audience eq 'PLATFORM' and published eq true`;
-  const r=await this.request('QUERY','search',{search:question,filter,vectorFilterMode:'preFilter',vectorQueries:[{kind:'vector',vector,fields:'vector',k:20}],top:10,select:'id,releaseId,revisionId,contentHash',queryType:'simple'});
-  if(!r||!Array.isArray(r.value)||r.value.length>10||r.value.some((x:any)=>!x||x.releaseId!==authorizedReleaseId||!uuid(x.revisionId)||!hash(x.id)||!hash(x.contentHash)||!Number.isFinite(x['@search.score'])||x['@search.score']<0)||new Set(r.value.map((x:any)=>x.id)).size!==r.value.length)throw new ServiceUnavailableException('Evidência Search divergente.');
-  return r.value.map((x:any)=>({id:x.id,revisionId:x.revisionId,contentHash:x.contentHash,ranking:'RRF' as const,score:x['@search.score']}));
+  const r=await this.request('QUERY','search',{search:question,filter,vectorFilterMode:'preFilter',vectorQueries:[{kind:'vector',vector,fields:'vector',k:20}],top:10,select:'id,chunkId,releaseId,revisionId,contentHash',queryType:'simple'});
+  if(!r||!Array.isArray(r.value)||r.value.length>10||r.value.some((x:any)=>!x||x.releaseId!==authorizedReleaseId||!uuid(x.revisionId)||!hash(x.id)||!hash(x.chunkId)||x.id!==searchDocumentId(authorizedReleaseId,x.chunkId)||!hash(x.contentHash)||!Number.isFinite(x['@search.score'])||x['@search.score']<0)||new Set(r.value.map((x:any)=>x.id)).size!==r.value.length)throw new ServiceUnavailableException('Evidência Search divergente.');
+  return r.value.map((x:any)=>({id:x.chunkId,indexId:x.id,revisionId:x.revisionId,contentHash:x.contentHash,ranking:'RRF' as const,score:x['@search.score']}));
  }
 }

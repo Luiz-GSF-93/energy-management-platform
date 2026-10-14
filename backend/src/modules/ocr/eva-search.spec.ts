@@ -1,5 +1,5 @@
 import {digest} from './eva-extraction.model';
-import {fragmentSource,SearchSource,searchFilters,searchPrepare} from './eva-search.model';
+import {fragmentSource,SearchSource,searchFilters,searchPrepare,searchDocumentId} from './eva-search.model';
 import {EvaSearchConnector} from './eva-search.connector';
 import {EvaSearchService} from './eva-search.service';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -17,7 +17,8 @@ describe('EVA semantic preparation',()=>{
  it('rejects query authorization supplied as filter and extraneous prepare fields',()=>{expect(()=>searchFilters({page:'0',organizationId:'org_other'})).toThrow();expect(()=>searchPrepare({actorId:id(1)})).toThrow();});
 });
 describe('EVA Search safe transport',()=>{
- const vector=Array(1536).fill(.1),doc={id:'a'.repeat(64),releaseId:id(1),revisionId:id(2),contentHash:'b'.repeat(64),scope:'OFFICIAL_PUBLIC' as const,audience:'PLATFORM' as const,published:false,text:'Evidence',vector};
+ const vector=Array(1536).fill(.1),doc={id:searchDocumentId(id(1),'a'.repeat(64)),chunkId:'a'.repeat(64),releaseId:id(1),revisionId:id(2),contentHash:'b'.repeat(64),scope:'OFFICIAL_PUBLIC' as const,audience:'PLATFORM' as const,published:false,text:'Evidence',vector};
+ it('isolates remote keys across releases even for the same curated chunk',()=>{expect(searchDocumentId(id(1),doc.chunkId)).not.toBe(searchDocumentId(id(5),doc.chunkId));expect(searchDocumentId(id(1),doc.chunkId)).toBe(doc.id);});
  it('performs no network or credentials operation with absent flags',async()=>{const c=new EvaSearchConnector({get:()=>undefined} as any),net=jest.spyOn(global,'fetch').mockRejectedValue(Error('unexpected'));try{await expect(c.index([doc])).rejects.toThrow('desligadas');await expect(c.query('Regra',vector,id(1))).rejects.toThrow('desligadas');expect(net).not.toHaveBeenCalled();}finally{net.mockRestore()}});
  it('requires authorization filters on the entire hybrid query',async()=>{const c=new EvaSearchConnector({} as any),request=jest.spyOn(c as any,'request').mockResolvedValue({value:[]});await c.query('PdC 1.8',vector,id(1));const b=request.mock.calls[0][2] as any;expect(b.filter).toContain(`releaseId eq '${id(1)}'`);expect(b.filter).toContain('published eq true');expect(b.filter).toContain("audience eq 'PLATFORM'");expect(b.vectorFilterMode).toBe('preFilter');expect(b.search).toBe('PdC 1.8');});
  it('refuses invalid dimensions, endpoint URL injection and surplus document data',async()=>{const c=new EvaSearchConnector({get:(k:string)=>k.endsWith('ENABLED')?'true':k==='EVA_SEARCH_ENDPOINT'?'https://private.local':undefined} as any);await expect(c.query('Q',[0],id(1))).rejects.toThrow('Vetor');await expect(c.query('Q',vector,id(1))).rejects.toThrow('Configuração');await expect(c.index([{...doc,secret:'never send'} as any])).rejects.toThrow('Documento');});

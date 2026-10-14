@@ -1,6 +1,7 @@
 import {digest,exact,hash,uuid} from './eva-extraction.model';
 export const SEARCH_PARSER='eva-semantic-v1';
 export const SEARCH_DIMENSIONS=1536;
+export const searchDocumentId=(releaseId:string,chunkId:string)=>digest(releaseId+'|'+chunkId);
 export type SearchSection={id:string;page:number;position:number;heading:string;content:string;content_hash:string;issues:string[]};
 export type SearchSource={jobId:string;versionId:string;reviewEventId:string;contentHash:string;fileHash:string;pageCount:number;metadata:{topic:string;publishedOn:string;validFrom:string;validTo:string|null;references:string[]};sections:SearchSection[]};
 export type SearchChunk={id:string;sectionId:string;ordinal:number;page:number;start:number;end:number;heading:string;text:string;textHash:string;context:string;kind:'TEXT'|'FLOW'|'TABLE';parentHash:string};
