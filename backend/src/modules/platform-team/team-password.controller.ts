@@ -14,6 +14,6 @@ export class TeamPasswordDto{
 @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
 export class TeamPasswordController{
  constructor(private readonly service:TeamPasswordService){}
- @Get(':user') read(@Req() req:RequestWithAuthenticatedUser,@Param('user',new ParseUUIDPipe()) user:string,@Query('page') page?:string){return this.service.read(req.authenticatedUser.userId,user,page===undefined?0:Number(page));}
- @Post(':user') send(@Req() req:RequestWithAuthenticatedUser,@Param('user',new ParseUUIDPipe()) user:string,@Body() dto:TeamPasswordDto){return this.service.send(req.authenticatedUser.userId,user,dto.requestKey,dto.reason);}
+ @Get(':user') @RequirePermission([TEAM_MANAGE]) read(@Req() req:RequestWithAuthenticatedUser,@Param('user',new ParseUUIDPipe()) user:string,@Query('page') page?:string){return this.service.read(req.authenticatedUser.userId,user,page===undefined?0:Number(page));}
+ @Post(':user') @RequirePermission([TEAM_MANAGE]) send(@Req() req:RequestWithAuthenticatedUser,@Param('user',new ParseUUIDPipe()) user:string,@Body() dto:TeamPasswordDto){return this.service.send(req.authenticatedUser.userId,user,dto.requestKey,dto.reason);}
 }
