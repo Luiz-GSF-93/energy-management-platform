@@ -1,0 +1,53 @@
+name: Platform team transactional notifications
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/platform-team/**'
+      - 'backend/src/database/migrations/20261031_platform_team_notifications.sql'
+      - 'backend/test/database/*team-notifications*'
+      - 'frontend/app/backoffice/platform-team/**'
+      - 'frontend/app/backoffice/platform-costs/TeamNotificationMetrics.tsx'
+      - 'frontend/app/backoffice/platform-costs/page.tsx'
+      - 'frontend/test/team-notifications.cjs'
+      - 'docs/platform-team-notifications.txt'
+      - 'docs/proposals/team-notifications-migration-audit.py'
+      - '.github/workflows/platform-team-notifications.yml'
+permissions:
+  contents: read
+jobs:
+  private-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node test/database/verify-team-notifications.mjs
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js src/modules/platform-team --runInBand
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - name: Disposable PostgreSQL concurrency fixture
+        run: |
+          docker run -d --name energyos-team-notifications-20261014 --network none -e POSTGRES_HOST_AUTH_METHOD=trust postgres:15
+          python3 - <<'PY'
+          import subprocess,time
+          for _ in range(30):
+           if subprocess.run(['docker','exec','energyos-team-notifications-20261014','pg_isready','-U','postgres'],capture_output=True).returncode==0:break
+           time.sleep(1)
+          else:raise RuntimeError('Disposable PostgreSQL not ready')
+          PY
+          python3 backend/test/database/team-notifications-concurrency.py
+      - name: Remove only the disposable test container
+        if: always()
+        run: docker rm -f energyos-team-notifications-20261014 || true
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/team-notifications.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

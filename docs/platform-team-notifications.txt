@@ -1,0 +1,37 @@
+EnergyOS — avisos transacionais da equipe da plataforma
+
+Entrega desligada. Nenhum envio real ou reenvio histórico é parte desta implementação.
+
+Flags, todas false por padrão:
+PLATFORM_TEAM_NOTIFICATIONS_ENABLED — consultas privadas do Owner e worker.
+PLATFORM_TEAM_NOTIFICATION_CALLS_ENABLED — GET do modelo e POST de envio no Resend.
+PLATFORM_TEAM_NOTIFICATION_WEBHOOK_ENABLED — processamento de webhook autenticado.
+
+Credenciais e parâmetros de homologação, diretamente no backend:
+RESEND_API_KEY — credencial já existente; não ampliar escopo automaticamente.
+PLATFORM_TEAM_RESEND_WEBHOOK_SECRET — segredo Svix do webhook dedicado.
+PLATFORM_TEAM_RESEND_TEMPLATE_VERSION — current_version_id conferido pelo Owner.
+PLATFORM_TEAM_RESEND_TEMPLATE_HASH — SHA-256 do HTML exato do modelo conferido.
+Nenhum segredo é incluído em respostas, migrações ou logs de envio.
+
+Modelo publicado: 84f37309-be6f-4c5f-aed2-499d562124cb.
+Variáveis: NOME_USUARIO, PERFIL, ATRIBUICOES, DATA_VALIDACAO.
+Remetente: EnergyOS <nao-responda@notificacoes.expertenergy.com.br>.
+O conector confere a versão e o hash publicados, renderiza o snapshot com escape HTML e preserva o corpo na fila antes de enviar. O POST envia esse HTML preservado, em vez de resolver novamente um alias mutável no momento do envio. Mudanças futuras no Resend bloqueiam novos envios até nova conferência. Não altera o convite Supabase de criação de senha.
+
+A migração 20261031_platform_team_notifications.sql acrescenta exatamente duas tabelas privadas. O trigger após a inserção da auditoria participa da transação de concessão; concessões negadas ou revertidas não deixam avisos. Não modifica save_platform_team_member nem a matriz de perfis. Não faz backfill, e Bruno não recebe reenvio por esta implantação.
+
+O worker reserva um item por minuto, com lease de cinco minutos e bloqueio entre processos via FOR UPDATE SKIP LOCKED. Uma reserva expirada vira UNKNOWN. A chave de idempotência é vinculada ao aviso; não se depende da janela de 24h do provedor para reenviar resultados incertos. Antes do envio verifica acesso ativo, perfil e destinatário ainda válidos.
+
+Endpoint POST /api/v1/webhooks/platform-team-resend: assinatura Svix sobre rawBody, tolerância de cinco minutos, deduplicação de event ID, estados monotônicos/temporais e vínculo pelo email_id preservado. Evento recebido antes do vínculo de recibo durante envio pede reentrega. Eventos sem vínculo não alteram contas. Não armazenar o JSON bruto do webhook.
+
+Owner consulta lista e detalhes com paginação e filtros de período UTC, perfil, identidade e envio. O modal distingue a concessão do acesso, o convite Auth, a confirmação do e-mail e último login registrado. Nenhum desses campos comprova leitura da mensagem ou criação de senha por inferência.
+
+Nova tentativa: apenas FAILED antes de payload preservado, sem recibo, menos de três reservas, com justificativa do Owner. UNKNOWN, payload preservado, devoluções e reclamações bloqueiam reenvio. Não existe recuperação automática que envie novamente após falha incerta. Análise excepcional desses casos exige evidência e etapa própria aprovada.
+
+Homologação posterior: conferir domínio/remetente, versão/hash e chave, configurar webhook pelo usuário, conferir o evento e destinatário de um único teste e ativar flags somente após autorização. Não contratar plano Resend. Preços/faturas não conferidos são desconhecidos, nunca zero. Volume de avisos/erros e custo real do provedor devem ser registrados no catálogo Custos e performance pelo fluxo existente, visível ao Owner e Financeiro, sem dados pessoais da equipe para Financeiro/Suporte.
+
+Referências oficiais:
+https://resend.com/docs/api-reference/templates/get-template
+https://resend.com/docs/api-reference/emails/send-email
+https://resend.com/docs/webhooks/verify-webhooks-requests
