@@ -1,0 +1,23 @@
+name: Cost service budget notices
+on:
+  pull_request:
+    paths: ['frontend/app/backoffice/platform-costs/**', 'frontend/test/service-budget.cjs', 'frontend/test/platform-cost-service-catalog.cjs', '.github/workflows/cost-service-budget.yml']
+permissions:
+  contents: read
+jobs:
+  catalog-notices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: node test/service-budget.cjs
+      - run: node test/platform-cost-service-catalog.cjs
