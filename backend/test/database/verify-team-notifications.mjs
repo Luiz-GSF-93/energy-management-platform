@@ -24,6 +24,7 @@ try{
  await db.exec(readFileSync(new URL("../../src/database/migrations/20261010_platform_team.sql",import.meta.url),"utf8"));
  await db.exec(readFileSync(new URL("../../src/database/migrations/20261031_platform_team_notifications.sql",import.meta.url),"utf8"));
  await db.exec(readFileSync(new URL("../../src/database/migrations/20261101_platform_team_webhook_isolation.sql",import.meta.url),"utf8"));
+ await db.exec(readFileSync(new URL("../../src/database/migrations/20261102_platform_team_notification_prepare.sql",import.meta.url),"utf8"));
  ok(await value('select count(*)=0 from platform_team_notifications'),'no backfill or resend of historical assignments');
  const ownerProcedure=await value("select prosrc from pg_proc where proname='save_platform_team_member'");
  await save(second,'OWNER');await save(finance,'FINANCE');await save(support,'SUPPORT');
@@ -111,5 +112,26 @@ try{
  await value("select finish_platform_team_notification($1,$2,'ACCEPTED',$3,$4,'approved-v1',$5,'Late synchronous receipt')",[race.id,raceLease,race.id,racePayload,hash]);
  ok(await value('select state from platform_team_notifications where id=$1',[race.id])==='DELIVERED','late POST acceptance never overwrites already verified delivery');
  ok(await value('select count(*)=2 from information_schema.tables where table_name in (\'platform_team_notifications\',\'platform_team_notification_events\')'),'exactly two additive private tables');
+ // Simulate an audited assignment predating installation of the notification trigger.
+ await db.exec('ALTER TABLE platform_team_audit DISABLE TRIGGER platform_team_notification_grant');
+ await save(third,'SUPPORT');
+ await db.exec('ALTER TABLE platform_team_audit ENABLE TRIGGER platform_team_notification_grant');
+ const prepare=(actor=owner,target=third,reason='Owner authorized an audited historical role notice.')=>value('select prepare_platform_team_notification($1,$2,$3)',[actor,target,reason]);
+ const size=await value('select count(*) from platform_team_notifications');
+ await denied(()=>prepare(finance),'42501');await denied(()=>prepare(support),'42501');await denied(()=>prepare(tenant),'42501');
+ await denied(()=>prepare(owner,third,'short'),'22023');await denied(()=>prepare(owner,tenant),'22023');
+ await denied(()=>prepare(owner,owner),'22023');
+ const oldGrant=await value('select to_jsonb(t) from platform_team_members t where user_id=$1',[third]);
+ const prepared=await prepare();ok(prepared.created===true,'Owner can explicitly prepare a historical grant');
+ ok(await value('select count(*) from platform_team_notifications')===size+1,'exactly one manual notice');
+ const notice=await value('select to_jsonb(n) from platform_team_notifications n where id=$1',[prepared.id]);
+ const audit=await value('select to_jsonb(a) from platform_team_audit a where id=$1',[notice.audit_id]);
+ ok(notice.validated_at===audit.created_at,'original grant date preserved');
+ ok(await value('select to_jsonb(t) from platform_team_members t where user_id=$1',[third]).then(x=>JSON.stringify(x)===JSON.stringify(oldGrant)),'no member or profile mutation');
+ const again=await prepare();ok(again.id===prepared.id&&again.created===false,'same grant is reconfirmed without duplicate');
+ ok(await value('select count(*)=1 from platform_team_notification_events where notification_id=$1 and source=\'OWNER\' and actor_id=$2',[prepared.id,owner]),'immutable history captures requesting Owner');
+ await db.exec('BEGIN');await save(third,'SUPPORT',1,false);await denied(()=>prepare(),'22023');await db.exec('ROLLBACK');
+ for(const role of ['anon','authenticated'])ok(await value('select has_function_privilege($1,\'prepare_platform_team_notification(uuid,uuid,text)\',\'EXECUTE\')',[role])===false,'prepare RPC revoked for '+role);
+ ok(await value('select has_function_privilege(\'service_role\',\'prepare_platform_team_notification(uuid,uuid,text)\',\'EXECUTE\')')===true,'prepare RPC executable only by service role with Owner check');
  console.log(JSON.stringify({checks,result:'PASS',externalCalls:0,emailsSent:0}));
 }finally{await db.close();}
