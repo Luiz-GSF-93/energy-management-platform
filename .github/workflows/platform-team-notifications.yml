@@ -7,6 +7,9 @@ on:
       - 'backend/src/database/migrations/20261101_platform_team_webhook_isolation.sql'
       - 'backend/src/database/migrations/20261102_platform_team_notification_prepare.sql'
       - 'backend/test/database/*team-notifications*'
+      - 'backend/src/database/migrations/20261103_platform_team_password_requests.sql'
+      - 'backend/test/database/*team-password*'
+      - 'frontend/test/team-password.cjs'
       - 'frontend/app/backoffice/platform-team/**'
       - 'frontend/app/backoffice/platform-costs/TeamNotificationMetrics.tsx'
       - 'frontend/app/backoffice/platform-costs/page.tsx'
@@ -27,6 +30,8 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
+      - run: node test/database/verify-team-password.mjs
+        working-directory: backend
       - run: node test/database/verify-team-notifications.mjs
         working-directory: backend
       - run: node node_modules/jest/bin/jest.js src/modules/platform-team --runInBand
@@ -43,11 +48,13 @@ jobs:
            time.sleep(1)
           else:raise RuntimeError('Disposable PostgreSQL not ready')
           PY
-          python3 backend/test/database/team-notifications-concurrency.py
+          python3 backend/test/database/team-password-concurrency.py
       - name: Remove only the disposable test container
         if: always()
         run: docker rm -f energyos-team-notifications-20261014 || true
       - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/team-password.cjs
         working-directory: frontend
       - run: node test/team-notifications.cjs
         working-directory: frontend

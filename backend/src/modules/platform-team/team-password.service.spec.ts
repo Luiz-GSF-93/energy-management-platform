@@ -1,0 +1,25 @@
+import {TeamPasswordService} from './team-password.service';
+const actor='11111111-1111-4111-8111-111111111111',user='22222222-2222-4222-8222-222222222222',key='33333333-3333-4333-8333-333333333333';
+function setup(purpose='INVITE'){
+ const conf:any={PLATFORM_TEAM_PASSWORD_ENABLED:'true',PLATFORM_TEAM_PASSWORD_CALLS_ENABLED:'true',FRONTEND_URL:'https://app.expertenergy.com.br'};
+ const invite:any=jest.fn().mockResolvedValue({data:{user:{id:user}},error:null}),recovery:any=jest.fn().mockResolvedValue({error:null});
+ const identity:any={id:user,email:'test@example.com',invited_at:'2026-10-14',email_confirmed_at:purpose==='RECOVERY'?'2026-10-14':null};
+ const lookup=jest.fn().mockResolvedValue({data:{user:identity},error:null});
+ const rpc:any=jest.fn(async(name:string,args:any)=>{if(name==='reserve_platform_team_password')return {data:{id:key,created:true,purpose,email:'test@example.com'},error:null};if(name==='read_platform_team_password')return {data:{active:true,email:'test@example.com',purpose},error:null};return {data:{id:key,state:args.p_state},error:null};});
+ const db:any={getClient:()=>({rpc}),createAuthClient:()=>({auth:{admin:{getUserById:lookup,inviteUserByEmail:invite},resetPasswordForEmail:recovery}})};
+ return {service:new TeamPasswordService(db,{get:(k:string)=>conf[k]} as any),conf,invite,recovery,lookup,rpc,identity};
+}
+describe('Owner password requests',()=>{
+ test('off prevents both reservation and provider',async()=>{const x=setup();x.conf.PLATFORM_TEAM_PASSWORD_CALLS_ENABLED='false';await expect(x.service.send(actor,user,key,'Justificativa conferida')).rejects.toThrow();expect(x.rpc).not.toHaveBeenCalled();expect(x.invite).not.toHaveBeenCalled();});
+ test('invite uses fixed redirect and same existing identity',async()=>{const x=setup();const r=await x.service.send(actor,user,key,'Justificativa conferida');expect(r.state).toBe('ACCEPTED');expect(x.invite).toHaveBeenCalledWith('test@example.com',{redirectTo:'https://app.expertenergy.com.br/auth/accept-invite'});expect(x.recovery).not.toHaveBeenCalled();expect(JSON.stringify(r)).not.toContain('test@example.com');});
+ test('confirmed account uses recovery only',async()=>{const x=setup('RECOVERY');await x.service.send(actor,user,key,'Justificativa conferida');expect(x.recovery).toHaveBeenCalledWith('test@example.com',{redirectTo:'https://app.expertenergy.com.br/auth/reset-password'});expect(x.invite).not.toHaveBeenCalled();});
+ test('duplicate reservation never calls provider',async()=>{const x=setup();x.rpc.mockResolvedValueOnce({data:{id:key,created:false,state:'ACCEPTED'},error:null});expect((await x.service.send(actor,user,key,'Justificativa conferida')).duplicate).toBe(true);expect(x.lookup).not.toHaveBeenCalled();expect(x.invite).not.toHaveBeenCalled();});
+ test('denied Owner never queries Auth',async()=>{const x=setup();x.rpc.mockResolvedValueOnce({data:null,error:{code:'42501'}});await expect(x.service.send(actor,user,key,'Justificativa conferida')).rejects.toThrow();expect(x.lookup).not.toHaveBeenCalled();});
+ test('concurrent confirmation blocks invite',async()=>{const x=setup();x.identity.email_confirmed_at='2026-10-14';expect((await x.service.send(actor,user,key,'Justificativa conferida')).state).toBe('FAILED');expect(x.invite).not.toHaveBeenCalled();expect(x.recovery).not.toHaveBeenCalled();});
+ test('identity mismatch blocks provider',async()=>{const x=setup();x.identity.email='wrong@example.com';expect((await x.service.send(actor,user,key,'Justificativa conferida')).state).toBe('FAILED');expect(x.invite).not.toHaveBeenCalled();});
+ test('unknown provider outcome preserved without retry',async()=>{const x=setup();x.invite.mockRejectedValue(new Error('private provider secret'));expect((await x.service.send(actor,user,key,'Justificativa conferida')).state).toBe('UNKNOWN');expect(x.invite).toHaveBeenCalledTimes(1);expect(JSON.stringify(x.rpc.mock.calls)).not.toContain('private provider secret');});
+ test('definitive rejection differs from uncertainty',async()=>{const x=setup();x.invite.mockResolvedValue({error:{status:429}});expect((await x.service.send(actor,user,key,'Justificativa conferida')).state).toBe('FAILED');});
+ test('unsafe origin blocks reservation',async()=>{const x=setup();x.conf.FRONTEND_URL='https://other.example';await expect(x.service.send(actor,user,key,'Justificativa conferida')).rejects.toThrow();expect(x.rpc).not.toHaveBeenCalled();});
+ test('page validation precedes RPC',async()=>{const x=setup();await expect(x.service.read(actor,user,-1)).rejects.toThrow();expect(x.rpc).not.toHaveBeenCalled();});
+ test('provider deadline records UNKNOWN',async()=>{jest.useFakeTimers();try{const x=setup();x.invite.mockImplementation(()=>new Promise(()=>{}));const run=x.service.send(actor,user,key,'Justificativa conferida');await jest.advanceTimersByTimeAsync(20001);expect((await run).state).toBe('UNKNOWN');expect(x.invite).toHaveBeenCalledTimes(1);}finally{jest.useRealTimers();}});
+});
