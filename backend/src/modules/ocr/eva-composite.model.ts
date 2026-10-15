@@ -4,7 +4,8 @@ import {knowledgeCatalogue,officialKnowledgeUrl} from './bot-energy-knowledge';
 
 export const COMPOSITE_VERSION='eva-composite-v1';
 export const COMPOSITE_LIMITS={pages:500,parts:25,chunks:2000,batch:100,text:6000,bytes:4*1024*1024} as const;
-export type CompositePart=SearchSource&{ordinal:number;startPage:number;endPage:number};
+export type CompositeCoverage={page:number;state:'INCLUDED'|'MIXED'|'EXCLUDED';hash:string};
+export type CompositePart=SearchSource&{ordinal:number;startPage:number;endPage:number;coverage?:CompositeCoverage[]};
 export type CompositeCandidate={setId:string;chainId:string;manifestHash:string;originalHash:string;pages:number;documentId:string;title:string;edition:string;url:string;authority:string;family:string;markets:string[];parts:CompositePart[]};
 export type CompositeChunk={id:string;partOrdinal:number;jobId:string;versionId:string;sectionId:string;ordinal:number;page:number;partPage:number;start:number;end:number;heading:string;context:string;text:string;textHash:string;parentHash:string};
 const day=(x:unknown):x is string=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Number.isFinite(Date.parse(x))&&new Date(x).toISOString().slice(0,10)===x;
@@ -22,7 +23,10 @@ export function prepareComposite(c:CompositeCandidate){
    ['publishedOn','validFrom','validTo','topic'].some(k=>(p.metadata as any)?.[k]!==(metadata as any)[k])||!Array.isArray(p.metadata.references)||!p.metadata.references.length)throw Error('INCOMPLETE_OR_MIXED_COMPOSITE');
   seenJobs.add(p.jobId);next=p.endPage+1;
   for(const ref of p.metadata.references){if(typeof ref!=='string'||ref.length>2048||!ref.startsWith('https://'))throw Error('INVALID_REFERENCE');references.add(ref);}
-  const covered=new Set(p.sections.map(s=>s.page));if(covered.size!==p.pageCount||Array.from({length:p.pageCount},(_,i)=>i+1).some(n=>!covered.has(n)))throw Error('MISSING_PART_PAGE');
+  const covered=new Set(p.sections.map(s=>s.page));
+  if(p.coverage!==undefined){
+   if(!Array.isArray(p.coverage)||p.coverage.length!==p.pageCount||p.coverage.some((x,i)=>!exact(x,['page','state','hash'])||x.page!==i+1||!['INCLUDED','MIXED','EXCLUDED'].includes(x.state)||!hash(x.hash)||(x.state==='EXCLUDED')===covered.has(x.page)))throw Error('INVALID_REVIEWED_COVERAGE');
+  }else if(covered.size!==p.pageCount||Array.from({length:p.pageCount},(_,i)=>i+1).some(n=>!covered.has(n)))throw Error('MISSING_PART_PAGE');
   for(const section of p.sections){if(seenSections.has(section.id))throw Error('DUPLICATE_SECTION');seenSections.add(section.id);}
   for(const x of fragmentSource(p)){
    if(x.text.length>COMPOSITE_LIMITS.text||Buffer.byteLength(x.text)>16000)throw Error('CURATE_OVERSIZED_SECTION');
@@ -33,7 +37,7 @@ export function prepareComposite(c:CompositeCandidate){
  if(next!==c.pages+1||!chunks.length||chunks.length>COMPOSITE_LIMITS.chunks||references.size>50)throw Error('COMPOSITE_COVERAGE_OR_LIMIT');
  const manifest={version:COMPOSITE_VERSION,setId:c.setId,chainId:c.chainId,sourceManifestHash:c.manifestHash,originalFileHash:c.originalHash,originalPageCount:c.pages,documentId:c.documentId,
   title:c.title,edition:c.edition,url:c.url,authority:c.authority,family:c.family,markets:c.markets,metadata:{...metadata,references:[...references].sort()},
-  parts:c.parts.map(p=>({ordinal:p.ordinal,startPage:p.startPage,endPage:p.endPage,jobId:p.jobId,versionId:p.versionId,reviewEventId:p.reviewEventId,contentHash:p.contentHash,fileHash:p.fileHash})),chunkTotal:chunks.length};
+  parts:c.parts.map(p=>({ordinal:p.ordinal,startPage:p.startPage,endPage:p.endPage,jobId:p.jobId,versionId:p.versionId,reviewEventId:p.reviewEventId,contentHash:p.contentHash,fileHash:p.fileHash,...(p.coverage===undefined?{}:{coverage:p.coverage})})),chunkTotal:chunks.length};
  const batches=Array.from({length:Math.ceil(chunks.length/COMPOSITE_LIMITS.batch)},(_,i)=>({ordinal:i+1,chunks:chunks.slice(i*COMPOSITE_LIMITS.batch,(i+1)*COMPOSITE_LIMITS.batch)}));
  const result={manifest,batches};if(Buffer.byteLength(JSON.stringify(result))>COMPOSITE_LIMITS.bytes)throw Error('COMPOSITE_BYTES_LIMIT');return result;
 }
