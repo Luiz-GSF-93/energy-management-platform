@@ -34,7 +34,7 @@ export class BackofficeAiService {
    const result=await this.connector.interpret(t.organizationId,question,evidence);
    await this.budget.settle(reservation,result.usage);
    await log(result.supported?'READY':'NO_EVIDENCE',{model:result.model,citations:result.citations,fields:result.fields,doubts:result.doubts,answer:result.answer});
-   if(!result.supported)return {state:'NO_EVIDENCE',message:'Não há evidência suficiente no contexto autorizado para responder. Nenhum preenchimento foi presumido.',checkedAt};
+   if(!result.supported)return {state:'NO_EVIDENCE',message:'Ainda não encontrei evidência suficiente para te orientar. Qual etapa do processo ou informação da fatura você quer entender? Assim posso conferir as fontes do contexto autorizado.',checkedAt};
    return {state:'READY',message:'Interpretação da IA concluída. Confira as fontes; esta interpretação não valida nem aprova financeiramente.',answer:result.answer,fields:result.fields,doubts:result.doubts,evidence:evidence.filter(e=>result.citations.includes(e.id)||result.doubts.some(d=>d.evidenceIds.includes(e.id))),model:result.model,promptVersion:result.promptVersion,checkedAt};
   }catch(error){
    const code=error instanceof BackofficeAiError?error.code:'CONTROL_UNAVAILABLE';

@@ -17,7 +17,7 @@ const Component=require('../app/components/BotEnergyReports.tsx').default,root=c
  await act(async()=>root.render(React.createElement(Component,{audience:'backoffice',reportId:'test-report'})));
  await act(async()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value').set.call(input,'Qual regra da CCEE?');input.dispatchEvent(new Event('input',{bubbles:true}))});
  await act(async()=>[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Perguntar ao Bot')).click());
- assert.equal(document.querySelectorAll('a').length,1);const link=document.querySelector('a');assert.equal(link.href,official.url);assert.equal(link.rel,'noopener noreferrer');assert.ok(document.body.textContent.includes('página 22'));assert.ok(document.body.textContent.includes('versão 1.0'));
+ assert.equal(document.querySelector('textarea').value,'','Report editor clears after sending');assert.equal(document.querySelectorAll('a').length,1);const link=document.querySelector('a');assert.equal(link.href,official.url);assert.equal(link.rel,'noopener noreferrer');assert.ok(document.body.textContent.includes('página 22'));assert.ok(document.body.textContent.includes('versão 1.0'));
  org='other';await act(async()=>root.render(React.createElement(Component,{audience:'backoffice',reportId:'test-report'})));assert.equal(document.querySelectorAll('a').length,0);assert.ok(!document.body.textContent.includes('Regra com fonte conferida.'));
  await act(async()=>root.unmount());console.log('PASS: cited official URL, version/page, safe external link and organization reset.');
  }catch(e){console.error(e);process.exitCode=1}})();
