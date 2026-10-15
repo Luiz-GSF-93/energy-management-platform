@@ -31,7 +31,7 @@ export class SalesSignatureAbsenceService {
     const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
     try{for(;;){const item=await reader.read();if(item.done)break;size+=item.value.length;if(size>131072)throw Error('FORMAT');chunks.push(item.value);}}finally{await reader.cancel();}
     let raw:unknown;try{raw=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw Error('FORMAT');}
-    const page=absencePage(raw,name,seen);if(seen.size>100)throw Error('FORMAT');pages++;url=page.next;
+    const page=absencePage(raw,name,seen,pages+1);if(seen.size>100)throw Error('FORMAT');pages++;url=page.next;
    }
    return {state:seen.size?'CANDIDATE':'EMPTY',pages,candidateIds:[...seen],reason:null};
   }catch(e){const message=e instanceof Error?e.message:'';return {state:'INCOMPLETE',pages,candidateIds:[],reason:['HTTP','FORMAT','PAGINATION'].includes(message)?message:e instanceof Error&&['TimeoutError','AbortError'].includes(e.name)?'TIMEOUT':'NETWORK'};}

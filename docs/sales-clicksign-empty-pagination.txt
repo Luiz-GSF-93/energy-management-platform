@@ -1,0 +1,14 @@
+Clicksign — coleção vazia na reconferência sandbox
+
+O suporte confirmou conta sandbox ativa e nenhum documento/envelope localizado. O cadastro do webhook está presente; o histórico ainda não tem eventos. Não considerar assinatura ponta a ponta homologada.
+
+A API documenta uma coleção vazia com data:[], meta.record_count:0 e links.first/last, sem links.next:
+https://developers.clicksign.com/v2.0/docs/primeiros-passos
+
+O parser de ausência aceita essa variante somente na primeira resposta, sem candidatos já acumulados, com contagem numérica zero e first/last equivalentes no endpoint HTTPS sandbox de envelopes. Somente filtro de nome exato, primeira página e tamanho válido são permitidos; links com credencial, origem diferente, duplicação de parâmetros, página posterior ou previous não nulo são bloqueados. Não há GET adicional para seguir first/last. O formato anterior com next explícito continua disponível.
+
+O contador real de páginas é passado pelo scanner compartilhado pela conferência e reconferência imediatamente anterior ao consumo. Uma segunda página vazia sem next continua INCOMPLETE.
+
+Não há migração, alteração de flags, permissão, identidade da conta ou histórico. UNKNOWN é preservado. A constatação EMPTY não autoriza, consome ou envia automaticamente. Continuam necessários UUID real da conta, confirmação suficiente do fornecedor, atestação do Owner e autorização excepcional de uso único antes de qualquer recuperação.
+
+Entrega sem chamadas externas. Não enviar convites, criar envelope ou aplicar licença como parte desta correção. A resposta do suporte anexada não contém account.key. A homologação posterior precisa de plano e autorização delimitados.
