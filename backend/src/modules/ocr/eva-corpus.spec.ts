@@ -114,3 +114,19 @@ describe('Published RAG pilot',()=>{
   const f=ragFixture();for(let i=0;i<6;i++)await f.s.retrieve(f.t,'Qual regra?',q);await expect(f.s.retrieve(f.t,'Qual regra?',q)).rejects.toThrow('Aguarde');expect(f.embeddings.embed).toHaveBeenCalledTimes(6);
  });
 });
+
+
+describe('Composite corpus keeps the existing pilot boundary',()=>{
+ const composite=():CorpusSource=>({...source(),kind:'COMPOSITE',chunkTotal:101,originalPages:187,partCount:5,compositeManifestHash:'b'.repeat(64)});
+ it('requires explicit enablement without relaxing the legacy chunk cap',()=>{expect(()=>validateCorpusSources([composite()],q)).toThrow();expect(validateCorpusSources([composite()],q,true)).toHaveLength(1);expect(()=>validateCorpusSources([{...source(),chunkTotal:101}],q,true)).toThrow()});
+ it.each([{originalPages:100},{originalPages:501},{partCount:1},{partCount:26},{compositeManifestHash:'bad'},{chunkTotal:2001},{kind:'OTHER'}])('rejects divergent composite metadata %#',patch=>expect(()=>validateCorpusSources([{...composite(),...patch}],q,true)).toThrow());
+ it('leaves the legacy RPC unchanged when disabled',async()=>{const f=ragFixture();await f.s.retrieve(f.t,'Qual regra?',q);expect(f.rpc.mock.calls.every(([name])=>name==='eva_corpus_rag')).toBe(true)});
+ it('uses one query and the same quota reservation for a whole composite group',async()=>{
+  const f=ragFixture({EVA_COMPOSITE_RAG_ENABLED:'true'});
+  f.rpc.mockImplementation(async(_name:string,a:any)=>({error:null,data:a.p_action==='sources'?[composite()]:a.p_action==='hydrate'?[{...composite(),chunkId:h,text,textHash:h,page:181,heading:'Artigo',context:'Original page'}]:{valid:true,recorded:true}}));
+  const result=await f.s.retrieve(f.t,'Qual regra?',q);expect(result.sources[0].page).toBe(181);expect(result.publicationProofs?.[0].kind).toBe('COMPOSITE');expect(f.search.query).toHaveBeenCalledTimes(1);expect(f.budget.reserve).toHaveBeenCalledTimes(1);expect(f.rpc.mock.calls.every(([name])=>name==='eva_composite_rag')).toBe(true);
+ });
+ it('rejects a composite citation outside the original page range',async()=>{
+  const f=ragFixture({EVA_COMPOSITE_RAG_ENABLED:'true'});f.rpc.mockImplementation(async(_name:string,a:any)=>({error:null,data:a.p_action==='sources'?[composite()]:a.p_action==='hydrate'?[{...composite(),chunkId:h,text,textHash:h,page:188,heading:'Artigo',context:'Invalid'}]:{valid:true,recorded:true}}));await expect(f.s.retrieve(f.t,'Qual regra?',q)).rejects.toThrow('evidências oficiais');
+ });
+});
