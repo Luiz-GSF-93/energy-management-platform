@@ -17,7 +17,7 @@ export class EvaPublishedRagService{
  constructor(private db:SupabaseService,private config:ConfigService,private search:EvaSearchConnector,private embeddings:EvaSearchEmbeddingConnector,private budget:BotEnergyBudgetService){}
  enabledFor(t:TenantContext){return this.config.get('EVA_SEARCH_RAG_ENABLED')==='true'&&t.organizationId==='org_default'&&t.role!=='consulta'&&String(this.config.get('EVA_SEARCH_RAG_ORGANIZATIONS')??'').split(',').map(s=>s.trim()).includes('org_default');}
  private async rpc(t:TenantContext,action:string,body:unknown){
-  const r=await this.db.getClient().rpc('eva_corpus_rag',{p_actor:t.userId,p_org:t.organizationId,p_role:t.roleId,p_operation:t.accessMode==='platform_operation',p_action:action,p_body:body});
+  const r=await this.db.getClient().rpc(this.config.get('EVA_COMPOSITE_RAG_ENABLED')==='true'?'eva_composite_rag':'eva_corpus_rag',{p_actor:t.userId,p_org:t.organizationId,p_role:t.roleId,p_operation:t.accessMode==='platform_operation',p_action:action,p_body:body});
   if(r.error)throw new ServiceUnavailableException('Biblioteca oficial indisponível ou alterada; reconfira as fontes.');return r.data;
  }
  async revalidate(t:TenantContext,proofs:CorpusProof[]){
@@ -30,9 +30,9 @@ export class EvaPublishedRagService{
   if(typeof question!=='string'||!question.trim()||question.length>500)throw new ServiceUnavailableException('Consulta inválida.');
   if(q.market==='COMMON'&&corpusCceeQuestion(question))q={...q,market:'ACL'};
   validateCorpusSources([],q);
-  const sources=validateCorpusSources(await this.rpc(t,'sources',{from:q.periodStart,to:q.periodEnd,market:q.market}),q);
+  const sources=validateCorpusSources(await this.rpc(t,'sources',{from:q.periodStart,to:q.periodEnd,market:q.market}),q,this.config.get('EVA_COMPOSITE_RAG_ENABLED')==='true');
   if(!sources.length)return empty('NO_EVIDENCE');if(corpusVersionConflict(sources,q))return empty('VERSION_CONFLICT');
-  const proofs=sources.map(s=>({publicationId:s.publicationId,eventId:s.publicationEventId}));
+  const proofs=sources.map(s=>({publicationId:s.publicationId,eventId:s.publicationEventId,...(s.kind==='COMPOSITE'?{kind:'COMPOSITE' as const}:{})}));
   const now=Date.now(),key=t.organizationId+'|'+t.userId;
   for(const [k,v] of this.windows)if(now-v.start>=60000)this.windows.delete(k);
   const window=this.windows.get(key)??{start:now,count:0};
@@ -51,7 +51,7 @@ export class EvaPublishedRagService{
    if(!Array.isArray(hydrated)||hydrated.length!==ranked.length)throw Error();
    const rows=hydrated.map((r:any,i:number)=>{
     const h=ranked[i],s=sources.find(x=>x.releaseId===h.releaseId);
-    if(!s||r.releaseId!==s.releaseId||r.revisionId!==s.revisionId||r.chunkId!==h.chunkId||r.textHash!==h.contentHash||typeof r.text!=='string'||!r.text.trim()||r.text.length>6000||knowledgeTextHash(r.text)!==h.contentHash||typeof r.heading!=='string'||typeof r.context!=='string'||(r.page!==null&&(!Number.isInteger(r.page)||r.page<1)))throw Error();
+    if(!s||r.releaseId!==s.releaseId||r.revisionId!==s.revisionId||r.chunkId!==h.chunkId||r.textHash!==h.contentHash||typeof r.text!=='string'||!r.text.trim()||r.text.length>6000||knowledgeTextHash(r.text)!==h.contentHash||typeof r.heading!=='string'||typeof r.context!=='string'||(r.page!==null&&(!Number.isInteger(r.page)||r.page<1||s.kind==='COMPOSITE'&&r.page>s.originalPages!)))throw Error();
     // Metadata comes from the live reviewed source, never from the provider response.
     return {s,r};
    }).slice(0,6);
