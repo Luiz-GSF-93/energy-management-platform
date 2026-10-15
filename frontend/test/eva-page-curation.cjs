@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});
+for(const k of ['window','document','navigator','HTMLElement','HTMLInputElement','HTMLTextAreaElement','Event','FormData','File'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');let api;
+const load=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:(...a)=>api(...a),ApiError:class extends Error{}};if(n==='@/app/components/ui')return {Button:({children,variant,...props})=>React.createElement('button',props,children),Card:({title,children})=>React.createElement('section',null,React.createElement('h2',null,title),children),Alert:({children})=>React.createElement('p',{role:'alert'},children)};return load.call(this,n,p,m)};
+const Component=require('../app/backoffice/eva-knowledge/PageCuration.tsx').default,root=createRoot(document.getElementById('root'));let busy=[],changed=0;
+const props={externalBusy:false,jobId:'job',versionId:'v1',onChanged:()=>changed++,onBusy:v=>busy.push(v)};
+const click=async text=>act(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent===text);assert(b,text);b.click()});
+(async()=>{try{
+ const calls=[];api=async(p,o)=>{calls.push([p,o]);return {enabled:false}};
+ await act(async()=>root.render(React.createElement(Component,props)));assert.equal(document.body.textContent,'');assert.equal(calls.length,1);
+ const proof={enabled:true,versionId:'v1',curationEventId:'e1',contentHash:'a'.repeat(64),pageCount:40,coveredPages:40,total:40,rows:[{page:3,disposition:'EXCLUDED',segments:0,reason:'Historical <script>not executable</script>',reference:'PDF original p. 123',anchor:'Struck original',payload_hash:'b'.repeat(64)}]};
+ api=async(p,o)=>{calls.push([p,o]);if(o?.method==='POST')throw Error('Resultado não confirmado');return proof};
+ await act(async()=>root.render(React.createElement(Component,{...props,key:'enabled'})));assert(document.body.textContent.includes('40 de 40'));assert(document.body.textContent.includes('Excluída da resposta'));assert.equal(document.querySelectorAll('script').length,0);
+ assert([...document.querySelectorAll('button')].find(b=>b.textContent==='Registrar versão por página').disabled);
+ await click('Próxima cobertura');assert(calls.at(-1)[0].endsWith('page=1'));await click('Cobertura anterior');assert(calls.at(-1)[0].endsWith('page=0'));
+ const file=new File(['{"metadata":{},"pages":[]}'],'candidate.json',{type:'application/json'});
+ await act(async()=>{const i=document.querySelector('input[type=file]');Object.defineProperty(i,'files',{configurable:true,value:[file]});i.dispatchEvent(new Event('change',{bubbles:true}));const t=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'Reviewed private source and explicit page coverage.');t.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('input[type=checkbox]').click()});
+ await click('Registrar versão por página');const post=calls.find(c=>c[1]?.method==='POST');assert(post,'An explicit confirmed upload is required');assert(post[1].body instanceof FormData);const request=JSON.parse(post[1].body.get('command'));assert.equal(request.expectedVersionId,'v1');assert(document.body.textContent.includes('Resultado não confirmado'));assert(document.querySelector('input[type=file]').matches(':disabled'));
+ proof.versionId=request.requestId;await click('Reconferir cobertura');assert.equal(changed,1);assert.equal(document.querySelector('input[type=file]').matches(':disabled'),false);assert.deepEqual(busy,[true,true,true,false]);assert.equal(calls.filter(c=>c[1]?.method==='POST').length,1,'No automatic retry or duplicate upload');
+ await act(async()=>root.unmount());console.log('PASS: page coverage UI hidden when disabled, escaped exclusions, pagination, explicit multipart upload, pending reservation, read-only reconciliation, no auto retry.');
+}finally{dom.window.close()}})().catch(e=>{console.error(e);process.exitCode=1});

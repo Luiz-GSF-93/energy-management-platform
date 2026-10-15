@@ -5,6 +5,8 @@ on:
       - 'backend/src/modules/ocr/**'
       - 'backend/src/database/migrations/**'
       - 'backend/test/eva-composite*'
+      - 'backend/test/eva-page-curation*'
+      - 'frontend/test/eva-page-curation.cjs'
       - 'frontend/app/backoffice/eva-knowledge/**'
       - 'frontend/test/eva-composite-publication.cjs'
       - '.github/workflows/eva-composite-publication.yml'
@@ -28,9 +30,11 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-composite.spec.ts src/modules/ocr/eva-composite.service.spec.ts src/modules/ocr/eva-corpus.spec.ts src/modules/ocr/eva-document-parts.spec.ts src/modules/ocr/eva-extraction.spec.ts src/modules/ocr/eva-conversation.spec.ts src/modules/ocr/eva-conversation.integration.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-page-curation.spec.ts src/modules/ocr/eva-composite.spec.ts src/modules/ocr/eva-composite.service.spec.ts src/modules/ocr/eva-corpus.spec.ts src/modules/ocr/eva-document-parts.spec.ts src/modules/ocr/eva-extraction.spec.ts src/modules/ocr/eva-conversation.spec.ts src/modules/ocr/eva-conversation.integration.spec.ts
         working-directory: backend
       - run: npm run build
+        working-directory: backend
+      - run: node test/eva-page-curation.cjs
         working-directory: backend
       - run: node test/eva-composite-publication.cjs
         working-directory: backend
@@ -43,6 +47,8 @@ jobs:
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/eva-page-curation.cjs
         working-directory: frontend
       - run: node test/eva-composite-publication.cjs
         working-directory: frontend
