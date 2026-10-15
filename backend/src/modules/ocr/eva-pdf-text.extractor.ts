@@ -56,7 +56,8 @@ export async function extractPdfText(bytes:Buffer):Promise<ExtractionResult>{
  const module=pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.mjs')).href;
  const root=dirname(require.resolve('pdfjs-dist/package.json'));
  return new Promise((resolve,reject)=>{
-  const worker=new Worker(program,{eval:true,workerData:{bytes:Uint8Array.from(bytes),module,fontDir:join(root,'standard_fonts')+sep,cMapDir:join(root,'cmaps')+sep,wasmDir:join(root,'wasm')+sep},resourceLimits:{maxOldGenerationSizeMb:256,maxYoungGenerationSizeMb:32,stackSizeMb:4}});
+  const asset=(name:string)=>join(root,name).split(sep).join('/')+'/';
+  const worker=new Worker(program,{eval:true,workerData:{bytes:Uint8Array.from(bytes),module,fontDir:asset('standard_fonts'),cMapDir:asset('cmaps'),wasmDir:asset('wasm')},resourceLimits:{maxOldGenerationSizeMb:256,maxYoungGenerationSizeMb:32,stackSizeMb:4}});
   let settled=false;
   const finish=(value?:ExtractionResult,code?:ExtractionError['code'])=>{if(settled)return;settled=true;clearTimeout(timer);void worker.terminate();value?resolve(value):reject(new ExtractionError(code??'EXTRACTION_FAILED'));};
   const timer=setTimeout(()=>finish(undefined,'LIMIT'),EXTRACTION_LIMITS.timeoutMs);

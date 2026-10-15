@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});
+for(const k of ['window','document','navigator','HTMLElement','HTMLInputElement','HTMLSelectElement','Event','FormData','File'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true};dom.window.HTMLDialogElement.prototype.close=function(){this.open=false};
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+let api;const load=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:(...a)=>api(...a),ApiError:class extends Error{}};if(n==='@/app/components/ui')return {Button:({children,variant,...props})=>React.createElement('button',props,children),Input:({label,...props})=>React.createElement('label',null,label,React.createElement('input',props)),Card:({title,children})=>React.createElement('section',null,React.createElement('h2',null,title),children),Alert:({children})=>React.createElement('p',{role:'alert'},children)};return load.call(this,n,p,m)};
+const Component=require('../app/backoffice/eva-knowledge/DocumentParts.tsx').default,root=createRoot(document.getElementById('root'));
+const row={id:'set-1',chainId:'chain',latestId:'set-1',revision:1,title:'REN fixture <script>unsafe()</script>',state:'DRAFT',pages:187,partCount:5};
+const detail={...row,originalPages:187,originalFileHash:'a'.repeat(64),manifestHash:'b'.repeat(64),originCurrent:true,readyForSearch:false,parts:[{ordinal:1,startPage:1,endPage:40,fileHash:'c'.repeat(64),size:100,jobId:null}],historyTotal:12,history:[{id:'h',revision:1,state:'DRAFT',actor_id:'Owner fixture',justification:'Synthetic local preparation only.',created_at:'2026-10-15T12:00:00Z'}]};
+const click=async label=>act(async()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent===label||b.getAttribute('aria-label')===label);assert.ok(b,label);b.click()});
+(async()=>{try{
+ const calls=[];api=async(p,o)=>{calls.push([p,o]);if(p.includes('/set-1'))return detail;if(p.includes('official-documents'))return {rows:[],total:0};return {rows:[row],total:15}};
+ await act(async()=>root.render(React.createElement(Component)));assert.ok(document.body.textContent.includes('não publica partes'));assert.equal(document.querySelectorAll('script').length,0);await click('Próxima');assert.ok(calls.at(-1)[0].includes('page=1'));await click('Ver conjunto');assert.ok(document.querySelector('dialog').open);assert.ok(document.body.textContent.includes('páginas originais 1–40'));assert.ok(document.body.textContent.includes('Sem curadoria vinculada'));
+ assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent==='Baixar parte 1').disabled,true,'No download without original bytes');
+ await click('Próximo histórico');assert.ok(calls.at(-1)[0].endsWith('page=1'));
+ await click('Conferir conjunto');const save=[...document.querySelectorAll('button')].find(b=>b.textContent==='Registrar conferência');assert.ok(save.disabled,'Reason and scope acknowledgement required');assert.equal(calls.filter(c=>c[1]?.method==='POST').length,0);
+ await click('Fechar Documento longo');assert.equal(document.querySelector('dialog'),null);
+ await click('Preparar documento longo');assert.ok(document.body.textContent.includes('Original preservado'));assert.ok([...document.querySelectorAll('button')].find(b=>b.textContent==='Registrar preparação').disabled);
+ await click('Fechar Documento longo');await act(async()=>root.unmount());
+ console.log('PASS: long-document UI filters/pagination/modal, escaped content, original page range, history, private scope and disabled incomplete actions.');
+}finally{dom.window.close()}})().catch(e=>{console.error(e);process.exitCode=1});

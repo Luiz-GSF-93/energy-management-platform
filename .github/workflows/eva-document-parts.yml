@@ -1,0 +1,46 @@
+name: EVA private long-document preparation
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/**'
+      - 'backend/test/eva-document-parts.cjs'
+      - 'frontend/app/backoffice/eva-knowledge/**'
+      - 'frontend/test/eva-document-parts.cjs'
+      - '.github/workflows/eva-document-parts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/**'
+      - 'frontend/app/backoffice/eva-knowledge/**'
+      - '.github/workflows/eva-document-parts.yml'
+permissions:
+  contents: read
+jobs:
+  private-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-document-parts.spec.ts src/modules/ocr/eva-extraction.spec.ts src/modules/ocr/eva-conversation.spec.ts src/modules/ocr/eva-conversation.integration.spec.ts
+        working-directory: backend
+      - run: node test/eva-document-parts.cjs
+        working-directory: backend
+      - run: node test/eva-official-extractions.cjs
+        working-directory: backend
+      - run: node test/eva-corpus-publication.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/eva-document-parts.cjs
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
