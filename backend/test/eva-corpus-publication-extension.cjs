@@ -1,0 +1,73 @@
+module.exports=async({db,id,ok,deny,orderJob,orderVersion})=>{
+ const fs=require('node:fs'),path=require('node:path');
+ await db.exec(`ALTER TABLE eva_official_extraction_jobs ADD COLUMN document_revision_id uuid,ADD COLUMN document_id uuid,ADD COLUMN source_event_id uuid;
+ CREATE TABLE eva_official_document_revisions(id uuid PRIMARY KEY,metadata jsonb);CREATE TABLE eva_official_source_revisions(id uuid PRIMARY KEY,metadata jsonb);CREATE TABLE eva_official_source_events(id uuid PRIMARY KEY,revision_id uuid);
+ CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);CREATE TABLE organization_members(organization_id text,user_id uuid,role_id uuid,status text);
+ CREATE TABLE platform_organization_sessions(organization_id text,user_id uuid,expires_at timestamptz,revoked_at timestamptz);
+ CREATE FUNCTION bot_energy_license_quota(text) RETURNS bigint LANGUAGE sql AS $$SELECT CASE WHEN $1='org_default' THEN 10000000::bigint ELSE 0 END$$;
+ INSERT INTO organizations VALUES('org_default',null),('other',null);
+ INSERT INTO roles VALUES('${id(9000)}','organization','admin_org','org_default','["62443ab1-9187-42e4-a932-a7cf54f76250"]');
+ INSERT INTO organization_members VALUES('org_default','${id(9001)}','${id(9000)}','ACTIVE');
+ UPDATE platform_team_members SET active=true WHERE user_id='${id(1)}';
+ INSERT INTO eva_official_curation_events VALUES('${id(9002)}','${orderJob}','${orderVersion}','REVIEWED',3);
+ INSERT INTO eva_official_document_revisions VALUES('${id(9003)}','{"title":"Official synthetic document","edition":"1.0","url":"https://www.ccee.org.br/test.pdf"}');
+ INSERT INTO eva_official_source_revisions VALUES('${id(9004)}','{"authority":"CCEE","family":"CCEE_PROCEDURES","markets":["ACL"]}');
+ INSERT INTO eva_official_source_events VALUES('${id(9005)}','${id(9004)}');
+ UPDATE eva_official_extraction_jobs SET document_revision_id='${id(9003)}',document_id='${id(9006)}',source_event_id='${id(9005)}' WHERE id='${orderJob}';`);
+ // The existing execution was tied to review 502. Restore its exact live decision;
+ // changing that review must invalidate publication, not silently upgrade it.
+ await db.exec('DROP TRIGGER IF EXISTS fixture_noop ON eva_official_curation_events');
+ await db.query('DELETE FROM eva_official_curation_events WHERE job_id=$1 AND sequence>1',[orderJob]);
+ await db.exec(fs.readFileSync(path.resolve(__dirname,'../src/database/migrations/20261105_eva_corpus_publication.sql'),'utf8'));
+ const run=(a,op,p,b)=>db.query('SELECT eva_corpus_action($1,$2,$3,$4) data',[a,op,p,JSON.stringify(b)]).then(r=>r.rows[0].data);
+ const rag=(op,b,org='org_default',actor=id(9001),role=id(9000),operation=false)=>db.query('SELECT eva_corpus_rag($1,$2,$3,$4,$5,$6) data',[actor,org,role,operation,op,JSON.stringify(b)]).then(r=>r.rows[0].data);
+ const why='Owner confirms a bounded disposable publication test.';
+ for(const t of ['eva_corpus_publications','eva_corpus_events']){
+  const r=(await db.query('SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=$1::regclass',[t])).rows[0];ok(r.relrowsecurity&&r.relforcerowsecurity);
+  for(const role of ['anon','authenticated','service_role'])for(const p of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) p',[role,t,p])).rows[0].p);
+ }
+ for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_corpus_source(uuid,boolean)','EXECUTE') p",[role])).rows[0].p);
+ for(const role of ['anon','authenticated'])for(const fn of ['eva_corpus_action(uuid,text,uuid,jsonb)','eva_corpus_rag(uuid,text,text,boolean,text,jsonb)'])ok(!(await db.query('SELECT has_function_privilege($1,$2,\'EXECUTE\') p',[role,fn])).rows[0].p);
+ const prep={requestId:id(9100),releaseId:id(700),expectedReleaseEventId:id(701),justification:why};
+ for(const actor of [null,id(3),id(4),id(99)])await deny(()=>run(actor,'prepare',id(9100),prep),'42501');
+ await deny(()=>run(id(1),'prepare',id(9100),{...prep,expectedReleaseEventId:id(999)}),'23505');
+ ok((await run(id(1),'prepare',id(9100),prep)).state==='PREPARED');ok((await run(id(1),'prepare',id(9100),prep)).replayed);
+ const period={from:'2026-10-01',to:'2026-10-31',market:'ACL'};
+ ok((await rag('sources',period)).length===0);
+ for(const args of [['other'],['org_default',id(4)],['org_default',id(9001),id(11)],['org_default',id(1),id(11),true]])await deny(()=>rag('sources',period,...args),'42501');
+ const decision=(n,event)=>({requestId:id(n),expectedEventId:event,justification:why});
+ const claim=await run(id(1),'publish',id(9100),decision(9101,id(9100)));ok(claim.chunks.length===12&&!claim.readOnly);
+ await deny(()=>run(id(2),'publish',id(9100),decision(9102,id(9101))),'23505');
+ ok((await run(id(1),'publish',id(9100),decision(9101,id(9100)))).replayed);
+ const finish=(n,confirmed,lease=id(9101))=>({leaseId:lease,requestId:id(n),confirmed});
+ await deny(()=>run(id(1),'finish',id(9100),finish(9103,true)),'23505');
+ const chunkId=claim.chunks[0].id;
+ await deny(()=>run(id(1),'verified',id(9100),{requestId:id(9104),leaseId:claim.leaseId,chunkId}),'23505');
+ const send=(n,kind,chunk=chunkId,lease=claim.leaseId)=>({requestId:id(n),leaseId:lease,chunkId:chunk,kind});
+ await run(id(1),'send',id(9100),send(9105,'MERGE'));await deny(()=>run(id(1),'send',id(9100),send(9106,'MERGE')),'23505');
+ await run(id(1),'finish',id(9100),finish(9107,false));ok((await rag('sources',period)).length===0);
+ const recovery=await run(id(1),'reconcile',id(9100),decision(9108,id(9107)));ok(recovery.readOnly);
+ await deny(()=>run(id(1),'send',id(9100),send(9109,'MERGE',chunkId,recovery.leaseId)),'42501');
+ let seq=9200;
+ for(const x of recovery.chunks){await run(id(1),'send',id(9100),send(seq++,'LOOKUP',x.id,recovery.leaseId));await run(id(1),'verified',id(9100),{requestId:id(seq++),leaseId:recovery.leaseId,chunkId:x.id});}
+ ok((await run(id(1),'finish',id(9100),finish(9300,true,recovery.leaseId))).state==='ACTIVE');
+ const sources=await rag('sources',period);ok(sources.length===1&&sources[0].title==='Official synthetic document'&&!('chunks'in sources[0]));
+ const proofs=[{publicationId:id(9100),eventId:id(9300)}];ok((await rag('revalidate',{proofs})).valid);
+ await deny(()=>rag('revalidate',{proofs:[...proofs,...proofs]}),'22023');
+ const hit={releaseId:id(700),chunkId,revisionId:orderVersion,contentHash:claim.chunks[0].contentHash};
+ ok((await rag('hydrate',{proofs,hits:[hit]}))[0].text===claim.chunks[0].text);
+ await deny(()=>rag('hydrate',{proofs,hits:[hit,hit]}),'22023');
+ await deny(()=>rag('hydrate',{proofs,hits:[{...hit,contentHash:'f'.repeat(64)}]}),'23505');await deny(()=>rag('hydrate',{proofs,hits:[{...hit,releaseId:id(720)}]}),'42501');
+ await rag('begin',{proofs,requestId:id(9400)});
+ const metric={requestId:id(9400),eventId:id(9401),state:'READY',elapsedMs:120,inputTokens:8,searchRequests:1,embeddingCostMicroUsd:1};
+ ok((await rag('finish',metric)).recorded);await deny(()=>rag('finish',{...metric,eventId:id(9402)}),'23505');
+ const month=new Date().toISOString().slice(0,7);for(const a of [id(1),id(3)]){const m=await run(a,'metrics',null,{month});ok(m.active===1&&m.completed===1&&m.inputTokens===8&&m.embeddingCostMicroUsd===1&&m.costIncludedInAiLedger&&!('history'in m));}
+ await deny(()=>run(id(4),'metrics',null,{month}),'42501');
+ const hist=await run(id(1),'detail',id(9100),{page:0}),hist2=await run(id(1),'detail',id(9100),{page:1});ok(hist.history.length===10&&hist2.history.length===10&&new Set([...hist.history,...hist2.history].map(x=>x.id)).size===20);
+ await db.query("UPDATE organization_members SET status='INACTIVE' WHERE user_id=$1",[id(9001)]);await deny(()=>rag('revalidate',{proofs}),'42501');await db.query("UPDATE organization_members SET status='ACTIVE' WHERE user_id=$1",[id(9001)]);
+ await db.query("UPDATE platform_team_members SET active=false WHERE user_id=$1",[id(2)]);await deny(()=>rag('revalidate',{proofs}),'42501');await db.query("UPDATE platform_team_members SET active=true WHERE user_id=$1",[id(2)]);
+ await run(id(1),'quarantine',id(9100),decision(9500,hist.eventId));await deny(()=>rag('revalidate',{proofs}),'23505');ok((await rag('sources',period)).length===0);
+ await deny(()=>run(id(1),'publish',id(9100),decision(9501,id(9500))),'23505');
+ await deny(()=>db.query('DELETE FROM eva_corpus_events'),'42501');
+ ok((await db.query("SELECT count(*) n FROM eva_corpus_events WHERE payload ?| array['question','text','vector','token','secret']")).rows[0].n===0);
+};

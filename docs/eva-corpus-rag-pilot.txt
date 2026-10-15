@@ -1,0 +1,81 @@
+EVA — publicação controlada e conexão RAG do piloto
+
+Entrega técnica desativada. Nenhuma chamada Azure ou publicação é executada
+por migração, inicialização da aplicação ou consulta às telas.
+
+PRÉ-REQUISITOS
+1. Preparação de release com origem preservada, versão atual de curadoria
+   REVIEWED, hash e fragmentos integrais. Documentos TEST_ONLY são bloqueados.
+2. Revisão da preparação por Owner distinto do preparador, ainda ativo.
+3. Execução privada SUCCEEDED, recibos de todos os vetores e índice exato
+   eva-official-pilot-v1. A indexação anterior grava published:false.
+
+PUBLICAÇÃO
+Owner: Conhecimento EVA > Indexação e busca > Publicação controlada do corpus.
+Preparar publicação seleciona uma execução privada conferida e fixa a revisão.
+Publicar exige nova confirmação e justificativa. O worker registra cada leitura
+e intenção de merge antes de chamar o provedor. Compara ID determinístico,
+release, revisão, hash, texto integral, vetor, escopo e audiência. O único merge
+remoto modifica published:true; não cria nem substitui documentos.
+Somente a conferência integral libera ACTIVE. Falhas ficam UNKNOWN, sem reenvio.
+Reconferência usa apenas GET; não completa merges pendentes automaticamente.
+Quarentena é local e imediata, sem depender do Azure. Não há restauração
+automática; uma nova revisão de origem e release deve seguir o fluxo completo.
+
+RAG
+Piloto exclusivo org_default (Expert Energy), backoffice autorizado, licença e
+cota vigentes. Revalidação de associação/perfil e operação temporária no banco.
+Consulta somente publicações ACTIVE e versões/aprovações ainda atuais.
+Fontes oficiais e vigências são validadas antes de consumir IA. Períodos que
+cruzam versões ou revisões conflitantes exigem precisão adicional, sem resposta.
+Busca híbrida usa filtros fixos de release, audiência, escopo e published:true;
+o escore RRF serve para ordenação, não representa confiança jurídica ou cosseno.
+Até oito releases, consultas paralelas, até seis trechos integrais. Texto e
+metadados são reidratados do banco e reconferidos pelo hash. Fontes incluem
+documento, versão, seção, página, vigência, URL e contexto de aplicabilidade.
+Não se armazenam perguntas, texto, tokens secretos ou vetores nos novos eventos.
+Não há cache de respostas ou normas recuperadas. Limites locais de concorrência
+e frequência complementam a reserva persistida da cota antes do embedding.
+A publicação é reconferida antes e depois da geração; revogação impede a resposta.
+Portal do cliente e organizações fora do piloto preservam o caminho existente.
+
+CONTROLE DE CUSTOS
+Owner/Financeiro: Custos e performance > EVA. Contagens, tokens, chamadas Search,
+latência de recuperação p50/p95 e custo de embedding conhecido/pendente.
+Consumo de embeddings é reservado/liquidado no histórico de IA existente (RAG),
+sem somar novamente. Preços precisam estar verificados; sem preço não há chamada.
+Geração permanece no histórico atual; custo fixo Search/Blob e seus orçamentos
+continuam no catálogo. O orçamento Search R$600 e alerta R$480 são separados.
+Não foi implementada coleta automática de faturas dos provedores.
+
+FLAGS NOVAS — TODAS AUSENTES/FALSE NA ENTREGA
+EVA_CORPUS_PUBLICATION_ENABLED=false
+EVA_CORPUS_PUBLICATION_CALLS_ENABLED=false
+EVA_SEARCH_RAG_ENABLED=false
+EVA_SEARCH_RAG_ORGANIZATIONS=
+Flags existentes INDEX/QUERY/EMBEDDING/EXECUTION externas permanecem desligadas.
+Ativação e homologação externa exigem etapa autorizada, corpus/revisões conferidos,
+limite de chamadas e custos. Não utilizar esta entrega como autorização de envio.
+
+REVISÃO DE BRUNO
+Na própria conta Owner: Conhecimento EVA > Indexação e busca > Detalhes da
+release. Conferir fragmentos/original, datas, tabelas, exceções e fluxogramas.
+Selecionar Conferir preparação privada; escrever justificativa, confirmar origem
+e versão e registrar preparação privada nas duas releases elegíveis. A decisão
+fica no histórico com a identidade real. Aprovação não publica nem chama Azure.
+
+BANCO
+20261105_eva_corpus_publication.sql: duas tabelas com RLS forçada, sem acesso
+direto inclusive por service_role; eventos imutáveis; RPCs com autorização viva.
+Nenhum registro inicial, nenhuma mudança em tabelas ou funções anteriores.
+Auditoria aditiva em docs/proposals/eva-corpus-migration-audit.py compara hashes
+de linhas, RLS, ACLs e funções antes/depois; dry-run obrigatório antes de apply.
+Rollback operacional: manter flags false e fontes em quarentena; preservar a
+migração e o histórico. Não apagar registros para autorizar nova tentativa.
+
+VALIDAÇÃO SEM REDE
+backend: test/eva-corpus-publication.cjs compõe os cenários SQL descartáveis.
+backend: eva-corpus.spec.ts cobre integridade, operações incertas, recuperação,
+desligamento, isolamento do piloto, validade, cota, citações e revogação do chat.
+frontend: test/eva-corpus-publication.cjs usa componentes reais com API sintética.
+Reexecutar regressões Search, RAG legado, orçamento, chat e relatórios, e builds.

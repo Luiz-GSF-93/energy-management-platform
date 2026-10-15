@@ -1,0 +1,37 @@
+Validação técnica — publicação e RAG EVA, entrega desligada
+15/10/2026
+
+Base: main 5756b9d32dc41d1c7f88d7c29f00e2fed0f16b21.
+Branch: feat/eva-published-rag-pilot.
+Autorização: implementação técnica desativada; nenhuma homologação Azure incluída.
+
+216 testes Jest aprovados: 193 em nove suítes específicas e 23 da extração
+reconferidos em isolamento. Uma execução ampliada inicial apresentou o pin do
+RAG legado e uma falha transitória no worker PDF. A solução preservou o código
+legado em uma fachada separada (sem atualizar hashes/publicações dos guias), e
+ambas as suítes passaram na reconferência; nenhum teste foi removido/relaxado.
+
+383 verificações SQL em PostgreSQL descartável (PGlite), compondo preparação,
+execução privada e publicação. Zero chamadas externas. Testes de autorização,
+RLS/ACL, duplicação, leases, resultados incertos, recuperação por GET, hashes,
+quarentena, revisão independente, histórico, isolamento e métricas.
+
+Componentes React reais com transporte sintético: filtros, paginação, seleção
+da revisão, tentativa incerta sem reenvio, histórico e métricas sem dados de
+fontes para o Financeiro. Regressões de execução Search também verificadas.
+
+Build Nest aprovado. Build Next aprovado com --webpack: as dependências do
+checkout de teste são symlinks compartilhados e o Turbopack não as resolveu.
+Nenhuma mudança da configuração de produção foi necessária para esse ambiente.
+
+Migração final SHA256:
+82516567df3ea729da531a195fe4cb9b7b5a9e2d3f8f8eb3f2aefef08703317d
+Dry-run no banco compartilhado: PASS, rollback, preservadas 257 tabelas e 575
+funções, linhas/permissões/RLS intactas. Duas tabelas e três funções novas,
+sem registros iniciais e sem chamadas aos provedores.
+
+As quatro flags novas são false/ausentes na entrega; nenhuma publicação,
+embedding, indexação ou consulta Azure é executada por inicialização/migração.
+Aplicação definitiva da migração, CI, merge e deploy devem ser registrados na
+entrega final. A revisão real de Bruno e a homologação externa continuam etapas
+separadas: não interpretar estes testes como liberação do piloto.

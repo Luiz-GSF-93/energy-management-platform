@@ -19,13 +19,13 @@ export function questionRegulation(question:string):boolean {
 export function questionIntent(question:string){const q=questionText(question);return /economia|economizou|economiz|resultado|custo total/.test(q)?'economy':/fornecedor|contratual|preco.*energia/.test(q)?'supplier':/desperdicio|perda|ineficien/.test(q)?'waste':/demanda/.test(q)?'demand':/\bgd\b|geracao distribuida/.test(q)?'regulation':/tusd|tarifa/.test(q)?'tariff':'general';}
 
 /** Select evidence for this question, without deriving totals or changing source values. */
-export function questionEvidence(question:string,evidence:AiEvidence[]):AiEvidence[]{
+export function questionEvidence(question:string,evidence:AiEvidence[],publishedOfficial=false):AiEvidence[]{
  const intent=questionIntent(question),words=questionText(question).split(/[^a-z0-9]+/).filter(w=>w.length>3);
  const score=(e:AiEvidence)=>{
   if(['context','library-availability','financial-coverage'].includes(e.id))return 100;
   if(intent==='supplier'&&e.id.startsWith('supplier-'))return 90;
   if(intent==='economy'&&e.id.startsWith('published-unit-'))return 90;
-  if((intent==='regulation'||questionRegulation(question))&&e.id.startsWith('regulation-'))return 90;
+  if((publishedOfficial||intent==='regulation'||questionRegulation(question))&&e.id.startsWith('regulation-'))return 90;
   return words.filter(w=>questionText(e.label+' '+e.value).includes(w)).length*5;
  };
  const ordered=evidence.map((e,i)=>({e,i,s:score(e)})).sort((a,b)=>b.s-a.s||a.i-b.i),out:AiEvidence[]=[];let size=Buffer.byteLength(JSON.stringify({question,evidence:[]}));

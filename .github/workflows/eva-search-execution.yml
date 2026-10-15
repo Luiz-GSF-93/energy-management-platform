@@ -3,13 +3,25 @@ on:
   pull_request:
     paths:
       - 'backend/src/modules/ocr/eva-search*'
+      - 'backend/src/modules/ocr/eva-corpus*'
+      - 'backend/src/modules/ocr/eva-published-rag.service.ts'
+      - 'backend/src/modules/ocr/eva-knowledge-rag.service.ts'
+      - 'backend/src/modules/ocr/bot-energy-question.ts'
+      - 'backend/src/modules/ocr/bot-energy-rag.service.ts'
+      - 'backend/src/modules/ocr/bot-energy.service.ts'
+      - 'backend/src/modules/bot-reports/bot-reports.service*'
       - 'backend/src/modules/ocr/ocr.module.ts'
       - 'backend/src/database/migrations/20261030_eva_search_execution.sql'
+      - 'backend/src/database/migrations/20261105_eva_corpus_publication.sql'
       - 'backend/test/eva-search-execution*'
+      - 'backend/test/eva-corpus-publication*'
       - 'frontend/app/backoffice/eva-knowledge/Search*'
       - 'frontend/app/backoffice/platform-costs/EvaSearchExecutionMetrics.tsx'
       - 'frontend/app/backoffice/platform-costs/page.tsx'
       - 'frontend/test/eva-search-execution.cjs'
+      - 'frontend/app/backoffice/eva-knowledge/CorpusPublications.tsx'
+      - 'frontend/app/backoffice/platform-costs/EvaCorpusMetrics.tsx'
+      - 'frontend/test/eva-corpus-publication.cjs'
       - 'infra/eva-search/index-pilot.schema.json'
       - 'docs/proposals/eva-search-execution-migration-audit.py'
       - '.github/workflows/eva-search-execution.yml'
@@ -25,13 +37,15 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node test/eva-search-execution.cjs
+      - run: node test/eva-corpus-publication.cjs
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js src/modules/ocr/eva-search-execution.spec.ts src/modules/ocr/eva-search.spec.ts --runInBand
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-search-execution.spec.ts src/modules/ocr/eva-search.spec.ts src/modules/ocr/eva-corpus.spec.ts src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/bot-energy-question.spec.ts src/modules/ocr/bot-energy-budget.service.spec.ts src/modules/ocr/bot-energy-rag.service.spec.ts src/modules/ocr/bot-energy.service.spec.ts src/modules/bot-reports/bot-reports.service.spec.ts
         working-directory: backend
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
       - run: node test/eva-search-execution.cjs
+        working-directory: frontend
+      - run: node test/eva-corpus-publication.cjs
         working-directory: frontend

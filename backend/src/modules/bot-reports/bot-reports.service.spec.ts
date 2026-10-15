@@ -18,4 +18,8 @@ describe('Published backoffice report integration',()=>{
  );
  it('abstains on unreleased norms and never sends draft normative content to AI',async()=>{const f=reportFixture();f.rag.retrieve.mockResolvedValue({state:'NO_EVIDENCE',evidence:[],sources:[]});const r=await f.service.ask({question:'Como corrigir o fator de potência?',reportId:id,kind:'OPERATIONAL'},backoffice,'backoffice');expect(r.state).toBe('NO_EVIDENCE');expect(f.ai.interpret).not.toHaveBeenCalled();});
  it('does not replace a historical report with newer publications or answer for another period',async()=>{let f=reportFixture();f.financial.reports.mockResolvedValue({primary:{publications:[{id:'g2',payloadHash:'hash2',version:2}]}});await expect(f.service.ask({question:'Consumo?',reportId:id,kind:'OPERATIONAL'},backoffice,'backoffice')).rejects.toThrow('recente');expect(f.ai.interpret).not.toHaveBeenCalled();f=reportFixture();expect((await f.service.ask({question:'Qual maior consumo no ano 2026?',reportId:id,kind:'OPERATIONAL'},backoffice,'backoffice')).state).toBe('CONTEXT_REQUIRED');expect(f.ai.interpret).not.toHaveBeenCalled();});
-});
+ it('rechecks publication before and after interpretation, blocking a revoked answer',async()=>{
+  const f=reportFixture(),revalidate=jest.fn(async()=>{});revalidate.mockResolvedValueOnce(undefined).mockRejectedValueOnce(Error('Publication revoked'));
+  Object.assign(f.rag,{revalidate});f.rag.retrieve.mockResolvedValue({state:'READY',evidence:[{id:'regulation-test',label:'Norma',value:'Regra',source:'CCEE'}],sources:[],publicationProofs:[{publicationId:'test',eventId:'test'}]});
+  await expect(f.service.ask({question:'Como corrigir o fator de potência?',reportId:id,kind:'OPERATIONAL'},backoffice,'backoffice')).rejects.toThrow('Publication revoked');expect(revalidate).toHaveBeenCalledTimes(2);expect(f.ai.interpret).toHaveBeenCalledTimes(1);
+ });});

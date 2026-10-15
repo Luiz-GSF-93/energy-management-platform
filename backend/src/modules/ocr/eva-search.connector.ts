@@ -42,11 +42,18 @@ export class EvaSearchConnector{
   if(!r||!Array.isArray(r.value)||r.value.length!==documents.length||r.value.some((x:any)=>!x||!documents.some(d=>d.id===x.key)||x.status!==true)||new Set(r.value.map((x:any)=>x.key)).size!==documents.length)throw new ServiceUnavailableException('Indexação parcial ou divergente.');
   return {confirmedKeys:r.value.map((x:any)=>x.key)};
  }
- async query(question:string,vector:number[],authorizedReleaseId:string){
+ async query(question:string,vector:number[],authorizedReleaseId:string):Promise<{id:string;indexId:string;revisionId:string;contentHash:string;ranking:'RRF';score:number}[]>{
   this.vector(vector);if(typeof question!=='string'||!question.trim()||question.length>500||! /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(authorizedReleaseId))throw new ServiceUnavailableException('Consulta inválida.');
   const filter=`releaseId eq '${authorizedReleaseId}' and scope eq 'OFFICIAL_PUBLIC' and audience eq 'PLATFORM' and published eq true`;
   const r=await this.request('QUERY','search',{search:question,filter,vectorFilterMode:'preFilter',vectorQueries:[{kind:'vector',vector,fields:'vector',k:20}],top:10,select:'id,chunkId,releaseId,revisionId,contentHash',queryType:'simple'});
   if(!r||!Array.isArray(r.value)||r.value.length>10||r.value.some((x:any)=>!x||x.releaseId!==authorizedReleaseId||!uuid(x.revisionId)||!hash(x.id)||!hash(x.chunkId)||x.id!==searchDocumentId(authorizedReleaseId,x.chunkId)||!hash(x.contentHash)||!Number.isFinite(x['@search.score'])||x['@search.score']<0)||new Set(r.value.map((x:any)=>x.id)).size!==r.value.length)throw new ServiceUnavailableException('Evidência Search divergente.');
   return r.value.map((x:any)=>({id:x.chunkId,indexId:x.id,revisionId:x.revisionId,contentHash:x.contentHash,ranking:'RRF' as const,score:x['@search.score']}));
+ }
+ /** Merge only the visibility bit of an existing, independently verified pilot record. */
+ async publish(releaseId:string,chunkId:string){
+  if(this.config.get('EVA_CORPUS_PUBLICATION_CALLS_ENABLED')!=='true'||this.config.get('EVA_SEARCH_INDEX')!=='eva-official-pilot-v1'||!uuid(releaseId)||!hash(chunkId))throw new ServiceUnavailableException('Publicação externa desligada.');
+  const id=searchDocumentId(releaseId,chunkId);
+  const r=await this.request('INDEX','index',{value:[{'@search.action':'merge',id,published:true}]});
+  if(!r||!Array.isArray(r.value)||r.value.length!==1||r.value[0]?.key!==id||r.value[0]?.status!==true)throw new ServiceUnavailableException('Publicação não confirmada; reconfira sem reenviar.');
  }
 }
