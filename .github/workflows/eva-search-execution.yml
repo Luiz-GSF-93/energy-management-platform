@@ -6,6 +6,9 @@ on:
       - 'backend/src/modules/ocr/eva-corpus*'
       - 'backend/src/modules/ocr/eva-published-rag.service.ts'
       - 'backend/src/modules/ocr/eva-knowledge-rag.service.ts'
+      - 'backend/src/modules/ocr/eva-conversation*'
+      - 'backend/src/modules/ocr/azure-backoffice-ai.connector*'
+      - 'backend/src/modules/ocr/backoffice-ai.service*'
       - 'backend/src/modules/ocr/bot-energy-question.ts'
       - 'backend/src/modules/ocr/bot-energy-rag.service.ts'
       - 'backend/src/modules/ocr/bot-energy.service.ts'
@@ -23,6 +26,8 @@ on:
       - 'frontend/app/backoffice/platform-costs/EvaCorpusMetrics.tsx'
       - 'frontend/test/eva-corpus-publication.cjs'
       - 'frontend/app/components/BotEnergyReports.tsx'
+      - 'frontend/app/components/BotEnergyHelp.tsx'
+      - 'frontend/test/bot-energy.cjs'
       - 'frontend/test/eva-corpus-citations.cjs'
       - 'infra/eva-search/index-pilot.schema.json'
       - 'docs/proposals/eva-search-execution-migration-audit.py'
@@ -41,7 +46,7 @@ jobs:
         working-directory: backend
       - run: node test/eva-corpus-publication.cjs
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-search-execution.spec.ts src/modules/ocr/eva-search.spec.ts src/modules/ocr/eva-corpus.spec.ts src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/bot-energy-question.spec.ts src/modules/ocr/bot-energy-budget.service.spec.ts src/modules/ocr/bot-energy-rag.service.spec.ts src/modules/ocr/bot-energy.service.spec.ts src/modules/bot-reports/bot-reports.service.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-conversation.spec.ts src/modules/ocr/eva-conversation.integration.spec.ts src/modules/ocr/azure-backoffice-ai.connector.spec.ts src/modules/ocr/backoffice-ai.service.spec.ts src/modules/ocr/eva-search-execution.spec.ts src/modules/ocr/eva-search.spec.ts src/modules/ocr/eva-corpus.spec.ts src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/bot-energy-question.spec.ts src/modules/ocr/bot-energy-budget.service.spec.ts src/modules/ocr/bot-energy-rag.service.spec.ts src/modules/ocr/bot-energy.service.spec.ts src/modules/bot-reports/bot-reports.service.spec.ts
         working-directory: backend
       - run: npm run build
         working-directory: backend
@@ -52,4 +57,8 @@ jobs:
       - run: node test/eva-corpus-publication.cjs
         working-directory: frontend
       - run: node test/eva-corpus-citations.cjs
+        working-directory: frontend
+      - run: node test/bot-energy.cjs
+        working-directory: frontend
+      - run: node test/eva-product-guides.cjs
         working-directory: frontend

@@ -13,6 +13,7 @@ import {retrieveTopics,regulatoryReferences} from './bot-energy-retrieval';
 import {OcrResolutionService} from './ocr-resolution.service';
 import {completionAnswer,CompletionAction} from './bot-energy-completion';
 import {questionEvidence,questionIntent,questionMonth,questionMonths,questionRegulation} from './bot-energy-question';
+import {evaConversation} from './eva-conversation';
 
 export const botEnergyTopics = [
  {key:'regulation',question:'Como conferir as regras regulatórias da fatura?',answer:'Confira distribuidora, enquadramento e vigência na tabela oficial correspondente. As tarifas de energia e demanda têm unidades diferentes. PIS e Cofins variam por mês; use a alíquota identificada na fatura e confirme a base de incidência. As referências oficiais abaixo apoiam a revisão, mas não comprovam por si só a correção desta fatura ou contrato.',reference:'Base regulatória controlada v1 · fontes oficiais consultadas em 03/10/2026'},
@@ -29,7 +30,7 @@ const contextualTopics = [
  {key:'records',question:'Quais registros e vigências foram encontrados?'},
 ] as const;
 type Item = {label:string;value:string;source:string};
-type SupportAnswer={name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[];actions?:CompletionAction[];interpretationState?:string;contextDocumentId?:string};
+type SupportAnswer={conversationQuestion?:string;name:string;mode:string;checkedAt:string;canApprove:boolean;canPublish:boolean;status:string;answer:string;items:Item[];sources:{label:string;reference:string;url:string}[];version?:number;retrievedTopics?:string[];actions?:CompletionAction[];interpretationState?:string;contextDocumentId?:string};
 @Injectable()
 export class BotEnergyService {
  constructor(private readonly assistant:OcrAssistantService,private readonly resolution:OcrResolutionService,@Optional() private readonly ai?:BackofficeAiService,@Optional() private readonly progress?:OcrAssistantProgressService,@Optional() private readonly rag?:BotEnergyRagService,@Optional() private readonly contexts?:BotEnergyContextService,@Optional() private readonly guides?:EvaProductGuideService){}
@@ -41,20 +42,27 @@ export class BotEnergyService {
  async topics(t:TenantContext){
   await this.authorize(t);
   const guides=await this.guides?.topics(t);
-  return {name:'EVA',mode:'EXTRACTIVE_RETRIEVAL',version:2,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],...(guides?.length?{productGuides:guides}:{}),message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
+  return {name:'EVA',mode:'EXTRACTIVE_RETRIEVAL',version:2,conversationContext:true,canAsk:t.permissions.includes(P.INTELLIGENCE_AI_USE),canGenerate:!!this.ai&&await this.ai.available(t),topics:[...botEnergyTopics.map(({key,question})=>({key,question})),...contextualTopics],...(guides?.length?{productGuides:guides}:{}),message:'Consulta à base controlada e ao contexto autorizado da fatura. Respostas extrativas com fontes; sem aprovação financeira nem atendimento ao cliente.'};
  }
  async answer(t:TenantContext,body:unknown,document?:string):Promise<SupportAnswer>{
   await this.authorize(t);
   if(!body||typeof body!=='object'||Array.isArray(body))throw new BadRequestException('Informe uma pergunta.');
-  const b=body as Record<string,unknown>,keys=Object.keys(b);
+  const request=body as Record<string,unknown>,{previousQuestion,...b}=request,keys=Object.keys(b);
+  if('previousQuestion' in request&&(typeof previousQuestion!=='string'||!previousQuestion.trim()||previousQuestion.length>500||typeof b.question!=='string'))throw new BadRequestException('Contexto de conversa inválido.');
   if(keys.length!==1||!['topic','question'].includes(keys[0])||typeof b[keys[0]]!=='string'||!(b[keys[0]] as string).trim()||(b[keys[0]] as string).length>500)throw new BadRequestException('Informe apenas a pergunta ou o tópico.');
+  const conversation=typeof b.question==='string'?evaConversation(b.question,previousQuestion as string|undefined):undefined;
+  if(conversation)b.question=conversation.question;
   const normalized=(v:string)=>v.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[?!.]+$/,'');
   const topics=[...botEnergyTopics,...contextualTopics];
   const topic=topics.find(v=>b.topic===v.key||typeof b.question==='string'&&normalized(b.question)===normalized(v.question));
-  const base={name:'EVA',mode:'CONTROLLED_SUPPORT',checkedAt:new Date().toISOString(),canApprove:false,canPublish:false};
+  const base={name:'EVA',mode:'CONTROLLED_SUPPORT',checkedAt:new Date().toISOString(),canApprove:false,canPublish:false,...(conversation?{conversationQuestion:conversation.question}:{})};
   const inputQuestion=typeof b.question==='string'?b.question:'';
   const denied=/ignore|ignorar|publique|senha|chave privada|token|outra organizacao|execute|executar|apague|deletar/.test(normalized(inputQuestion));
   if(denied)return {...base,status:'NO_EVIDENCE',answer:'Posso explicar regras e registros autorizados do backoffice. Não executo comandos nem altero permissões, validações ou aprovações por uma conversa.',items:[],sources:[]};
+  if(conversation?.clarification){
+   if(!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
+   return {...base,status:'CONTEXT_REQUIRED',answer:document&&!corpusCceeQuestion(inputQuestion)&&!/prazo/.test(normalized(inputQuestion))?'Vamos olhar esta fatura juntos. Você quer entender os valores, conferir as pendências ou saber o próximo passo?':conversation.clarification,items:[],sources:[]};
+  }
   const guide=await this.guides?.answer(t,{topic:typeof b.topic==='string'?b.topic:undefined,question:inputQuestion});
   if(guide)return guide;
   if(topic?.key==='status'||/\b(status|andamento|processando|preenchendo|terminou)\b/.test(normalized(inputQuestion))){
@@ -116,6 +124,7 @@ export class BotEnergyService {
    if(publicationProofs)await this.rag!.revalidate(t,publicationProofs);
    const generated=await this.ai.interpret(t,inputQuestion,questionEvidence(inputQuestion,evidence,!!publicationProofs),document,'BOT_ENERGY');
    if(publicationProofs)await this.rag!.revalidate(t,publicationProofs);
+   if(generated.state==='NO_EVIDENCE'&&regulatoryState==='READY'&&corpusCceeQuestion(inputQuestion))return {...base,mode:'CONTROLLED_DATA',status:'CONTEXT_REQUIRED',contextDocumentId:document,interpretationState:generated.state,answer:'Localizei trechos oficiais da CCEE, mas eles ainda não sustentam uma resposta completa para esta pergunta. Você pode me contar o perfil do participante e a etapa que está tentando concluir?',items:[],sources:regulatorySources.map(({id,...source})=>({...source,label:'Trecho recuperado para conferência · '+source.label}))};
    if(publicationProofs&&generated.state==='READY'&&(questionRegulation(inputQuestion)||corpusCceeQuestion(inputQuestion))&&!regulatorySources.some(s=>generated.evidence?.some(e=>e.id===s.id)))return {...base,mode:'CONTROLLED_DATA',status:'NO_EVIDENCE',answer:'A interpretação não citou uma evidência oficial conferida para a regra solicitada. Nenhuma orientação normativa foi liberada; confira a fonte e refaça a consulta.',items:[],sources:[]};
    if(generated.state==='READY')return {...base,mode:'AZURE_GENERATIVE',status:'SUPPORTED',contextDocumentId:document,interpretationState:generated.state,answer:generated.answer!+(regulatoryState==='NO_EVIDENCE'?'\n\nBiblioteca oficial: nenhum trecho revisado aplicável disponível; regras regulatórias e preços oficiais ainda exigem revisão da fonte.':''),actions,items:(generated.evidence??[]).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[...regulatorySources.filter(s=>generated.evidence?.some(e=>e.id===s.id)),{label:'Interpretação Azure OpenAI · '+generated.model,reference:generated.promptVersion+' · interpretação para revisão; fontes atuais recuperadas pelo backend',url:document?'/backoffice/ocr-audit':'/backoffice/documents'}]};
    return {...base,mode:'AZURE_GENERATIVE',status:generated.state==='NO_EVIDENCE'?'NO_EVIDENCE':'UNAVAILABLE',interpretationState:generated.state,contextDocumentId:document,answer:generated.message,actions,items:evidence.filter(e=>e.id.startsWith('completion-')||e.id==='context').map(e=>({label:e.label,value:e.value,source:e.source})),sources:document?[{label:'Abrir preenchimentos e fontes desta fatura',reference:'Conferência e validação conforme perfil',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=preparation'}]:[]};

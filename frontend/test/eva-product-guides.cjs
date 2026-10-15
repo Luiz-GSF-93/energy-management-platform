@@ -8,6 +8,7 @@ const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
 let api;const original=Module._load;
 Module._load=function(name,parent,main){
+ if(name==='@/app/providers')return {useAuth:()=>({status:'authenticated',context:{scope:'organization',user:{id:'test-actor'},currentOrganization:{id:'test-org',role:'operacional',permissions:[]}}})};
  if(name==='./BotEnergyAvatar.module.css')return {__esModule:true,default:{avatar:'avatar'}};
  if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>api(p,o)};
  return original.call(this,name,parent,main);
