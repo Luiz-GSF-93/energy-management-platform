@@ -1,5 +1,6 @@
 import {BotEnergyContextService} from './bot-energy-context.service';
-import {BotEnergyRagService} from './bot-energy-rag.service';
+import {EvaKnowledgeRagService as BotEnergyRagService} from './eva-knowledge-rag.service';
+import {CorpusProof,corpusCceeQuestion} from './eva-corpus.model';
 import {EvaProductGuideService} from './eva-product-guide.service';
 import {BadRequestException, ForbiddenException, Injectable,Optional} from '@nestjs/common';
 import {AiEvidence} from './azure-backoffice-ai.connector';
@@ -79,7 +80,7 @@ export class BotEnergyService {
    if(!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Perguntas livres exigem a permissão de uso da IA.');
    const evidence:AiEvidence[]=botEnergyTopics.map((r,i)=>({id:'rule-'+i,label:r.question,value:r.answer,source:r.reference}));
    if(!document&&this.contexts&&/\b(cliente|clientes|economia|desperdicio|custo|custos|tarifa|tarifas)\b/.test(normalized(inputQuestion)))evidence.push(...await this.contexts.portfolio(t,inputQuestion));
-   let actions:CompletionAction[]=[];let regulatoryState='NO_EVIDENCE';let regulatorySources:{id:string;label:string;reference:string;url:string}[]=[];
+   let actions:CompletionAction[]=[];let regulatoryState='NO_EVIDENCE';let regulatorySources:{id:string;label:string;reference:string;url:string}[]=[];let publicationProofs:CorpusProof[]|undefined;
    if(document){
     if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Fatura inválida.');
     const plan=await this.assistant.inspect(document,t);evidence.push(...assistantAiEvidence(plan));
@@ -105,13 +106,17 @@ export class BotEnergyService {
     const end=dateEvidence?new Date(Date.UTC(Number(dateEvidence.slice(0,4)),Number(dateEvidence.slice(5,7)),0)).toISOString().slice(0,10):today;
     const market=/\b(gd|geracao distribuida)\b/.test(normalized(inputQuestion))?'GD':/\b(acl|mercado livre)\b/.test(normalized(inputQuestion))?'ACL':'COMMON';
     const retrieval=await this.rag.retrieve(t,inputQuestion,{periodStart:start,periodEnd:end,market});regulatoryState=retrieval.state;
+    publicationProofs=retrieval.publicationProofs;
     if(retrieval.state==='VERSION_CONFLICT')return {...base,status:'NO_EVIDENCE',answer:'Há transição ou conflito de vigência normativa nesta competência. Informe a data do fato para conferir a versão aplicável.',items:[],sources:[]};
     evidence.push(...retrieval.evidence);
-    regulatorySources=retrieval.sources.map(s=>({id:s.id,label:s.title+' · '+s.section,reference:'Versão '+s.version+' · vigência '+s.validFrom+' até '+(s.validTo??'sem término cadastrado'),url:s.url}));
+    regulatorySources=retrieval.sources.map(s=>({id:s.id,label:s.title+' · '+s.section,reference:'Versão '+s.version+' · página '+(s.page??'não paginada')+' · vigência '+s.validFrom+' até '+(s.validTo??'sem término cadastrado'),url:s.url}));
     if(retrieval.state!=='READY')evidence.push({id:'library-availability',label:'Disponibilidade da biblioteca oficial',value:'Não há trechos oficiais revisados aplicáveis à consulta. Não afirmar regra de GD nem recomendar tarifa oficial sem evidência; solicitar revisão da biblioteca.',source:'Consulta atual ao catálogo regulatório, estado '+retrieval.state});
    }
-   if(regulatoryState!=='READY'&&questionRegulation(inputQuestion))return {...base,mode:'CONTROLLED_DATA',status:'NO_EVIDENCE',contextDocumentId:document,answer:'A biblioteca não contém trechos oficiais revisados aplicáveis à unidade e competência desta consulta. Não há fonte revisada suficiente para orientar a regra solicitada, incluindo demanda, fator de potência, reativo, GD, TUSD ou tributos. Próximo passo: revisar e disponibilizar a fonte oficial com sua versão, vigência e enquadramento; depois refaça a consulta. Os valores da fatura e parâmetros cadastrados podem ser consultados separadamente, mas não substituem a norma oficial.',items:evidence.filter(e=>e.id==='context'||e.id==='library-availability').map(e=>({label:e.label,value:e.value,source:e.source})),sources:[{label:'Consultar documentos e biblioteca oficial',reference:'Revisão de fontes e vigências pendente',url:'/backoffice/documents'}],actions};
-   const generated=await this.ai.interpret(t,inputQuestion,questionEvidence(inputQuestion,evidence),document,'BOT_ENERGY');
+   if(regulatoryState!=='READY'&&(questionRegulation(inputQuestion)||(this.rag?.publishedPilot?.(t)&&corpusCceeQuestion(inputQuestion))))return {...base,mode:'CONTROLLED_DATA',status:'NO_EVIDENCE',contextDocumentId:document,answer:'A biblioteca não contém trechos oficiais revisados aplicáveis à unidade e competência desta consulta. Não há fonte revisada suficiente para orientar a regra solicitada, incluindo demanda, fator de potência, reativo, GD, TUSD ou tributos. Próximo passo: revisar e disponibilizar a fonte oficial com sua versão, vigência e enquadramento; depois refaça a consulta. Os valores da fatura e parâmetros cadastrados podem ser consultados separadamente, mas não substituem a norma oficial.',items:evidence.filter(e=>e.id==='context'||e.id==='library-availability').map(e=>({label:e.label,value:e.value,source:e.source})),sources:[{label:'Consultar documentos e biblioteca oficial',reference:'Revisão de fontes e vigências pendente',url:'/backoffice/documents'}],actions};
+   if(publicationProofs)await this.rag!.revalidate(t,publicationProofs);
+   const generated=await this.ai.interpret(t,inputQuestion,questionEvidence(inputQuestion,evidence,!!publicationProofs),document,'BOT_ENERGY');
+   if(publicationProofs)await this.rag!.revalidate(t,publicationProofs);
+   if(publicationProofs&&generated.state==='READY'&&(questionRegulation(inputQuestion)||corpusCceeQuestion(inputQuestion))&&!regulatorySources.some(s=>generated.evidence?.some(e=>e.id===s.id)))return {...base,mode:'CONTROLLED_DATA',status:'NO_EVIDENCE',answer:'A interpretação não citou uma evidência oficial conferida para a regra solicitada. Nenhuma orientação normativa foi liberada; confira a fonte e refaça a consulta.',items:[],sources:[]};
    if(generated.state==='READY')return {...base,mode:'AZURE_GENERATIVE',status:'SUPPORTED',contextDocumentId:document,interpretationState:generated.state,answer:generated.answer!+(regulatoryState==='NO_EVIDENCE'?'\n\nBiblioteca oficial: nenhum trecho revisado aplicável disponível; regras regulatórias e preços oficiais ainda exigem revisão da fonte.':''),actions,items:(generated.evidence??[]).map(e=>({label:e.label,value:e.value,source:e.source})),sources:[...regulatorySources.filter(s=>generated.evidence?.some(e=>e.id===s.id)),{label:'Interpretação Azure OpenAI · '+generated.model,reference:generated.promptVersion+' · interpretação para revisão; fontes atuais recuperadas pelo backend',url:document?'/backoffice/ocr-audit':'/backoffice/documents'}]};
    return {...base,mode:'AZURE_GENERATIVE',status:generated.state==='NO_EVIDENCE'?'NO_EVIDENCE':'UNAVAILABLE',interpretationState:generated.state,contextDocumentId:document,answer:generated.message,actions,items:evidence.filter(e=>e.id.startsWith('completion-')||e.id==='context').map(e=>({label:e.label,value:e.value,source:e.source})),sources:document?[{label:'Abrir preenchimentos e fontes desta fatura',reference:'Conferência e validação conforme perfil',url:'/backoffice/contracts?ocrDocument='+encodeURIComponent(document)+'&area=preparation'}]:[]};
   }
