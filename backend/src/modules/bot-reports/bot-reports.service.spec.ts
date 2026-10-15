@@ -22,4 +22,7 @@ describe('Published backoffice report integration',()=>{
   const f=reportFixture(),revalidate=jest.fn(async()=>{});revalidate.mockResolvedValueOnce(undefined).mockRejectedValueOnce(Error('Publication revoked'));
   Object.assign(f.rag,{revalidate});f.rag.retrieve.mockResolvedValue({state:'READY',evidence:[{id:'regulation-test',label:'Norma',value:'Regra',source:'CCEE'}],sources:[],publicationProofs:[{publicationId:'test',eventId:'test'}]});
   await expect(f.service.ask({question:'Como corrigir o fator de potência?',reportId:id,kind:'OPERATIONAL'},backoffice,'backoffice')).rejects.toThrow('Publication revoked');expect(revalidate).toHaveBeenCalledTimes(2);expect(f.ai.interpret).toHaveBeenCalledTimes(1);
+ }); it('suppresses a normative report answer without a cited official source',async()=>{
+  const f=reportFixture();Object.assign(f.rag,{revalidate:async()=>{}});f.rag.retrieve.mockResolvedValue({state:'READY',evidence:[{id:'regulation-test',label:'Norma',value:'Regra',source:'CCEE'}],sources:[{id:'regulation-test',title:'PdC',section:'3.1',url:'https://www.ccee.org.br/test.pdf',version:'1',validFrom:'2025-01-01',validTo:null,page:1}],publicationProofs:[{publicationId:'test',eventId:'test'}]});
+  const r=await f.service.ask({question:'Como corrigir o fator de potência?',reportId:id,kind:'OPERATIONAL'},backoffice,'backoffice');expect(r.state).toBe('NO_EVIDENCE');expect(r).not.toHaveProperty('answer');
  });});

@@ -56,7 +56,7 @@ export class BotReportsService {
   const years=[...q.matchAll(/\b(20\d{2})\b/g)].map(m=>m[1]);
   if(months.length>2||(months.length===1&&(period.from!==months[0]||period.to!==months[0]))||(months.length===2&&(period.from!==[...months].sort()[0]||period.to!==[...months].sort()[1]))||years.some(y=>!months.length&&(period.from!==y+'-01'||period.to!==y+'-12'))||months.some(m=>m<period.from||m>period.to)||years.some(y=>y<period.from.slice(0,4)||y>period.to.slice(0,4))||/ultim[oa]s?\s+\d+|\bdias?\b/.test(q))return {state:'CONTEXT_REQUIRED',message:'A pergunta indica outro recorte. Selecione ou gere o relatório no intervalo mensal desejado. Este contexto não contém medições diárias; o Bot não presume outro período.'};
   if(/\bpaga[s]?\b|\bpago[s]?\b|pagamento|quitad/.test(q))return {state:'NO_EVIDENCE',message:'Este contexto contém custos apurados publicados, sem comprovação de pagamento. Para informar valores pagos, é necessário um registro de quitação vinculado à fatura.'};
-  const evidence=reportEvidence(analytics,scope,forecast);let publicationProofs:CorpusProof[]|undefined;
+  const evidence=reportEvidence(analytics,scope,forecast);let publicationProofs:CorpusProof[]|undefined;let officialSources:{id:string;title:string;section:string;url:string;version:string;validFrom:string;validTo:string|null;page:number|null}[]=[];
   if(/como|onde|preencher|utilizar|usar/.test(q)&&/relatorio|portal|previsao|publica|fonte/.test(q))evidence.push({id:'product-guide-reports',label:'Guia do produto · relatórios · versão 1',value:audience==='client'?'No portal, consulte Financeiro publicado e Previsão de consumo. No Bot, selecione unidade, período e visão. Confira as fontes da resposta. Apenas resultados publicados ficam disponíveis; peça esclarecimentos à equipe de gestão.':'Relatórios: consulte as publicações, selecione cliente e unidade, gere uma versão e abra-a. No Bot da versão aberta, pergunte sobre resultados e fontes. Previsão de consumo possui conferência de dados e premissas, justificativa, validação e publicação separadas; validação não publica automaticamente. PDF e Excel preservam a versão gerada.',source:'Guia de uso do EnergyOS; não é norma regulatória'});
   if(questionRegulation(input.question)||(this.rag.publishedPilot?.(t)&&corpusCceeQuestion(input.question))){
    const end=new Date(Date.UTC(Number(period.to.slice(0,4)),Number(period.to.slice(5)),0)).toISOString().slice(0,10),query={periodStart:period.from+'-01',periodEnd:end,market:'ACL' as const};
@@ -64,10 +64,12 @@ export class BotReportsService {
    if(official.state!=='READY')return {state:'NO_EVIDENCE',message:'A biblioteca oficial ainda não possui evidência revisada e vigente suficiente para esta pergunta. Trechos em rascunho não são usados como regra. Os valores publicados continuam disponíveis para consulta.'};
    evidence.push(...official.evidence);
    publicationProofs=official.publicationProofs;
+   officialSources=official.sources;
   }
   if(publicationProofs)await this.rag.revalidate(t,publicationProofs);
   const answer=await this.ai.interpret(t,input.question,questionEvidence(input.question,evidence,!!publicationProofs),audience);
   if(publicationProofs)await this.rag.revalidate(t,publicationProofs);
-  return {...answer,context:{unitName:scope.unitName,period,kind:input.kind},checkedAt:new Date().toISOString()};
+  if(publicationProofs&&answer.state==='READY'&&!officialSources.some(s=>answer.evidence?.some(e=>e.id===s.id)))return {state:'NO_EVIDENCE',message:'A interpretação não citou uma fonte oficial conferida para a regra solicitada. Confira as evidências e refaça a consulta.'};
+  return {...answer,...(publicationProofs?{officialSources:officialSources.filter(s=>answer.evidence?.some(e=>e.id===s.id))}:{}),context:{unitName:scope.unitName,period,kind:input.kind},checkedAt:new Date().toISOString()};
  }
 }

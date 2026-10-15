@@ -5,7 +5,7 @@ Base: main 5756b9d32dc41d1c7f88d7c29f00e2fed0f16b21.
 Branch: feat/eva-published-rag-pilot.
 Autorização: implementação técnica desativada; nenhuma homologação Azure incluída.
 
-216 testes Jest aprovados: 193 em nove suítes específicas e 23 da extração
+219 testes Jest aprovados: 196 em nove suítes específicas e 23 da extração
 reconferidos em isolamento. Uma execução ampliada inicial apresentou o pin do
 RAG legado e uma falha transitória no worker PDF. A solução preservou o código
 legado em uma fachada separada (sem atualizar hashes/publicações dos guias), e
@@ -19,6 +19,8 @@ quarentena, revisão independente, histórico, isolamento e métricas.
 Componentes React reais com transporte sintético: filtros, paginação, seleção
 da revisão, tentativa incerta sem reenvio, histórico e métricas sem dados de
 fontes para o Financeiro. Regressões de execução Search também verificadas.
+Links oficiais nos relatórios: URL HTTPS, versão/página, proteção de aba externa
+e limpeza das evidências ao trocar de organização.
 
 Build Nest aprovado. Build Next aprovado com --webpack: as dependências do
 checkout de teste são symlinks compartilhados e o Turbopack não as resolveu.

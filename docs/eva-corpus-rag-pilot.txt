@@ -37,6 +37,8 @@ Não se armazenam perguntas, texto, tokens secretos ou vetores nos novos eventos
 Não há cache de respostas ou normas recuperadas. Limites locais de concorrência
 e frequência complementam a reserva persistida da cota antes do embedding.
 A publicação é reconferida antes e depois da geração; revogação impede a resposta.
+Resposta normativa sem citação de fonte oficial recuperada também é bloqueada.
+Os relatórios exibem links oficiais, versão, página e vigência das fontes citadas.
 Portal do cliente e organizações fora do piloto preservam o caminho existente.
 
 CONTROLE DE CUSTOS

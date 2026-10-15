@@ -49,6 +49,16 @@ function ragFixture(over:Record<string,string>={}){
  const s=new EvaPublishedRagService({getClient:()=>({rpc})} as any,config(over),search,embeddings,budget);return {t,rpc,embeddings,budget,search,s};
 }
 describe('Published RAG pilot',()=>{
+ it('suppresses a normative answer that cites only generic product rules',async()=>{
+  const f=ragFixture(),retrieved=await f.s.retrieve(f.t,'Qual regra de GD?',q),ai:any={available:async()=>true,interpret:jest.fn(async()=>({state:'READY',answer:'Uncited legal claim',evidence:[{id:'rule-0',label:'Generic',value:'x',source:'product'}]}))};
+  const bot=new BotEnergyService({authorize:async()=>{}} as any,{} as any,ai,undefined,{retrieve:async()=>retrieved,revalidate:async()=>{}} as any);
+  const r=await bot.answer(f.t,{question:'Qual regra de GD?'});expect(r.status).toBe('NO_EVIDENCE');expect(r.answer).not.toContain('Uncited legal claim');expect(r.sources).toEqual([]);
+ });
+ it('returns the actual page and official URL only for cited evidence',async()=>{
+  const f=ragFixture(),retrieved=await f.s.retrieve(f.t,'Qual regra de GD?',q),ai:any={available:async()=>true,interpret:jest.fn(async()=>({state:'READY',answer:'Conferir a regra citada.',evidence:retrieved.evidence,model:'test',promptVersion:'test'}))};
+  const bot=new BotEnergyService({authorize:async()=>{}} as any,{} as any,ai,undefined,{retrieve:async()=>retrieved,revalidate:async()=>{}} as any);
+  const r=await bot.answer(f.t,{question:'Qual regra de GD?'});expect(r.status).toBe('SUPPORTED');expect(r.sources[0]).toMatchObject({url:source().url});expect(r.sources[0].reference).toContain('página 22');
+ });
  it('preserves legacy and portal routing and validates pilot permissions/licence before retrieval',async()=>{
   const f=ragFixture(),legacy:any={retrieve:jest.fn(async()=>({state:'NO_EVIDENCE',evidence:[],sources:[]})),retrieveClient:jest.fn(async()=>({state:'NO_EVIDENCE',evidence:[],sources:[]}))},licenses:any={available:jest.fn(async()=>true)};
   const facade=new EvaKnowledgeRagService(legacy,f.s,licenses);

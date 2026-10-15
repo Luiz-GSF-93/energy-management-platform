@@ -22,6 +22,8 @@ on:
       - 'frontend/app/backoffice/eva-knowledge/CorpusPublications.tsx'
       - 'frontend/app/backoffice/platform-costs/EvaCorpusMetrics.tsx'
       - 'frontend/test/eva-corpus-publication.cjs'
+      - 'frontend/app/components/BotEnergyReports.tsx'
+      - 'frontend/test/eva-corpus-citations.cjs'
       - 'infra/eva-search/index-pilot.schema.json'
       - 'docs/proposals/eva-search-execution-migration-audit.py'
       - '.github/workflows/eva-search-execution.yml'
@@ -48,4 +50,6 @@ jobs:
       - run: node test/eva-search-execution.cjs
         working-directory: frontend
       - run: node test/eva-corpus-publication.cjs
+        working-directory: frontend
+      - run: node test/eva-corpus-citations.cjs
         working-directory: frontend
