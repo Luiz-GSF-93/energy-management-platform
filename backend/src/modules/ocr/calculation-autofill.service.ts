@@ -65,6 +65,7 @@ export class CalculationAutofillService{
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }
  private output(c:Awaited<ReturnType<CalculationAutofillService['context']>>,t:TenantContext){if(!c.available)return {enabled:true,available:false,percent:0,canPrepare:false,observations:[c.observation],unitId:c.unit,month:c.month};return {enabled:true,available:true,unitId:c.unit,month:c.month,documentId:c.documentId,sourceHash:c.sourceHash,basis:c.basis,token:c.token,canPrepare:this.canWrite(t),...c.plan};}
+ async closingSnapshot(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())throw new ServiceUnavailableException('Preparação automática indisponível.');return this.context(q,t);}
  async inspect(q:Record<string,unknown>,t:TenantContext){if(!this.enabled())return {enabled:false};await this.allowed(t);this.query(q);return this.output(await this.context(q,t),t);}
  private async rpc(action:string,q:{unit:string;month:string},t:TenantContext,run:string|null,body:any){return this.fail(await this.db.getClient().rpc('calculation_autofill_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.unit,p_month:q.month,p_run:run,p_body:body}));}
  private manual(value:unknown){try{return commercialProposal(value);}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Valores comerciais inválidos.');}}
