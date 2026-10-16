@@ -36,7 +36,7 @@ try{
  }
  for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'calculation_autofill_action(text,text,text,boolean,text,text,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
  const action=(a,run,body,patch={})=>db.query('SELECT calculation_autofill_action($1,$2,$3,$4,$5,$6,$7,$8,$9) data',[patch.org??'org',patch.actor??id(20),patch.role??'operator',patch.platform??false,a,patch.unit??id(1),patch.month??'2026-08',run,JSON.stringify(body)]).then(r=>r.rows[0].data);
- const plan={percent:100,total:1,filled:1,pending:0,readyForValidation:true,fields:[{key:'consumption',value:'1000',source:'Synthetic PDF only',state:'FILLED'}],canPublish:false};
+ const plan={manualOverrides:{fixedFee:'900.00'},manualAuthor:id(20),percent:100,total:1,filled:1,pending:0,readyForValidation:true,fields:[{key:'consumption',value:'1000',source:'Synthetic PDF only',state:'FILLED'}],canPublish:false};
  const input={basis:'b'.repeat(64),documentId:id(2),sourceHash:'a'.repeat(64),plan};
  ok((await action('access',null,{})).allowed);ok((await action('history',null,{page:0})).total===0);
  for(const patch of [{actor:id(22),role:'client'},{actor:id(23)},{org:'other'},{unit:id(11)},{actor:id(50)},{platform:true,actor:id(99)}])await deny(()=>action('reserve',id(30),input,patch),'42501');
@@ -52,6 +52,7 @@ try{
  ok((await action('finish',id(30),result)).state==='PARTIAL');ok((await action('finish',id(30),result)).state==='PARTIAL');
  await deny(()=>action('finish',id(30),{status:'PREPARED',receipts:[]}),'23505');
  const history=await action('history',null,{page:0});ok(history.total===1&&history.rows.length===1);ok(history.rows[0].events.length===2&&history.rows[0].events[1].receipts.length===2);ok((await action('history',null,{page:1})).rows.length===0);
+ await db.exec('SET ROLE service_role');const scopedHistory=await action('history',null,{page:0});await db.exec('RESET ROLE');ok(scopedHistory.rows[0].plan.manualOverrides.fixedFee==='900.00'&&scopedHistory.rows[0].plan.manualAuthor===id(20));ok(scopedHistory.rows[0].organization_id==='org'&&scopedHistory.rows[0].document_id===id(2)&&scopedHistory.rows[0].source_hash==='a'.repeat(64));
  await deny(()=>db.query('UPDATE calculation_preparation_runs SET plan=$1 WHERE id=$2',[JSON.stringify({}),id(30)]),'23514');await deny(()=>db.exec('DELETE FROM calculation_preparation_run_events'),'23514');
  await db.exec(`UPDATE organization_members SET status='INACTIVE' WHERE user_id='${id(20)}'`);await deny(()=>action('history',null,{page:0}),'42501');await db.exec(`UPDATE organization_members SET status='ACTIVE' WHERE user_id='${id(20)}'`);
  await db.exec(`UPDATE licenses SET document_management=false WHERE organization_id='org'`);await deny(()=>action('reserve',id(32),input),'42501');await db.exec(`UPDATE licenses SET document_management=true WHERE organization_id='org'`);

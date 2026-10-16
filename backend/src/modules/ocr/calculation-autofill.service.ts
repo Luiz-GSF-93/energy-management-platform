@@ -27,6 +27,14 @@ export class CalculationAutofillService{
  }
  private query(q:Record<string,unknown>){if(!q||Object.keys(q).sort().join(',')!=='consumerUnitId,month'||!uuid(q.consumerUnitId)||typeof q.month!=='string'||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(q.month))throw new BadRequestException('Selecione unidade e competência válidas.');return {unit:q.consumerUnitId as string,month:q.month};}
  private fail(r:any){if(!r?.error&&r?.data!==null&&r?.data!==undefined)return r.data;if(r?.error?.code==='42501')throw new ForbiddenException('Contexto ou acesso da preparação indisponível.');if(['23505','40001'].includes(r?.error?.code))throw new ConflictException('Fontes ou execução mudaram. Reconfira o histórico.');throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');}
+ private async savedCommercial(scope:{unit:string;month:string},document:{id:string;file_hash:string},customer:string,t:TenantContext){
+  const history=await this.rpc('history',scope,t,null,{page:0});
+  if(!Array.isArray(history?.rows))throw new ServiceUnavailableException('Histórico comercial indisponível.');
+  const row=history.rows[0];if(!row)return null;
+  if(row.organization_id!==t.organizationId||row.customer_id!==customer||row.consumer_unit_id!==scope.unit||row.month!==scope.month)throw new ConflictException('Histórico fora do escopo da preparação.');
+  if(!['PREPARED','PARTIAL','RUNNING','UNKNOWN'].includes(row.state)||row.document_id!==document.id||row.source_hash!==document.file_hash||!row.plan?.manualOverrides||!Object.keys(row.plan.manualOverrides).length)return null;
+  return {values:this.manual(row.plan.manualOverrides),author:row.plan.manualAuthor||row.actor_id};
+ }
  private async context(q:Record<string,unknown>,t:TenantContext,manual?:ManualCommercial){
   const {unit,month}=this.query(q),db=this.db.getClient(),period=monthPeriod(month);
   await this.rpc('access',{unit,month},t,null,{});
@@ -47,7 +55,7 @@ export class CalculationAutofillService{
   if(historical.data.length){const top=historical.data[0];if(historical.data.some((r:any)=>r.id!==top.id&&r.month===top.month&&r.version_number===top.version_number))throw new ConflictException('Fechamento anterior ambíguo.');const row=await db.from('monthly_energy_settlements').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('id',top.id).maybeSingle();if(row.error||!row.data||row.data.financial_hash!==top.financial_hash)throw new ConflictException('Fechamento anterior mudou durante a consulta.');prior=previousCalculationReference([row.data],u,month);if(!prior)throw new ServiceUnavailableException('Integridade do fechamento anterior requer conferência.');}
   c.reference=prior;c.customerUnits=units.data;
   let restored:any=null;
-  if(manual===undefined){const saved=await db.from('calculation_preparation_runs').select('plan,actor_id,state,source_hash,document_id').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('month',month).order('created_at',{ascending:false}).limit(1);if(saved.error)throw new ServiceUnavailableException('Histórico comercial indisponível.');const row=saved.data?.[0];if(row&&['PREPARED','PARTIAL','RUNNING','UNKNOWN'].includes(row.state)&&row.document_id===c.document.id&&row.source_hash===c.document.file_hash&&row.plan?.manualOverrides&&Object.keys(row.plan.manualOverrides).length)restored={values:commercialProposal(row.plan.manualOverrides),author:row.plan.manualAuthor||row.actor_id};}
+  if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
   c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
   c.libraryRecord=selectAutofillLibrary(libraries,u,month).record;
   const plan=calculationAutofillPlan(c,libraries);
