@@ -4,6 +4,7 @@ import {monthPeriod} from '../contracts/services/preparation';
 import {validateProfile} from '../contracts/services/tariff-library-plan';
 import {parameterIssues} from '../contracts/services/parameter-issues';
 import {feeCents,feeMoney,allocationUnits,allocateFee} from '../contracts/services/management-fee';
+import {measurementIssues} from '../contracts/services/monthly-inputs';
 
 export type FillField={key:string;label:string;value:unknown;unit:string;scenario:string;source:string;state:'FILLED'|'PENDING';observation:string|null};
 export const autofillHash=(v:unknown):string=>{
@@ -86,8 +87,10 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  const costConflict=c.cost?.status==='DRAFT'&&c.cip.ready&&!c.cipPresent&&(c.cost.costs?.items??[]).some((i:any)=>i.scenario==='ACL'&&i.category==='OTHER');
  if(monthlyConflict)observations.push('O rascunho mensal existente diverge da nova proposta e foi preservado; conferir a diferença antes de validar.');
  if(costConflict)observations.push('Há custo mensal em rascunho que exige conciliação com a iluminação pública da fatura; nenhum item foi substituído.');
+ let measurementWarnings:string[];try{measurementWarnings=measurementIssues(c.measurements,true);}catch{measurementWarnings=['As medições possuem formato inconsistente; conferir a evidência original.'];}
+ observations.push(...measurementWarnings);
  const pending=fields.filter(f=>f.state==='PENDING').length,filled=fields.length-pending;
- const sourceConsistent=c.ready&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict;
+ const sourceConsistent=c.ready&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict&&!measurementWarnings.length;
  const percent=Math.min(sourceConsistent?100:99,fields.length?Math.floor(filled*100/fields.length):0);
  return {fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
 }
