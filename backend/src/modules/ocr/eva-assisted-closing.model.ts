@@ -1,20 +1,21 @@
 import {feeMoney,allocateFee} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;unavailable?:string};
-const money=(v:unknown)=>{if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
+const money=(value:unknown)=>{const v=typeof value==='number'&&Number.isFinite(value)?String(value):value;if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const scale=(v:unknown,p=6)=>{if(typeof v!=='string'||!new RegExp('^-?(0|[1-9][0-9]{0,11})(\\.\\d{1,'+p+'})?$').test(v))throw Error('Decimal sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*10n**BigInt(p)+BigInt(f.padEnd(p,'0')))*(v.startsWith('-')?-1n:1n);};
 const fixed=(v:bigint,p:number)=>{const s=(v<0n?-v:v).toString().padStart(p+1,'0');return (v<0n?'-':'')+s.slice(0,-p)+'.'+s.slice(-p);};
 const rounded=(n:bigint,d:bigint)=>{if(d<=0n)throw Error();return (n<0n?-1n:1n)*(((n<0n?-n:n)+d/2n)/d);};
 const fmt=feeMoney;
 const field=(p:any,key:string)=>p?.fields?.find((f:any)=>f.key===key&&f.state==='FILLED');
 function acrTotal(entry:ClosingEntry,missing:string[]){
+ let blocked=false;const missingTaxes:string[]=[];
  const p=entry.plan,o=p?.operational,rates=(p?.fields??[]).filter((f:any)=>f.key.startsWith('ACR:')&&!f.key.includes(':tax:')&&f.key!=='ACR:library');
- if(!p?.library||!rates.length||rates.some((f:any)=>f.state!=='FILLED'||!o?.acr?.lines?.some((l:any)=>l.key===f.key))){missing.push('ACR: existem rubricas sem tarifa da biblioteca ou quantidade faturável demonstrada.');return null;}
- if((p.fields??[]).some((f:any)=>f.key.startsWith('reactive')&&f.state==='FILLED'&&typeof f.value==='string'&&scale(f.value)>0n)&&!rates.some((f:any)=>f.key.startsWith('ACR:REACTIVE:'))){missing.push('ACR: o reativo da fatura não possui rubrica correspondente na biblioteca.');return null;}
- let total=o.acr.lines.reduce((sum:bigint,l:any)=>sum+money(l.amount),0n);const lines=o.acr.lines,params=entry.context?.captured?.parameters??[];
+ if(!p?.library||!rates.length||rates.some((f:any)=>f.state!=='FILLED'||!o?.acr?.lines?.some((l:any)=>l.key===f.key))){missing.push('ACR: existem rubricas sem tarifa da biblioteca ou quantidade faturável demonstrada.');blocked=true;}
+ if((p.fields??[]).some((f:any)=>f.key.startsWith('reactive')&&f.state==='FILLED'&&typeof f.value==='string'&&scale(f.value)>0n)&&!rates.some((f:any)=>f.key.startsWith('ACR:REACTIVE:'))){missing.push('ACR: o reativo da fatura não possui rubrica correspondente na biblioteca.');blocked=true;}
+ const lines=o?.acr?.lines??[];let total=lines.reduce((sum:bigint,l:any)=>sum+money(l.amount),0n);const params=entry.context?.captured?.parameters??[];
  for(const code of ['ICMS','PIS','COFINS']){
   const value=field(p,'ACR:tax:'+code)?.value;
-  if(!value||!['EXEMPT','NOT_APPLICABLE','INSIDE','OUTSIDE'].includes(value.treatment)){missing.push('ACR: base e tratamento de '+code+' não demonstrados; não foi presumida isenção.');return null;}
+  if(!value||!['EXEMPT','NOT_APPLICABLE','INSIDE','OUTSIDE'].includes(value.treatment)){missingTaxes.push(code);blocked=true;continue;}
   if(['EXEMPT','NOT_APPLICABLE'].includes(value.treatment))continue;
   try{
    const rate=scale(value.rate);if(rate<0n||rate>=100000000n||value.basis?.version!==1||value.basis?.interaction!=='INDEPENDENT'||!Array.isArray(value.basis.items)||!value.basis.items.length||new Set(value.basis.items.map((i:any)=>i.parameterId)).size!==value.basis.items.length)throw Error();
@@ -26,9 +27,10 @@ function acrTotal(entry:ClosingEntry,missing:string[]){
    }
    if(included.size!==lines.length)throw Error();
    total+=rounded(base*rate*100n,10n**18n*(value.treatment==='INSIDE'?100000000n-rate:100000000n));
-  }catch{missing.push('ACR: base estruturada de '+code+' incompleta ou interação tributária ainda não demonstrada.');return null;}
+  }catch{missing.push('ACR: base estruturada de '+code+' incompleta ou interação tributária ainda não demonstrada.');blocked=true;}
  }
- return total;
+ if(missingTaxes.length)missing.push('ACR: base e tratamento de '+missingTaxes.join(', ')+' não demonstrados; não foi presumida isenção.');
+ return blocked?null:total;
 }
 export function historicalDifference(label:string,current:unknown,previous:unknown,basis:string){
  try{const a=scale(current),b=scale(previous),d=a-b;return {label,basis,current:String(current),previous:String(previous),difference:fixed(d,6),percent:b===0n?null:fixed(rounded(d*10000n,b<0n?-b:b),2),comparable:true};}catch{return {label,basis,current:current??null,previous:previous??null,difference:null,percent:null,comparable:false};}

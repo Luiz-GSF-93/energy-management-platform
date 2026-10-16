@@ -35,7 +35,8 @@ export class EvaAssistedClosingService{
    if(u.organization_id!==t.organizationId||u.customer_id!==primary.customer_id)throw new ForbiddenException('Fontes fora do escopo.');
    if(u.status!=='ACTIVE'){entries.push({unitId:u.id,name:u.name??u.id,unavailable:'Unidade inativa exige conferência da cobertura do cliente.'});continue;}
    const c=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
-   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
+   const uncertain=(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state));
+   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
   }
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   const r=await this.rpc('reserve',q,t,b.requestId,{basis,hash,report,sources});
