@@ -30,7 +30,7 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext,au
  const [conversationSession,setConversationSession]=useState(0);
  const [checkedOcr,setCheckedOcr]=useState(false);
  const period=year+'-'+month,available=units.filter(u=>u.customer_id===customerId),create=hasPermission(PERM.create),update=hasPermission(PERM.update);
- const {proposal:autofill,loading:sourceLoading,error:sourceError}=useInvoiceAutofill(customerId,unitId,period,acceptedAutofill);
+ const {proposal:autofill,loading:sourceLoading,error:sourceError}=useInvoiceAutofill(customerId,available.some(u=>u.id===unitId)?unitId:'',period,acceptedAutofill);
  useEffect(()=>{if(!initialContext||initialContext.customerId!==customerId||!units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId))return;let cancelled=false;apiRequest<{rows:Row[];canValidate:boolean}>('/api/v1/calculation-monthly-costs?consumerUnitId='+encodeURIComponent(initialContext.unitId)+'&month='+encodeURIComponent(initialContext.month)).then(r=>{if(!cancelled){setRows(r.rows);setValidate(r.canValidate);}}).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Falha na consulta.');}).finally(()=>{if(!cancelled)setBusy(false);});return()=>{cancelled=true;};},[initialContext,customerId,units]);
  function clearResults(){setRows(null);setError('');setMessage('');setConfirm(null);setHistory(null);}
  function close(){setEditor(null);setDiscard(false);onDirty(false);}

@@ -1,0 +1,57 @@
+name: Source-backed automatic preparation
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/calculation-autofill*'
+      - 'backend/src/modules/ocr/ocr-resolution.service.ts'
+      - 'backend/src/database/migrations/20261109_calculation_autofill.sql'
+      - 'backend/test/calculation-autofill.cjs'
+      - 'frontend/app/backoffice/contracts/AutomaticPreparation.tsx'
+      - 'frontend/app/backoffice/contracts/CalculationPreparation.tsx'
+      - 'frontend/app/backoffice/contracts/MonthlyCosts.tsx'
+      - 'frontend/app/backoffice/contracts/MonthlyInputs.tsx'
+      - 'frontend/app/backoffice/documents/OcrResolution.tsx'
+      - 'frontend/test/calculation-autofill.cjs'
+      - 'frontend/test/preparation-navigation.cjs'
+      - '.github/workflows/calculation-autofill.yml'
+permissions:
+  contents: read
+jobs:
+  private-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55484:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/ocr-resolution.service.spec.ts src/modules/ocr/ocr-autofill.spec.ts src/modules/ocr/ocr-autofill.service.spec.ts src/modules/contracts/services/contract-supplier-cost.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/fee-adjustment.spec.ts src/modules/contracts/services/preparation.spec.ts src/modules/contracts/services/tariff-library-plan.spec.ts src/modules/contracts/services/tariff-library.service.spec.ts src/modules/contracts/services/monthly-inputs-ocr-edit.spec.ts
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: node test/calculation-autofill.cjs
+        working-directory: backend
+      - run: npm install --prefix /tmp/calculation-pg-driver --ignore-scripts pg@8.16.3
+      - run: node test/calculation-autofill.cjs
+        working-directory: backend
+        env:
+          NODE_PATH: /tmp/calculation-pg-driver/node_modules
+          CALCULATION_AUTOFILL_TEST_PG_PORT: '55484'
+      - run: node test/financial-settlements.cjs
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
