@@ -1,6 +1,7 @@
+import type {InvoiceComparison} from './eva-tariff-workbench.model';
 import {feeMoney,allocateFee} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
-export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;unavailable?:string};
+export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;comparative?:InvoiceComparison;unavailable?:string};
 const money=(value:unknown)=>{const v=typeof value==='number'&&Number.isFinite(value)?String(value):value;if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const scale=(v:unknown,p=6)=>{if(typeof v!=='string'||!new RegExp('^-?(0|[1-9][0-9]{0,11})(\\.\\d{1,'+p+'})?$').test(v))throw Error('Decimal sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*10n**BigInt(p)+BigInt(f.padEnd(p,'0')))*(v.startsWith('-')?-1n:1n);};
 const fixed=(v:bigint,p:number)=>{const s=(v<0n?-v:v).toString().padStart(p+1,'0');return (v<0n?'-':'')+s.slice(0,-p)+'.'+s.slice(-p);};
@@ -45,17 +46,19 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
   if(e.unavailable||!p||o?.state==='UNAVAILABLE'){ownMissing.push(e.unavailable??'Vínculo ou fonte da fatura indisponível.');continue;}
   try{
-   const acr=acrTotal(e,ownMissing);if(acr!==null)row.acr=fmt(acr);
+   const acr=e.comparative?(e.comparative.amount===null?null:money(e.comparative.amount)):acrTotal(e,ownMissing);
+   if(e.comparative){estimated=true;row.methodology=e.comparative;ownMissing.push(...e.comparative.missing);for(const n of e.comparative.observations)add(n);}if(acr!==null)row.acr=fmt(acr);
    const invoice=money(o.invoice.amount),supplier=money(o.supplier.amount);if(invoice<0n||supplier<0n)throw Error();
    // The reference is an explicitly estimated energy price, never an assertion of a current contract.
    if(p.referenceUsed||Object.keys(p.manualOverrides??{}).length){estimated=true;add('Preço/condição de referência ou valor comercial do operador usado na competência atual; sem prorrogar contrato.');}
    const supplierTax=field(p,'supplier:tax')?.value;
-   if(!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)){ownMissing.push('Fornecedor: o preço de energia está proposto, mas a composição final de tributos/encargos não está demonstrada.');}
+   if(!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)&&!e.comparative){ownMissing.push('Fornecedor: o preço de energia está proposto, mas a composição final de tributos/encargos não está demonstrada.');}
+   if(e.comparative&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)){estimated=true;add('Fornecedor: preço usado como referência comparativa, com composição fiscal não demonstrada. Não representa isenção ou tributos incluídos confirmados.');}
    let extraAcl=0n,extraAcr=0n;
    const costs=field(p,'costs:monthly')?.value;
    if(!costs||!Array.isArray(costs.items)||typeof costs.noCosts!=='boolean'||costs.noCosts&&costs.items.length)ownMissing.push('Custos adicionais: revisão da competência não demonstrada.');
    else for(const item of costs.items){
-    if(item.scenario==='ACL'&&item.source?.includes(c.document.id))continue;
+    if((item.scenario==='ACL'||e.comparative)&&item.source?.includes(c.document.id))continue;
     if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
     if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte ou tratamento final demonstrado.');continue;}
     const amount=money(item.amount);if(amount<0n)throw Error();if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
@@ -103,5 +106,5 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
  }catch(e){for(const key of Object.keys(financial))financial[key]=key==='status'?'INCOMPLETE':null;missing.push(e instanceof Error?e.message:'Consolidado indisponível.');}}
  for(let i=0;i<units.length;i++){const u=units[i],old=entries[i]?.context?.reference?.comparison?.unit;if(u.comparison&&old){for(const [label,key,previous] of [['Honorário variável','variableFee',old.variableFee],['Honorários totais','totalFees',old.totalFees],['ACL com honorários','aclAfterFees',old.aclAfterFees],['Economia','savings',old.savingsAfterFees]])u.comparison.metrics.push(historicalDifference(label,missing.length?null:u[key],previous,'BRL'));}}
  const completeness=missing.length?'INCOMPLETE':estimated?'ESTIMATED':'COMPLETE';
- return {formatVersion:'eva-assisted-closing-1.0',organizationId:org,customerId:customer,month,unitIds:entries.map(e=>e.unitId).sort(),completeness,approvalEligible:!missing.length,financial,units,missing:[...new Set(missing)],observations:[...new Set(observations)],recommendations:[...new Set(recommendations)],justification:missing.length?'A EVA preencheu as fontes disponíveis. O fechamento permanece incompleto pelas evidências relacionadas no resumo; nenhum total parcial foi convertido em resultado final.':estimated?'Fechamento preparado com referências identificadas e memória preservada. Confira as condições e diferenças antes da decisão.':'Fechamento preparado com fontes da competência e cálculos preservados para decisão.',publicationAllowed:false,automaticApproval:false};
+ return {formatVersion:'eva-assisted-closing-1.0',methodology:entries.some(e=>e.comparative)?'SAME_INVOICE_QUANTITIES_AND_CHARGES_V1':'SOURCE_BILLING_V1',organizationId:org,customerId:customer,month,unitIds:entries.map(e=>e.unitId).sort(),completeness,approvalEligible:!missing.length,financial,units,missing:[...new Set(missing)],observations:[...new Set(observations)],recommendations:[...new Set(recommendations)],justification:missing.length?'A EVA preencheu as fontes disponíveis. O fechamento permanece incompleto pelas evidências relacionadas no resumo; nenhum total parcial foi convertido em resultado final.':estimated?'Fechamento preparado com referências identificadas e memória preservada. Confira as condições e diferenças antes da decisão.':'Fechamento preparado com fontes da competência e cálculos preservados para decisão.',publicationAllowed:false,automaticApproval:false};
 }

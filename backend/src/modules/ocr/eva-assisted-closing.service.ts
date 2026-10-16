@@ -3,6 +3,7 @@ import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {CalculationAutofillService} from './calculation-autofill.service';
+import {invoiceComparison} from './eva-tariff-workbench.model';
 import {autofillHash} from './calculation-autofill.model';
 import {assistedClosingReport,ClosingEntry} from './eva-assisted-closing.model';
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
@@ -20,7 +21,7 @@ export class EvaAssistedClosingService{
   if(r.error?.code==='22023')throw new BadRequestException('Dados insuficientes ou decisão inválida.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }
- async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,unitId:scope.consumerUnitId,month:scope.month,...await this.rpc('history',scope,t,null,{page:Number(page)})};}
+ async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...await this.rpc('history',scope,t,null,{page:Number(page)})};}
  async prepare(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento assistido desligado.');
   if(!b||Object.keys(b).sort().join(',')!=='consumerUnitId,month,requestId'||!uuid(b.requestId))throw new BadRequestException('Preparação inválida.');
@@ -36,7 +37,7 @@ export class EvaAssistedClosingService{
    if(u.status!=='ACTIVE'){entries.push({unitId:u.id,name:u.name??u.id,unavailable:'Unidade inativa exige conferência da cobertura do cliente.'});continue;}
    const c=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
    const uncertain=(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state));
-   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
+   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:invoiceComparison(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
   }
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   const r=await this.rpc('reserve',q,t,b.requestId,{basis,hash,report,sources});

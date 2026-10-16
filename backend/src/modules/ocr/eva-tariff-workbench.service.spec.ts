@@ -1,0 +1,11 @@
+import {EvaTariffWorkbenchService} from './eva-tariff-workbench.service';
+const u='00000000-0000-4000-8000-000000000001',id='00000000-0000-4000-8000-000000000002',t:any={organizationId:'org',userId:'actor',roleId:'role'};
+function fixture(enabled=true){const rpc=jest.fn().mockResolvedValue({data:{canWrite:true,events:[]}}),queue={enqueue:jest.fn(),reviewSource:jest.fn()},s=new EvaTariffWorkbenchService({getClient:()=>({rpc})} as any,{get:(k:string)=>k==='EVA_TARIFF_WORKBENCH_ENABLED'&&enabled?'true':'false'} as any,queue as any);return {s,rpc,queue}}
+describe('Tariff model service',()=>{
+ it('keeps new workflow disabled without DB or provider access',async()=>{const x=fixture(false);expect(await x.s.inspect({},t)).toEqual({enabled:false});expect(x.rpc).not.toHaveBeenCalled()});
+ it('rejects invalid scope and arbitrary action',async()=>{const x=fixture();await expect(x.s.inspect({consumerUnitId:'other',month:'2026-09'},t)).rejects.toThrow();await expect(x.s.command({consumerUnitId:u,month:'2026-09',requestId:id,action:'grant',data:{}},t)).rejects.toThrow()});
+ it('never enqueues a paid call with its dedicated flag off',async()=>{const x=fixture();await expect(x.s.command({consumerUnitId:u,month:'2026-09',requestId:id,action:'enqueue',data:{documentId:id}},t)).rejects.toThrow('desligada');expect(x.queue.enqueue).not.toHaveBeenCalled()});
+ it('rejects lowering the quality criterion below 90%',async()=>{const x=fixture();await expect(x.s.command({consumerUnitId:u,month:'2026-09',requestId:id,action:'import',data:{documentId:id,threshold:0.8,reason:'Conferência suficiente para teste.'}},t)).rejects.toThrow();expect(x.queue.reviewSource).not.toHaveBeenCalled()});
+ it('requires authorization before loading an invoice',async()=>{const x=fixture();x.rpc.mockResolvedValue({data:{canWrite:false}});await expect(x.s.command({consumerUnitId:u,month:'2026-09',requestId:id,action:'import',data:{documentId:id,threshold:0.9,reason:'Conferência suficiente para teste.'}},t)).rejects.toThrow();expect(x.queue.reviewSource).not.toHaveBeenCalled()});
+ it('maps source races without retry',async()=>{const x=fixture();x.rpc.mockResolvedValue({error:{code:'40001'}});await expect(x.s.inspect({consumerUnitId:u,month:'2026-09'},t)).rejects.toThrow('mudou');expect(x.rpc).toHaveBeenCalledTimes(1)});
+});
