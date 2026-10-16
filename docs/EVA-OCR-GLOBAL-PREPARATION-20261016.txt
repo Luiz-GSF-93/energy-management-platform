@@ -1,0 +1,17 @@
+EVA — OCR, score global e preparação estruturada V2
+
+Chave nova: EVA_OCR_GLOBAL_PREPARATION_ENABLED=false por padrão. Não alterar EVA_TARIFF_WORKBENCH_ENABLED ou EVA_TARIFF_MODEL_CALLS_ENABLED nesta entrega. Sem a chave V2, avaliações novas preservam a regra V1; histórico não é recalculado. Novas mensagens de andamento/histórico são compatíveis com ambas as versões.
+
+O score V2 agrega cinco seções de mesmo peso: identificação/período, enquadramento, consumo/demanda, tarifas/rubricas, totais/tributos. Dentro da seção, confianças são ponderadas por caracteres úteis. Projeções duplicadas da mesma evidência não aumentam o peso. Fonte sem confiança continua no denominador, reduz a cobertura e não é apresentada como confiança nativa zero. Uma seção abaixo de 90% não impede o resultado quando o score global atinge o critério, todos os campos aplicáveis estão preenchidos e a consistência foi conferida. Score não é probabilidade calibrada de acerto financeiro.
+
+Confiança direta é preservada. Na ausência, palavras verificadas por texto, spans UTF-16, página e cobertura integral permitem confiança derivada explicitamente identificada. Nenhum valor é inventado para preencher a fatura, e nenhum clique do operador aumenta a confiança. Campos não identificados permanecem pendentes. Mais de 200 evidências impede homologação integral, sem relatório truncado declarado completo.
+
+Preparação estruturada preservada no payload do import: pares campo/valor/fonte provenientes de evidência verificada, disponíveis mesmo antes ou em falha da interpretação generativa. Quando o serviço IA já autorizado está disponível, usa uma chamada existente e retorna fields. O backend confere novamente key, value e evidenceId exatos; sugestões sem correspondência são descartadas, sem alterar score. Sem novo serviço, parser pago ou endpoint. Até 140 fatos individuais no contexto de IA; a proposta determinística preserva os campos restantes conforme o mesmo limite de preparação. Não transmitir PDF ou resposta bruta do provedor.
+
+A biblioteca e a preparação financeira existentes continuam sendo a fonte para tarifas ACR e condições comerciais/referências. O link Abrir preparação desta fatura mantém documento/unidade/competência; a homologação não grava valores mensais, aprova fechamento nem publica no cliente. Esta entrega não habilita o novo comparativo financeiro ou diálogo RAG. Não presume que todos os layouts e tributos estejam homologados.
+
+Interface: estado de consulta, mensagem persistente de processamento, confirmação ao concluir, resultado expandido e posicionado, tradução de estado, histórico vazio explícito, preenchimento, cobertura e score separados, valores com fontes e detalhes opcionais. Novo cliente/competência limpa retorno anterior. Nenhum reenvio de mutação após erro. Continuidade da limitação de seis revisões, reservas duráveis e cota de documentos/IA.
+
+Segurança: mesmo controlador, permissões, organização/licença, RPC, tabelas append-only e RLS; nenhuma alteração de banco, função SQL, grants ou autenticação. Chamadas pagas e homologação real não fazem parte desta implementação. Revisão 1/6 e versões históricas não recebem débito/crédito retroativo.
+
+Validação esperada: regressão de leitura/confiança/preparação, autorização e fonte, score V2, geração estruturada adversarial, concorrência/cota/limite no SQL existente, interface e builds. Antes da homologação seguinte, confirmar nova regra V2, fonte, cota e escopo; executar uma única avaliação controlada e conferir evidência/custos.
