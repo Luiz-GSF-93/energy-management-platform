@@ -109,6 +109,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
   <dialog ref={dialog} aria-label="EVA · conferir fatura" style={{width:'min(1100px,94vw)',maxHeight:'90vh',overflow:'auto',background:'#101b2c',color:'#f0f5ff',border:'1px solid #536984',borderRadius:16,padding:24}}>
    <button type="button" onClick={()=>dialog.current?.close()} disabled={writeBusy}>Fechar assistente</button>
    <h2>EVA · conferir fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
+   <p><a className="ds-button" href={ocrContractLink(id,'preparation')}>EVA · preparar apuração</a></p>
    <button type="button" disabled={busy} onClick={()=>void load()}>Atualizar conferência</button>
    {activityView}{busy&&<p role="status">{writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}</p>}{error&&<BotEnergyGuidance error={error}/>}
    {notice&&<p role="status">{notice}</p>}
