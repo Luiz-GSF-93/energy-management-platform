@@ -1,3 +1,4 @@
+import {simplifiedPreparation} from './calculation-autofill-summary';
 import {referenceEnergyAmount,referenceMwh} from './calculation-autofill-reference';
 import {createHash} from 'node:crypto';
 import {adjustedContracts} from '../contracts/services/fee-adjustment';
@@ -72,10 +73,10 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  const feeSource=feeReference?reference.source+' · honorários, sem vigência atual confirmada':m?'Contrato de gestão '+m.id:'';
  if(feeReference)observations.push('Honorários sem vigência: referência de '+reference.month+'; confirmar condições atuais.');
  let fixed=m&&!m.fee_adjustment_pending?m.fixed_fee_monthly:null;try{if(fixed!==null)feeCents(fixed);}catch{fixed=null;}
- add('fee:fixed','Honorário fixo por unidade',fixed,'BRL','ACL',m?'Contrato de gestão '+m.id+(m.fee_adjustment?' · reajuste '+m.fee_adjustment.id:''):'');
+ add('fee:fixed','Honorário fixo por unidade',fixed,'BRL','ACL',feeReference?feeSource:m?'Contrato de gestão '+m.id+(m.fee_adjustment?' · reajuste '+m.fee_adjustment.id:''):'');
  if(m?.remuneration_model==='HYBRID'){
-  let percentage=m.savings_percentage;try{allocationUnits(percentage);}catch{percentage=null;}
-  add('fee:percentage','Honorário variável',percentage,'%','ACL','Contrato de gestão '+m.id,'Valor final depende da economia consolidada de todas as unidades.');
+  let percentage=m.savings_percentage==null?null:String(m.savings_percentage);try{allocationUnits(percentage);}catch{percentage=null;}
+  add('fee:percentage','Honorário variável',percentage,'%','ACL',feeSource,'Valor final depende da economia consolidada de todas as unidades.');
   const allocations=c.captured.feeRules.filter((a:any)=>a.contract_id===m.id&&a.month===c.month).sort((a:any,b:any)=>b.version-a.version),a=allocations[0];
   let allocation=a?.allocations??null;try{if(!a?.source||a.fixed_fee_basis!=='PER_UNIT')throw Error();allocateFee('0',allocation);if(!allocation.some((x:any)=>x.consumerUnitId===u.id))throw Error();}catch{allocation=null;}
   let allocationSource=a?'Rateio '+a.id+' v'+a.version+' · '+a.source:'';
@@ -85,10 +86,11 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  }
  const currentSupplier=c.diagnosis.contractSupplierCost;
  const overlaps=(c.captured.contracts??[]).some((x:any)=>['ACTIVE','APPROVED'].includes(x.status)&&x.contract_type==='ENERGY_PURCHASE'&&String(x.start_date).slice(0,10)<=period.end&&String(x.end_date??'9999-12-31').slice(0,10)>=period.start);
- const supplierReference=!currentSupplier?.contract&&!overlaps&&reference?.supplier;
+ const activeSuppliers=(c.captured.contracts??[]).filter((x:any)=>['ACTIVE','APPROVED'].includes(x.status)&&x.contract_type==='ENERGY_PURCHASE'&&String(x.start_date).slice(0,10)<=period.end&&String(x.end_date??'9999-12-31').slice(0,10)>=period.start);
+ const supplierReference=((!currentSupplier?.contract&&!overlaps)||currentSupplier?.contract&&!currentSupplier.pricePerMwh&&activeSuppliers.length<=1)&&reference?.supplier;
  const s=supplierReference?{...supplierReference,regularAmount:referenceEnergyAmount(supplierReference.pricePerMwh,c.measurements.consumptionTotal),contractedMwh:referenceMwh(c.measurements.consumptionTotal),requirements:[]}:currentSupplier;
  const supplierSource=supplierReference?reference.source+' · preço histórico aplicado ao consumo atual; não é contrato vigente':null;
- if(supplierReference)observations.push('Fornecedor sem vigência: preço de '+reference.month+' aplicado ao consumo atual, sem copiar volume ou total anterior. Conferir compra, perdas, tributos e encargos atuais.');
+ if(supplierReference)observations.push('Fornecedor sem condições completas para a competência: preço de '+reference.month+' aplicado ao consumo atual, sem copiar volume ou total anterior. Conferir compra, perdas, tributos e encargos atuais.');
  add('supplier:contract','Contrato fornecedor',s?.contract?.number??null,'','ACL',supplierSource??(s?.contract?'Contrato '+s.contract.id:''));
  add('supplier:price',supplierReference?'Preço de referência do fornecedor':'Preço vigente fornecedor',s?.pricePerMwh??null,'BRL_MWH','ACL',supplierSource??(s?.pricePerMwh?'Contrato '+s.contract.id+' · '+s.priceSource:''));
  add('supplier:volume',supplierReference?'Volume atual usado na referência':'Volume contratado',s?.contractedMwh??null,'MWh','ACL',supplierSource??(s?.contract?'Contrato '+s.contract.id:''));
@@ -103,8 +105,15 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  if(costConflict)observations.push('Há custo mensal em rascunho que exige conciliação com a iluminação pública da fatura; nenhum item foi substituído.');
  let measurementWarnings:string[];try{measurementWarnings=measurementIssues(c.measurements,true);}catch{measurementWarnings=['As medições possuem formato inconsistente; conferir a evidência original.'];}
  observations.push(...measurementWarnings);
+ const manual=c.manualOverrides??{},manualSource='Valor informado pelo operador '+c.manualAuthor+' para esta proposta mensal, sem alterar contratos ou vigências.';
+ const setManual=(key:string,label:string,value:unknown,unit:string)=>{const found=fields.find(f=>f.key===key);if(found)Object.assign(found,{value,source:manualSource,state:'FILLED',observation:'Referência comercial do operador; conferir antes do fechamento.'});else add(key,label,value,unit,'ACL',manualSource,'Referência comercial do operador; conferir antes do fechamento.');};
+ if(manual.fixedFee!==undefined)setManual('fee:fixed','Honorário fixo por unidade',manual.fixedFee,'BRL');
+ if(manual.feePercentage!==undefined)setManual('fee:percentage','Honorário variável',manual.feePercentage,'%');
+ if(manual.supplierPricePerMwh!==undefined){setManual('supplier:price','Preço de referência do fornecedor',manual.supplierPricePerMwh,'BRL_MWH');const volume=referenceMwh(c.measurements.consumptionTotal),amount=referenceEnergyAmount(manual.supplierPricePerMwh,c.measurements.consumptionTotal);if(volume!==null)setManual('supplier:volume','Consumo atual usado na proposta',volume,'MWh');if(amount!==null)setManual('supplier:regular','Energia regular proposta',amount,'BRL');}
+ if(Object.keys(manual).length)observations.push('Condições comerciais informadas pelo operador foram preservadas somente nesta proposta auditada. Tributos, perdas e encargos não informados não foram somados ao preço de referência.');
  const pending=fields.filter(f=>f.state==='PENDING').length,filled=fields.length-pending;
  const sourceConsistent=(c.ready||c.proposalReady)&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict&&!measurementWarnings.length;
  const percent=Math.min(sourceConsistent?100:99,fields.length?Math.floor(filled*100/fields.length):0);
- return {reference:reference?{id:reference.id,month:reference.month,version:reference.version,hash:reference.hash}:null,referenceUsed:!!(supplierReference||feeReference),humanReviewPending:!c.ready,financialApproval:false,fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
+ const simplified=simplifiedPreparation(fields,[...new Set(observations)],{proposalReady:!!(c.ready||c.proposalReady),library:lib?{id:lib.id,version:lib.version}:null,referenceUsed:!!(supplierReference||feeReference)});
+ return {manualOverrides:manual,manualAuthor:c.manualAuthor??null,simplified,reference:reference?{id:reference.id,month:reference.month,version:reference.version,hash:reference.hash}:null,referenceUsed:!!(supplierReference||feeReference),humanReviewPending:!c.ready,financialApproval:false,fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
 }
