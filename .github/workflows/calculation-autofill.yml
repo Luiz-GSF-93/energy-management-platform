@@ -24,6 +24,11 @@ on:
       - 'frontend/app/backoffice/documents/OcrResolution.tsx'
       - 'frontend/test/calculation-autofill.cjs'
       - 'frontend/test/preparation-navigation.cjs'
+      - 'backend/src/modules/ocr/eva-tariff-*'
+      - 'backend/src/modules/ocr/eva-closing-dialogue*'
+      - 'backend/src/database/migrations/20261111*'
+      - 'frontend/app/backoffice/contracts/Tariff*'
+      - 'frontend/app/backoffice/contracts/ClosingConversation.tsx'
       - '.github/workflows/calculation-autofill.yml'
 permissions:
   contents: read
@@ -46,9 +51,11 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-assisted-closing.model.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/calculation-operational-proposal.spec.ts src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/ocr-resolution.service.spec.ts src/modules/ocr/ocr-autofill.spec.ts src/modules/ocr/ocr-autofill.service.spec.ts src/modules/contracts/services/contract-supplier-cost.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/fee-adjustment.spec.ts src/modules/contracts/services/preparation.spec.ts src/modules/contracts/services/tariff-library-plan.spec.ts src/modules/contracts/services/tariff-library.service.spec.ts src/modules/contracts/services/monthly-inputs-ocr-edit.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/documents/controllers/documents.upload-http.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-tariff-workbench.model.spec.ts src/modules/ocr/eva-tariff-workbench.service.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts src/modules/ocr/eva-assisted-closing.model.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/calculation-operational-proposal.spec.ts src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/ocr-resolution.service.spec.ts src/modules/ocr/ocr-autofill.spec.ts src/modules/ocr/ocr-autofill.service.spec.ts src/modules/contracts/services/contract-supplier-cost.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/fee-adjustment.spec.ts src/modules/contracts/services/preparation.spec.ts src/modules/contracts/services/tariff-library-plan.spec.ts src/modules/contracts/services/tariff-library.service.spec.ts src/modules/contracts/services/monthly-inputs-ocr-edit.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/documents/controllers/documents.upload-http.spec.ts
         working-directory: backend
       - run: npm run build
+        working-directory: backend
+      - run: node test/eva-tariff-workbench.cjs
         working-directory: backend
       - run: node test/eva-assisted-closing.cjs
         working-directory: backend
@@ -65,11 +72,16 @@ jobs:
         env:
           NODE_PATH: /tmp/calculation-pg-driver/node_modules
           EVA_CLOSING_TEST_PG_PORT: '55484'
+      - run: node test/eva-tariff-workbench.cjs
+        working-directory: backend
+        env:
+          NODE_PATH: /tmp/calculation-pg-driver/node_modules
+          EVA_TARIFF_TEST_PG_PORT: '55484'
       - run: node test/financial-settlements.cjs
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/eva-assisted-closing.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
+      - run: node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

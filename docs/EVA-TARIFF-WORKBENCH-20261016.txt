@@ -1,0 +1,31 @@
+EVA — biblioteca tarifária existente, homologação de modelos e conversa do fechamento
+Escopo aprovado em 16/10/2026. Entrega técnica inicialmente desligada.
+
+Navegação: Contratos → Biblioteca de distribuidoras, junto às áreas de dados mensais e preparação. Usa TariffLibrary e tariff_library_versions existentes. Alterações são novas versões com justificativa; não cria outro catálogo tarifário.
+
+Novas flags (ausentes ou diferentes de true significam desligado):
+EVA_TARIFF_WORKBENCH_ENABLED — avaliações privadas de modelos e candidatos tarifários.
+EVA_TARIFF_MODEL_CALLS_ENABLED — enfileirar OCR e interpretar a qualidade com IA; usa filas, cotas e custos existentes.
+EVA_INVOICE_COMPARISON_ENABLED — metodologia comparativa com quantidades/impostos/despesas da fatura.
+EVA_CLOSING_DIALOGUE_ENABLED — campo de conversa sobre a versão em tela.
+EVA_CLOSING_DIALOGUE_CALLS_ENABLED — interpretação e consultas RAG pagas nessa conversa.
+Nenhuma flag existente é alterada pela migração. Nenhuma chamada externa faz parte dos testes.
+
+Migração 20261111: quatro tabelas privadas append-only (imports, candidates, model_evaluations, events), RPC scoped e view de seleção operacional. Modelo é documento classificado MODEL no catálogo já existente e fica fora da seleção de fatura mensal. Arquivo idêntico já existente é reutilizado, sem reclassificá-lo silenciosamente.
+A organização continua isolada. Conferência e licença são revalidadas pelo backend/RPC; nenhum privilégio é atribuído no frontend. Homologar modelo requer perfil gestor/admin autorizado, aceite explícito, score mínimo por campo, consistência e análise IA disponível. Homologação documental não é aprovação financeira.
+
+Confiança mínima: 90% por campo essencial, ajustável somente para critério mais exigente. Média alta não compensa campo ausente. Confiança do provedor e verificação de consistência são separadas; a IA explica limitações e não aumenta o score observado. Correções humanas ficam como evidências de revisão e não equivalem a treinamento de pesos.
+Até seis avaliações/revisões por modelo de distribuidora/grupo/subgrupo/modalidade na organização. Reservas pendentes contam antes de iniciar OCR novo. Nova versão legível pode ser enviada, respeitando limite e cota; não há repetição paga indefinida nem reenvio automático de resultado UNKNOWN. Encerradas seis revisões sem qualidade, há necessidade de tratamento técnico do layout, sem elevar score por conveniência.
+O arquivo novo consome a cota de documentos no upload existente. A primeira avaliação desse arquivo não duplica o débito; cada reavaliação do mesmo documento consome uma unidade adicional. Mudanças do percentual só passam a valer ao registrar a revisão, que consome cota. organization_resource_usage e documents_used passam a incluir esses débitos, sem alterar limites/licenças. Históricos antigos não são cobrados retroativamente.
+OCR mantém a fila durável e a idempotência existentes. IA utiliza BackofficeAiService/BotEnergyBudgetService, com uso/custo e latência nos mecanismos administrativos existentes. Sem preço conhecido, não se declara custo zero.
+
+Tarifas: todas as distribuidoras podem ser cadastradas na biblioteca existente; grupos/modalidades e postos têm matriz de componentes. Posto intermediário pode ser registrado para a modalidade branca; o motor legado de aplicação de parâmetros mantém suas limitações e não será apresentado como homologado para todos os perfis.
+Leitura estruturada automática reutiliza os parsers já existentes (CPFL Paulista/Elektro). Outros layouts não são automaticamente considerados homologados pelo simples cadastro. Campos/evidências insuficientes exigem correção, novo arquivo ou evolução do parser. Não há promessa de biblioteca nacional completa nem garantia de score antes da leitura.
+
+Comparativo: exigir tarifas líquidas explicitamente declaradas em nova versão; não acrescentar os impostos da fatura a tarifas brutas/desconhecidas. Aplicar consumo e demanda disponíveis; demanda medida usada por hipótese é identificada, sem afirmar demanda faturável regulatória. Não criar parcela de demanda não utilizada zero. Reativo exige tarifa e unidade compatíveis.
+Substituir as rubricas de energia/rede pelas tarifas; conservar exatamente uma vez os impostos decompostos e as demais despesas/créditos, reconciliando com o total. Ausência ou diferença inexplicada não vira despesa inventada. Referências históricas de fornecedor/honorários não criam vigência. Preço sem composição fiscal comprovada fica identificado como referência comparativa.
+Totais suficientes por essa metodologia são ESTIMATED, para decisão interna humana com reconhecimento das hipóteses. Valores essenciais ausentes continuam INCOMPLETE. Sem publicação no portal, cobrança ou modificação de versões financeiras já preparadas.
+
+Conversa: reconsulta a versão autorizada e descarta contexto ao trocar identidade/organização/versão. Preserva novo rascunho enquanto responde. Conversa não altera dados nem executa comandos. REN 1000/CCEE somente por corpus efetivamente publicado e elegível, com revalidação/citações; não declara norma recuperada quando a busca está desligada ou sem evidência.
+
+Testes: aritmética exata, tributos sem duplicação, fontes/medidas/reativo, permissões/cross-tenant, cota/concorrência/idempotência, seis reservas, score mínimo, histórico imutável, estados incertos, interfaces e builds. PostgreSQL descartável e dados sintéticos; sem homologar um modelo real nem decidir por um usuário.

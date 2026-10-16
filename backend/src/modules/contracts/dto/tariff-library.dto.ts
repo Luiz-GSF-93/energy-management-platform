@@ -2,12 +2,14 @@ import {Type} from 'class-transformer';
 import {ArrayMaxSize,ArrayMinSize,ArrayUnique,IsArray,IsBoolean,IsDateString,IsIn,IsInt,IsOptional,IsString,IsUUID,Matches,MaxLength,Min,ValidateNested} from 'class-validator';
 export class LibraryItemDto {
  @IsIn(['TE','TUSD_ENERGY','TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED','REACTIVE']) component!:string;
- @IsIn(['PEAK','OFF_PEAK','ALL']) band!:string;
+ @IsIn(['PEAK','OFF_PEAK','INTERMEDIATE','ALL']) band!:string;
  @IsIn(['BRL_KWH','BRL_MWH','BRL_KW','BRL_KVARH']) measure!:string;
  @Matches(/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,6})?$/) value!:string;
  @IsString() @Matches(/\S/) @MaxLength(150) label!:string;
 }
 export class LibraryProfileDto {
+ @IsOptional() @IsIn(['NET','GROSS','UNKNOWN']) taxTreatment?:string;
+ @IsOptional() @IsString() @MaxLength(100) voltageClass?:string;
  @IsString() @Matches(/\S/) @MaxLength(150) distributor!:string;
  @IsIn(['A','B']) group!:string;
  @IsString() @Matches(/^[A-Z0-9]{1,5}$/) subgroup!:string;
