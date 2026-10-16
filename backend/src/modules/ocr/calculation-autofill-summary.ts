@@ -2,7 +2,7 @@ type Field={key:string;label:string;value:unknown;unit:string;source:string;stat
 /** An operational proposal is useful before financial validation. Never invents an absent amount. */
 export function simplifiedPreparation(fields:Field[],observations:string[],context:{proposalReady:boolean;library:{id:string;version:number}|null;referenceUsed:boolean}){
  const available=fields.filter(f=>f.state==='FILLED');
- const manualGroups=[{key:'fees',label:'Honorários',fields:fields.filter(f=>f.key.startsWith('fee:'))},{key:'supplier',label:'Fornecedor Mercado Livre',fields:fields.filter(f=>f.key.startsWith('supplier:'))}].map(g=>({...g,pending:g.fields.filter(f=>f.state!=='FILLED').map(f=>f.label)}));
+ const manualGroups=[{key:'fees',label:'Honorários',fields:fields.filter(f=>f.key.startsWith('fee:'))},{key:'supplier',label:'Fornecedor Mercado Livre',fields:fields.filter(f=>f.key.startsWith('supplier:'))}].map(g=>({...g,pending:g.fields.filter(f=>f.state!=='FILLED'&&['fee:fixed','fee:percentage','supplier:price'].includes(f.key)).map(f=>f.label)}));
  const extracted=fields.filter(f=>!f.key.startsWith('fee:')&&!f.key.startsWith('supplier:')&&!f.key.includes(':tax:')&&!f.key.startsWith('ACR:')&&!(f.key.startsWith('reactive')&&f.state!=='FILLED'));
  const coverage={filled:extracted.filter(f=>f.state==='FILLED').length,total:extracted.length};
  const missing=fields.filter(f=>f.state!=='FILLED'&&!f.key.startsWith('fee:')&&!f.key.startsWith('supplier:')).map(f=>f.label+' ('+f.scenario+')');
