@@ -36,6 +36,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  };
  add('unit','Unidade',u.name,'','BOTH','Cadastro '+u.id);add('month','Competência',c.month,'','BOTH','Fatura '+c.document.id);
  for(const [key,label] of Object.entries({distributor:'Distribuidora',tariff_group:'Grupo tarifário',tariff_subgroup:'Subgrupo tarifário',tariff_modality:'Modalidade',consumption_class:'Classe de consumo'}))add('unit:'+key,label,u[key]??null,'','BOTH','Cadastro '+u.id);
+ if(u.tariff_group==='A')for(const key of u.tariff_modality==='BLUE'?['contracted_demand_peak','contracted_demand_off_peak']:['contracted_demand'])add('unit:'+key,'Demanda contratada · '+key,u[key]??null,'kW','BOTH','Cadastro '+u.id);
  const src='Fatura '+c.document.id+' · SHA-256 '+c.document.file_hash;
  for(const key of ['consumptionTotal','consumptionPeak','consumptionOffPeak'])add(key,{consumptionTotal:'Consumo total',consumptionPeak:'Consumo ponta',consumptionOffPeak:'Consumo fora ponta'}[key]!,c.measurements[key]??null,'kWh','BOTH',src);
  const demands=c.technical?.demand??[];
@@ -48,6 +49,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  for(const [key,value] of Object.entries(c.measurements))if(key.startsWith('reactive'))add(key,'Reativo · '+key,value,key==='reactiveTotal'?'kVArh':'kWh','BOTH',src);
  for(const r of c.rates)add('ACL:'+r.component+':'+r.band,r.label,r.amount,r.measure,'ACL',r.source,r.state==='CONFLICT'?'Tarifa já cadastrada diverge; registro preservado.':null);
  if(c.cip.ready)add('cip','Iluminação pública',c.cip.amount,'BRL','ACL',src+' · '+c.cip.source);
+ add('costs:monthly','Custos e créditos mensais',c.cost?.costs??null,'','BOTH',c.cost?.source_reference??'',c.cost?'Versão '+c.cost.version+' · proposta/registro preservado; não somar novamente a NF do fornecedor.':null);
  const library=selectAutofillLibrary(libraries,u,c.month),lib=library.record;
  if(lib){for(const i of lib.profile.items)add('ACR:'+i.component+':'+i.band,i.label,i.value,i.measure,'ACR','Biblioteca '+lib.id+' v'+lib.version+' · '+lib.profile.source);
   const required=[...(['GREEN','BLUE','WHITE'].includes(u.tariff_modality)?['TE:PEAK','TE:OFF_PEAK','TUSD_ENERGY:PEAK','TUSD_ENERGY:OFF_PEAK']:['TE:ALL','TUSD_ENERGY:ALL']),...(u.tariff_group==='A'?(u.tariff_modality==='BLUE'?['TUSD_DEMAND_USED:PEAK','TUSD_DEMAND_USED:OFF_PEAK']:['TUSD_DEMAND_USED:ALL']):[])];
@@ -80,8 +82,12 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  for(const r of s?.requirements??[])observations.push(r.message);
  if(!c.ready)observations.push('Identidade, leitura ou conciliação da fatura ainda exige conferência; nenhuma confirmação humana será simulada.');
  for(const r of c.rates)if(r.state==='CONFLICT')observations.push(r.label+': divergência com registro existente.');
+ const monthlyConflict=c.input?.status==='DRAFT'&&!!c.monthlyChanges?.length;
+ const costConflict=c.cost?.status==='DRAFT'&&c.cip.ready&&!c.cipPresent&&(c.cost.costs?.items??[]).some((i:any)=>i.scenario==='ACL'&&i.category==='OTHER');
+ if(monthlyConflict)observations.push('O rascunho mensal existente diverge da nova proposta e foi preservado; conferir a diferença antes de validar.');
+ if(costConflict)observations.push('Há custo mensal em rascunho que exige conciliação com a iluminação pública da fatura; nenhum item foi substituído.');
  const pending=fields.filter(f=>f.state==='PENDING').length,filled=fields.length-pending;
- const sourceConsistent=c.ready&&!c.rates.some((r:any)=>r.state==='CONFLICT');
+ const sourceConsistent=c.ready&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict;
  const percent=Math.min(sourceConsistent?100:99,fields.length?Math.floor(filled*100/fields.length):0);
- return {fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&c.ready&&!c.rates.some((r:any)=>r.state==='CONFLICT'),library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
+ return {fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
 }

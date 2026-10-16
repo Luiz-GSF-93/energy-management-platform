@@ -5,8 +5,8 @@ import {useAuth} from '@/app/providers';
 import {Card,Button,Alert} from '@/app/components/ui';
 import WorkflowModal from './WorkflowModal';
 type Field={key:string;label:string;value:unknown;unit:string;scenario:string;source:string;state:string;observation:string|null};
-type Plan={enabled:boolean;available?:boolean;unitId?:string;month?:string;basis?:string;token?:string;percent?:number;filled?:number;total?:number;pending?:number;canPrepare?:boolean;readyForValidation?:boolean;fields?:Field[];observations?:string[]};
-type Run={id:string;state:string;created_at:string;actor_id:string;plan:Plan;events?:{sequence:number;state:string;created_at:string;receipts:{label:string;state:string}[]}[]};
+type Plan={enabled:boolean;available?:boolean;unitId?:string;month?:string;basis?:string;sourceHash?:string;token?:string;percent?:number;filled?:number;total?:number;pending?:number;canPrepare?:boolean;readyForValidation?:boolean;fields?:Field[];observations?:string[]};
+type Run={id:string;state:string;created_at:string;actor_id:string;consumer_unit_id:string;month:string;source_basis:string;source_hash:string;plan:Plan;events?:{sequence:number;state:string;created_at:string;receipts:{label:string;state:string}[]}[]};
 const value=(v:unknown):string=>v===null||v===undefined?'Aguardando fonte':typeof v==='object'?JSON.stringify(v):String(v);
 async function boundedRequest<T>(path:string,options:Parameters<typeof apiRequest>[1]={}):Promise<T>{
  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
@@ -38,14 +38,14 @@ function PreparationScope({unitId,month,onEnabled,onPrepared,onValidate}:{unitId
   }catch(e){if(live&&g===generation.current){uncertain.current=true;setError(e instanceof Error?e.message:'Consulte o histórico antes de repetir.');}}
   finally{working.current=false;if(live&&g===generation.current)setBusy(false);}
  })();return()=>{live=false;generation.current++;};},[query,unitId,month,refresh]);
- useEffect(()=>{if(!open)return;let live=true;setHistory(null);void boundedRequest<{rows:Run[];total:number}>('/api/v1/calculation-autofill/history?'+query+'&page='+page).then(h=>{if(live)setHistory(h)}).catch(()=>{if(live)setError('Histórico indisponível. Nenhuma tentativa será reenviada.');});return()=>{live=false};},[open,page,query,refresh]);
+ useEffect(()=>{if(!open)return;let live=true;setHistory(null);void boundedRequest<{rows:Run[];total:number}>('/api/v1/calculation-autofill/history?'+query+'&page='+page).then(h=>{if(!live)return;if(h.rows.some(r=>r.consumer_unit_id!==unitId||r.month!==month))throw Error('Histórico fora do escopo');setHistory(h);const completed=h.rows.find(r=>r.source_basis===plan?.basis&&r.source_hash===plan?.sourceHash&&['PREPARED','PARTIAL'].includes(r.state));if(completed){uncertain.current=false;attempted.current.add(completed.source_basis);setRun(completed);setError('');}}).catch(()=>{if(live)setError('Histórico indisponível. Nenhuma tentativa será reenviada.');});return()=>{live=false};},[open,page,query,unitId,month,refresh,plan?.basis,plan?.sourceHash]);
  if(!plan?.enabled)return error?<Alert>{error}</Alert>:null;
  const needsRecheck=!!error||uncertain.current||!!run&&run.state!=='PREPARED';
  const complete=plan.percent===100&&plan.readyForValidation&&!busy&&!needsRecheck;
  const progress=Math.min(plan.percent??0,needsRecheck||busy?99:100);
  const observations=Array.from(new Set([...(plan.observations??[]),...(plan.fields??[]).filter(f=>f.observation).map(f=>f.label+': '+f.observation)]));
  return <Card title='Preparação automática pela EVA'>
-  <p role='status'>{busy?'A EVA está conferindo fontes e preparando os preenchimentos…':needsRecheck?'Preparação exige reconferência — consulte a observação e o histórico.':complete?'100% preenchido — aguardando validação':`${progress}% preenchido · ${plan.pending??0} informação(ões) aguardando fonte ou conferência`}</p>
+  <p role='status'>{busy?'A EVA está conferindo fontes e preparando os preenchimentos…':needsRecheck?'Preparação exige reconferência — consulte a observação e o histórico.':complete?'100% preenchido — aguardando validação':plan.pending?`${progress}% preenchido · ${plan.pending} informação(ões) aguardando fonte ou conferência`:`${progress}% preparado · confira a observação da EVA antes de validar`}</p>
   <progress max={100} value={progress} aria-label='Preenchimento da apuração'/>
   <p>A EVA reúne a fatura, a biblioteca ACR e os contratos vigentes na competência. Os valores são propostas; aprovação e publicação seguem as permissões atuais.</p>
   {error?<Alert>{error}</Alert>:null}

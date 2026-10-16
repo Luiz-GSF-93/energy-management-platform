@@ -68,6 +68,7 @@ export class CalculationAutofillService{
    }
    const after=await this.context(q,t);
    if(!after.available||after.basis!==c.basis){status='PARTIAL';receipts.push({label:'Fonte alterada durante a preparação; revisão necessária',state:'VERIFY_REQUIRED'});}
+   else status=after.c.ready&&after.plan.readyForValidation&&!receipts.some((r:any)=>r.state==='VERIFY_REQUIRED')?'PREPARED':'PARTIAL';
    const run=await this.rpc('finish',scope,t,reserved.run.id,{status,receipts});
    return {run,current:this.output(after,t),canPublish:false};
   }catch{
