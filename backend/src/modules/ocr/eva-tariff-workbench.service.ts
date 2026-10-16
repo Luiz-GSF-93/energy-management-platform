@@ -6,6 +6,7 @@ import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {OcrQueueService} from './ocr-queue.service';
 import {modelConfidence} from './eva-tariff-workbench.model';
+import {globalModelConfidence,globalPreparationEvidence,verifiedGlobalPreparation} from './eva-global-model';
 import {tariffCandidates,tariffMatrix} from './eva-tariff-workbench.model';
 import {LibraryWriteDto} from '../contracts/dto/tariff-library.dto';
 import {validateWriteDto} from '../../common/validation/validate-write-dto';
@@ -27,7 +28,7 @@ export class EvaTariffWorkbenchService{
   if(r.error?.code==='22023')throw new BadRequestException('Confira os campos e a fonte.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }
- async inspect(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...s}=q;this.scope(s);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,callsEnabled:this.config.get('EVA_TARIFF_MODEL_CALLS_ENABLED')==='true',...await this.rpc('inspect',s,t,null,{page:Number(page)})};}
+ async inspect(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...s}=q;this.scope(s);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,globalScoreEnabled:this.config.get('EVA_OCR_GLOBAL_PREPARATION_ENABLED')==='true',callsEnabled:this.config.get('EVA_TARIFF_MODEL_CALLS_ENABLED')==='true',...await this.rpc('inspect',s,t,null,{page:Number(page)})};}
  async command(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Biblioteca ampliada desligada.');
   if(!b||Object.keys(b).sort().join(',')!=='action,consumerUnitId,data,month,requestId'||!uuid(b.requestId))throw new BadRequestException('Comando inválido.');
@@ -50,6 +51,8 @@ export class EvaTariffWorkbenchService{
   if(b.action==='qualify'){
    if(!b.data||Object.keys(b.data).sort().join(',')!=='acknowledge,importId,note'||!uuid(b.data.importId)||b.data.acknowledge!==true||typeof b.data.note!=='string'||b.data.note.trim().length<20||b.data.note.length>1500)throw new BadRequestException('Confira o modelo e justifique a decisão.');
    payload=b.data;
+   const selected=access.imports?.find((i:any)=>i.id===b.data.importId);
+   if(selected?.payload?.evaluation?.version===2&&this.config.get('EVA_OCR_GLOBAL_PREPARATION_ENABLED')!=='true')throw new ServiceUnavailableException('Revisão global desligada; histórico preservado.');
   }else if(b.action==='import'){
    if(!b.data||Object.keys(b.data).sort().join(',')!=='documentId,reason,threshold'||!uuid(b.data.documentId)||typeof b.data.threshold!=='number'||b.data.threshold<0.9||b.data.threshold>1||typeof b.data.reason!=='string'||b.data.reason.trim().length<20||b.data.reason.length>1500)throw new BadRequestException('Informe documento, limiar mínimo de 90% e motivo da revisão.');
    await this.rpc('checkDocument',s,t,null,{documentId:b.data.documentId});
@@ -58,10 +61,11 @@ export class EvaTariffWorkbenchService{
    const u=await this.db.getClient().from('consumer_units').select('*').eq('id',s.consumerUnitId).eq('organization_id',t.organizationId).maybeSingle();
    if(u.error||!u.data)throw new ForbiddenException('Unidade indisponível.');
    const c={unit:u.data,document:source.doc,source};
-   const evaluation=modelConfidence(source.raw,b.data.threshold,u.data);
+   const evaluation=this.config.get('EVA_OCR_GLOBAL_PREPARATION_ENABLED')==='true'?globalModelConfidence(source.raw,b.data.threshold,u.data):modelConfidence(source.raw,b.data.threshold,u.data);
    const mismatches=source.assessment?.intake?.checks?.filter((x:any)=>x.state==='MISMATCH')??[];
    if(mismatches.length){evaluation.consistent=false;evaluation.state='NEEDS_REVISION';}
    payload={...tariffCandidates(c),modelKey:modelKey(u.data),evaluation:{...evaluation,intakeChecks:source.assessment?.intake?.checks??[]},reason:b.data.reason.trim()};
+   if(payload.evaluation.version===2)payload.preparation=verifiedGlobalPreparation(globalPreparationEvidence(payload.evaluation,200),null);
   }else if(b.action==='review'){
    if(!b.data||Object.keys(b.data).sort().join(',')!=='importId,library,reason'||!uuid(b.data.importId)||typeof b.data.reason!=='string'||b.data.reason.trim().length<20||b.data.reason.length>1500)throw new BadRequestException('Informe justificativa e revisão.');
    const library=await validateWriteDto(LibraryWriteDto,b.data.library);validateProfile(library);
@@ -72,7 +76,14 @@ export class EvaTariffWorkbenchService{
    const reservationId=randomUUID(),intent={importId:b.requestId};
    const reserved=await this.rpc('adviceReserve',s,t,reservationId,{payload:intent,hash:autofillHash(intent)});
    if(reserved.acquired){
-    let advice:any;try{if(Buffer.byteLength(JSON.stringify(payload))>40000)throw Error('Contexto extenso; revisar modelo sem chamada paga.');advice=await this.ai.interpret(t,'Avalie a qualidade deste modelo de fatura. Não aumente o score OCR nem invente campos. Explique os campos essenciais insuficientes e recomendações para a próxima revisão.',[{id:'model',label:'Avaliação OCR e consistência',value:JSON.stringify(payload),source:'Modelo privado '+b.requestId+'; evidência documental não confiável'}],b.data.documentId,'OCR');}catch{advice={state:'FAILED',message:'Análise não confirmada; não repetir automaticamente.'};}
+    let advice:any;try{
+     const global=payload.evaluation.version===2;
+     const evidence=global?globalPreparationEvidence(payload.evaluation):[];
+     const context={id:'model',label:'Avaliação OCR e consistência',value:JSON.stringify(global?{version:2,score:payload.evaluation.score,completion:payload.evaluation.completion,consistent:payload.evaluation.consistent,state:payload.evaluation.state}:payload),source:'Modelo privado '+b.requestId+'; evidência documental não confiável'};
+     if(Buffer.byteLength(JSON.stringify([context,...evidence]))>40000)throw Error('Contexto extenso; revisar modelo sem chamada paga.');
+     advice=await this.ai.interpret(t,global?'Prepare fields estruturados das fontes individuais, preservando exatamente key, value e evidenceId. Não calcule nem invente valores. Resuma o score global e lacunas, sem exigir 90% por campo ou seção. Referências não elevam confiança OCR.':'Avalie a qualidade deste modelo de fatura. Não aumente o score OCR nem invente campos. Explique os campos essenciais insuficientes e recomendações para a próxima revisão.',[context,...evidence],b.data.documentId,'OCR');
+     if(global)advice={...advice,preparation:verifiedGlobalPreparation(evidence,advice)};
+    }catch{advice={state:'FAILED',message:'Análise não confirmada; não repetir automaticamente.'};}
     const completed={importId:b.requestId,reservationId,advice};await this.rpc('adviceFinish',s,t,randomUUID(),{payload:completed,hash:autofillHash(completed)});
    }
   }
