@@ -40,7 +40,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
  let estimated=false;
  for(const e of entries){
   const p=e.plan,c=e.context,ownMissing:string[]=[],o=p?.operational;
-  const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,missing:ownMissing};units.push(row);
+  const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
   if(e.unavailable||!p||o?.state==='UNAVAILABLE'){ownMissing.push(e.unavailable??'Vínculo ou fonte da fatura indisponível.');continue;}
   try{
    const acr=acrTotal(e,ownMissing);if(acr!==null)row.acr=fmt(acr);
