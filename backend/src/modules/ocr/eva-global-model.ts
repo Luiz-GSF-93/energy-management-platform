@@ -21,9 +21,19 @@ export function globalFieldEvidence(raw:any,f:any){
 }
 const labels=['Identificação e período','Enquadramento','Consumo e demanda','Tarifas e rubricas','Totais e tributos'];
 const fieldLabels:Record<string,string>={customerTaxId:'CNPJ do cliente',unit:'Unidade/instalação',reference:'Competência',classification:'Classificação tarifária',description:'Descrição da rubrica',quantity:'Quantidade faturada',rate:'Tarifa',amount:'Valor da rubrica',invoiceTotal:'Total da fatura',total:'Total',icmsAmount:'ICMS',pisAmount:'PIS',cofinsAmount:'Cofins'};
+/** Scoped V2 projection: never mutates the shared OCR parser or its historical result. */
+export function globalModelLayout(raw:any){
+ const layout=extractCpflPaulistaLayout(raw);
+ return {...layout,operations:layout.operations.map(row=>{
+  const label=String(row.fields.description?.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
+  const amount=row.fields.amount?.decimal;
+  if(row.role!=='UNKNOWN'||row.component!=='OTHER'||!/^ATUALIZACAO MONETARIA(?:\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/\d{2}(?:\d{2})?)?$/.test(label)||typeof amount!=='string'||! /^-?\d+(?:\.\d{1,2})?$/.test(amount)||!globalFieldEvidence(raw,row.fields.description).filled||!globalFieldEvidence(raw,row.fields.amount).filled)return row;
+  return {...row,component:'MONETARY_CORRECTION',role:(amount.startsWith('-')?'CREDIT':'CHARGE') as typeof row.role,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
+ })};
+}
 /** V2 aggregates five equally weighted sections. Coverage is never hidden by a high average. */
 export function globalModelConfidence(raw:any,threshold=0.9,profile?:any){
- const layout=extractCpflPaulistaLayout(raw),sections=labels.map((label,index)=>({key:index,label,fields:[] as any[]}));let count=0,truncated=false;
+ const layout=globalModelLayout(raw),sections=labels.map((label,index)=>({key:index,label,fields:[] as any[]}));let count=0,truncated=false;
  const add=(section:number,key:string,f:any,source:string,numeric=false)=>{
   if(count++>=200){truncated=true;return;}
   const suffix=key.split('.').pop()!;
@@ -66,7 +76,14 @@ export function globalModelConfidence(raw:any,threshold=0.9,profile?:any){
  const profileMatches=!profile||layout.fields.filter(f=>f.name==='classification').some(f=>{const tokens=String(f.value.text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().split(/[^A-Z0-9]+/);return !!profile.tariff_subgroup&&tokens.includes(normalize(profile.tariff_subgroup))&&!!modality&&tokens.includes(modality)});
  const consistent=profileMatches&&!!layout.layoutId&&layout.reconciliation.state==='MATCH'&&rows.length>0&&!rows.some(r=>r.role==='UNKNOWN'||r.arithmetic?.state==='DIFFERENCE'||r.arithmetic?.state==='DIVERGENT'||r.issues.some(x=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN','UNMAPPED_COMPONENT','UNVERIFIED_SOURCE'].includes(x)))&&!layout.operations.some(r=>r.role==='UNKNOWN');
  const complete=!truncated&&summaries.every(s=>s.complete);
- return {version:2,method:'EQUAL_SECTION_WEIGHTED_EVIDENCE_V2',threshold,score,profileMatches,consistent,complete,truncated,completion:truncated?null:fields.filter(f=>f.filled).length/fields.length,confidenceCoverage:known/fields.length,sections:summaries,fields,layout:layout.layoutId,aiScore:null,state:score!==null&&score>=threshold&&consistent&&complete?'READY_FOR_REVIEW':'NEEDS_REVISION',message:truncated?'Documento excede o limite de evidências desta preparação. Nenhuma homologação integral; revisar cobertura.':'Confiança global da leitura, com cinco seções de mesmo peso. Seções não exigem 90% individual. Preenchimento e consistência são conferidos separadamente; referências não elevam a confiança OCR.'};
+ const reviewReasons=[...(!profileMatches?['Enquadramento diferente do cadastro.']:[]),...(layout.reconciliation.state!=='MATCH'?['Totais da fatura não conciliados.']:[]),...layout.operations.filter(r=>r.role==='UNKNOWN'||r.arithmetic?.state==='DIFFERENCE'||r.arithmetic?.state==='DIVERGENT'||r.issues.some(x=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN','UNMAPPED_COMPONENT','UNVERIFIED_SOURCE'].includes(x))).map(r=>({source:r.source,label:r.fields.description?.text??'Rubrica não identificada',reason:r.role==='UNKNOWN'?'Rubrica não classificada':'Fonte ou cálculo da rubrica requer conferência'}))];
+ const monetaryCorrections=layout.operations.filter(r=>r.component==='MONETARY_CORRECTION').map(r=>({source:r.source,label:r.fields.description.text,amount:r.fields.amount.decimal,role:r.role}));
+ return {version:2,method:'EQUAL_SECTION_WEIGHTED_EVIDENCE_V2',threshold,score,profileMatches,consistent,complete,truncated,completion:truncated?null:fields.filter(f=>f.filled).length/fields.length,confidenceCoverage:known/fields.length,sections:summaries,fields,reviewReasons,monetaryCorrections,layout:layout.layoutId,aiScore:null,state:score!==null&&score>=threshold&&consistent&&complete?'READY_FOR_REVIEW':'NEEDS_REVISION',message:truncated?'Documento excede o limite de evidências desta preparação. Nenhuma homologação integral; revisar cobertura.':'Confiança global da leitura, com cinco seções de mesmo peso. Seções não exigem 90% individual. Preenchimento e consistência são conferidos separadamente; referências não elevam a confiança OCR.'};
+}
+/** The values are already prepared. Ask for a short interpretation, not a copy of every field. */
+export function globalAdviceEvidence(e:ReturnType<typeof globalModelConfidence>):AiEvidence[]{
+ const pct=(n:number|null)=>n===null?'Não disponível':(n*100).toFixed(1)+'%';
+ return [{id:'model-quality',label:'Resultado calculado da preparação',source:'Motor V2 do backend; não é aprovação financeira',value:JSON.stringify({confidence:pct(e.score),criterion:pct(e.threshold),completion:pct(e.completion),coverage:pct(e.confidenceCoverage),preparedFields:e.fields.filter(f=>f.filled).length,state:e.state,consistent:e.consistent,sections:e.sections.map(s=>({label:s.label,score:pct(s.score),filled:s.filled,total:s.total})),reviewReasons:e.reviewReasons.slice(0,8),monetaryCorrections:e.monetaryCorrections.slice(0,8)})}];
 }
 /** Only individually scoped facts are sent, never the PDF or arbitrary source URLs. */
 export function globalPreparationEvidence(evaluation:ReturnType<typeof globalModelConfidence>,limit=140):AiEvidence[]{

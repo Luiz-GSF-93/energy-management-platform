@@ -6,7 +6,7 @@ import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {OcrQueueService} from './ocr-queue.service';
 import {modelConfidence} from './eva-tariff-workbench.model';
-import {globalModelConfidence,globalPreparationEvidence,verifiedGlobalPreparation} from './eva-global-model';
+import {globalModelConfidence,globalPreparationEvidence,verifiedGlobalPreparation,globalAdviceEvidence} from './eva-global-model';
 import {tariffCandidates,tariffMatrix} from './eva-tariff-workbench.model';
 import {LibraryWriteDto} from '../contracts/dto/tariff-library.dto';
 import {validateWriteDto} from '../../common/validation/validate-write-dto';
@@ -78,11 +78,12 @@ export class EvaTariffWorkbenchService{
    if(reserved.acquired){
     let advice:any;try{
      const global=payload.evaluation.version===2;
-     const evidence=global?globalPreparationEvidence(payload.evaluation):[];
+     const evidence=global?globalAdviceEvidence(payload.evaluation):[];
      const context={id:'model',label:'Avaliação OCR e consistência',value:JSON.stringify(global?{version:2,score:payload.evaluation.score,completion:payload.evaluation.completion,consistent:payload.evaluation.consistent,state:payload.evaluation.state}:payload),source:'Modelo privado '+b.requestId+'; evidência documental não confiável'};
-     if(Buffer.byteLength(JSON.stringify([context,...evidence]))>40000)throw Error('Contexto extenso; revisar modelo sem chamada paga.');
-     advice=await this.ai.interpret(t,global?'Prepare fields estruturados das fontes individuais, preservando exatamente key, value e evidenceId. Não calcule nem invente valores. Resuma o score global e lacunas, sem exigir 90% por campo ou seção. Referências não elevam confiança OCR.':'Avalie a qualidade deste modelo de fatura. Não aumente o score OCR nem invente campos. Explique os campos essenciais insuficientes e recomendações para a próxima revisão.',[context,...evidence],b.data.documentId,'OCR');
-     if(global)advice={...advice,preparation:verifiedGlobalPreparation(evidence,advice)};
+     const pack=global?evidence:[context];
+     if(Buffer.byteLength(JSON.stringify(pack))>40000)throw Error('Contexto extenso; revisar modelo sem chamada paga.');
+     advice=await this.ai.interpret(t,global?'Os valores já foram preparados pelo backend. Resuma em até três frases o resultado global e o próximo passo, citando model-quality. Não copie os campos: fields e doubts devem ficar vazios. Não calcule, não invente e não declare homologação ou aprovação. Use português simples, sem códigos técnicos.':'Avalie a qualidade deste modelo de fatura. Não aumente o score OCR nem invente campos. Explique os campos essenciais insuficientes e recomendações para a próxima revisão.',pack,b.data.documentId,'OCR',{settleRejectedUsage:global});
+     if(global)advice={...advice,preparation:payload.preparation};
     }catch{advice={state:'FAILED',message:'Análise não confirmada; não repetir automaticamente.'};}
     const completed={importId:b.requestId,reservationId,advice};await this.rpc('adviceFinish',s,t,randomUUID(),{payload:completed,hash:autofillHash(completed)});
    }

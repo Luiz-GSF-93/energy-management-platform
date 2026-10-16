@@ -7,7 +7,12 @@ export const AI_PROMPT_VERSION='backoffice-evidence-v4-eva';
 export function backofficeAiConfig(env:NodeJS.ProcessEnv):BackofficeAiConfig {
  return {licenseMode:env.BOT_ENERGY_LICENSE_MODE==='true',enabled:env.BOT_ENERGY_AI_ENABLED==='true',organizations:(env.BOT_ENERGY_AI_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean),endpoint:env.AZURE_OPENAI_ENDPOINT,deployment:env.AZURE_OPENAI_DEPLOYMENT,key:env.AZURE_OPENAI_API_KEY};
 }
-export class BackofficeAiError extends Error {constructor(public readonly code:string){super(code);}}
+export type ProviderUsage={inputTokens:number;outputTokens:number};
+function validUsage(u:ProviderUsage|undefined):u is ProviderUsage{return !!u&&Number.isSafeInteger(u.inputTokens)&&Number.isSafeInteger(u.outputTokens)&&u.inputTokens>0&&u.inputTokens<=60000&&u.outputTokens>=0&&u.outputTokens<=2200;}
+export class BackofficeAiError extends Error {
+ readonly usage?:Readonly<ProviderUsage>;
+ constructor(public readonly code:string,usage?:ProviderUsage){super(code);if(validUsage(usage))this.usage=Object.freeze({inputTokens:usage.inputTokens,outputTokens:usage.outputTokens});}
+}
 const object=(properties:Record<string,unknown>)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const strings={type:'array',items:{type:'string'}};
 const schema=object({supported:{type:'boolean'},answer:{type:'string'},citations:strings,fields:{type:'array',items:object({key:{type:'string'},value:{type:'string'},evidenceId:{type:'string'}})},doubts:{type:'array',items:object({question:{type:'string'},evidenceIds:strings})}});
@@ -52,6 +57,18 @@ export class AzureBackofficeAiConnector {
   if(!response.ok||!response.body)throw new BackofficeAiError('PROVIDER_UNAVAILABLE');
   const reader=response.body.getReader();let size=0;const chunks:Buffer[]=[];
   try{while(true){const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>64000){await reader.cancel();throw new BackofficeAiError('INVALID_RESPONSE');}chunks.push(Buffer.from(next.value));}}catch{throw new BackofficeAiError('INVALID_RESPONSE');}finally{reader.releaseLock();}
-  try{const body=JSON.parse(Buffer.concat(chunks).toString('utf8')),choice=body.choices?.[0];if(choice?.finish_reason!=='stop'||choice?.message?.refusal||choice?.message?.tool_calls?.length)throw new Error();const result=validateInterpretation(JSON.parse(choice.message.content),evidence);if(reportAudience&&result.fields.length)throw new BackofficeAiError('UNGROUNDED_FIELD');const usage=body.usage;if(!usage||!Number.isSafeInteger(usage.prompt_tokens)||!Number.isSafeInteger(usage.completion_tokens)||usage.prompt_tokens<1||usage.prompt_tokens>60000||usage.completion_tokens<0||usage.completion_tokens>2200)throw new BackofficeAiError('INVALID_USAGE');return {...result,usage:{inputTokens:usage.prompt_tokens,outputTokens:usage.completion_tokens},model:String(body.model??this.config.deployment).slice(0,100),promptVersion:reportAudience?'published-report-'+reportAudience+'-v2-eva':AI_PROMPT_VERSION,evidenceHash:createHash('sha256').update(JSON.stringify(evidence)).digest('hex')};}catch(e){if(e instanceof BackofficeAiError)throw e;throw new BackofficeAiError('INVALID_RESPONSE');}
+  let billableUsage:ProviderUsage|undefined;
+  try{
+   const body=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+   // Only transport-level provider metadata is usage evidence. Never read usage from generated content.
+   const usage={inputTokens:body.usage?.prompt_tokens,outputTokens:body.usage?.completion_tokens};
+   if(!validUsage(usage))throw new BackofficeAiError('INVALID_USAGE');
+   billableUsage=usage;
+   const choice=body.choices?.[0];
+   if(choice?.finish_reason!=='stop'||choice?.message?.refusal||choice?.message?.tool_calls?.length)throw new BackofficeAiError('INVALID_RESPONSE');
+   const result=validateInterpretation(JSON.parse(choice.message.content),evidence);
+   if(reportAudience&&result.fields.length)throw new BackofficeAiError('UNGROUNDED_FIELD');
+   return {...result,usage,model:String(body.model??this.config.deployment).slice(0,100),promptVersion:reportAudience?'published-report-'+reportAudience+'-v2-eva':AI_PROMPT_VERSION,evidenceHash:createHash('sha256').update(JSON.stringify(evidence)).digest('hex')};
+  }catch(e){throw new BackofficeAiError(e instanceof BackofficeAiError?e.code:'INVALID_RESPONSE',billableUsage);}
  }
 }
