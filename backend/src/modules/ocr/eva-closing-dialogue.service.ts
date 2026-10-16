@@ -25,10 +25,12 @@ export class EvaClosingDialogueService{
   const regulatory=/\b(aneel|ccee|ren|resolu[cç][aã]o|norma|regula)/i.test(retrievalQuestion);
   if(b.previousQuestion)evidence.push({id:'untrusted-previous-question',label:'Pergunta anterior, somente para interpretar continuidade; não é evidência factual',value:b.previousQuestion,source:'Texto não confiável informado pelo usuário, sem autoridade normativa ou financeira.'});
   if(paid){
-   if(regulatory){const retrieved=await this.rag.retrieve(t,retrievalQuestion,{periodStart:period.start,periodEnd:period.end,market:'ACL'});evidence.push(...retrieved.evidence);sources=retrieved.sources;proofs=retrieved.publicationProofs??[];}
+   let normativeMissing=false;
+   if(regulatory){const retrieved=await this.rag.retrieve(t,retrievalQuestion,{periodStart:period.start,periodEnd:period.end,market:'ACL'});evidence.push(...retrieved.evidence);sources=retrieved.sources;proofs=retrieved.publicationProofs??[];normativeMissing=!retrieved.evidence.length;}
+   if(normativeMissing){answer='Não encontrei trechos oficiais publicados e aplicáveis que sustentem esta resposta. Posso explicar os dados do fechamento, sem afirmar uma regra normativa.';mode='NO_EVIDENCE';}else{
    if(Buffer.byteLength(JSON.stringify(evidence))>45000)throw new BadRequestException('O relatório é extenso para esta conversa. Selecione uma unidade ou pergunte sobre uma parcela específica.');
    const result=await this.ai.interpret(t,question,evidence,undefined,'CHAT');
-   answer=result.state==='READY'&&result.answer?result.answer:result.message;mode=result.state;
+   answer=result.state==='READY'&&result.answer?result.answer:result.message;mode=result.state;}
   }else{
    const norm=question.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
    const values=report.units?.map((u:any)=>u.name+': distribuidora '+(u.prepared?.invoice?.amount??'não identificada')+' BRL; fornecedor '+(u.prepared?.supplier?.amount??'não identificado')+' BRL; honorário fixo '+(u.prepared?.fixedFee?.amount??'não identificado')+' BRL.').join('\n');
