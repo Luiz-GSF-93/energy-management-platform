@@ -1,0 +1,79 @@
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
+import {ConfigService} from '@nestjs/config';
+import {SupabaseService} from '../../services/supabase.service';
+import {LicensesService} from '../licenses/services/licenses.service';
+import {TenantContext} from '../../common/interfaces/tenant-context.interface';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
+import {OcrResolutionService} from './ocr-resolution.service';
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
+import {autofillHash,calculationAutofillPlan} from './calculation-autofill.model';
+import {monthPeriod} from '../contracts/services/preparation';
+import {MonthlyInputsService} from '../contracts/services/monthly-inputs.service';
+
+const uuid=(x:unknown)=>typeof x==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
+@Injectable()
+export class CalculationAutofillService{
+ constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService){}
+ private enabled(){return this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true';}
+ private canWrite(t:TenantContext){return ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions.includes(P.ENERGIA_OCR_PROCESS);}
+ private async allowed(t:TenantContext,write=false){
+  if(!t?.userId||!t.organizationId||(t.scope as string)==='global'||(!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p))||write&&!this.canWrite(t))throw new ForbiddenException('Preparação restrita ao backoffice autorizado da organização.');
+  await this.licenses.requireEntitlement(t.organizationId,'free_market_management');await this.licenses.requireEntitlement(t.organizationId,'document_management');
+ }
+ private query(q:Record<string,unknown>){if(!q||Object.keys(q).sort().join(',')!=='consumerUnitId,month'||!uuid(q.consumerUnitId)||typeof q.month!=='string'||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(q.month))throw new BadRequestException('Selecione unidade e competência válidas.');return {unit:q.consumerUnitId as string,month:q.month};}
+ private fail(r:any){if(!r?.error&&r?.data!==null&&r?.data!==undefined)return r.data;if(r?.error?.code==='42501')throw new ForbiddenException('Contexto ou acesso da preparação indisponível.');if(['23505','40001'].includes(r?.error?.code))throw new ConflictException('Fontes ou execução mudaram. Reconfira o histórico.');throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');}
+ private async context(q:Record<string,unknown>,t:TenantContext){
+  const {unit,month}=this.query(q),db=this.db.getClient(),period=monthPeriod(month);
+  await this.rpc('access',{unit,month},t,null,{});
+  const u=this.fail(await db.from('consumer_units').select('*').eq('id',unit).eq('organization_id',t.organizationId).maybeSingle());
+  const customer=this.fail(await db.from('customers').select('id,status').eq('id',u.customer_id).eq('organization_id',t.organizationId).is('deleted_at',null).maybeSingle());
+  if(u.status!=='ACTIVE'||customer.status!=='ACTIVE')throw new ConflictException('Unidade ou cliente inativo.');
+  const docs=await db.from('documents').select('id,file_hash,file_verified,reference_month').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('document_type','INVOICE_DISTRIBUTOR').gte('reference_month',period.start).lte('reference_month',period.end).order('id').limit(101);
+  if(docs.error||!Array.isArray(docs.data)||docs.data.length>100)throw new ServiceUnavailableException('Não foi possível conferir as faturas completas.');
+  if(docs.data.length!==1||!docs.data[0].file_verified||!/^[a-f0-9]{64}$/.test(docs.data[0].file_hash??''))return {available:false as const,unit,month,observation:docs.data.length>1?'Há mais de uma fatura nesta unidade e competência; conferir o vínculo correto.':'É necessária uma fatura verificada nesta unidade e competência.'};
+  const libraries:any[]=[];for(let offset=0;offset<10000;offset+=200){const r=await db.from('tariff_library_versions').select('*').eq('organization_id',t.organizationId).order('id').range(offset,offset+199);if(r.error||!Array.isArray(r.data))throw new ServiceUnavailableException('Biblioteca indisponível.');libraries.push(...r.data);if(r.data.length<200)break;if(offset===9800)throw new ServiceUnavailableException('Biblioteca extensa; nenhuma seleção parcial.');}
+  const c=await this.resolution.preparationSnapshot(docs.data[0].id,t);
+  if(c.unit.id!==unit||c.unit.organization_id!==t.organizationId||c.unit.customer_id!==u.customer_id||c.month!==month||c.document.file_hash!==docs.data[0].file_hash||autofillHash(c.unit)!==autofillHash(u))throw new ConflictException('O vínculo ou arquivo mudou durante a consulta.');
+  const plan=calculationAutofillPlan(c,libraries);
+  // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
+  const basis=autofillHash({v:1,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
+  return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
+ }
+ private output(c:Awaited<ReturnType<CalculationAutofillService['context']>>,t:TenantContext){if(!c.available)return {enabled:true,available:false,percent:0,canPrepare:false,observations:[c.observation],unitId:c.unit,month:c.month};return {enabled:true,available:true,unitId:c.unit,month:c.month,documentId:c.documentId,sourceHash:c.sourceHash,basis:c.basis,token:c.token,canPrepare:this.canWrite(t),...c.plan};}
+ async inspect(q:Record<string,unknown>,t:TenantContext){if(!this.enabled())return {enabled:false};await this.allowed(t);this.query(q);return this.output(await this.context(q,t),t);}
+ private async rpc(action:string,q:{unit:string;month:string},t:TenantContext,run:string|null,body:any){return this.fail(await this.db.getClient().rpc('calculation_autofill_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.unit,p_month:q.month,p_run:run,p_body:body}));}
+ async history(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return this.rpc('history',this.query(scope),t,null,{page:Number(page)});}
+ async prepare(body:any,t:TenantContext){
+  await this.allowed(t,true);if(!this.enabled())throw new ServiceUnavailableException('Preenchimento automático desligado.');
+  if(!body||Object.keys(body).sort().join(',')!=='consumerUnitId,month,requestId,token'||!uuid(body.requestId)||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Preparação inválida.');
+  const q={consumerUnitId:body.consumerUnitId,month:body.month},scope=this.query(q),c=await this.context(q,t);
+  if(!c.available||c.token!==body.token)throw new ConflictException('Atualize as fontes antes de preparar.');
+  const reserved=await this.rpc('reserve',scope,t,body.requestId,{basis:c.basis,documentId:c.documentId,sourceHash:c.sourceHash,plan:c.plan});
+  if(!reserved.acquired)return {run:reserved.run,replayed:true,current:this.output(c,t),canPublish:false};
+  let receipts:any[]=[],status=c.plan.pending||!c.c.ready?'PARTIAL':'PREPARED';
+  try{
+   // Reserve is persisted BEFORE any legacy write; unknown results can only be reconciled by GET.
+   const fresh=await this.context(q,t);if(!fresh.available||fresh.token!==c.token)throw new ConflictException('Sources changed');
+   if(c.c.ready&&c.c.resolution.canPrepare){
+    // Populate the first monthly draft with the proposed measured demand too. Never edit an existing draft.
+    if(!c.c.input){
+     const measurements={...c.c.measurements};const demand=c.plan.fields.find(f=>f.key==='demandSingle');
+     if(demand?.state==='FILLED'&&typeof demand.value==='string')measurements.demandSingle=demand.value;
+     const saved=await this.inputs.create({consumerUnitId:scope.unit,month:scope.month,measurements,billedDemand:c.c.billed,sourceReference:'EVA · '+c.documentId+' · '+c.sourceHash,notes:'Preenchimento automático proposto; sem confirmação humana ou validação financeira.',correctionReason:'Proposta inicial a partir da evidência da competência.'},t);
+     receipts.push({label:'Dados mensais preenchidos em rascunho',state:'SAVED_DRAFT',id:saved.id});
+    }
+    const current=await this.context(q,t);if(!current.available||current.basis!==c.basis)throw new ConflictException('Sources changed');
+    const r=await this.resolution.prepare(c.documentId,t,{token:current.c.token});receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
+   }
+   const after=await this.context(q,t);
+   if(!after.available||after.basis!==c.basis){status='PARTIAL';receipts.push({label:'Fonte alterada durante a preparação; revisão necessária',state:'VERIFY_REQUIRED'});}
+   const run=await this.rpc('finish',scope,t,reserved.run.id,{status,receipts});
+   return {run,current:this.output(after,t),canPublish:false};
+  }catch{
+   // Never repeat a side effect here. A failed finish leaves the durable RUNNING reservation visible.
+   try{await this.rpc('finish',scope,t,reserved.run.id,{status:'UNKNOWN',receipts:[...receipts,{label:'Etapa não confirmada; consultar histórico',state:'VERIFY_REQUIRED'}]});}catch{/* durable reservation retained */}
+   throw new ServiceUnavailableException('Preparação não confirmada. Consulte o histórico; não será repetida automaticamente.');
+  }
+ }
+}
