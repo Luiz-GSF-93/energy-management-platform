@@ -1,3 +1,7 @@
+import {previousCalculationReference} from './calculation-autofill-reference';
+import {CalculationParametersService} from '../contracts/services/parameters.service';
+import {selectAutofillLibrary} from './calculation-autofill.model';
+import {resolutionId} from './ocr-resolution-plan';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -13,7 +17,7 @@ import {MonthlyInputsService} from '../contracts/services/monthly-inputs.service
 const uuid=(x:unknown)=>typeof x==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
 @Injectable()
 export class CalculationAutofillService{
- constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService){}
+ constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService){}
  private enabled(){return this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true';}
  private canWrite(t:TenantContext){return ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions.includes(P.ENERGIA_OCR_PROCESS);}
  private async allowed(t:TenantContext,write=false){
@@ -32,11 +36,18 @@ export class CalculationAutofillService{
   if(docs.error||!Array.isArray(docs.data)||docs.data.length>100)throw new ServiceUnavailableException('Não foi possível conferir as faturas completas.');
   if(docs.data.length!==1||!docs.data[0].file_verified||!/^[a-f0-9]{64}$/.test(docs.data[0].file_hash??''))return {available:false as const,unit,month,observation:docs.data.length>1?'Há mais de uma fatura nesta unidade e competência; conferir o vínculo correto.':'É necessária uma fatura verificada nesta unidade e competência.'};
   const libraries:any[]=[];for(let offset=0;offset<10000;offset+=200){const r=await db.from('tariff_library_versions').select('*').eq('organization_id',t.organizationId).order('id').range(offset,offset+199);if(r.error||!Array.isArray(r.data))throw new ServiceUnavailableException('Biblioteca indisponível.');libraries.push(...r.data);if(r.data.length<200)break;if(offset===9800)throw new ServiceUnavailableException('Biblioteca extensa; nenhuma seleção parcial.');}
-  const c=await this.resolution.preparationSnapshot(docs.data[0].id,t);
+  const c:any=await this.resolution.preparationSnapshot(docs.data[0].id,t);
   if(c.unit.id!==unit||c.unit.organization_id!==t.organizationId||c.unit.customer_id!==u.customer_id||c.month!==month||c.document.file_hash!==docs.data[0].file_hash||autofillHash(c.unit)!==autofillHash(u))throw new ConflictException('O vínculo ou arquivo mudou durante a consulta.');
+  const historical=await db.from('monthly_energy_settlements').select('id,organization_id,customer_id,consumer_unit_id,month,status,validation_status,approved_at,published_at,version_number,financial_format,financial_hash').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('financial_format','financial-settlement-1.0').in('status',['APPROVED','PUBLISHED']).eq('validation_status','VALIDATED').not('approved_at','is',null).lt('month',period.start).order('month',{ascending:false}).order('version_number',{ascending:false}).limit(101);
+  if(historical.error||!Array.isArray(historical.data)||historical.data.length>100)throw new ServiceUnavailableException('Histórico anterior indisponível; nenhuma referência parcial.');
+  const units=await db.from('consumer_units').select('id,status').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).limit(101);
+  if(units.error||!Array.isArray(units.data)||units.data.length>100)throw new ServiceUnavailableException('Unidades indisponíveis para conferir rateio.');
+  let prior=null;
+  if(historical.data.length){const top=historical.data[0];if(historical.data.some((r:any)=>r.id!==top.id&&r.month===top.month&&r.version_number===top.version_number))throw new ConflictException('Fechamento anterior ambíguo.');const row=await db.from('monthly_energy_settlements').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('id',top.id).maybeSingle();if(row.error||!row.data||row.data.financial_hash!==top.financial_hash)throw new ConflictException('Fechamento anterior mudou durante a consulta.');prior=previousCalculationReference([row.data],u,month);if(!prior)throw new ServiceUnavailableException('Integridade do fechamento anterior requer conferência.');}
+  c.reference=prior;c.customerUnits=units.data;c.libraryRecord=selectAutofillLibrary(libraries,u,month).record;
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
-  const basis=autofillHash({v:1,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const basis=autofillHash({v:2,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }
@@ -55,7 +66,7 @@ export class CalculationAutofillService{
   try{
    // Reserve is persisted BEFORE any legacy write; unknown results can only be reconciled by GET.
    const fresh=await this.context(q,t);if(!fresh.available||fresh.token!==c.token)throw new ConflictException('Sources changed');
-   if(c.c.ready&&c.c.resolution.canPrepare){
+   if((c.c.ready||c.c.proposalReady)&&(c.c.resolution.canPrepare||c.c.proposalReady)){
     // Populate the first monthly draft with the proposed measured demand too. Never edit an existing draft.
     if(!c.c.input){
      const measurements={...c.c.measurements};const demand=c.plan.fields.find(f=>f.key==='demandSingle');
@@ -64,11 +75,19 @@ export class CalculationAutofillService{
      receipts.push({label:'Dados mensais preenchidos em rascunho',state:'SAVED_DRAFT',id:saved.id});
     }
     const current=await this.context(q,t);if(!current.available||current.basis!==c.basis)throw new ConflictException('Sources changed');
-    const r=await this.resolution.prepare(c.documentId,t,{token:current.c.token});receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
+    const r=await (current.c.ready?this.resolution.prepare(c.documentId,t,{token:current.c.token}):this.resolution.prepareProposals(c.documentId,t,{token:current.c.token}));receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
+   }
+   if(this.parameters&&c.c.libraryRecord&&(c.c.ready||c.c.proposalReady)){
+    const lib=c.c.libraryRecord;
+    for(const item of lib.profile.items){
+     const existing=c.c.captured.parameters.filter((p:any)=>p.scenario==='ACR'&&p.kind==='TARIFF'&&p.component_code===item.component&&p.time_band===item.band&&p.status!=='RETIRED'&&String(p.start_date).slice(0,10)<=scope.month+'-31'&&String(p.end_date).slice(0,10)>=scope.month+'-01');
+     if(existing.length)continue;
+     const saved=await this.parameters.createPrepared(resolutionId(['autofill-acr-v2',t.organizationId,c.documentId,c.sourceHash,lib.id,item.component,item.band]),{consumerUnitId:scope.unit,kind:'TARIFF',componentCode:item.component,label:item.label,scenario:'ACR',timeBand:item.band,measure:item.measure,amount:item.value,treatment:'NET',embeddedTaxCodes:[],includedTaxes:'',baseRule:'',direction:'DEBIT',source:'Biblioteca '+lib.id+' v'+lib.version+' · '+lib.profile.source,notes:'Proposta EVA a conferir: tarifa-base da biblioteca; incidência e bases tributárias exigem conferência específica. Não é aprovação.',startDate:c.c.period.start,endDate:c.c.period.end},t.organizationId,t.userId);receipts.push({label:'ACR · '+item.label+' em rascunho para conferência',state:'SAVED_DRAFT',id:saved.id});
+    }
    }
    const after=await this.context(q,t);
    if(!after.available||after.basis!==c.basis){status='PARTIAL';receipts.push({label:'Fonte alterada durante a preparação; revisão necessária',state:'VERIFY_REQUIRED'});}
-   else status=after.c.ready&&after.plan.readyForValidation&&!receipts.some((r:any)=>r.state==='VERIFY_REQUIRED')?'PREPARED':'PARTIAL';
+   else status=(after.c.ready||after.c.proposalReady)&&after.plan.readyForValidation&&!receipts.some((r:any)=>r.state==='VERIFY_REQUIRED')?'PREPARED':'PARTIAL';
    const run=await this.rpc('finish',scope,t,reserved.run.id,{status,receipts});
    return {run,current:this.output(after,t),canPublish:false};
   }catch{

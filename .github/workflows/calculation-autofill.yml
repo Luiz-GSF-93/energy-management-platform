@@ -7,6 +7,7 @@ on:
       - 'backend/src/database/migrations/20261109_calculation_autofill.sql'
       - 'backend/test/calculation-autofill.cjs'
       - 'frontend/app/backoffice/contracts/AutomaticPreparation.tsx'
+      - 'frontend/app/backoffice/contracts/ContractReadiness.tsx'
       - 'frontend/app/backoffice/contracts/CalculationPreparation.tsx'
       - 'frontend/app/backoffice/contracts/MonthlyCosts.tsx'
       - 'frontend/app/backoffice/contracts/MonthlyInputs.tsx'
