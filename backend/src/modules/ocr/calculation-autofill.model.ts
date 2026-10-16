@@ -1,3 +1,5 @@
+import {operationalProposal} from './calculation-operational-proposal';
+import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {simplifiedPreparation} from './calculation-autofill-summary';
 import {referenceEnergyAmount,referenceMwh} from './calculation-autofill-reference';
 import {createHash} from 'node:crypto';
@@ -115,5 +117,6 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  const sourceConsistent=(c.ready||c.proposalReady)&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict&&!measurementWarnings.length;
  const percent=Math.min(sourceConsistent?100:99,fields.length?Math.floor(filled*100/fields.length):0);
  const simplified=simplifiedPreparation(fields,[...new Set(observations)],{proposalReady:!!(c.ready||c.proposalReady),library:lib?{id:lib.id,version:lib.version}:null,referenceUsed:!!(supplierReference||feeReference)});
- return {manualOverrides:manual,manualAuthor:c.manualAuthor??null,simplified,reference:reference?{id:reference.id,month:reference.month,version:reference.version,hash:reference.hash}:null,referenceUsed:!!(supplierReference||feeReference),humanReviewPending:!c.ready,financialApproval:false,fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
+ const operational=operationalProposal(fields,c,c.source?.raw?extractCpflPaulistaLayout(c.source.raw):null);
+ return {operational,manualOverrides:manual,manualAuthor:c.manualAuthor??null,simplified,reference:reference?{id:reference.id,month:reference.month,version:reference.version,hash:reference.hash}:null,referenceUsed:!!(supplierReference||feeReference),humanReviewPending:!c.ready,financialApproval:false,fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
 }
