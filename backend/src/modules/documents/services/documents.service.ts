@@ -108,9 +108,13 @@ export class DocumentsService {
     const path = organizationId + '/' + dto.consumerUnitId + '/' + randomUUID() + '.' + detected.extension;
     const row = await this.prepareCreate({ ...dto, fileName: detected.name, fileType: detected.mime,
       fileHash: createHash('sha256').update(bytes).digest('hex'), fileSizeBytes: bytes.length, filePath: path }, organizationId, actorUserId);
-    const duplicate = await this.table().select('id').eq('organization_id', organizationId).eq('file_hash', row.file_hash).maybeSingle();
+    const duplicate = await this.table().select('*').eq('organization_id', organizationId).eq('file_hash', row.file_hash).maybeSingle();
     this.check(duplicate.error);
-    if (duplicate.data) throw new ConflictException('Documento já cadastrado nesta organização');
+    if (duplicate.data) {
+      const prior=duplicate.data;
+      if(dto.documentType==='INVOICE_DISTRIBUTOR'&&prior.organization_id===organizationId&&prior.customer_id===dto.customerId&&prior.consumer_unit_id===dto.consumerUnitId&&prior.document_type===dto.documentType&&String(prior.reference_month).slice(0,10)===dto.referenceMonth&&prior.file_verified===true&&prior.file_hash===row.file_hash&&prior.file_size_bytes===bytes.length&&prior.storage_bucket===DOCUMENT_BUCKET&&prior.file_path?.startsWith(organizationId+'/'+dto.consumerUnitId+'/'))return {...prior,idempotentUpload:true};
+      throw new ConflictException('Documento já cadastrado nesta organização; confira o vínculo e a versão, sem duplicar o arquivo.');
+    }
     const storage = this.supabaseService.getClient().storage.from(DOCUMENT_BUCKET);
     // Every attempt owns a fresh random key. Compensation never touches a
     // pre-existing object, including when concurrent inserts hit the hash index.

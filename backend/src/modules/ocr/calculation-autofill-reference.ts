@@ -21,6 +21,6 @@ export function referenceMwh(consumption:unknown):string|null{
  return (n.slice(0,cut).replace(/^0+(?=\d)/,'')+'.'+n.slice(cut).replace(/0+$/,'')).replace(/[.]$/,'');
 }
 export function proposalFieldsSafe(identity:any[],consumption:any[]){
- const safe=(rows:any[],keys:string[])=>rows.length===keys.length&&keys.every(key=>{const a=rows.filter(f=>f.key===key),f=a[0],h=f?.history??[];return a.length===1&&f.state==='EXTRACTED_REVIEW'&&f.decimal!==null&&f.sourceHash&&(!h.length||h[0].sourceHash===f.sourceHash&&h[0].decision!=='NEEDS_CORRECTION'&&h.filter((r:any)=>r.version===h[0].version).length===1);});
+ const safe=(rows:any[],keys:string[])=>rows.length===keys.length&&keys.every(key=>{const a=rows.filter(f=>f.key===key),f=a[0],h=f?.history??[];const matched=f?.state==='EXTRACTED_REVIEW'||key==='address'&&f?.state==='BLOCKED'&&f.check?.comparison==='DIFFERENT';return a.length===1&&matched&&f.decimal!==null&&f.sourceHash&&(!h.length||h[0].sourceHash===f.sourceHash&&h[0].decision!=='NEEDS_CORRECTION'&&h.filter((r:any)=>r.version===h[0].version).length===1);});
  return safe(identity,['customer','taxId','unit','address','period','market'])&&safe(consumption,['consumptionPeakKwh','consumptionOffPeakKwh','consumptionTotalKwh']);
 }

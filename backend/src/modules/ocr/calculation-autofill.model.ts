@@ -31,7 +31,7 @@ export function selectAutofillLibrary(rows:any[],u:any,month:string){
 }
 /** A candidate is not a financial validation. No fabricated zero or attestation. */
 export function calculationAutofillPlan(c:any,libraries:any[]){
- const u=c.unit,period=monthPeriod(c.month),fields:FillField[]=[],observations:string[]=[];
+ const u=c.unit,period=monthPeriod(c.month),fields:FillField[]=[],observations:string[]=[...(c.proposalObservations??[])];
  const add=(key:string,label:string,value:unknown,unit:string,scenario:string,source:string,observation:string|null=null)=>{
   const present=value!==null&&value!==undefined&&value!==''&&!!source;
   fields.push({key,label,value:present?value:null,unit,scenario,source,state:present?'FILLED':'PENDING',observation:observation??(present?null:'Fonte não disponível para este campo.')});
