@@ -1,0 +1,17 @@
+EVA — correção isolada após teste único da regra global
+
+Base conferida: main 3541f998d65084c722dbea7f2700dec42b529c7f. A avaliação histórica d5670f65-3924-47bd-ab9c-f9059a55f032 continua em revisão 2/6; não reavaliar nem reescrever durante a implementação. A reserva histórica de US$0,0202 continua pendente sem conciliação retroativa.
+
+Escopo V2: globalModelLayout projeta Atualização Monetária [mês/ano] como MONETARY_CORRECTION, somente quando descrição e valor possuem fonte verificável. Preserva sinal e valor; negativo é crédito, positivo é despesa. Não altera o parser compartilhado, suas classes, as tarifas ACR ou os totais históricos. Nenhum outro componente desconhecido ganha aprovação genérica. Totais divergentes continuam impedindo homologação.
+
+Preparação: os valores já mapeados são preservados no payload estruturado. A IA recebe uma única evidência resumida, com percentuais formatados e calculados pelo backend, seções e até oito motivos/exceções; não recebe pedido de transcrever todos os campos. Resposta curta, fields e doubts vazios, citações válidas. O validador original mantém limite de80 campos/40 citações/2200 tokens e rejeição de números sem fonte. Não aumentar orçamento ou gerar lote de tentativas. A interpretação não modifica valores, score ou estado financeiro.
+
+Consumo: o conector pode devolver no erro apenas metadados de uso vindos do envelope autenticado do provedor, validados contra os limites já reservados. Nunca usa conteúdo gerado como fonte de tokens nem persiste resposta bruta. O adaptador V2 opta por settleRejectedUsage; demais chamadores preservam o comportamento anterior. Resposta inválida com uso válido pode ter consumo registrado uma única vez e continuar FAILED. Timeout, metadados inválidos ou falha de settlement mantêm estado pendente, sem zero inventado, reenvio ou nova tentativa de settlement. Nenhuma conciliação retroativa nesta entrega.
+
+Interface: motivos de conferência por rubrica, identificação de correção monetária com fonte e valor, e estado de consumo em falha. Mantém contexto de organização/documento e o histórico antigo.
+
+Banco e segurança: nenhuma tabela/migração/RPC/grant novo. Mantidos autenticação, perfis, licença, RLS, tenant, auditoria, cotas, idempotência e máximo seis revisões. Sem homologação, aprovação, cobrança, publicação ao cliente, alteração de corpus ou chamada paga durante a implementação. Toda a regra nova permanece sob EVA_OCR_GLOBAL_PREPARATION_ENABLED=false na entrega; demais flags preservadas.
+
+Testes: correção monetária com sinais diferentes, fonte inválida e rubrica desconhecida, totais divergentes, contexto de84 campos reduzido sem vazamento de valores, percentual formatado e número não fundamentado, rejeição com uso válido/invalidado, timeout, settlement falho sem retry e opt-in do adaptador, preservação dos campos e interface. Regressão SQL de cotas/isolamento, builds Nest/Next e verificações de código.
+
+Limite: validação técnica não substitui uma nova homologação real autorizada. O próximo teste precisa confirmar uma única nova revisão, custo e consistência, sem aprovação automática do modelo ou fechamento.
