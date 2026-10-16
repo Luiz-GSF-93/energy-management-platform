@@ -17,7 +17,7 @@ export default function AssistedClosingReview(props:{unitId:string;month:string;
 }
 function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{unitId:string;month:string;customerId:string;organizationId:string;onEnabled:(v:boolean)=>void;onCorrect?:(tab:string)=>void}){
  const [commercialHistory,setCommercialHistory]=useState<any[]|null>(null);
- const [commercial,setCommercial]=useState<Record<string,string>>({});const commercialUncertain=useRef(false);
+ const [commercial,setCommercial]=useState<Record<string,string>>({});const commercialUncertain=useRef(false),commercialAttempt=useRef<{id:string;basis:string;sourceHash:string}|null>(null);
  const [clock,setClock]=useState(()=>Date.now());
  const [h,setH]=useState<History|null>(null),[row,setRow]=useState<Row|null>(null),[page,setPage]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState(''),[note,setNote]=useState(''),[ack,setAck]=useState(false),[choice,setChoice]=useState(''),[guide,setGuide]=useState(true),[paused,setPaused]=useState(false),[help,setHelp]=useState('');
  const attempted=useRef(false),live=useRef(true),working=useRef(false),enabled=useRef(onEnabled);enabled.current=onEnabled;
@@ -39,10 +39,10 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
   working.current=true;setBusy(true);setError('');let started=false,completed=false;
   try{
    const candidate=await request<any>('/api/v1/calculation-autofill/preview',{method:'POST',body:{consumerUnitId:unitId,month,manual}});
-   if(!live.current)return;if(candidate.unitId!==unitId||candidate.month!==month||!candidate.token||!candidate.canPrepare)throw Error('Valores comerciais fora da seleção ou sem permissão.');
-   started=true;const result=await request<any>('/api/v1/calculation-autofill',{method:'POST',body:{consumerUnitId:unitId,month,manual,requestId:crypto.randomUUID(),token:candidate.token}});
-   if(!live.current)return;if(result.current?.unitId!==unitId||result.current?.month!==month||!['PARTIAL','PREPARED'].includes(result.run?.state))throw Error('Correção comercial ainda não confirmada. Consulte o histórico antes de repetir.');
-   setCommercial({});completed=true;
+   if(!live.current)return;if(candidate.unitId!==unitId||candidate.month!==month||!candidate.token||!candidate.canPrepare||typeof candidate.basis!=='string'||!/^[a-f0-9]{64}$/.test(candidate.basis)||typeof candidate.sourceHash!=='string'||!/^[a-f0-9]{64}$/.test(candidate.sourceHash))throw Error('Valores comerciais fora da seleção ou sem permissão.');
+   const requestId=crypto.randomUUID();commercialAttempt.current={id:requestId,basis:candidate.basis,sourceHash:candidate.sourceHash};started=true;const result=await request<any>('/api/v1/calculation-autofill',{method:'POST',body:{consumerUnitId:unitId,month,manual,requestId,token:candidate.token}});
+   if(!live.current)return;if(result.run?.id&&commercialAttempt.current)commercialAttempt.current.id=result.run.id;if(result.current?.unitId!==unitId||result.current?.month!==month||!['PARTIAL','PREPARED'].includes(result.run?.state))throw Error('Correção comercial ainda não confirmada. Consulte o histórico antes de repetir.');
+   commercialAttempt.current=null;setCommercial({});completed=true;
   }catch(e){if(live.current){if(started)commercialUncertain.current=true;setError(e instanceof Error?e.message:'Correção não confirmada; confira o histórico.');}}
   finally{working.current=false;if(live.current)setBusy(false);}
   if(completed&&live.current)await prepare();
@@ -52,8 +52,9 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
   try{const data=await request<any>('/api/v1/calculation-autofill/history?'+query+'&page=0');if(!live.current)return;
    if(!Array.isArray(data.rows)||data.rows.some((r:any)=>r.consumer_unit_id!==unitId||r.month!==month||r.customer_id!==customerId||r.organization_id!==organizationId))throw Error('Histórico comercial fora da seleção.');
    setCommercialHistory(data.rows.map((r:any)=>({id:r.id,state:r.state,createdAt:r.created_at})));
-   if(data.rows[0]&&['PARTIAL','PREPARED'].includes(data.rows[0].state))commercialUncertain.current=false;
-   if(data.rows[0]&&['RUNNING','UNKNOWN'].includes(data.rows[0].state))commercialUncertain.current=true;
+   const attempt=commercialAttempt.current,matched=attempt?data.rows.find((r:any)=>r.id===attempt.id||r.source_basis===attempt.basis&&r.source_hash===attempt.sourceHash):data.rows[0];
+   if(matched&&['PARTIAL','PREPARED'].includes(matched.state)){commercialUncertain.current=false;commercialAttempt.current=null;}
+   if(matched&&['RUNNING','UNKNOWN'].includes(matched.state))commercialUncertain.current=true;
   }catch(e){if(live.current)setError(e instanceof Error?e.message:'Histórico comercial indisponível.');}
   finally{working.current=false;if(live.current)setBusy(false);}
  }
