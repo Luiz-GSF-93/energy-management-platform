@@ -7,6 +7,7 @@ describe('EVA assisted closing',()=>{
  it('rejects fractional cents instead of inventing a rounded fee',()=>{const e=entry();e.plan.fields.find((f:any)=>f.key==='fee:fixed').value=1302.051;expect(report([e]).approvalEligible).toBe(false)});
  it('labels a reference estimate',()=>{const e=entry();e.plan.referenceUsed=true;expect(report([e]).completeness).toBe('ESTIMATED')});
  it.each(['ICMS','PIS','COFINS'])('requires %s evidence',code=>{const e=entry();e.plan.fields=e.plan.fields.filter((f:any)=>f.key!=='ACR:tax:'+code);expect(report([e]).approvalEligible).toBe(false)});
+ it('lists missing quantities and all tax bases in the same report',()=>{const e=entry();e.plan.fields=e.plan.fields.filter((f:any)=>!f.key.includes(':tax:'));e.plan.fields.push({key:'ACR:TUSD_DEMAND_USED:ALL',state:'FILLED',value:'10'});const missing=report([e]).missing.join(' ');expect(missing).toContain('quantidade faturável');expect(missing).toContain('ICMS, PIS, COFINS')});
  it('does not convert RESERVED to final supplier cost',()=>{const e=entry();e.plan.fields.find((f:any)=>f.key==='supplier:tax').value='RESERVED';expect(report([e]).financial.status).toBe('INCOMPLETE')});
  it('does not substitute measured demand',()=>{const e=entry();e.plan.fields.push({key:'ACR:TUSD_DEMAND_USED:ALL',state:'FILLED',value:'10'});expect(report([e]).missing.join()).toContain('quantidade faturável')});
  it('requires all units',()=>{expect(report([entry(),{unitId:'other',name:'Other',unavailable:'Sem fatura'}]).approvalEligible).toBe(false);expect(report([]).approvalEligible).toBe(false)});
