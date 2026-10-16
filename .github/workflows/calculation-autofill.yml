@@ -8,8 +8,11 @@ on:
       - 'backend/test/calculation-autofill.cjs'
       - 'frontend/app/backoffice/contracts/AutomaticPreparation.tsx'
       - 'frontend/app/backoffice/contracts/CalculationPreparation.tsx'
+      - 'frontend/app/backoffice/contracts/MonthlyCosts.tsx'
+      - 'frontend/app/backoffice/contracts/MonthlyInputs.tsx'
       - 'frontend/app/backoffice/documents/OcrResolution.tsx'
       - 'frontend/test/calculation-autofill.cjs'
+      - 'frontend/test/preparation-navigation.cjs'
       - '.github/workflows/calculation-autofill.yml'
 permissions:
   contents: read
