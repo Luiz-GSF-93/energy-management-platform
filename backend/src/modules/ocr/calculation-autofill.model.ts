@@ -76,7 +76,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  add('fee:fixed','Honorário fixo por unidade',fixed,'BRL','ACL',feeReference?feeSource:m?'Contrato de gestão '+m.id+(m.fee_adjustment?' · reajuste '+m.fee_adjustment.id:''):'');
  if(m?.remuneration_model==='HYBRID'){
   let percentage=m.savings_percentage==null?null:String(m.savings_percentage);try{allocationUnits(percentage);}catch{percentage=null;}
-  add('fee:percentage','Honorário variável',percentage,'%','ACL','Contrato de gestão '+m.id,'Valor final depende da economia consolidada de todas as unidades.');
+  add('fee:percentage','Honorário variável',percentage,'%','ACL',feeSource,'Valor final depende da economia consolidada de todas as unidades.');
   const allocations=c.captured.feeRules.filter((a:any)=>a.contract_id===m.id&&a.month===c.month).sort((a:any,b:any)=>b.version-a.version),a=allocations[0];
   let allocation=a?.allocations??null;try{if(!a?.source||a.fixed_fee_basis!=='PER_UNIT')throw Error();allocateFee('0',allocation);if(!allocation.some((x:any)=>x.consumerUnitId===u.id))throw Error();}catch{allocation=null;}
   let allocationSource=a?'Rateio '+a.id+' v'+a.version+' · '+a.source:'';

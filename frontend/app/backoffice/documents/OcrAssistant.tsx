@@ -102,6 +102,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
   finally{writing.current=false;if(g===generation.current){setBusy(false);setWriteBusy(false);}}
  }
  return <section aria-label="Assistente de conferência OCR" style={{marginTop:12}}>
+  <a className="ds-button" href={ocrContractLink(id,'preparation')}>EVA · preparar apuração</a>
   <button type="button" onClick={()=>{dialog.current?.showModal();void load();}}>EVA · conferir fatura</button>
   {activityView}
   <p>{busy?'Conferindo extração e cadastros…':plan?'Preenchimentos disponíveis para conferência; consulte a próxima ação no assistente.':'Assistente de conferência disponível após a extração.'}</p>
