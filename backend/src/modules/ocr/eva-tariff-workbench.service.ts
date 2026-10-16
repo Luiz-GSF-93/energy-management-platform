@@ -57,7 +57,7 @@ export class EvaTariffWorkbenchService{
    const u=await this.db.getClient().from('consumer_units').select('*').eq('id',s.consumerUnitId).eq('organization_id',t.organizationId).maybeSingle();
    if(u.error||!u.data)throw new ForbiddenException('Unidade indisponível.');
    const c={unit:u.data,document:source.doc,source};
-   const evaluation=modelConfidence(source.raw,b.data.threshold);
+   const evaluation=modelConfidence(source.raw,b.data.threshold,u.data);
    const mismatches=source.assessment?.intake?.checks?.filter((x:any)=>x.state==='MISMATCH')??[];
    if(mismatches.length){evaluation.consistent=false;evaluation.state='NEEDS_REVISION';}
    payload={...tariffCandidates(c),modelKey:autofillHash([u.data.distributor,u.data.tariff_group,u.data.tariff_subgroup,u.data.tariff_modality]),evaluation:{...evaluation,intakeChecks:source.assessment?.intake?.checks??[]},reason:b.data.reason.trim()};

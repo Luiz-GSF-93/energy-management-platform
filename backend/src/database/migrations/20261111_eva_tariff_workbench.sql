@@ -4,7 +4,7 @@ CREATE TABLE public.eva_tariff_model_evaluations(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id text NOT NULL REFERENCES public.organizations(id),import_id uuid NOT NULL,model_key text NOT NULL,quota_units integer NOT NULL CHECK(quota_units IN(0,1)),
  evaluation jsonb NOT NULL CHECK(jsonb_typeof(evaluation)='object'),created_at timestamptz NOT NULL DEFAULT clock_timestamp());
 CREATE TABLE public.eva_tariff_imports(
- id uuid PRIMARY KEY,organization_id text NOT NULL REFERENCES public.organizations(id),consumer_unit_id text NOT NULL REFERENCES public.consumer_units(id),month text NOT NULL,
+ id uuid PRIMARY KEY,organization_id text NOT NULL REFERENCES public.organizations(id),consumer_unit_id text NOT NULL REFERENCES public.consumer_units(id),customer_id text NOT NULL REFERENCES public.customers(id),month text NOT NULL,
  document_id text NOT NULL REFERENCES public.documents(id),source_hash text NOT NULL CHECK(source_hash ~ '^[a-f0-9]{64}$'),payload_hash text NOT NULL CHECK(payload_hash ~ '^[a-f0-9]{64}$'),
  payload jsonb NOT NULL CHECK(jsonb_typeof(payload)='object'),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT clock_timestamp(),UNIQUE(organization_id,id));
 CREATE TABLE public.eva_tariff_candidates(
@@ -23,10 +23,11 @@ DO $$DECLARE n text;BEGIN FOREACH n IN ARRAY ARRAY['eva_tariff_model_evaluations
 END LOOP;END$$;
 CREATE FUNCTION public.eva_tariff_workbench_action(p_org text,p_actor text,p_role text,p_platform boolean,p_action text,p_unit text,p_month text,p_id uuid,p_body jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE rights jsonb;member record;writer boolean:=false;pg integer;data jsonb;imp public.eva_tariff_imports;event public.eva_tariff_events;doc public.documents;lib jsonb;candidate jsonb;pos integer;result jsonb;profile jsonb;library_id uuid;lic record;used bigint;charge integer;revision_count integer;
+DECLARE unit_row public.consumer_units;rights jsonb;member record;writer boolean:=false;pg integer;data jsonb;imp public.eva_tariff_imports;event public.eva_tariff_events;doc public.documents;lib jsonb;candidate jsonb;pos integer;result jsonb;profile jsonb;library_id uuid;lic record;used bigint;charge integer;revision_count integer;
 BEGIN
  IF p_action IS NULL OR p_action NOT IN('inspect','checkDocument','import','review','qualify','adviceReserve','adviceFinish','reserveModel') OR p_org IS NULL OR p_actor IS NULL OR p_role IS NULL OR p_platform IS NULL OR jsonb_typeof(p_body) IS DISTINCT FROM 'object' OR octet_length(p_body::text)>500000 THEN RAISE EXCEPTION 'Invalid tariff request' USING ERRCODE='22023';END IF;
  rights:=public.eva_assisted_closing_action(p_org,p_actor,p_role,p_platform,'history',p_unit,p_month,NULL,'{"page":0}');
+ SELECT * INTO STRICT unit_row FROM public.consumer_units WHERE organization_id=p_org AND id=p_unit;
  IF p_platform THEN writer:=true;ELSE
   SELECT rr.permissions INTO member FROM public.organization_members m JOIN public.roles rr ON rr.id=m.role_id AND rr.organization_id=m.organization_id AND rr.scope='organization' WHERE m.organization_id=p_org AND m.user_id::text=p_actor AND m.role_id::text=p_role AND upper(m.status)='ACTIVE' FOR SHARE OF m,rr;
   writer:=coalesce((rights->>'canPrepare')::boolean,false) AND member.permissions ? 'beb6ec90-8ba8-40ce-a156-aeef6cc75cce' AND member.permissions ? 'fd8a932f-87c0-4f86-8389-9f30c50e95b7';
@@ -36,14 +37,14 @@ BEGIN
   pg:=(p_body->>'page')::integer;
   RETURN jsonb_build_object('canWrite',writer,'canManage',rights->'canManage','page',pg,'libraries',(SELECT coalesce(jsonb_agg(to_jsonb(v) ORDER BY created_at DESC),'[]') FROM(SELECT * FROM public.tariff_library_versions WHERE organization_id=p_org ORDER BY created_at DESC,id LIMIT 25 OFFSET pg*25)v),
    'total',(SELECT count(*) FROM public.tariff_library_versions WHERE organization_id=p_org),
-   'documents',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'name',original_filename,'verified',file_verified)),'[]') FROM(SELECT * FROM public.documents WHERE organization_id=p_org AND consumer_unit_id=p_unit AND document_type='INVOICE_DISTRIBUTOR' AND left(reference_month::text,7)=p_month AND to_jsonb(documents)->>'deleted_at' IS NULL ORDER BY created_at DESC LIMIT 100)v),
-   'imports',(SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM(SELECT * FROM public.eva_tariff_imports WHERE organization_id=p_org AND consumer_unit_id=p_unit AND month=p_month ORDER BY created_at DESC LIMIT 10)v),
-   'evaluations',(SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM(SELECT * FROM public.eva_tariff_model_evaluations e WHERE e.organization_id=p_org AND EXISTS(SELECT 1 FROM public.eva_tariff_imports i WHERE i.id=e.import_id AND i.organization_id=p_org AND i.consumer_unit_id=p_unit AND i.month=p_month) ORDER BY created_at DESC LIMIT 1000)v),
-   'events',(SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM(SELECT * FROM public.eva_tariff_events e WHERE e.organization_id=p_org AND EXISTS(SELECT 1 FROM public.eva_tariff_imports i WHERE i.id=e.subject_id AND i.organization_id=p_org AND i.consumer_unit_id=p_unit AND i.month=p_month) OR e.organization_id=p_org AND e.kind='RESERVEMODEL' AND EXISTS(SELECT 1 FROM public.documents d WHERE d.id=e.subject_id::text AND d.organization_id=p_org AND d.consumer_unit_id=p_unit AND left(d.reference_month::text,7)=p_month) ORDER BY created_at DESC LIMIT 25 OFFSET pg*25)v));
+   'documents',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'name',original_filename,'verified',file_verified)),'[]') FROM(SELECT * FROM public.documents WHERE organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND document_type='INVOICE_DISTRIBUTOR' AND left(reference_month::text,7)=p_month AND to_jsonb(documents)->>'deleted_at' IS NULL ORDER BY created_at DESC LIMIT 100)v),
+   'imports',(SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM(SELECT * FROM public.eva_tariff_imports WHERE organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND month=p_month ORDER BY created_at DESC LIMIT 10)v),
+   'evaluations',(SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM(SELECT * FROM public.eva_tariff_model_evaluations e WHERE e.organization_id=p_org AND EXISTS(SELECT 1 FROM public.eva_tariff_imports i WHERE i.id=e.import_id AND i.organization_id=p_org AND i.consumer_unit_id=p_unit AND i.customer_id=unit_row.customer_id AND i.month=p_month) ORDER BY created_at DESC LIMIT 1000)v),
+   'events',(SELECT coalesce(jsonb_agg(to_jsonb(v)),'[]') FROM(SELECT * FROM public.eva_tariff_events e WHERE e.organization_id=p_org AND EXISTS(SELECT 1 FROM public.eva_tariff_imports i WHERE i.id=e.subject_id AND i.organization_id=p_org AND i.consumer_unit_id=p_unit AND i.customer_id=unit_row.customer_id AND i.month=p_month) OR e.organization_id=p_org AND e.kind='RESERVEMODEL' AND EXISTS(SELECT 1 FROM public.documents d WHERE d.id=e.subject_id::text AND d.organization_id=p_org AND d.consumer_unit_id=p_unit AND left(d.reference_month::text,7)=p_month) ORDER BY created_at DESC LIMIT 25 OFFSET pg*25)v));
  END IF;
  IF p_action='checkDocument' THEN
   IF p_id IS NOT NULL OR (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(p_body)k) IS DISTINCT FROM ARRAY['documentId'] THEN RAISE EXCEPTION 'Invalid document request' USING ERRCODE='22023';END IF;
-  PERFORM 1 FROM public.documents WHERE id=p_body->>'documentId' AND organization_id=p_org AND consumer_unit_id=p_unit AND left(reference_month::text,7)=p_month AND document_type='INVOICE_DISTRIBUTOR' AND to_jsonb(documents)->>'deleted_at' IS NULL;
+  PERFORM 1 FROM public.documents WHERE id=p_body->>'documentId' AND organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND left(reference_month::text,7)=p_month AND document_type='INVOICE_DISTRIBUTOR' AND to_jsonb(documents)->>'deleted_at' IS NULL;
   IF NOT FOUND THEN RAISE EXCEPTION 'Document denied' USING ERRCODE='42501';END IF;
   RETURN jsonb_build_object('allowed',true);
  END IF;
@@ -57,7 +58,7 @@ BEGIN
  END IF;
  data:=p_body->'payload';
  IF p_action='reserveModel' THEN
-  PERFORM 1 FROM public.documents WHERE id=data->>'documentId' AND organization_id=p_org AND consumer_unit_id=p_unit AND left(reference_month::text,7)=p_month AND file_verified=true FOR SHARE;
+  PERFORM 1 FROM public.documents WHERE id=data->>'documentId' AND organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND left(reference_month::text,7)=p_month AND file_verified=true FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Document denied' USING ERRCODE='42501';END IF;
   IF data->>'modelKey' IS NULL OR data->>'modelKey' !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Invalid model' USING ERRCODE='22023';END IF;
   IF EXISTS(SELECT 1 FROM public.eva_tariff_events WHERE organization_id=p_org AND kind='RESERVEMODEL' AND subject_id=(data->>'documentId')::uuid) THEN RETURN jsonb_build_object('acquired',false);END IF;
@@ -66,9 +67,12 @@ BEGIN
   INSERT INTO public.eva_tariff_events(id,organization_id,kind,subject_id,payload,actor_id) VALUES(p_id,p_org,'RESERVEMODEL',(data->>'documentId')::uuid,jsonb_build_object('requestHash',p_body->>'hash','modelKey',data->>'modelKey'),p_actor) RETURNING * INTO event;
   RETURN jsonb_build_object('acquired',true,'event',to_jsonb(event),'replayed',false);
  ELSIF p_action IN('qualify','adviceReserve','adviceFinish','reserveModel') THEN
-  SELECT * INTO imp FROM public.eva_tariff_imports WHERE id=(data->>'importId')::uuid AND organization_id=p_org AND consumer_unit_id=p_unit AND month=p_month FOR SHARE;
+  SELECT * INTO imp FROM public.eva_tariff_imports WHERE id=(data->>'importId')::uuid AND organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND month=p_month FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Import denied' USING ERRCODE='42501';END IF;
   IF p_action='qualify' THEN
+   PERFORM 1 FROM public.documents WHERE id=imp.document_id AND organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND file_hash=imp.source_hash AND file_verified=true AND document_type='INVOICE_DISTRIBUTOR' FOR SHARE;
+   IF NOT FOUND OR unit_row.distributor IS DISTINCT FROM imp.payload#>>'{profile,distributor}' OR unit_row.tariff_group IS DISTINCT FROM imp.payload#>>'{profile,group}' OR unit_row.tariff_subgroup IS DISTINCT FROM imp.payload#>>'{profile,subgroup}' OR unit_row.tariff_modality IS DISTINCT FROM imp.payload#>>'{profile,modality}' THEN RAISE EXCEPTION 'Model registration changed' USING ERRCODE='40001';END IF;
+
    IF rights->>'canManage' IS DISTINCT FROM 'true' OR data->'acknowledge' IS DISTINCT FROM 'true'::jsonb OR length(btrim(data->>'note')) NOT BETWEEN 20 AND 1500 THEN RAISE EXCEPTION 'Model decision denied' USING ERRCODE='42501';END IF;
    IF EXISTS(SELECT 1 FROM public.eva_tariff_events WHERE organization_id=p_org AND subject_id=imp.id AND kind='QUALIFY') THEN RAISE EXCEPTION 'Already homologated' USING ERRCODE='23505';END IF;
    IF imp.payload#>>'{evaluation,state}' IS DISTINCT FROM 'READY_FOR_REVIEW' OR NOT EXISTS(SELECT 1 FROM public.eva_tariff_events WHERE organization_id=p_org AND subject_id=imp.id AND kind='ADVICEFINISH' AND payload#>>'{result,advice,state}'='READY') THEN RAISE EXCEPTION 'OCR and AI quality not ready' USING ERRCODE='22023';END IF;
@@ -85,9 +89,9 @@ BEGIN
   RETURN jsonb_build_object('acquired',p_action='adviceReserve','event',to_jsonb(event),'replayed',false);
  ELSIF p_action='import' THEN
   IF data->>'documentId' IS NULL OR data->>'sourceHash' IS NULL OR jsonb_typeof(data->'candidates') IS DISTINCT FROM 'array' OR jsonb_array_length(data->'candidates')>200 THEN RAISE EXCEPTION 'Invalid evidence' USING ERRCODE='22023';END IF;
-  SELECT * INTO doc FROM public.documents WHERE id=data->>'documentId' AND organization_id=p_org AND consumer_unit_id=p_unit AND left(reference_month::text,7)=p_month AND document_type='INVOICE_DISTRIBUTOR' AND file_verified=true AND file_hash=data->>'sourceHash' AND to_jsonb(documents)->>'deleted_at' IS NULL FOR SHARE;
+  SELECT * INTO doc FROM public.documents WHERE id=data->>'documentId' AND organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND left(reference_month::text,7)=p_month AND document_type='INVOICE_DISTRIBUTOR' AND file_verified=true AND file_hash=data->>'sourceHash' AND to_jsonb(documents)->>'deleted_at' IS NULL FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Document changed' USING ERRCODE='40001';END IF;
-  INSERT INTO public.eva_tariff_imports(id,organization_id,consumer_unit_id,month,document_id,source_hash,payload_hash,payload,created_by) VALUES(p_id,p_org,p_unit,p_month,doc.id,doc.file_hash,p_body->>'hash',data,p_actor);
+  INSERT INTO public.eva_tariff_imports(id,organization_id,consumer_unit_id,customer_id,month,document_id,source_hash,payload_hash,payload,created_by) VALUES(p_id,p_org,p_unit,unit_row.customer_id,p_month,doc.id,doc.file_hash,p_body->>'hash',data,p_actor);
   pos:=0;FOR candidate IN SELECT value FROM jsonb_array_elements(data->'candidates') LOOP
    INSERT INTO public.eva_tariff_candidates(organization_id,import_id,position,candidate) VALUES(p_org,p_id,pos,candidate);pos:=pos+1;
   END LOOP;
@@ -106,7 +110,7 @@ BEGIN
   result:=jsonb_build_object('importId',p_id);
  ELSE
   IF data->>'importId' IS NULL OR data->>'importId' !~ '^[a-f0-9-]{36}$' OR length(btrim(data->>'reason')) NOT BETWEEN 20 AND 1500 OR jsonb_typeof(data->'library') IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Invalid review' USING ERRCODE='22023';END IF;
-  SELECT * INTO imp FROM public.eva_tariff_imports WHERE id=(data->>'importId')::uuid AND organization_id=p_org AND consumer_unit_id=p_unit AND month=p_month FOR SHARE;
+  SELECT * INTO imp FROM public.eva_tariff_imports WHERE id=(data->>'importId')::uuid AND organization_id=p_org AND customer_id=unit_row.customer_id AND consumer_unit_id=p_unit AND month=p_month FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Import denied' USING ERRCODE='42501';END IF;
   IF EXISTS(SELECT 1 FROM public.eva_tariff_events WHERE organization_id=p_org AND kind='REVIEW' AND subject_id=imp.id) THEN RAISE EXCEPTION 'Import already reviewed; prepare new version' USING ERRCODE='23505';END IF;
   PERFORM 1 FROM public.documents WHERE id=imp.document_id AND organization_id=p_org AND file_hash=imp.source_hash AND file_verified=true AND to_jsonb(documents)->>'deleted_at' IS NULL FOR SHARE;

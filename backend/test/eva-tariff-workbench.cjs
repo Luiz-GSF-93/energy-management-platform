@@ -6,8 +6,8 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 (async()=>{const db=new PGlite();let checks=0;const ok=x=>{assert(x);checks++},deny=async f=>{await assert.rejects(f);checks++};try{
  await db.exec((process.env.EVA_TARIFF_TEST_PG_PORT?'':'CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;')+`
  CREATE TABLE organizations(id text PRIMARY KEY);CREATE TABLE customers(id text PRIMARY KEY);
- CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text);
- CREATE TABLE documents(id text PRIMARY KEY,organization_id text,consumer_unit_id text,reference_month date,document_type text,file_verified boolean,file_hash text,original_filename text,created_at timestamptz DEFAULT now());
+ CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,distributor text,tariff_group text,tariff_subgroup text,tariff_modality text);
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,consumer_unit_id text,reference_month date,document_type text,file_verified boolean,file_hash text,original_filename text,customer_id text DEFAULT 'customer',created_at timestamptz DEFAULT now());
  CREATE TABLE document_catalog(document_id text,organization_id text,tag text);
  CREATE TABLE licenses(id text PRIMARY KEY,organization_id text,active boolean,status text,start_date date,end_date date,documents_limit integer,documents_unlimited boolean,documents_used bigint);
  CREATE TABLE roles(id text,organization_id text,scope text,name text,permissions jsonb);CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text);
@@ -16,14 +16,14 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  IF $1<>'org' OR $2<>'actor' OR $3<>'manager' OR $6<>'${id(1)}' OR $7<>'2026-09' OR $4 THEN RAISE EXCEPTION 'denied' USING ERRCODE='42501';END IF;
  RETURN '{"canPrepare":true,"canManage":true}';END$$;
  INSERT INTO organizations VALUES('org'),('other');INSERT INTO customers VALUES('customer');
- INSERT INTO consumer_units VALUES('${id(1)}','org','customer');
+ INSERT INTO consumer_units VALUES('${id(1)}','org','customer','Teste','A','A4','GREEN');
  INSERT INTO documents(id,organization_id,consumer_unit_id,reference_month,document_type,file_verified,file_hash,original_filename) VALUES('${id(2)}','org','${id(1)}','2026-09-01','INVOICE_DISTRIBUTOR',true,'${'a'.repeat(64)}','synthetic.pdf');
  INSERT INTO licenses VALUES('license','org',true,'active','2026-01-01','2027-01-01',10,false,1);
  INSERT INTO roles VALUES('manager','org','organization','admin_org','["beb6ec90-8ba8-40ce-a156-aeef6cc75cce","fd8a932f-87c0-4f86-8389-9f30c50e95b7"]');INSERT INTO organization_members VALUES('org','actor','manager','ACTIVE');`);
  const lib=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261001_f1_135_tariff_library.sql'),'utf8');await db.exec(lib.split('CREATE TABLE public.tariff_library_applications')[0]+'COMMIT;');await db.exec(lib.slice(lib.indexOf('CREATE FUNCTION public.save_tariff_library'),lib.indexOf('CREATE FUNCTION public.apply_tariff_library')));
  await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261111_eva_tariff_workbench.sql'),'utf8'));
  const call=(action,request,body,org='org',actor='actor')=>db.query('SELECT eva_tariff_workbench_action($1,$2,$3,false,$4,$5,$6,$7,$8) d',[org,actor,'manager',action,id(1),'2026-09',request,JSON.stringify(body)]).then(r=>r.rows[0].d);
- const candidate={documentId:id(2),sourceHash:'a'.repeat(64),modelKey:'b'.repeat(64),candidates:[{key:'TE:PEAK',value:'1.00',confidence:0.95}],evaluation:{score:0.95,threshold:0.9,state:'READY_FOR_REVIEW'},reason:'Conferência de modelo sintético.'};
+ const candidate={profile:{distributor:'Teste',group:'A',subgroup:'A4',modality:'GREEN'},documentId:id(2),sourceHash:'a'.repeat(64),modelKey:'b'.repeat(64),candidates:[{key:'TE:PEAK',value:'1.00',confidence:0.95}],evaluation:{score:0.95,threshold:0.9,state:'READY_FOR_REVIEW'},reason:'Conferência de modelo sintético.'};
  const body={payload:candidate,hash:'c'.repeat(64)};
  ok((await call('inspect',null,{page:0})).canWrite);await deny(()=>call('inspect',null,{page:0},'other'));await deny(()=>call('inspect',null,{page:0},'org','another'));await deny(()=>call('checkDocument',null,{documentId:id(9)}));
  await call('import',id(10),body);ok((await call('import',id(10),body)).replayed);ok((await db.query('SELECT count(*) n FROM eva_tariff_model_evaluations')).rows[0].n===1);

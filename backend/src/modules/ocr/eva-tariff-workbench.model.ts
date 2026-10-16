@@ -86,7 +86,7 @@ export function invoiceComparison(c:any,p:any,libraries:any[]):InvoiceComparison
 const abs=(n:bigint)=>n<0n?-n:n;
 
 /** Minimum provider confidence on every essential field, never the mean or a human-inflated score. */
-export function modelConfidence(raw:any,threshold=0.9){
+export function modelConfidence(raw:any,threshold=0.9,profile?:any){
  const l=extractCpflPaulistaLayout(raw),fields:any[]=[];
  for(const name of ['customerTaxId','unit','reference','classification']){
   const found=l.fields.filter(f=>f.name===name);fields.push({key:name,confidence:found.length===1?found[0].value.confidence:null,source:found.length===1?found[0].source:null});
@@ -95,6 +95,10 @@ export function modelConfidence(raw:any,threshold=0.9){
   const f=row.fields[key];fields.push({key:row.source+'.'+key,confidence:f?.confidence??null,source:row.source,issues:f?.issues??[]});
  }
  const scores=fields.map(f=>f.confidence),minimum=scores.length&&scores.every(v=>typeof v==='number'&&v>=0&&v<=1)?Math.min(...scores):null;
- const consistent=!!l.layoutId&&l.reconciliation.state==='MATCH'&&l.operations.length>0&&!l.operations.some(r=>r.role==='UNKNOWN'||r.issues.some(x=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN','UNMAPPED_COMPONENT','UNVERIFIED_SOURCE'].includes(x))||r.arithmetic?.state==='DIFFERENCE')&&fields.every(f=>!(f.issues??[]).some((x:string)=>x!=='MISSING_CONFIDENCE'));
- return {threshold,score:minimum,state:minimum!==null&&minimum>=threshold&&consistent?'READY_FOR_REVIEW':'NEEDS_REVISION',consistent,fields,layout:l.layoutId,aiScore:null,message:'Mínimo de confiança OCR por campo essencial. Consistência é verificação separada. Correção humana não aumenta o score; sem leitura suficiente, envie nova versão legível. Nenhuma repetição paga automática.'};
+ const normalize=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ');
+ const classification=normalize(l.fields.filter(f=>f.name==='classification').map(f=>f.value.text).join(' '));
+ const modality=({GREEN:'VERDE',BLUE:'AZUL',WHITE:'BRANCA',CONVENTIONAL:'CONVENCIONAL'} as any)[profile?.tariff_modality];
+ const profileMatches=!profile||!!profile.tariff_subgroup&&classification.split(' ').includes(normalize(profile.tariff_subgroup))&&classification.split(' ').includes(modality);
+ const consistent=profileMatches&&!!l.layoutId&&l.reconciliation.state==='MATCH'&&l.operations.length>0&&!l.operations.some(r=>r.role==='UNKNOWN'||r.issues.some(x=>['MERGED_OR_DUPLICATE_CELL','UNMAPPED_COLUMN','UNMAPPED_COMPONENT','UNVERIFIED_SOURCE'].includes(x))||r.arithmetic?.state==='DIFFERENCE')&&fields.every(f=>!(f.issues??[]).some((x:string)=>x!=='MISSING_CONFIDENCE'));
+ return {threshold,profileMatches,score:minimum,state:minimum!==null&&minimum>=threshold&&consistent?'READY_FOR_REVIEW':'NEEDS_REVISION',consistent,fields,layout:l.layoutId,aiScore:null,message:'Mínimo de confiança OCR por campo essencial. Consistência é verificação separada. Correção humana não aumenta o score; sem leitura suficiente, envie nova versão legível. Nenhuma repetição paga automática.'};
 }

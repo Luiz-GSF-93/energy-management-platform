@@ -12,7 +12,7 @@ export class LibraryProfileDto {
  @IsOptional() @IsString() @MaxLength(100) voltageClass?:string;
  @IsString() @Matches(/\S/) @MaxLength(150) distributor!:string;
  @IsIn(['A','B']) group!:string;
- @IsString() @Matches(/^[A-Z0-9]{1,5}$/) subgroup!:string;
+ @IsString() @Matches(/^[A-Z0-9]{1,5}$/i) subgroup!:string;
  @IsIn(['GREEN','BLUE','CONVENTIONAL','WHITE']) modality!:string;
  @IsString() @Matches(/\S/) @MaxLength(100) category!:string;
  @IsString() @Matches(/\S/) @MaxLength(100) consumptionClass!:string;
