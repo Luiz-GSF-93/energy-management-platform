@@ -13,7 +13,7 @@ import { apiRequest } from '@/app/lib/api/client';
 
 type Customer = { id: string; company_name: string };
 type Unit = { id: string; customer_id: string; name?: string; consumer_unit_number: string };
-type Document = CatalogDocument & {intake_state?:string;processing_status:string};
+type Document = CatalogDocument & {intake_state?:string;processing_status:string;idempotentUpload?:boolean};
 const types = [['INVOICE_DISTRIBUTOR','Fatura da distribuidora'],['INVOICE_SUPPLIER','Fatura do fornecedor'],['CONTRACT_ENERGY','Contrato de energia'],['CONTRACT_CUSD','CUSD — Uso do Sistema de Distribuição'],['CONTRACT_CCER','CCER — Compra de Energia Regulada'],['CONTRACT_MANAGEMENT','Contrato de gestão'],['CCEE_SETTLEMENT','Liquidação CCEE'],['CCEE_CHARGES','Encargos CCEE'],['TAX_DOCUMENT','Documento fiscal'],['COMPLIANCE_REPORT','Relatório de conformidade'],['OTHER','Evidências / outros (inclui Excel e CSV)']];
 const uploadPermission = '8f3ff5eb-157a-468a-91af-6f89d92e23a7';
 const viewPermission = '8f105b02-4443-49de-b188-847e0284e7ed';
@@ -78,8 +78,9 @@ function DocumentsContent() {
       const saved=await apiRequest<Document>('/api/v1/documents/upload',{method:'POST',body:data});
       if (currentOrg.current!==org) return;
       let ocrNotice='';let classificationNotice='';
-      if(requestedTag!==(previousDocument?'REVIEWED':'DRAFT')){try{await apiRequest('/api/v1/document-catalog/'+encodeURIComponent(saved.id),{method:'PUT',body:{revision:1,tag:requestedTag,reason:tagReason,checkedDocument:tagChecked}});classificationNotice=' Classificação documental salva.';}catch{classificationNotice=' Arquivo salvo; classificação não confirmada. Consulte o registro na biblioteca antes de tentar novamente.';}}
-      if(saved.document_type==='INVOICE_DISTRIBUTOR'&&saved.file_verified&&hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')){
+      if(saved.idempotentUpload)ocrNotice='Arquivo idêntico já preservado nesta unidade e competência. Documento e leitura existentes reutilizados, sem nova cópia ou novo processamento OCR. Abra EVA — Conferir fatura e a preparação da competência.';
+      if(!saved.idempotentUpload&&requestedTag!==(previousDocument?'REVIEWED':'DRAFT')){try{await apiRequest('/api/v1/document-catalog/'+encodeURIComponent(saved.id),{method:'PUT',body:{revision:1,tag:requestedTag,reason:tagReason,checkedDocument:tagChecked}});classificationNotice=' Classificação documental salva.';}catch{classificationNotice=' Arquivo salvo; classificação não confirmada. Consulte o registro na biblioteca antes de tentar novamente.';}}
+      if(!saved.idempotentUpload&&saved.document_type==='INVOICE_DISTRIBUTOR'&&saved.file_verified&&hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')){
         try{await apiRequest('/api/v1/documents/'+encodeURIComponent(saved.id)+'/ocr',{method:'POST'});ocrNotice=' Leitura OCR iniciada automaticamente. O andamento será atualizado nesta tela.';}
         catch{ocrNotice=' O arquivo foi salvo, mas não foi possível iniciar o OCR automaticamente. Consulte a leitura para verificar a disponibilidade.';}
       }

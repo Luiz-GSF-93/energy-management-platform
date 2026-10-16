@@ -1,3 +1,4 @@
+import {proposalFieldsSafe} from './calculation-autofill-reference';
 import {Injectable,BadRequestException,ConflictException,ForbiddenException,ServiceUnavailableException} from '@nestjs/common';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
@@ -42,6 +43,7 @@ export class OcrResolutionService {
   if(!captured||documents.error||!Array.isArray(documents.data)||documents.data.length>100)throw new ServiceUnavailableException('Não foi possível conferir todas as fontes da competência.');
   const unit=captured.unit,rows=captured.parameters.filter((p:any)=>p.start_date<=period.end&&p.end_date>=period.start),groups=homologationProgress(identity.fields,consumption.fields,[]).groups,refs=[...new Set(layout.fields.filter(f=>f.name==='reference').map(f=>cpflReference(f.value.text)))];
   const ready=groups[0].complete&&groups[1].complete&&unit.id===source.doc.consumer_unit_id&&unit.customer_id===source.doc.customer_id&&unit.status==='ACTIVE'&&unit.free_market===true&&unit.tariff_group==='A'&&unit.tariff_modality==='GREEN'&&reviewedLayoutSupported(layout.layoutId)&&layout.reconciliation.state==='MATCH'&&refs.length===1&&refs[0]===month;
+  const proposalReady=ready||proposalFieldsSafe(identity.fields,consumption.fields)&&unit.id===source.doc.consumer_unit_id&&unit.customer_id===source.doc.customer_id&&unit.status==='ACTIVE'&&unit.free_market===true&&unit.tariff_group==='A'&&unit.tariff_modality==='GREEN'&&reviewedLayoutSupported(layout.layoutId)&&layout.reconciliation.state==='MATCH'&&refs.length===1&&refs[0]===month;
   const provenance='OCR · documento '+document+' · SHA-256 '+source.doc.file_hash;
   const candidates:any[]=[];
   const add=(component:string,band:string,amount:string|null,measure:string,line:string|null,label:string)=>{const operation=layout.operations.find(r=>r.source===line),taxCodes=operationTaxCodes(operation,combinedTaxLayout(layout));if(!numeric(amount)||!line||!taxCodes.length)return;candidates.push({component,band,amount,measure,line,label,taxCodes,source:provenance+' · '+line});};
@@ -67,9 +69,9 @@ export class OcrResolutionService {
   const cip=cipCostCandidate(layout.operations,month),items=cost?.costs?.items??[],cipPresent=items.some((i:any)=>i.scenario==='ACL'&&i.source?.includes(document)&&i.amount===cip.amount),supplierPresent=items.some((i:any)=>i.scenario==='ACL'&&i.category==='SUPPLIER_INVOICE');
   const token=ocrReviewDigest({format:'resolution-1',actor:t.userId,org:t.organizationId,source:source.doc,job:source.jobId,raw:source.raw,captured,identity,consumption,memory,documents:documents.data,rates,technical});
   const evidenceToken=ocrReviewDigest({source:source.doc,job:source.jobId,raw:source.raw,unit,identity,consumption,memory,technicalDemand:technical.demand,documents:documents.data});
-  return {evidenceToken,source,unit,period,month,ready,rows,rates,taxes,input,cost,marker,provenance,measurements,billed,technical,monthlyChanges,cip,cipPresent,supplierPresent,documents:documents.data,diagnosis,captured,token,groups:resolutionGroups(diagnosis.findings)};
+  return {evidenceToken,source,unit,period,month,ready,proposalReady,proposalObservations:identity.fields.filter((f:any)=>f.key==='address'&&f.state==='BLOCKED').map(()=> 'Endereço da fatura diverge do cadastro; proposta vinculada por CNPJ, unidade e competência coincidentes. Conferir antes de validar; cadastro preservado.'),rows,rates,taxes,input,cost,marker,provenance,measurements,billed,technical,monthlyChanges,cip,cipPresent,supplierPresent,documents:documents.data,diagnosis,captured,token,groups:resolutionGroups(diagnosis.findings)};
  }
- private parameter(c:any,r:any):ParameterDto{return {consumerUnitId:c.unit.id,kind:'TARIFF',componentCode:r.component,label:r.label,scenario:'ACL',timeBand:r.band,measure:r.measure,amount:r.amount,treatment:'GROSS',embeddedTaxCodes:r.taxCodes,includedTaxes:'Tributos destacados nesta linha já incluídos no preço final; sem nova cobrança.',baseRule:'',direction:'DEBIT',source:r.source,notes:c.marker+' · tarifa bruta da linha '+r.line+' · conferências atuais de identidade, consumo e classificação da demanda preservadas.',startDate:c.period.start,endDate:c.period.end};}
+ private parameter(c:any,r:any):ParameterDto{return {consumerUnitId:c.unit.id,kind:'TARIFF',componentCode:r.component,label:r.label,scenario:'ACL',timeBand:r.band,measure:r.measure,amount:r.amount,treatment:'GROSS',embeddedTaxCodes:r.taxCodes,includedTaxes:'Tributos destacados nesta linha já incluídos no preço final; sem nova cobrança.',baseRule:'',direction:'DEBIT',source:r.source,notes:c.marker+' · tarifa bruta da linha '+r.line+' · proposta de extração; conferências humanas e classificação da demanda existentes preservadas. Aguarda validação.',startDate:c.period.start,endDate:c.period.end};}
  private tax(c:any,v:any):ParameterDto{return {consumerUnitId:c.unit.id,kind:'TAX',componentCode:v.code,label:v.code+' já incluído nas linhas ACL',scenario:'ACL',timeBand:'ALL',measure:'PERCENT',amount:null,treatment:'INCLUDED',taxBasis:{version:1,items:v.bases},embeddedTaxCodes:[],includedTaxes:'',baseRule:'Declaração das bases OCR com tributo embutido. Não aplicar a alíquota novamente.',direction:'DEBIT',source:c.provenance,notes:c.marker+' · declaração limitada às rubricas vinculadas. Não presume isenção do fornecedor ou incidência em outros cenários.',startDate:c.period.start,endDate:c.period.end};}
  private botTaxSource(p:any,c:any){return p.source===c.provenance||!!p.supersedes_parameter_id&&p.source===c.provenance+' · exclusões completadas do parâmetro '+p.supersedes_parameter_id;}
  private automatic(c:any){return {taxes:c.ready&&c.rates.every((r:any)=>r.state==='PRESERVED')&&c.taxes.some((v:any)=>missingTaxExclusions(v,c)),monthly:c.ready&&!!c.monthlyChanges?.length&&c.input?.status!=='DRAFT',costs:c.ready&&c.cip.ready&&!c.cipPresent&&c.cost?.status!=='DRAFT'&&!(c.cost?.costs?.items??[]).some((i:any)=>i.scenario==='ACL'&&i.category==='OTHER')};}
@@ -82,15 +84,17 @@ export class OcrResolutionService {
  // Internal server snapshot. No route exposes raw extraction or tenant source records.
  async preparationSnapshot(document:string,t:TenantContext){const c=await this.context(document,t);return {...c,document:c.source.doc,resolution:this.publicPlan(c,t)};}
  private body(body:any,keys:string[]){if(!body||Array.isArray(body)||Object.keys(body).sort().join(',')!==keys.sort().join(',')||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Atualize o plano de resolução.');}
- async prepare(document:string,t:TenantContext,body:any){
-  await this.allowed(t,true);this.body(body,['token']);let c=await this.context(document,t);if(!c.ready||c.token!==body.token)throw new ConflictException('Conferências ou fontes mudaram; nenhum novo lote foi iniciado.');const evidenceToken=c.evidenceToken,receipts:any[]=[];
+ async prepare(document:string,t:TenantContext,body:any){return this.prepareInternal(document,t,body,false);}
+ async prepareProposals(document:string,t:TenantContext,body:any){return this.prepareInternal(document,t,body,true);}
+ private async prepareInternal(document:string,t:TenantContext,body:any,proposed:boolean){
+  await this.allowed(t,true);this.body(body,['token']);let c=await this.context(document,t);if(!(proposed?c.proposalReady:c.ready)||c.token!==body.token)throw new ConflictException('Conferências ou fontes mudaram; nenhum novo lote foi iniciado.');const evidenceToken=c.evidenceToken,receipts:any[]=[];
   // Only absent rates. Never overwrite an existing draft or an approved rate.
   const missing=c.rates.filter((r:any)=>r.state==='MISSING');
   const results=await Promise.allSettled(missing.map((r:any)=>this.parameters.createPrepared(resolutionId([t.organizationId,document,c.source.doc.file_hash,r.component,r.band]),this.parameter(c,r),t.organizationId,t.userId)));
   results.forEach((result,i)=>receipts.push({label:missing[i].label,state:result.status==='fulfilled'?'SAVED_DRAFT':'VERIFY_REQUIRED',...(result.status==='fulfilled'?{id:result.value.id}:{})}));
   if(results.some(r=>r.status==='rejected'))return {receipts,current:await this.inspect(document,t),canPublish:false};
   c=await this.context(document,t);
-  if(!c.ready||c.evidenceToken!==evidenceToken){receipts.push({label:'As fontes mudaram durante a preparação; conferir rascunhos',state:'VERIFY_REQUIRED'});return {receipts,current:this.publicPlan(c,t),canPublish:false};}
+  if(!(proposed?c.proposalReady:c.ready)||c.evidenceToken!==evidenceToken){receipts.push({label:'As fontes mudaram durante a preparação; conferir rascunhos',state:'VERIFY_REQUIRED'});return {receipts,current:this.publicPlan(c,t),canPublish:false};}
   for(const v of c.taxes.filter((v:any)=>!v.existing.length&&v.bases.length)){try{const saved=await this.parameters.createPrepared(resolutionId([t.organizationId,document,c.source.doc.file_hash,'TAX',v.code]),this.tax(c,v),t.organizationId,t.userId);receipts.push({label:v.code,state:'SAVED_DRAFT',id:saved.id});}catch{receipts.push({label:v.code,state:'VERIFY_REQUIRED'});break;}}
   if(receipts.some(r=>r.state==='VERIFY_REQUIRED'))return {receipts,current:await this.inspect(document,t),canPublish:false};
   // Approved declarations are immutable. Propose only omitted exclusions as a linked draft.
@@ -118,8 +122,8 @@ export class OcrResolutionService {
   // Database guards serialize versions, preserve validated records and permit only one draft.
   for(const kind of ['monthly','costs'] as const){
    c=await this.context(document,t);
-   if(!c.ready||c.evidenceToken!==evidenceToken){receipts.push({label:'Fonte alterada; atualizar antes de continuar',state:'VERIFY_REQUIRED'});break;}
-   if(!this.automatic(c)[kind])continue;
+   if(!(proposed?c.proposalReady:c.ready)||c.evidenceToken!==evidenceToken){receipts.push({label:'Fonte alterada; atualizar antes de continuar',state:'VERIFY_REQUIRED'});break;}
+   if(!this.automatic(c)[kind]&&!(proposed&&kind==='costs'&&c.cip.ready&&!c.cost&&!c.cipPresent))continue;
    const note='Proposta automática com fonte OCR atual; aguarda conferência do operador. Demanda medida e comparativo ACR existentes preservados.';
    try{let saved:any;
     if(kind==='monthly')saved=await this.inputs.create({consumerUnitId:c.unit.id,month:c.month,measurements:c.measurements,billedDemand:c.billed,sourceReference:c.marker+' · '+c.provenance,notes:note,correctionReason:note,previousId:c.input?.id??null},t);

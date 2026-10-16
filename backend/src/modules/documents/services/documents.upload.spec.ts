@@ -33,6 +33,13 @@ describe('Private document upload',()=>{
  it('blocks known duplicate before storage',async()=>{
   docs.maybeSingle.mockResolvedValue({data:{id},error:null});await expect(service.upload(dto,file,'org-a',id)).rejects.toMatchObject({status:409});expect(storage.upload).not.toHaveBeenCalled();
  });
+ it('reuses identical verified bytes only in the same scoped invoice without storage or metadata writes',async()=>{
+  const prior={id,organization_id:'org-a',customer_id:id,consumer_unit_id:id,document_type:dto.documentType,reference_month:dto.referenceMonth,file_verified:true,file_hash:createHash('sha256').update(file.buffer).digest('hex'),file_size_bytes:file.buffer.length,storage_bucket:'energy-documents-private',file_path:'org-a/'+id+'/existing.pdf',processing_status:'COMPLETED'};
+  docs.maybeSingle.mockResolvedValue({data:prior,error:null});expect(await service.upload(dto,file,'org-a',id)).toEqual({...prior,idempotentUpload:true});expect(storage.upload).not.toHaveBeenCalled();expect(docs.insert).not.toHaveBeenCalled();
+ });
+ it.each(['organization_id','customer_id','consumer_unit_id','document_type','reference_month','file_hash','file_verified','storage_bucket','file_path'])('never reuses an identical upload with divergent %s',async key=>{
+  const prior:any={id,organization_id:'org-a',customer_id:id,consumer_unit_id:id,document_type:dto.documentType,reference_month:dto.referenceMonth,file_verified:true,file_hash:createHash('sha256').update(file.buffer).digest('hex'),file_size_bytes:file.buffer.length,storage_bucket:'energy-documents-private',file_path:'org-a/'+id+'/existing.pdf'};prior[key]=key==='file_verified'?false:'other';docs.maybeSingle.mockResolvedValue({data:prior,error:null});await expect(service.upload(dto,file,'org-a',id)).rejects.toMatchObject({status:409});expect(storage.upload).not.toHaveBeenCalled();expect(docs.insert).not.toHaveBeenCalled();
+ });
  it.each([{code:'23502'},{code:'23503'},{code:'23514'},{code:'23505',message:'duplicate'},{code:'P0001',message:'DOCUMENT_QUOTA_EXCEEDED'}])('compensates a confirmed rejected insert %p',async error=>{
   docs.single.mockResolvedValue({data:null,error});await expect(service.upload(dto,file,'org-a',id)).rejects.toBeDefined();
   expect(storage.remove).toHaveBeenCalledWith([storage.upload.mock.calls[0][0]]);

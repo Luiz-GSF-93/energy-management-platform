@@ -4,9 +4,13 @@ on:
     paths:
       - 'backend/src/modules/ocr/calculation-autofill*'
       - 'backend/src/modules/ocr/ocr-resolution.service.ts'
+      - 'backend/src/modules/documents/services/documents.service.ts'
+      - 'backend/src/modules/documents/services/documents.upload.spec.ts'
+      - 'frontend/app/backoffice/documents/page.tsx'
       - 'backend/src/database/migrations/20261109_calculation_autofill.sql'
       - 'backend/test/calculation-autofill.cjs'
       - 'frontend/app/backoffice/contracts/AutomaticPreparation.tsx'
+      - 'frontend/app/backoffice/contracts/ContractReadiness.tsx'
       - 'frontend/app/backoffice/contracts/CalculationPreparation.tsx'
       - 'frontend/app/backoffice/contracts/MonthlyCosts.tsx'
       - 'frontend/app/backoffice/contracts/MonthlyInputs.tsx'
@@ -35,7 +39,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/ocr-resolution.service.spec.ts src/modules/ocr/ocr-autofill.spec.ts src/modules/ocr/ocr-autofill.service.spec.ts src/modules/contracts/services/contract-supplier-cost.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/fee-adjustment.spec.ts src/modules/contracts/services/preparation.spec.ts src/modules/contracts/services/tariff-library-plan.spec.ts src/modules/contracts/services/tariff-library.service.spec.ts src/modules/contracts/services/monthly-inputs-ocr-edit.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/ocr-resolution.service.spec.ts src/modules/ocr/ocr-autofill.spec.ts src/modules/ocr/ocr-autofill.service.spec.ts src/modules/contracts/services/contract-supplier-cost.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/fee-adjustment.spec.ts src/modules/contracts/services/preparation.spec.ts src/modules/contracts/services/tariff-library-plan.spec.ts src/modules/contracts/services/tariff-library.service.spec.ts src/modules/contracts/services/monthly-inputs-ocr-edit.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/documents/controllers/documents.upload-http.spec.ts
         working-directory: backend
       - run: npm run build
         working-directory: backend
