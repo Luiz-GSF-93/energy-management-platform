@@ -3,6 +3,8 @@ const entry=():any=>({unitId:'unit',name:'Teste',context:{document:{id:'doc'},ca
 const report=(e:any[]= [entry()])=>assistedClosingReport('org','customer','2026-09',e);
 describe('EVA assisted closing',()=>{
  it('reconciles internal totals without automatic approval/publication',()=>{expect(report()).toMatchObject({completeness:'COMPLETE',approvalEligible:true,automaticApproval:false,publicationAllowed:false,financial:{acr:'1000.00',aclBeforeFees:'700.00',aclAfterFees:'750.00',savings:'250.00'}})});
+ it('accepts an exact monetary number serialized by PostgreSQL without rounding',()=>{const e=entry();e.plan.fields.find((f:any)=>f.key==='fee:fixed').value=1302.05;expect(report([e]).financial.fixedFee).toBe('1302.05');expect(report([e]).approvalEligible).toBe(true)});
+ it('rejects fractional cents instead of inventing a rounded fee',()=>{const e=entry();e.plan.fields.find((f:any)=>f.key==='fee:fixed').value=1302.051;expect(report([e]).approvalEligible).toBe(false)});
  it('labels a reference estimate',()=>{const e=entry();e.plan.referenceUsed=true;expect(report([e]).completeness).toBe('ESTIMATED')});
  it.each(['ICMS','PIS','COFINS'])('requires %s evidence',code=>{const e=entry();e.plan.fields=e.plan.fields.filter((f:any)=>f.key!=='ACR:tax:'+code);expect(report([e]).approvalEligible).toBe(false)});
  it('does not convert RESERVED to final supplier cost',()=>{const e=entry();e.plan.fields.find((f:any)=>f.key==='supplier:tax').value='RESERVED';expect(report([e]).financial.status).toBe('INCOMPLETE')});

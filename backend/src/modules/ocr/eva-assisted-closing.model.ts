@@ -1,7 +1,7 @@
 import {feeMoney,allocateFee} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;unavailable?:string};
-const money=(v:unknown)=>{if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
+const money=(value:unknown)=>{const v=typeof value==='number'&&Number.isFinite(value)?String(value):value;if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const scale=(v:unknown,p=6)=>{if(typeof v!=='string'||!new RegExp('^-?(0|[1-9][0-9]{0,11})(\\.\\d{1,'+p+'})?$').test(v))throw Error('Decimal sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*10n**BigInt(p)+BigInt(f.padEnd(p,'0')))*(v.startsWith('-')?-1n:1n);};
 const fixed=(v:bigint,p:number)=>{const s=(v<0n?-v:v).toString().padStart(p+1,'0');return (v<0n?'-':'')+s.slice(0,-p)+'.'+s.slice(-p);};
 const rounded=(n:bigint,d:bigint)=>{if(d<=0n)throw Error();return (n<0n?-1n:1n)*(((n<0n?-n:n)+d/2n)/d);};

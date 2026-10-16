@@ -23,7 +23,7 @@ export function operationalProposal(fields:FillField[],c:any,layout:any):Operati
   result.invoice.lines=rows.filter((r:any)=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role)).map((r:any)=>({key:r.source,label:r.fields.description?.text||'Rubrica sem descrição',amount:verified(r.fields.amount)?format(cents(r.fields.amount.decimal)):null,source:source+' · '+r.source}));
  }else note('Detalhamento da fatura excede o limite desta prévia; consulte o documento original.');
  // The invoice total is evidence, not a sum with the same CIP/credits or tax values again.
- for(const [key,target] of [['supplier:regular','supplier'],['fee:fixed','fixedFee']] as const){const f=get(key);if(f&&money(f.value)&&cents(f.value)>=0n)result[target]={amount:format(cents(f.value)),source:f.source};}
+ for(const [key,target] of [['supplier:regular','supplier'],['fee:fixed','fixedFee']] as const){const f=get(key),value=typeof f?.value==='number'&&Number.isFinite(f.value)?String(f.value):f?.value;if(f&&money(value)&&cents(value)>=0n)result[target]={amount:format(cents(value)),source:f.source};}
  if(!result.supplier.amount)note('Preço ou valor do fornecedor sem fonte suficiente; confira somente as condições comerciais.');
  const rates=fields.filter(f=>f.key.startsWith('ACR:')&&!f.key.includes(':tax:')&&f.key!=='ACR:library');
  if(!rates.length)note('Biblioteca ACR compatível não disponível para esta competência.');
