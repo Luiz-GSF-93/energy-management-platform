@@ -11,6 +11,7 @@ import {LibraryWriteDto} from '../contracts/dto/tariff-library.dto';
 import {validateWriteDto} from '../../common/validation/validate-write-dto';
 import {validateProfile} from '../contracts/services/tariff-library-plan';
 import {autofillHash} from './calculation-autofill.model';
+const modelKey=(u:any)=>autofillHash([u.distributor,u.tariff_group,u.tariff_subgroup,u.tariff_modality].map(v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'')));
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 @Injectable()
 export class EvaTariffWorkbenchService{
@@ -41,7 +42,7 @@ export class EvaTariffWorkbenchService{
    await this.rpc('checkDocument',s,t,null,b.data);
    const current=await this.queue.status(t.organizationId,b.data.documentId);if(current.job)return current.job;
    const u=await this.db.getClient().from('consumer_units').select('*').eq('id',s.consumerUnitId).eq('organization_id',t.organizationId).maybeSingle();if(u.error||!u.data)throw new ForbiddenException('Unidade indisponível.');
-   const payload={documentId:b.data.documentId,modelKey:autofillHash([u.data.distributor,u.data.tariff_group,u.data.tariff_subgroup,u.data.tariff_modality])};
+   const payload={documentId:b.data.documentId,modelKey:modelKey(u.data)};
    const reservation=await this.rpc('reserveModel',s,t,b.requestId,{payload,hash:autofillHash(payload)});
    if(!reservation.acquired)throw new ConflictException('Processamento já reservado. Consulte o histórico antes de repetir.');
    return this.queue.enqueue(t.organizationId,b.data.documentId,t.userId);
@@ -60,7 +61,7 @@ export class EvaTariffWorkbenchService{
    const evaluation=modelConfidence(source.raw,b.data.threshold,u.data);
    const mismatches=source.assessment?.intake?.checks?.filter((x:any)=>x.state==='MISMATCH')??[];
    if(mismatches.length){evaluation.consistent=false;evaluation.state='NEEDS_REVISION';}
-   payload={...tariffCandidates(c),modelKey:autofillHash([u.data.distributor,u.data.tariff_group,u.data.tariff_subgroup,u.data.tariff_modality]),evaluation:{...evaluation,intakeChecks:source.assessment?.intake?.checks??[]},reason:b.data.reason.trim()};
+   payload={...tariffCandidates(c),modelKey:modelKey(u.data),evaluation:{...evaluation,intakeChecks:source.assessment?.intake?.checks??[]},reason:b.data.reason.trim()};
   }else if(b.action==='review'){
    if(!b.data||Object.keys(b.data).sort().join(',')!=='importId,library,reason'||!uuid(b.data.importId)||typeof b.data.reason!=='string'||b.data.reason.trim().length<20||b.data.reason.length>1500)throw new BadRequestException('Informe justificativa e revisão.');
    const library=await validateWriteDto(LibraryWriteDto,b.data.library);validateProfile(library);

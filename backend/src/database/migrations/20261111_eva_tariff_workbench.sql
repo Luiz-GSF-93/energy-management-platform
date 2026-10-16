@@ -97,7 +97,7 @@ BEGIN
   END LOOP;
   IF data->>'modelKey' IS NULL OR data->>'modelKey' !~ '^[a-f0-9]{64}$' OR (data#>>'{evaluation,threshold}')::numeric NOT BETWEEN 0.9 AND 1 THEN RAISE EXCEPTION 'Invalid model' USING ERRCODE='22023';END IF;
   SELECT (SELECT count(*) FROM public.eva_tariff_model_evaluations WHERE organization_id=p_org AND model_key=data->>'modelKey')+(SELECT count(*) FROM public.eva_tariff_events e WHERE e.organization_id=p_org AND e.kind='RESERVEMODEL' AND e.payload->>'modelKey'=data->>'modelKey' AND NOT EXISTS(SELECT 1 FROM public.eva_tariff_imports i WHERE i.organization_id=p_org AND i.document_id=e.subject_id::text)) INTO revision_count;
-  IF revision_count>=6 THEN RAISE EXCEPTION 'Model revision limit: 6' USING ERRCODE='22023';END IF;
+  IF revision_count>=6 OR (SELECT count(*) FROM public.eva_tariff_imports WHERE organization_id=p_org AND document_id=doc.id)>6 THEN RAISE EXCEPTION 'Model revision limit: 6' USING ERRCODE='22023';END IF;
   -- Upload already consumes one document. Re-evaluating a retained document consumes an additional unit.
   charge:=CASE WHEN EXISTS(SELECT 1 FROM public.eva_tariff_imports WHERE organization_id=p_org AND document_id=doc.id AND id<>p_id) THEN 1 ELSE 0 END;
   PERFORM pg_advisory_xact_lock(hashtextextended(p_org,315));
