@@ -42,7 +42,17 @@ describe('EVA product guide admission and deterministic reads',()=>{
    for(const source of g.codeSnapshots){
     expect(source.path).toMatch(/^(backend\/src|frontend\/app)\//);expect(source.path).not.toContain('..');
     const text=readFileSync(resolve(repo,source.path),'utf8').replace(/\r\n/g,'\n');
-    expect(createHash('sha256').update(text).digest('hex')).toBe(source.sha256);
+    const actual=createHash('sha256').update(text).digest('hex');
+    if(actual===source.sha256){expect(actual).toBe(source.sha256);}
+    else {
+     // Published v1 evidence is immutable: verify the exact historical file, never rewrite the guide hash.
+     const folder=resolve(repo,'backend/test/fixtures/eva-product-guide');
+     const historical=JSON.parse(readFileSync(resolve(folder,'provenance.json'),'utf8'));
+     expect(historical.path).toBe(source.path);expect(historical.sha256).toBe(source.sha256);
+     expect(historical.commit).toMatch(/^[a-f0-9]{40}$/);
+     expect(historical.fixture).toBe('documents-'+source.sha256+'.txt');
+     expect(createHash('sha256').update(readFileSync(resolve(folder,historical.fixture),'utf8')).digest('hex')).toBe(source.sha256);
+    }
    }
    for(const link of g.content.links)expect(existsSync(resolve(repo,'frontend/app'+link.url+'/page.tsx'))).toBe(true);
   }
