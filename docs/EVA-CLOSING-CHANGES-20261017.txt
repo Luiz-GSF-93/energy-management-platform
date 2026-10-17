@@ -1,0 +1,60 @@
+EVA — CONVERSA E CORREÇÕES DO FECHAMENTO
+
+Entrega inicialmente desligada. Não habilitar EVA_CLOSING_DIALOGUE_ENABLED,
+EVA_CLOSING_DIALOGUE_CALLS_ENABLED ou EVA_CLOSING_CHANGES_ENABLED automaticamente.
+EVA_INVOICE_COMPARISON_ENABLED e OCR/corpus atuais permanecem como encontrados.
+
+Reutiliza o chat lateral. Perguntas consultam o relatório/hash selecionado e não
+descontam documentos. IA/RAG continuam nos controles existentes de licença,
+orçamento e auditoria. Normas somente a partir de fontes publicadas aplicáveis.
+
+Correções usam gramática restrita em português, propostas estruturadas e motor
+decimal determinístico. Não existe execução de código, SQL ou ação arbitrária
+produzida pelo modelo. Pedidos sem campo/valor/base/cenário suficiente pedem
+esclarecimento. Escopo: unidade e competência selecionadas, todas as unidades
+do cliente preservadas no consolidado. Até12 operações por proposta, 30 propostas
+por usuário/organização/hora, validade20min. Não há repetição automática de OCR.
+
+Exemplos:
+Mostre a memória de cálculo e justifique o honorário variável.
+Altere o honorário fixo para 1300.
+Altere o preço do fornecedor para 151.82.
+Altere ICMS ACR para 18% por dentro base: 1000.
+Altere PIS ACL para 0.67% por fora base: 1000.
+Altere ICMS ACR valor fixo para 900.00.
+Altere tarifa TE ACR ponta para 0.43188.
+Altere quantidade TUSD energia ACR fora ponta para 110307.19.
+Altere crédito adicional ACR para 50; altere honorário fixo para 1200.
+
+Números sem separador de milhar; ponto ou vírgula decimal. Bases tributárias
+informadas são premissas explícitas do operador, não constatações fiscais.
+O tributo alterado substitui somente seu montante anterior no cenário escolhido;
+não duplica tributos embutidos. Dentro: base*alíquota/(100-alíquota).
+Fora: base*alíquota/100. Não inferir interação fiscal entre tributos.
+Tarifas/quantidades ficam sobrepostas apenas no estudo. OCR, cadastros,
+contratos, vigências e biblioteca compartilhada não são editados pelo chat.
+Uma nova versão ainda requer decisão humana e não publica nem cobra.
+
+Modelo de dados: três tabelas privadas, RLS forçada e imutabilidade:
+eva_closing_change_proposals; eva_closing_change_events;
+eva_closing_document_credits. Reutiliza versões/eventos de fechamento existentes.
+Proposta pertence ao mesmo autor, organização, unidade, competência e hash.
+Confirmação revalida direitos, licença, fontes e última versão. Na mesma
+transação cria versão, conclui preparação e lança1documento. Replay retorna
+resultado anterior. Falha desfaz tudo; status consulta o mesmo identificador.
+Cancelar/consultar/prévia não descontam. Recursos ilimitados mantêm esse caráter.
+organization_resource_usage soma o novo ledger à fórmula anterior sem backfill.
+
+Migração: 20261112_eva_closing_changes.sql. Auditar em rollback antes de aplicar,
+preservando linhas/grants/funções não relacionadas e conferindo que uso inicial
+de documentos não muda. Rollback operacional por flag; não apagar histórico.
+Aplicar somente com testes/CI aprovados; nenhuma correção real neste deploy.
+
+Limites explícitos da entrega: não é uma ferramenta para editar qualquer campo
+do software. Fórmulas/operações fora da lista, alterações normativas, permissões,
+licenças, publicações e pagamentos não são executados por texto. Versões sem
+composição completa e memória V2 exigem reconferência das fontes no fluxo atual.
+O consolidado recalculado preserva a comparação anterior como fonte histórica
+e recalcula diferenças financeiras com os totais novos; as leituras originais
+da fatura permanecem identificadas. Tarifas antigas não são reclassificadas
+como comparáveis sem nova evidência. Fontes e ajustes são exibidos separadamente.
