@@ -1,7 +1,9 @@
-const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),pglite=require('@electric-sql/pglite');
+let PGlite=pglite.PGlite;
+if(process.env.EVA_CHANGES_TEST_PG_PORT){if(process.env.EVA_CHANGES_TEST_PG_PORT!=='55484')throw Error('Disposable loopback only');const {Pool}=require('pg');PGlite=class{constructor(){this.ready=(async()=>{const a=new Pool({host:'127.0.0.1',port:55484,user:'postgres',database:'postgres'});await a.query('CREATE DATABASE eva_closing_changes_test');await a.end();this.pool=new Pool({host:'127.0.0.1',port:55484,user:'postgres',database:'eva_closing_changes_test',max:4})})();}async exec(sql){await this.ready;return this.pool.query(sql)}async query(sql,args){await this.ready;return this.pool.query(sql,args)}async close(){await this.ready;return this.pool.end()}};}
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 (async()=>{const db=new PGlite();let checks=0;const ok=x=>{assert(x);checks++},deny=async f=>{await assert.rejects(f);checks++};try{
- const fixture=fs.readFileSync(path.join(__dirname,'calculation-autofill.cjs'),'utf8').split('await db.exec(`')[1].split('`);')[0].replace(/\$\{id\((\d+)\)\}/g,(_,n)=>id(n)).replace(/\$\{'a'\.repeat\(64\)\}/g,'a'.repeat(64));await db.exec(fixture);
+ const fixture=fs.readFileSync(path.join(__dirname,'calculation-autofill.cjs'),'utf8').split('await db.exec(`')[1].split('`);')[0].replace(/\$\{id\((\d+)\)\}/g,(_,n)=>id(n)).replace(/\$\{'a'\.repeat\(64\)\}/g,'a'.repeat(64));await db.exec(process.env.EVA_CHANGES_TEST_PG_PORT?fixture.replace('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;',''):fixture);
  await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261109_calculation_autofill.sql'),'utf8'));
  await db.exec(`ALTER TABLE licenses ADD COLUMN id text;UPDATE licenses SET id=organization_id;ALTER TABLE licenses ADD PRIMARY KEY(id);ALTER TABLE licenses ADD COLUMN documents_used bigint DEFAULT 0;ALTER TABLE licenses ADD COLUMN documents_limit bigint DEFAULT 3;ALTER TABLE licenses ADD COLUMN documents_unlimited boolean DEFAULT false;
  UPDATE roles SET permissions=permissions||'["62443ab1-9187-42e4-a932-a7cf54f76250"]';
@@ -22,7 +24,7 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  const p=await change('propose',id(40),body);ok(p.state==='PROPOSED'&&!p.charged&&p.documentCharge===1);ok(await usage()===1);
  await deny(()=>change('confirm',id(40),{hash:p.hash,acknowledge:false}));await deny(()=>change('confirm',id(40),{hash:'f'.repeat(64),acknowledge:true}));
  const results=await Promise.all([change('confirm',id(40),{hash:p.hash,acknowledge:true}),change('confirm',id(40),{hash:p.hash,acknowledge:true})]);ok(results.every(r=>r.state==='APPLIED'&&r.charged));ok(await usage()===2);ok((await close('history',null,{page:0})).total===2);
- ok((await db.query('SELECT count(*) n FROM eva_closing_document_credits')).rows[0].n===1);ok((await db.query("SELECT documents_used FROM licenses WHERE id='org'")).rows[0].documents_used===2);
+ ok(Number((await db.query('SELECT count(*) n FROM eva_closing_document_credits')).rows[0].n)===1);ok(Number((await db.query("SELECT documents_used FROM licenses WHERE id='org'")).rows[0].documents_used)===2);
  ok((await change('status',id(40),{hash:p.hash})).closingId===id(40));
  const b2={...body,sourceId:id(40),sourceHash:p.hash,reportHash:'d'.repeat(64)};const p2=await change('propose',id(41),b2);await change('cancel',id(41),{hash:p2.hash});await deny(()=>change('confirm',id(41),{hash:p2.hash,acknowledge:true}));ok(await usage()===2);
  const p3=await change('propose',id(42),{...b2,reportHash:'e'.repeat(64)});await db.exec("UPDATE licenses SET documents_limit=2 WHERE id='org'");await deny(()=>change('confirm',id(42),{hash:p3.hash,acknowledge:true}));ok(await usage()===2);ok((await close('history',null,{page:0})).total===2);

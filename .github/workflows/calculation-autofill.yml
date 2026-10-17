@@ -87,6 +87,11 @@ jobs:
         env:
           NODE_PATH: /tmp/calculation-pg-driver/node_modules
           EVA_TARIFF_TEST_PG_PORT: '55484'
+      - run: node test/eva-closing-changes.cjs
+        working-directory: backend
+        env:
+          NODE_PATH: /tmp/calculation-pg-driver/node_modules
+          EVA_CHANGES_TEST_PG_PORT: '55484'
       - run: node test/financial-settlements.cjs
         working-directory: backend
       - run: npm ci --ignore-scripts
