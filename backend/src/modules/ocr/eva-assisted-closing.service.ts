@@ -21,7 +21,13 @@ export class EvaAssistedClosingService{
   if(r.error?.code==='22023')throw new BadRequestException('Dados insuficientes ou decisão inválida.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }
- async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',changesEnabled:this.config.get('EVA_CLOSING_CHANGES_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...await this.rpc('history',scope,t,null,{page:Number(page)})};}
+ async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',contextEnabled:this.config.get('EVA_CLOSING_CONTEXT_ENABLED')==='true',changesEnabled:this.config.get('EVA_CLOSING_CHANGES_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...await this.rpc('history',scope,t,null,{page:Number(page)})};}
+ async dialogueUnit(q:any,t:TenantContext){
+  if(!this.enabled())throw new ServiceUnavailableException('Fechamento desligado.');this.scope(q);
+  const captured=await this.rpc('capture',q,t,null,{}),u=captured?.financial?.tables?.consumer_units?.find((u:any)=>u.id===q.consumerUnitId&&u.organization_id===t.organizationId);
+  if(!u)throw new ForbiddenException('Unidade fora do escopo.');
+  return Object.fromEntries(['id','distributor','tariff_group','tariff_subgroup','tariff_modality','consumption_class','voltage','state','free_market'].map(k=>[k,u[k]??null]));
+ }
  async prepare(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento assistido desligado.');
   if(!b||Object.keys(b).sort().join(',')!=='consumerUnitId,month,requestId'||!uuid(b.requestId))throw new BadRequestException('Preparação inválida.');
