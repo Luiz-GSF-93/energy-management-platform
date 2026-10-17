@@ -29,7 +29,7 @@ export function tariffCandidates(c:any){
  return {formatVersion:1,documentId:c.document.id,sourceHash:c.document.file_hash,layout:layout.layoutId,candidates,profile:{distributor:profile.distributor,group:profile.tariff_group,subgroup:profile.tariff_subgroup,modality:profile.tariff_modality,consumptionClass:profile.consumption_class},message:'Proposta de extração. Campos ausentes não viram zero; corrija e confira antes de registrar uma versão.'};
 }
 
-export type InvoiceComparison={method:'SAME_INVOICE_QUANTITIES_AND_CHARGES_V1';amount:string|null;lines:any[];retained:any[];observations:string[];missing:string[];library:any};
+export type InvoiceComparison={method:'SAME_INVOICE_QUANTITIES_AND_CHARGES_V1'|'SAME_INVOICE_AMOUNTS_V2';taxes?:any[];amount:string|null;lines:any[];retained:any[];observations:string[];missing:string[];library:any};
 /** Explicit user-requested counterfactual; never labels a measured quantity as legally billed. */
 export function invoiceComparison(c:any,p:any,libraries:any[]):InvoiceComparison{
  const selected=selectAutofillLibrary(libraries,c.unit,c.month),lib=selected.record;
