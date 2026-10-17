@@ -15,7 +15,7 @@ export class EvaClosingDialogueService{
  async answer(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Conversa do fechamento desligada.');
   if(!t.permissions?.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('Sem permissão para conversar com a EVA.');
-  if(!b||!['consumerUnitId,hash,id,month,question','consumerUnitId,hash,id,month,previousQuestion,question'].includes(Object.keys(b).sort().join(','))||typeof b.question!=='string'||!b.question.trim()||b.question.length>2000||b.previousQuestion!==undefined&&(typeof b.previousQuestion!=='string'||b.previousQuestion.length>300))throw new BadRequestException('Pergunta inválida.');
+  if(!b||!['consumerUnitId,hash,id,month,question','consumerUnitId,hash,id,month,previousQuestion,question'].includes(Object.keys(b).sort().join(','))||typeof b.question!=='string'||!b.question.trim()||b.question.length>500||b.previousQuestion!==undefined&&(typeof b.previousQuestion!=='string'||b.previousQuestion.length>300))throw new BadRequestException('Pergunta inválida.');
   const q={consumerUnitId:b.consumerUnitId,month:b.month,page:'0'},history=await this.closing.history(q,t),row=history.rows?.find((r:any)=>r.id===b.id&&r.payload_hash===b.hash);
   if(!row||!row.report?.unitIds?.includes(b.consumerUnitId))throw new ConflictException('Selecione uma versão atual disponível.');
   const report=row.report,period=monthPeriod(b.month),question=b.question.trim();
