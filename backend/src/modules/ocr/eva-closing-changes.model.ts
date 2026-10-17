@@ -8,7 +8,7 @@ const cents=(v:unknown)=>{if(typeof v!=='string'||! /^-?(0|[1-9][0-9]{0,11})(\.\
 const fmt=(n:bigint)=>{const s=(n<0n?-n:n).toString().padStart(3,'0');return (n<0n?'-':'')+s.slice(0,-2)+'.'+s.slice(-2);};
 const round=(n:bigint,d:bigint)=>{if(d<=0n)throw Error('Base inválida.');return (n<0n?-1n:1n)*(((n<0n?-n:n)+d/2n)/d);};
 const normal=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-export const isChangeRequest=(q:string)=>/\b(alter[ae]|alterar|ajust[ae]|ajustar|corrij[ae]|corrigir|substitu[ai]|substituir|mude|mudar|recalcul[ae]|recalcular)\b/.test(normal(q))&&!/^\s*(como|por que|porque|posso|qual)\b/.test(normal(q));
+export const isChangeRequest=(q:string)=>/\b(alter[ae]|alterar|ajust[ae]|ajustar|corrij[ae]|corrigir|substitu[ai]|substituir|mude|mudar|recalcul[ae]|recalcular|modifique|modificar|aumente|reduza|troque)\b/.test(normal(q))&&!/^\s*(como|por que|porque|posso|qual)\b/.test(normal(q));
 /** Restricted natural-language grammar. Unknown or ambiguous instructions never execute. */
 export function parseClosingChanges(question:string,unitId:string):ClosingChange[]{
  if(typeof question!=='string'||question.length>2000||!isChangeRequest(question))throw Error('Diga qual valor deseja alterar. Perguntas não alteram o fechamento.');
@@ -16,15 +16,17 @@ export function parseClosingChanges(question:string,unitId:string):ClosingChange
  const clauses=question.split(/[;\n]+/).map(s=>normal(s).trim()).filter(Boolean);if(!clauses.length||clauses.length>12)throw Error('Informe até 12 ajustes separados por ponto e vírgula.');
  const changes:ClosingChange[]=[];
  for(const s of clauses){
+  if(/\b(ou|talvez|se)\b/.test(s))throw Error('O pedido tem alternativas ou condições. Informe um ajuste definido para a prévia.');
   const num='(0|[1-9][0-9]{0,11})(?:[.,][0-9]{1,6})?';
   const valueAfter=(label:string)=>{const m=s.match(new RegExp(label+'\\s*(?:para|=|:)\\s*(?:r\\$\\s*)?('+num+')(?=\\s|%|$)'));return m?.[1].replace(',','.');};
   const tax=s.match(/\b(icms|pis|cofins)\b/),scenario=s.match(/\b(acr|acl)\b/g);
   if(tax){
+   if(new Set(s.match(/\b(icms|pis|cofins)\b/g)).size!==1||/honorario|fornecedor|tarifa|quantidade|custo adicional|credito adicional/.test(s))throw Error('Separe cada imposto e demais campos por ponto e vírgula.');
    if(!scenario||new Set(scenario).size!==1)throw Error('Informe o cenário ACR ou ACL do imposto.');
    const mode=s.includes('por dentro')?'INSIDE':s.includes('por fora')?'OUTSIDE':s.includes('valor fixo')?'FIXED':null;
    if(!mode||s.includes('por dentro')&&s.includes('por fora'))throw Error('Informe valor fixo, por dentro ou por fora e a base do imposto.');
    if(mode==='FIXED'){const value=valueAfter('valor fixo');if(!value)throw Error('Exemplo: alterar ICMS ACR valor fixo para 900.00.');changes.push({unitId,kind:'TAX',target:tax[1].toUpperCase(),scenario:scenario[0].toUpperCase() as any,mode,value});}
-   else{const r=s.match(new RegExp('('+num+')\\s*%')),base=valueAfter('base');if(!r||!base)throw Error('Informe alíquota e base em reais. Exemplo: alterar ICMS ACR para 18% por dentro base: 1000.00. A base informada será registrada como premissa do operador.');changes.push({unitId,kind:'TAX',target:tax[1].toUpperCase(),scenario:scenario[0].toUpperCase() as any,mode,rate:r[1].replace(',','.'),base,baseLabel:'Base independente em reais informada pelo operador no comando; não é base fiscal confirmada.'});}
+   else{const r=s.match(new RegExp('('+num+')\\s*%')),base=valueAfter('base');if(!r||!base||(s.match(/%/g)??[]).length!==1||(s.match(/\bbase\s*(?:para|=|:)/g)??[]).length!==1)throw Error('Informe alíquota e base em reais. Exemplo: alterar ICMS ACR para 18% por dentro base: 1000.00. A base informada será registrada como premissa do operador.');changes.push({unitId,kind:'TAX',target:tax[1].toUpperCase(),scenario:scenario[0].toUpperCase() as any,mode,rate:r[1].replace(',','.'),base,baseLabel:'Base independente em reais informada pelo operador no comando; não é base fiscal confirmada.'});}
   }else{
    const rules:[RegExp,ClosingChange['kind'],string][]=[[/honorario\s+fixo/,'AMOUNT','fixedFee'],[/honorario\s+variavel/,'PERCENT','feePercentage'],[/preco\s+(?:do\s+)?fornecedor/,'AMOUNT','supplierPrice'],[/valor\s+(?:do\s+)?fornecedor/,'AMOUNT','supplier'],[/total\s+(?:da\s+)?(?:fatura|distribuidora)/,'AMOUNT','invoice'],[/custo\s+adicional\s+acr/,'AMOUNT','extraAcr'],[/custo\s+adicional\s+acl/,'AMOUNT','extraAcl'],[/credito\s+adicional\s+acr/,'AMOUNT','creditAcr'],[/credito\s+adicional\s+acl/,'AMOUNT','creditAcl']];
    const matches=rules.filter(([r])=>r.test(s));
