@@ -3,7 +3,7 @@ import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {CalculationAutofillService} from './calculation-autofill.service';
-import {invoiceComparison} from './eva-tariff-workbench.model';
+import {invoiceComparisonV2} from './invoice-comparison-v2';
 import {autofillHash} from './calculation-autofill.model';
 import {assistedClosingReport,ClosingEntry} from './eva-assisted-closing.model';
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
@@ -37,7 +37,7 @@ export class EvaAssistedClosingService{
    if(u.status!=='ACTIVE'){entries.push({unitId:u.id,name:u.name??u.id,unavailable:'Unidade inativa exige conferência da cobertura do cliente.'});continue;}
    const c=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
    const uncertain=(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state));
-   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:invoiceComparison(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
+   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:invoiceComparisonV2(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
   }
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   const r=await this.rpc('reserve',q,t,b.requestId,{basis,hash,report,sources});

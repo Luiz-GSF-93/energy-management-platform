@@ -1,0 +1,17 @@
+EVA — COMPARAÇÃO FINANCEIRA COM VALORES DA FATURA — 17/10/2026
+
+Base PR410/main3f3738cb9f0528d2f8b41240666354b0a0776f28. Implementação autorizada após impactos ENERGYOS-FECHAMENTO-ACR-OCR-COMPLETO-IMPACTOS-20261017 e escolha explícita de conservar impostos em reais e exibir alíquotas. Não reaplicar alíquotas sobre o novo ACR.
+
+invoiceComparisonV2 é um adaptador determinístico novo, separado da metodologia V1. Seleciona biblioteca única da organização, com enquadramento e vigência integral e taxTreatment NET explícito. Não assume NET para bibliotecas antigas e não altera automaticamente seu cadastro. Usa TE/TUSD da biblioteca e os consumos da fatura; demanda é a soma das quantidades faturadas por posto, sem adicionar medida/contratada. Reativo é preservado com quantidade/unidade/valor final lidos, sem tarifa reativa da biblioteca aplicada novamente.
+
+Concilia todas as rubricas com o total da fatura. Substitui energia/rede/demanda por valores líquidos da biblioteca; conserva tributos monetários das rubricas substituídas e conserva valores brutos das demais rubricas, inclusive reativo, despesas/créditos e correção monetária. Impostos embutidos nas parcelas retidas não são novamente somados. O subtotal de tarifas e o conjunto de parcelas retidas formam o comparativo.
+
+O resumo impresso de cada imposto deve coincidir com a soma de células conhecidas, sem valores negativos/incompatíveis, fonte inválida ou diferença inexplicada. Célula vazia continua sem valor individual demonstrado; não é gravada como zero ou isenta. Conciliação agregada comprova o montante conservado, não incidência fiscal nova. Alíquotas impressas ICMS/PIS/Cofins têm fonte própria e não são utilizadas para recálculo. Ambiguidade do percentual não cria valor inventado.
+
+O adaptador utiliza a projeção V2 já validada para Atualização Monetária sem mudar o parser compartilhado. Rubrica desconhecida, sinais conflitantes, fontes repetidas, divergência aritmética/material, biblioteca bruta/desconhecida, componentes/quantidades ausentes ou total não conciliado impedem elegibilidade financeira.
+
+O fechamento mantém contrato/honorário vigente ou referência permitida, consolida todas as unidades e calcula fixo+variável/economia com decimais determinísticos. A tela mostra o percentual contratado mesmo antes do valor monetário e a memória dos impostos preservados. Estimativa comparativa permanece identificada; Aprovar/Rejeitar é decisão humana com confirmação e justificativa, sem publicação ou cobrança automática.
+
+Nenhuma tabela/migração/dependência nova, grant, licença, identidade ou RLS alterada. Reutiliza versões/eventos/auditoria/idempotência existentes e leitores legados. Versões1–3 não são reescritas; adaptação está condicionada a EVA_INVOICE_COMPARISON_ENABLED. Entrega false, mantendo V2 OCR true e todas as demais flags. Sem novo OCR, revisão/cota de documentos ou chamada IA paga nesta implementação.
+
+Homologação posterior delimitada: confirmar origem líquida da biblioteca CPFL e registrar nova versão com metadado NET/fonte/justificativa, preservando tarifas/período/anteriores; habilitar somente comparação; preparar uma única nova versão financeira de setembro pelo usuário autorizado, sem Aprovar/Rejeitar pelo agente. Essa execução real deve ser autorizada após a entrega técnica. Não prometer fechamento final enquanto a simulação/fontes não comprovarem composição integral.
