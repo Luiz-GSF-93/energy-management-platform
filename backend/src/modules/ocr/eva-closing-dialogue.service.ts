@@ -8,7 +8,7 @@ import {EvaAssistedClosingService} from './eva-assisted-closing.service';
 import {EvaKnowledgeRagService} from './eva-knowledge-rag.service';
 import {BackofficeAiService} from './backoffice-ai.service';
 import {monthPeriod} from '../contracts/services/preparation';
-import {closingEvidence,closingIntent,closingMarkets,fitClosingEvidence,validClosingMemory,CLOSING_CONTEXT_VERSION} from './eva-closing-context';
+import {closingDataAnswer,closingEvidence,closingIntent,closingMarkets,fitClosingEvidence,validClosingMemory,CLOSING_CONTEXT_VERSION} from './eva-closing-context';
 @Injectable()
 export class EvaClosingDialogueService{
  constructor(private config:ConfigService,private closing:EvaAssistedClosingService,private rag:EvaKnowledgeRagService,private ai:BackofficeAiService,@Optional() private changes?:EvaClosingChangesService){}
@@ -74,7 +74,8 @@ export class EvaClosingDialogueService{
    if(caveat||fitted.omitted)fitted.evidence.push({id:'retrieval-status',label:'Cobertura das fontes',value:JSON.stringify({officialAvailable:hasOfficial,omitted:fitted.omitted,limitation:caveat||'Trechos completos selecionados por relevância dentro do orçamento de contexto; não alegar cobertura integral da norma.'}),source:'Controle de recuperação; não é fundamento normativo.'});
    if(Buffer.byteLength(JSON.stringify(fitted.evidence))>45000)throw new BadRequestException('Não foi possível selecionar evidências suficientes dentro do limite; nenhuma alteração foi feita.');
    const result=await this.ai.interpret(t,b.question.trim(),fitted.evidence,undefined,'CHAT');answer=caveat+(result.state==='READY'&&result.answer?result.answer:result.message);mode=result.state;
-  }else{answer='Consulta de IA desligada. Valores registrados na versão '+row.version+': '+JSON.stringify(row.report.financial)+'. As informações são do fechamento, sem conclusão normativa.';}
+   if(result.state==='NO_EVIDENCE'&&intent.financial){answer=(caveat||'Os trechos recuperados não sustentam uma conclusão normativa sobre esta pergunta. ')+closingDataAnswer(row,b.consumerUnitId);mode='FINANCIAL_ONLY';sources=[];}
+  }else{answer='Consulta de IA desligada. '+closingDataAnswer(row,b.consumerUnitId);}
   for(let i=0;i<proofs.length;i+=8)await this.rag.revalidate(t,proofs.slice(i,i+8));
   const fresh=await this.closing.history(q,t);if(!fresh.rows?.some((r:any)=>r.id===row.id&&r.payload_hash===row.payload_hash&&r.state===row.state))throw new ConflictException('A versão mudou durante a resposta.');
   return {name:'EVA',id:row.id,hash:row.payload_hash,answer,mode,sources,canApprove:false,canPublish:false,context:{version:CLOSING_CONTEXT_VERSION,questions:memory.length,topic:intent.topic,markets,officialAvailable:hasOfficial,omitted:fitted.omitted},checkedAt:new Date().toISOString()};

@@ -43,3 +43,9 @@ export function fitClosingEvidence(base:AiEvidence[],official:AiEvidence[]){
  for(const e of official){if(ids.has(e.id))continue;const size=Buffer.byteLength(JSON.stringify(e))+1;if(used+size<=43000){result.push(e);ids.add(e.id);used+=size;}else omitted++;}
  return {evidence:result,omitted};
 }
+export function closingDataAnswer(row:any,unitId:string){
+ const labels:Record<string,string>={acr:'ACR',aclBeforeFees:'ACL antes dos honorários',fixedFee:'honorário fixo',variableFee:'honorário variável',totalFees:'honorários totais',aclAfterFees:'ACL com honorários',savings:'economia',savingsPercent:'economia (%)'};
+ const describe=(f:any)=>Object.entries(labels).filter(([k])=>typeof f?.[k]==='string'&&/^-?\d{1,18}\.\d{1,6}$/.test(f[k])).map(([k,l])=>l+': '+(k==='savingsPercent'?f[k]+'%':Number(f[k]).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}))).join('; ');
+ const u=row.report.units?.find((u:any)=>u.id===unitId);
+ return 'Valores registrados na versão '+row.version+': '+(u?'unidade selecionada — '+describe(u)+'. ':'')+'Consolidado do cliente — '+describe(row.report.financial)+'. Estes são resultados do estudo, sujeitos às hipóteses e observações preservadas; não demonstram por si só uma regra tributária. Nenhum valor foi alterado.';
+}
