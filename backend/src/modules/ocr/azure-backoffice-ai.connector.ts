@@ -21,7 +21,8 @@ const instruction=`Você é EVA, a Analista Virtual do EnergyOS, no contexto do 
 export function validateInterpretation(raw:unknown,evidence:AiEvidence[]):AiInterpretation {
  const v=raw as AiInterpretation;
  if(!v||typeof v!=='object'||Object.keys(v).sort().join(',')!=='answer,citations,doubts,fields,supported'||typeof v.supported!=='boolean'||typeof v.answer!=='string'||!v.answer.trim()||v.answer.length>5000||/[<>]|https?:\/\//i.test(v.answer)||!Array.isArray(v.citations)||v.citations.length>40||!Array.isArray(v.fields)||v.fields.length>80||!Array.isArray(v.doubts)||v.doubts.length>20)throw new BackofficeAiError('INVALID_RESPONSE');
- const byId=new Map(evidence.map(e=>[e.id,e]));
+ // Conversation memory can resolve references, but can never substantiate a citation or number.
+ const byId=new Map(evidence.filter(e=>e.id!=='untrusted-memory').map(e=>[e.id,e]));
  const citations=(ids:unknown)=>Array.isArray(ids)&&ids.length>0&&ids.length<=40&&ids.every(id=>typeof id==='string'&&byId.has(id));
  if(v.supported&&!citations(v.citations)||!v.supported&&(v.citations.length||v.fields.length||v.doubts.length))throw new BackofficeAiError('UNGROUNDED_RESPONSE');
  if(v.fields.some(f=>!f||Object.keys(f).sort().join(',')!=='evidenceId,key,value'||typeof f.key!=='string'||typeof f.value!=='string'||byId.get(f.evidenceId)?.fieldKey!==f.key||byId.get(f.evidenceId)?.value!==f.value||!v.citations.includes(f.evidenceId))||new Set(v.fields.map(f=>f.key)).size!==v.fields.length)throw new BackofficeAiError('UNGROUNDED_FIELD');
