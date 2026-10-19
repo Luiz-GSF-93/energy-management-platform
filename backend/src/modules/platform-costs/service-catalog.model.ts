@@ -24,6 +24,7 @@ export function catalogCommand(v:unknown){
  return {...b,requestId:catalogUuid(b.requestId),expectedRevisionId:b.expectedRevisionId===null?null:catalogUuid(b.expectedRevisionId),justification:b.justification.trim(),definition:d as CostServiceDefinition};
 }
 export const COST_SERVICE_PRESETS=[
+ ['ccee-integration','CCEE · integração, processamento e tráfego','CCEE / infraestrutura EnergyOS','SERVER','PLANNED','PLANNED','NOT_CONNECTED'],
  ['azure-openai','Azure OpenAI · EVA e interpretação','Microsoft Azure','AI','PRODUCTION','ACTIVE','TELEMETRY'],
  ['azure-embeddings','Azure OpenAI · embeddings','Microsoft Azure','AI','PRODUCTION','ACTIVE','TELEMETRY'],
  ['azure-ocr','Azure Document Intelligence · páginas OCR','Microsoft Azure','OCR','PRODUCTION','ACTIVE','NOT_CONNECTED'],

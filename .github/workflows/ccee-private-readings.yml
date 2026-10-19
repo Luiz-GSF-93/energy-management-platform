@@ -1,0 +1,42 @@
+name: CCEE private readings R1
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ccee/**'
+      - 'backend/src/database/migrations/*ccee*'
+      - 'backend/test/database/ccee*'
+      - 'backend/package*.json'
+      - 'frontend/app/backoffice/ccee-data/**'
+      - 'frontend/app/components/Ccee*'
+      - 'frontend/app/backoffice/platform-costs/CceeMetrics.tsx'
+      - 'frontend/test/ccee*'
+      - '.github/workflows/ccee-private-readings.yml'
+permissions:
+  contents: read
+jobs:
+  private-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/platform-costs/service-catalog.spec.ts
+        working-directory: backend
+      - run: node test/database/ccee-r1.test.mjs
+        working-directory: backend
+      - run: node test/database/ccee-private-intake.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/ccee-data.cjs
+        working-directory: frontend
+      - run: node test/ccee-integration.cjs
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

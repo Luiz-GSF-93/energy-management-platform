@@ -6,5 +6,9 @@ import {SupabaseService} from '../../services/supabase.service';
 import {LicensesModule} from '../licenses/licenses.module';
 import {CceeRegistrationController} from './ccee-registration.controller';
 import {CceeRegistrationService} from './ccee-registration.service';
-@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController],providers:[CceeService,CceePublicationService,CceeRegistrationService,SupabaseService]})
+import {CceeDataService} from './ccee-data.service';
+import {CceePrivateConnector} from './ccee-private.connector';
+import {CceeDataWorker} from './ccee-data.worker';
+import {CceeDataController,CceeCalendarController,CceeDataMetricsController} from './ccee-data.controller';
+@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController],providers:[CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDataWorker,SupabaseService]})
 export class CceeModule {}

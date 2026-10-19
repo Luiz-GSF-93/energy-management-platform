@@ -31,17 +31,18 @@ export class CceeService {
     if(!profilePresent(response.body,config.profile))throw new Error('CCEE_PROFILE_NOT_CONFIRMED');
     return {authenticated:true,organizationId:config.organizationId,profileConfirmed:true,checkedAt:new Date().toISOString(),imported:false};
   });}
-  async preview(input:unknown){
+  async preview(input:unknown,observer?:{attempt:()=>void;response:(bytes:number)=>void}){
     if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length!==1||!('month' in input)||typeof input.month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month)||input.month<'2021-01'||input.month>=new Date().toISOString().slice(0,7))throw new BadRequestException('Informe um mês encerrado a partir de janeiro de 2021.');
     const month=input.month;
     return this.run(async config=>{
-      const proof=parseCcee(await cceeRead(config,'profile'),'profile',1);
+      const read=async(kind:'profile'|'pld',page=1)=>{observer?.attempt();const xml=await cceeRead(config,kind,page,kind==='pld'?month:undefined);observer?.response(Buffer.byteLength(xml));return xml;};
+      const proof=parseCcee(await read('profile'),'profile',1);
       if(!profilePresent(proof.body,config.profile))throw new Error('CCEE_PROFILE_NOT_CONFIRMED');
       const rows:PldHour[]=[],hashes:string[]=[];let pages=1,total=-1;
       const deadline=Date.now()+90000;
       for(let page=1;page<=pages;page++){
         if(Date.now()>deadline)throw new Error('CCEE_TIMEOUT');
-        const response=parseCcee(await cceeRead(config,'pld',page,month),'pld',page);
+        const response=parseCcee(await read('pld',page),'pld',page);
         if(page>1&&(response.pages!==pages||response.total!==total))throw new Error('CCEE_CHANGED_PAGINATION');
         pages=response.pages;total=response.total;
         rows.push(...normalizeCceePld(response.body,month));hashes.push(response.hash);
