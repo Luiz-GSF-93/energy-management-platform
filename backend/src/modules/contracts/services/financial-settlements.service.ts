@@ -143,7 +143,7 @@ export class FinancialSettlementsService {
   for(const p of primary.eva){if(d.unitId&&!p.financial.units.some((u:any)=>u.id===d.unitId))continue;const snapshot=financialAnalytics(t.organizationId,primary.period,[p],d.unitId);history.push({...p.meta,customerName:p.customerName,amounts:snapshot.totals,current:selected.has(p.meta.id),reservations:p.reservations} as any);}
   const signature=(items:any[])=>JSON.stringify(items.map(p=>[p.meta.id,p.meta.payloadHash,p.meta.publishedAt,p.meta.status]));
   for(const result of [primary,comparison].filter(Boolean))if(signature(result!.eva)!==signature(await this.evaPublications(result!.period,t)))throw new ConflictException('As publicações mudaram durante a consulta. Atualize o painel.');
-  return {...base,primary:primary.data,comparison:comparison?.data??null,comparisonResult:comparison?compareFinancialAnalytics(primary.data,comparison.data):null,history,mode:'APPROVED_AND_PUBLISHED_REPORTS'};
+  return {...base,primary:primary.data,comparison:comparison?.data??null,comparisonResult:comparison?compareFinancialAnalytics(primary.data,comparison.data):null,history,mode:'PUBLISHED_REPORTS'};
  }
  private async portalMember(t:TenantContext){
   if(!t.organizationId||!t.userId)throw new UnauthorizedException('Contexto organizacional ausente.');
