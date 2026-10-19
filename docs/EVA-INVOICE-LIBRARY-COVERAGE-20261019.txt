@@ -1,0 +1,36 @@
+EVA — correção da preparação comparativa por fatura
+
+Problema: o seletor contava bibliotecas legadas sem origem líquida junto com
+bibliotecas NET antes de aplicar o requisito tributário da comparação V2.
+Uma fatura conciliada também parava por ausência de declaração manual de custos,
+mesmo na comparação autorizada que conserva as despesas da própria fatura.
+
+Correção: requisito NET aplicado na elegibilidade, depois de resolver os heads.
+Mantidos tenant, enquadramento, vigência integral e ambiguidade entre elegíveis.
+O modo legado do seletor não muda. Exclusões tributárias constam no relatório.
+Uma sucessora inelegível nunca ressuscita a versão anterior.
+
+Despesas: V2 registra prova do documento/hash/total após conciliação completa.
+Somente na ausência de registro mensal e com prova correspondente, o relatório
+mostra RECONCILED_INVOICE_ONLY. Não grava noCosts, não cria declaração humana,
+não altera o cadastro e não acrescenta despesas externas desconhecidas.
+Registros de custos existentes continuam conferidos, inclusive falhas de formato.
+Impostos e tarifas exibidos no relatório correspondem ao método utilizado;
+os parâmetros e planos legados continuam preservados nas fontes originais.
+O subtotal líquido ACR é apresentado separadamente do custo comparativo final.
+
+Compatibilidade: payload aditivo, nenhuma migração/tabela/dependência nova.
+Somente a comparação V2 sob EVA_INVOICE_COMPARISON_ENABLED usa a mudança.
+Histórico anterior imutável; novas preparações geram versões candidatas.
+Nenhuma chamada de OCR/Azure, débito de documentos, publicação ou aprovação
+financeira automática. Permissões, licenças, RPC, hashes e auditoria existentes.
+
+Validação local: 182 testes Jest em sete suites; build Nest; 45 verificações SQL
+descartáveis. Após ajuste do subtotal exibido, repetidos build e 31 testes V2.
+Replay privado de OCR preservado: duas causas removidas, valores completos e
+nenhum campo pendente. Isso não constitui homologação de produção nem decisão.
+CI do PR executa também os contratos de isolamento e frontend existentes.
+
+Autorização: metodologia de mesmos impostos/despesas e tarifas líquidas já
+aprovada na proposta de 16/10 e no PR411. Este ajuste corrige sua aplicação;
+não altera regras tributárias, score, cotas, corpus, escopo ou perfis.
