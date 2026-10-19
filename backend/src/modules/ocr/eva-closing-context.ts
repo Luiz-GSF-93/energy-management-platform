@@ -7,7 +7,7 @@ export function closingIntent(question:string,memory:string[]){
  const previous=memory.slice(-2).join(' · '),text=normalize((follow?previous+' · ':'')+question);
  const regulatory=/\b(aneel|ccee|ren\s*\d|resolucao|norma|regra|legislacao|icms|tributa)/.test(text);
  const topic=/icms|pis\b|cofins|impost|tribut|por dentro|por fora/.test(text)?'tax':/honorar/.test(text)?'fees':/compar|anterior|agosto|diferenc/.test(text)?'history':/tarifa|demanda|tusd|\bte\b|consum|reativ|memoria/.test(text)?'tariffs':'summary';
- const financial=/fechamento|estudo|unidade|compar|economia|valor|calcul|impost|icms|honorar|fatura|aliquota/.test(current)||follow;
+ const financial=/fechamento|estudo|unidade|compar|economia|valor|calcul|impost|icms|honorar|fatura|aliquota|consum|medi[cç]|diverg|\bkwh\b|scde/.test(current)||follow;
  return {text,follow,regulatory,topic,financial,query:(follow?previous+' · ':'')+question};
 }
 export function closingMarkets(text:string,unit:any):('ACL'|'ACR'|'COMMON')[]{

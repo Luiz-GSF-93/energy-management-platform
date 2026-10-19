@@ -58,13 +58,19 @@ export function quantityMicro(value:unknown,unit:unknown):bigint{
  const[a,b='']=value.split('.');return(BigInt(a)*1000000n+BigInt(b.padEnd(6,'0')))*(unit==='MWh'?1000n:1n);
 }
 const decimal=(n:bigint)=>(n/1000000n).toString()+'.'+(n%1000000n).toString().padStart(6,'0');
-export function measurementRows(xml:string,point:string,start:string,end:string){
+export function measurementRows(xml:string,point:string,start:string,end:string,diagnostics=false){
  const parsed=privateEnvelope(xml,1,'listarMedidaResponse'),rows=list(parsed.body?.medidas?.medida);
  if(rows.length>744)throw new CceeReadingError('MEASUREMENT_LIMIT');
  const seen=new Set<number>();let total=0n;const observations:string[]=[];
  const data=rows.map(r=>{
   const stamp=String(r.periodo?.fim??''),at=Date.parse(stamp);
-  if(r.pontoMedicao?.codigo!==point||!/^\d{4}-\d{2}-\d{2}T\d{2}:00:00(?:-03:00|Z)$/.test(stamp)||!Number.isFinite(at)||at<=Date.parse(start)||at>Date.parse(end)||seen.has(at))throw new CceeReadingError('MEASUREMENT_INTERVAL_OR_POINT_MISMATCH');
+  const fail=(code:string)=>{throw new CceeReadingError(diagnostics?code:'MEASUREMENT_INTERVAL_OR_POINT_MISMATCH');};
+  if(typeof r.pontoMedicao?.codigo!=='string'||!r.pontoMedicao.codigo)fail('MEASUREMENT_POINT_MISSING');
+  if(r.pontoMedicao?.codigo!==point)fail('MEASUREMENT_POINT_MISMATCH');
+  if(!stamp)fail('MEASUREMENT_TIMESTAMP_MISSING');
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:00:00(?:-03:00|Z)$/.test(stamp)||!Number.isFinite(at))fail('MEASUREMENT_TIMESTAMP_FORMAT');
+  if(at<=Date.parse(start)||at>Date.parse(end))fail('MEASUREMENT_INTERVAL_MISMATCH');
+  if(seen.has(at))fail('MEASUREMENT_DUPLICATE_TIMESTAMP');
   seen.add(at);let quantityKwh:string|null=null;
   try{const n=quantityMicro(r.consumoAtivo,r.unidade?.codigo);quantityKwh=decimal(n);total+=n;}catch{observations.push('Quantidade ou unidade não demonstrada em '+stamp);}
   if(r.status!=='HCC')observations.push('Qualidade '+String(r.status??'não informada')+' em '+stamp);
@@ -118,6 +124,7 @@ export class CceePrivateConnector{
   }
   const binding=job.binding;if(!binding)throw new CceeReadingError('BINDING_REQUIRED');
   let config:CceeConfig|undefined;const result:ReadingResult={complete:true,requests:0,bytes:0,durationMs:0,hashes:[],transactions:[],data:{rows:[],observations:[]}};
+  const diagnostics=process.env.CCEE_READING_DIAGNOSTICS_ENABLED==='true';let lastHttpStatus:number|null=null;
   try{
    config=cceeConfig(process.env);config={...config,profile:job.kind==='MEASUREMENTS'?binding.principal_profile_code:binding.profile_code};
    const month=job.month.slice(0,7),days=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).getUTCDate();
@@ -127,13 +134,17 @@ export class CceePrivateConnector{
     const day=month+'-'+String(index).padStart(2,'0'),next=new Date(Date.parse(day+'T00:00:00Z')+86400000).toISOString().slice(0,10),start=day+'T00:00:00-03:00',end=next+'T00:00:00-03:00';
     const payload=Buffer.from(privateSoap(config,job.kind,binding.measurement_point,job.measurement_kind??'FINAL',start,end,binding.meter_code,index));
     result.requests++;
-    let response:{xml:string;bytes:number};try{response=await this.fetch(config,job.environment,job.kind==='POINTS'?'/ws/v2/PontoMedicaoBSv2':'/ws/medc/ListarMedidaBSv1',job.kind==='POINTS'?'listarPontoMedicao':'listarMedida',payload);}finally{payload.fill(0);}
-    result.bytes+=response.bytes;
+    let response:{xml:string;bytes:number;httpStatus:number};try{response=await this.fetch(config,job.environment,job.kind==='POINTS'?'/ws/v2/PontoMedicaoBSv2':'/ws/medc/ListarMedidaBSv1',job.kind==='POINTS'?'listarPontoMedicao':'listarMedida',payload);}finally{payload.fill(0);}
+    result.bytes+=response.bytes;lastHttpStatus=response.httpStatus;
+    // Capture only bounded provenance before row validation; never retain a raw provider body.
+    if(diagnostics){result.hashes.push(createHash('sha256').update(response.xml).digest('hex'));}
+    const envelope=diagnostics?privateEnvelope(response.xml,job.kind==='POINTS'?2:1,job.kind==='POINTS'?'listarPontoMedicaoResponse':'listarMedidaResponse'):null;
+    if(envelope?.transactionId)result.transactions.push(envelope.transactionId);
     if(job.kind==='POINTS'){
      const p=privateEnvelope(response.xml,2,'listarPontoMedicaoResponse'),pg=p.pagination;
      if(!pg||Number(pg.numero)!==index||!Number.isInteger(Number(pg.totalPaginas))||Number(pg.totalPaginas)<1||Number(pg.totalPaginas)>20||!Number.isInteger(Number(pg.quantidadeTotalItens))||Number(pg.quantidadeTotalItens)<0||Number(pg.quantidadeTotalItens)>1000||index>1&&(pages!==Number(pg.totalPaginas)||totalPoints!==Number(pg.quantidadeTotalItens)))throw new CceeReadingError('PAGINATION_CHANGED_OR_LIMIT');
      pages=Number(pg.totalPaginas);totalPoints=Number(pg.quantidadeTotalItens);
-     result.data.rows.push(...list(p.body?.pontosMedicao?.pontoMedicao));result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);
+     result.data.rows.push(...list(p.body?.pontosMedicao?.pontoMedicao));if(!diagnostics){result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);}
     }else if(job.measurement_kind==='FALTANTES'){
      const p=privateEnvelope(response.xml,1,'listarMedidaResponse');result.complete=false;
      const rows=list(p.body?.medidas?.medida);if(rows.length>744)throw new CceeReadingError('MEASUREMENT_LIMIT');
@@ -144,9 +155,9 @@ export class CceePrivateConnector{
       if(!Number.isFinite(at)||!/(?:-03:00|Z)$/.test(stamp)||at<=Date.parse(start)||at>Date.parse(end)||seen.has(at))throw new CceeReadingError('MEASUREMENT_INTERVAL_OR_POINT_MISMATCH');
       seen.add(at);
      }
-     result.data.rows.push(...rows);result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);
+     result.data.rows.push(...rows);if(!diagnostics){result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);}
     }else{
-     const p=measurementRows(response.xml,binding.measurement_point,start,end);result.complete&&=p.complete;result.data.rows.push(...p.data);result.data.observations.push(...p.observations);total+=quantityMicro(p.totalKwh,'kWh');result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);
+     const p=measurementRows(response.xml,binding.measurement_point,start,end,diagnostics);result.complete&&=p.complete;result.data.rows.push(...p.data);result.data.observations.push(...p.observations);total+=quantityMicro(p.totalKwh,'kWh');if(!diagnostics){result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);}
     }
    }
    if(job.kind==='POINTS'&&(result.data.rows.length!==totalPoints||new Set(result.data.rows.map((r:any)=>r.codigo)).size!==totalPoints))throw new CceeReadingError('INCOMPLETE_POINTS');
@@ -159,7 +170,7 @@ export class CceePrivateConnector{
    await revalidate();result.durationMs=Date.now()-began;return result;
   }catch(e){
    const error=e instanceof CceeReadingError?e:new CceeReadingError('READ_NOT_CONFIRMED');
-   error.metrics={requests:result.requests,bytes:result.bytes+error.responseBytes,durationMs:Date.now()-began,hashes:result.hashes,transactions:[...result.transactions,...(error.transactionId?[error.transactionId]:[])],httpStatus:error.httpStatus};throw error;
+   error.metrics={requests:result.requests,bytes:result.bytes+error.responseBytes,durationMs:Date.now()-began,hashes:result.hashes,transactions:[...result.transactions,...(error.transactionId?[error.transactionId]:[])],httpStatus:error.httpStatus??lastHttpStatus};throw error;
   }finally{config?.pfx.fill(0);}
  }
 }

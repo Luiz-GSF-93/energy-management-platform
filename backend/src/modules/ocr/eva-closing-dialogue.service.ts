@@ -1,3 +1,4 @@
+import {CceeDataService} from '../ccee/ccee-data.service';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,Optional,ServiceUnavailableException} from '@nestjs/common';
 import {EvaClosingChangesService} from './eva-closing-changes.service';
 import {isChangeRequest} from './eva-closing-changes.model';
@@ -11,7 +12,7 @@ import {monthPeriod} from '../contracts/services/preparation';
 import {closingDataAnswer,closingEvidence,closingIntent,closingMarkets,fitClosingEvidence,validClosingMemory,CLOSING_CONTEXT_VERSION} from './eva-closing-context';
 @Injectable()
 export class EvaClosingDialogueService{
- constructor(private config:ConfigService,private closing:EvaAssistedClosingService,private rag:EvaKnowledgeRagService,private ai:BackofficeAiService,@Optional() private changes?:EvaClosingChangesService){}
+ constructor(private config:ConfigService,private closing:EvaAssistedClosingService,private rag:EvaKnowledgeRagService,private ai:BackofficeAiService,@Optional() private changes?:EvaClosingChangesService,@Optional() private ccee?:CceeDataService){}
  enabled(){return this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true';}
  async answer(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Conversa do fechamento desligada.');
@@ -57,6 +58,15 @@ export class EvaClosingDialogueService{
   let sources:any[]=[],proofs:any[]=[],official:any[]=[],mode='CONTROLLED_DATA',answer:string;
   const paid=this.config.get('EVA_CLOSING_DIALOGUE_CALLS_ENABLED')==='true';
   const base=closingEvidence(row,b.consumerUnitId,b.month,unit,intent.topic,memory);
+  let cceeSnapshot:string|null=null,cceeAnswer='';
+  if(this.config.get('CCEE_RECONCILIATION_ENABLED')==='true'&&this.ccee&&/ccee|medi[cç]|consum|diverg|fatura/i.test(intent.text)){
+   try{
+    const current=await this.ccee.reconciliations(t,b.consumerUnitId,b.month,0),rows=current.rows.slice(0,2);
+    cceeSnapshot=JSON.stringify(rows.map((r:any)=>[r.id,r.payload_hash]));
+    cceeAnswer=rows.length?rows.map((r:any)=>r.summary).join('\n'):'Nenhuma conciliação CCEE × fatura auditada nesta unidade e competência.';
+    base.push({id:'ccee-invoice-reconciliation',label:'Conciliação auditada CCEE × fatura, separada do fechamento',value:JSON.stringify({rows:rows.map((r:any)=>({id:r.id,version:r.version,hash:r.payload_hash,summary:r.summary,state:r.payload.state,issues:r.payload.issues,source:r.payload.source,basisEvidence:r.payload.invoice?.basisEvidence??null})),notice:'Valores são snapshots de conciliação, não compõem automaticamente o fechamento selecionado. Não atribuir causa à divergência; bases não comparáveis não sustentam percentual. A conciliação não é fonte normativa.'}),source:'Unidade e competência autorizadas; registros privados imutáveis. Sem nova chamada CCEE.'});
+   }catch(e){if(!(e instanceof ForbiddenException))throw e;}
+  }
   if(paid&&intent.regulatory){
    const context=[unit.free_market===true?'unidade ACL':unit.free_market===false?'unidade ACR':'mercado não demonstrado',unit.state?'UF '+unit.state:'UF não demonstrada',unit.tariff_group,unit.tariff_subgroup,unit.tariff_modality,'competência '+b.month].filter(Boolean).join(' · ');
    const query=intent.query.slice(0,Math.max(0,498-context.length))+' · '+context;
@@ -75,8 +85,9 @@ export class EvaClosingDialogueService{
    if(Buffer.byteLength(JSON.stringify(fitted.evidence))>45000)throw new BadRequestException('Não foi possível selecionar evidências suficientes dentro do limite; nenhuma alteração foi feita.');
    const result=await this.ai.interpret(t,b.question.trim(),fitted.evidence,undefined,'CHAT');answer=caveat+(result.state==='READY'&&result.answer?result.answer:result.message);mode=result.state;
    if(result.state==='NO_EVIDENCE'&&intent.financial){answer=(caveat||'Os trechos recuperados não sustentam uma conclusão normativa sobre esta pergunta. ')+closingDataAnswer(row,b.consumerUnitId);mode='FINANCIAL_ONLY';sources=[];}
-  }else{answer='Consulta de IA desligada. '+closingDataAnswer(row,b.consumerUnitId);}
+  }else{answer='Consulta de IA desligada. '+(cceeAnswer||closingDataAnswer(row,b.consumerUnitId));}
   for(let i=0;i<proofs.length;i+=8)await this.rag.revalidate(t,proofs.slice(i,i+8));
+  if(cceeSnapshot!==null){const current=await this.ccee!.reconciliations(t,b.consumerUnitId,b.month,0);if(JSON.stringify(current.rows.slice(0,2).map((r:any)=>[r.id,r.payload_hash]))!==cceeSnapshot)throw new ConflictException('A conciliação CCEE mudou durante a resposta.');}
   const fresh=await this.closing.history(q,t);if(!fresh.rows?.some((r:any)=>r.id===row.id&&r.payload_hash===row.payload_hash&&r.state===row.state))throw new ConflictException('A versão mudou durante a resposta.');
   return {name:'EVA',id:row.id,hash:row.payload_hash,answer,mode,sources,canApprove:false,canPublish:false,context:{version:CLOSING_CONTEXT_VERSION,questions:memory.length,topic:intent.topic,markets,officialAvailable:hasOfficial,omitted:fitted.omitted},checkedAt:new Date().toISOString()};
  }

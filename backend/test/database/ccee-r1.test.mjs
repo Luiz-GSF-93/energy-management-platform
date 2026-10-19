@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 const db=new PGlite();let checks=0;
 const author=randomUUID(),reviewer=randomUUID(),foreign=randomUUID(),owner=randomUUID(),owner2=randomUUID(),finance=randomUUID(),support=randomUUID();
-const perm=['f5364101-4486-42c2-a90f-807937ac3011','f5364101-4486-42c2-a90f-807937ac3012','f5364101-4486-42c2-a90f-807937ac3013','fd8a932f-87c0-4f86-8389-9f30c50e95b7','6da45eb4-810c-4e40-9933-d9cda66a8841'];
+const perm=['f5364101-4486-42c2-a90f-807937ac3011','f5364101-4486-42c2-a90f-807937ac3012','f5364101-4486-42c2-a90f-807937ac3013','fd8a932f-87c0-4f86-8389-9f30c50e95b7','6da45eb4-810c-4e40-9933-d9cda66a8841','8f105b02-4443-49de-b188-847e0284e7ed'];
 const denied=async promise=>{await assert.rejects(promise);checks++;},ok=v=>{assert.ok(v);checks++;};
 const query=async(sql,args=[])=>{const r=await db.query(sql,args);return r.rows[0]?.result;};
 const action=(actor,act,id=null,body={},org='o1')=>query('SELECT ccee_data_action($1,$2,$3,$4,$5) result',[org,actor,act,id,JSON.stringify(body)]);
@@ -28,7 +28,7 @@ try{
  CREATE FUNCTION platform_workflow_actor(a uuid,p text)RETURNS text LANGUAGE plpgsql AS $$DECLARE r text;BEGIN SELECT profile INTO r FROM public.platform_team_members WHERE user_id=a AND active;IF r IS NULL OR r='SUPPORT' THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;RETURN r;END$$;
  CREATE FUNCTION assert_license_platform_actor(a uuid)RETURNS void LANGUAGE plpgsql AS $$BEGIN IF NOT EXISTS(SELECT 1 FROM public.platform_team_members WHERE user_id=a AND active AND profile='OWNER')THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION acl_preserve_record()RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Preserved' USING ERRCODE='42501';END$$;
- CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,file_verified boolean);`);
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,file_verified boolean,original_filename text,reference_month date,document_type text,file_hash text);CREATE TABLE document_ocr_results(document_id text,organization_id text,file_hash text,job_id uuid,raw_result jsonb,evidence jsonb);`);
  for(const[actor,org]of [[author,'o1'],[reviewer,'o1'],[foreign,'o2']]){
   const role=randomUUID();await db.query(`INSERT INTO roles VALUES($1,$2,'organization','gestor',$3)`,[role,org,JSON.stringify(perm)]);await db.query(`INSERT INTO organization_members VALUES($1,$2,$3,'ACTIVE')`,[org,actor,role]);
  }
@@ -37,6 +37,7 @@ try{
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_private_intake.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261113_ccee_private_readings.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261114_ccee_binding_review.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261115_ccee_invoice_reconciliation.sql',import.meta.url),'utf8'));
  const body={requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'123',principalProfileCode:'123',measurementPoint:'SYNTHETIC',representationKind:'PARTIAL',serviceScope:['POINTS','MEASUREMENTS','AGENDA'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'NO_LOSSES',evidenceReference:'Synthetic evidence only',reason:'Synthetic reviewed representation'};
  const draft=await action(author,'binding',null,body);ok(draft.status==='DRAFT');ok((await action(author,'binding',null,body)).id===draft.id);
  await denied(action(author,'binding',null,{...body,reason:'Changed payload'}));
@@ -113,6 +114,39 @@ try{
  await db.exec('SET ROLE service_role');for(const t of ['ccee_integration_jobs','ccee_integration_events','ccee_calendar_versions','ccee_calendar_items'])await denied(db.query('SELECT * FROM '+t));
  await denied(db.query(`SELECT assert_ccee_data_actor('o1',$1,'view')`,[author]));await db.exec('RESET ROLE');
  await denied(db.query(`UPDATE ccee_integration_events SET event='overwrite'`));
+
+ const rec=(actor,action,id,body={},org='o1')=>query('SELECT ccee_reconciliation_action($1,$2,$3,$4,$5) result',[org,actor,action,id,JSON.stringify(body)]);
+ // Restore the reviewed binding used by the completed measurement fixture if revoked below.
+ // Revocations are append-only; prepare an independent completed job against the newest approved binding.
+ const newest=await action(author,'binding',null,{...body,requestId:randomUUID()});
+ const reviewed=await action(reviewer,'approve_binding',newest.id,{requestId:randomUUID(),revision:newest.revision,reason:'Reconciliation fixture reviewed'});
+ const recJob=await action(author,'enqueue',null,{...enqueue,requestId:randomUUID(),authorizationId:reviewed.id});
+ const leased=await query('SELECT ccee_claim_reading(true) result');ok(leased.id===recJob.id);
+ const recBinding={...binding,authorizationId:reviewed.id,authorizationRevision:reviewed.revision};
+ await query('SELECT ccee_finish_reading($1,$2,$3,NULL) result',[recJob.id,leased.lease_id,JSON.stringify({...result,record:{...record,binding:recBinding}})]);
+ await db.query(`INSERT INTO documents VALUES('rec-doc','o1','c1','u1',true,'synthetic.pdf','2021-01-01','INVOICE_DISTRIBUTOR',$1)`,['b'.repeat(64)]);
+ await db.query(`INSERT INTO document_ocr_results VALUES('rec-doc','o1',$1,$2,'{}','{}')`,['b'.repeat(64),randomUUID()]);
+ ok((await rec(author,'candidates',recJob.id)).documents[0].id==='rec-doc');
+ await denied(rec(foreign,'source',recJob.id,{documentId:'rec-doc'}));
+ await denied(rec(author,'source',recJob.id,{documentId:'rec-doc'},'o2'));
+ await denied(rec(reviewOnly,'source',recJob.id,{documentId:'rec-doc'}));
+ const src=await rec(author,'source',recJob.id,{documentId:'rec-doc'});
+ ok(src.sourceFingerprint.length===32&&src.document.id==='rec-doc');
+ const payload={formulaVersion:'ccee-invoice-v1',organizationId:'o1',unitId:'u1',customerId:'c1',month:'2021-01',jobId:recJob.id,documentId:'rec-doc',payloadHash:'a'.repeat(64),state:'REVIEW_REQUIRED'};
+ const save={documentId:'rec-doc',requestId:randomUUID(),reason:'Synthetic source comparison',sourceFingerprint:src.sourceFingerprint,payload};
+ await denied(rec(author,'save',recJob.id,{...save,sourceFingerprint:'f'.repeat(32)}));
+ await denied(rec(author,'save',recJob.id,{...save,payload:{...payload,organizationId:'o2'}}));
+ const snap=await rec(author,'save',recJob.id,save);ok(snap.row.version===1);
+ ok((await rec(author,'save',recJob.id,save)).row.id===snap.row.id);
+ await denied(rec(author,'save',recJob.id,{...save,reason:'Changed request'}));
+ const v2=await rec(author,'save',recJob.id,{...save,requestId:randomUUID(),payload:{...payload,payloadHash:'b'.repeat(64)}});ok(v2.row.version===2);
+ const listing=await rec(author,'list',null,{unitId:'u1',month:'2021-01',page:0});ok(listing.rows.length===2&&listing.rows[0].version===2);
+ await denied(rec(author,'list',null,{unitId:'u2',month:'2021-01'}));
+ await denied(db.query('UPDATE ccee_invoice_reconciliations SET reason=$1 WHERE id=$2',['overwrite',snap.row.id]));
+ await db.exec('SET ROLE service_role');await denied(db.query('SELECT * FROM ccee_invoice_reconciliations'));await db.exec('RESET ROLE');
+ await db.exec('SET ROLE authenticated');await denied(rec(author,'list',null,{unitId:'u1',month:'2021-01'}));await db.exec('RESET ROLE');
+ await action(reviewer,'revoke_binding',reviewed.id,{requestId:randomUUID(),revision:reviewed.revision,reason:'Revoked after comparison'});
+ await denied(rec(author,'list',null,{unitId:'u1',month:'2021-01'}));
  await db.query(`UPDATE licenses SET active=false WHERE organization_id='o1'`);await denied(action(author,'list'));
  console.log(checks+' CCEE R1 SQL checks passed: isolation, scoped partial representation, independent review, leases, revocation, immutable history, draft preservation, calendar quarantine and financial access.');
 }finally{await db.close();}

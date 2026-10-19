@@ -10,5 +10,5 @@ import {CceeDataService} from './ccee-data.service';
 import {CceePrivateConnector} from './ccee-private.connector';
 import {CceeDataWorker} from './ccee-data.worker';
 import {CceeDataController,CceeCalendarController,CceeDataMetricsController} from './ccee-data.controller';
-@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController],providers:[CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDataWorker,SupabaseService]})
+@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController],providers:[CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDataWorker,SupabaseService],exports:[CceeDataService]})
 export class CceeModule {}
