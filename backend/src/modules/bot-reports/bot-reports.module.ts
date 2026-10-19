@@ -1,4 +1,5 @@
 import {EnergyForecastModule} from '../energy-forecast/energy-forecast.module';
+import {PortalInsightsModule} from '../portal-insights/portal-insights.module';
 import {Body,Controller,Get,Header,Module,Post,Query} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -17,5 +18,5 @@ class BotReportsController {
  @Post('client') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW,P.INTELLIGENCE_AI_USE]) client(@Body() body:unknown,@Tenant() t:TenantContext){return this.service.ask(body,t,'client');}
  @Get('client/units') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW,P.INTELLIGENCE_AI_USE]) units(@Query('from') from:string,@Query('to') to:string,@Tenant() t:TenantContext){return this.service.clientUnits(from,to,t);}
 }
-@Module({imports:[CommonModule,OcrModule,ContractsModule,ReportsModule,EnergyForecastModule],controllers:[BotReportsController],providers:[BotReportsService,ReportAiService]})
+@Module({imports:[CommonModule,OcrModule,ContractsModule,ReportsModule,EnergyForecastModule,PortalInsightsModule],controllers:[BotReportsController],providers:[BotReportsService,ReportAiService]})
 export class BotReportsModule {}

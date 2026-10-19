@@ -1,27 +1,14 @@
 "use client";
-import Link from "next/link";
 import ProtectedRoute from "@/app/components/ProtectedRoute";
-import AccountSettings from "@/app/components/AccountSettings";
-import UserIdentity from "@/app/components/UserIdentity";
-import portalStyles from "../portal.module.css";
+import PortalWorkspace from "@/app/components/PortalWorkspace";
+import {useAuth} from '@/app/providers';
+import {isOrganizationAuthContext} from '@/app/lib/auth/organization-context';
+import {Alert} from '@/app/components/ui';
 export default function PortalSettingsPage() {
+  const {context}=useAuth();
   return (
     <ProtectedRoute>
-      <div className={portalStyles.layout}>
-        <nav className={portalStyles.sidebar} aria-label="Menu do Portal">
-          <strong>EnergyOS</strong>
-          <Link href="/portal">Dashboard</Link>
-          <Link href="/portal/settings" aria-current="page">
-            ⚙ Configurações ambiente
-          </Link>
-        </nav>
-        <main className="client-portal">
-          <div className="environment-topbar">
-            <UserIdentity portal />
-          </div>
-          <AccountSettings />
-        </main>
-      </div>
+      {isOrganizationAuthContext(context)&&context.currentOrganization.role==='consulta'&&!context.accessMode?<PortalWorkspace key={context.user.id+'|'+context.currentOrganization.id} settings/>:<Alert>Use o perfil externo vinculado ao Portal.</Alert>}
     </ProtectedRoute>
   );
 }

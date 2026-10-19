@@ -1,6 +1,7 @@
 import {ConfigService} from '@nestjs/config';
 import {PublishedClientForecastService} from '../energy-forecast/published-client-forecast.service';
-import {Injectable,BadRequestException,ForbiddenException,ConflictException,InternalServerErrorException} from '@nestjs/common';
+import {Injectable,Optional,BadRequestException,ForbiddenException,ConflictException,InternalServerErrorException} from '@nestjs/common';
+import {PortalInsightsService} from '../portal-insights/portal-insights.module';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {SupabaseService} from '../../services/supabase.service';
@@ -21,7 +22,7 @@ export function reportPeriod(from:unknown,to:unknown){
 }
 @Injectable()
 export class BotReportsService {
- constructor(private db:SupabaseService,private reports:ReportsService,private financial:FinancialSettlementsService,private licenses:BotEnergyLicenseService,private rag:BotEnergyRagService,private ai:ReportAiService,private clientForecast:PublishedClientForecastService,private config:ConfigService){}
+ constructor(private db:SupabaseService,private reports:ReportsService,private financial:FinancialSettlementsService,private licenses:BotEnergyLicenseService,private rag:BotEnergyRagService,private ai:ReportAiService,private clientForecast:PublishedClientForecastService,private config:ConfigService,@Optional() private insights?:PortalInsightsService){}
  private async permission(t:TenantContext,audience:'client'|'backoffice'){
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(audience==='client'?(t.role!=='consulta'||!!t.accessMode||!t.roleId):(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')))throw new ForbiddenException('EVA exige acesso de relatórios e IA no contexto autorizado.');
   if(!await this.licenses.available(t.organizationId))throw new ForbiddenException('EVA exige licença vigente e cota disponível.');
@@ -37,13 +38,14 @@ export class BotReportsService {
   await this.permission(t,audience);
   const keys=audience==='client'?['question','unitId','from','to','kind']:['question','reportId','kind'];
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!keys.includes(k))||typeof input.question!=='string'||!input.question.trim()||input.question.length>500||!['OPERATIONAL','EXECUTIVE','FINANCIAL'].includes(input.kind))throw new BadRequestException('Selecione o contexto e informe uma pergunta de até 500 caracteres.');
-  let analytics:any,scope:any,forecast:any=null,portalProof:any=null;
+  let analytics:any,scope:any,forecast:any=null,portalProof:any=null,insightProof:any=null;
   if(audience==='client'){
    if(!uuid(input.unitId))throw new BadRequestException('Selecione uma unidade vinculada.');
    const period=reportPeriod(input.from,input.to),data=await this.client(t,period,input.unitId);
    const approved=await this.financial.portalApprovedPublications(period,t);
    portalProof={period,signature:JSON.stringify(approved.map((p:any)=>[p.meta.id,p.meta.payloadHash,p.meta.status]))};
    analytics=clientReportAnalytics(data,t.organizationId,period,input.unitId,approved);
+   if(this.insights){const details=await this.insights.read(t,period.from,period.to,input.unitId);const visible=new Set(analytics.publications.map((p:any)=>p.id));analytics.clientInsights=details.rows.filter((r:any)=>visible.has(r.publicationId));insightProof={period,unitId:input.unitId,signature:JSON.stringify(details)};}
    if(this.config.get('ENERGY_FORECAST_ENABLED')==='true'){const published=await this.clientForecast.list(t);forecast=published.rows.filter((f:any)=>f.unitId===input.unitId&&f.asOfMonth<=period.to).sort((a:any,b:any)=>b.asOfMonth.localeCompare(a.asOfMonth)||b.version-a.version)[0]??null;}
    scope={unitId:input.unitId,unitName:data.units.find((u:any)=>u.id===input.unitId)?.name,audience};
   }else{
@@ -73,6 +75,7 @@ export class BotReportsService {
   if(publicationProofs)await this.rag.revalidate(t,publicationProofs);
   if(publicationProofs&&answer.state==='READY'&&!officialSources.some(s=>answer.evidence?.some(e=>e.id===s.id)))return {state:'NO_EVIDENCE',message:'A interpretação não citou uma fonte oficial conferida para a regra solicitada. Confira as evidências e refaça a consulta.'};
   if(portalProof){const current=await this.financial.portalApprovedPublications(portalProof.period,t);if(JSON.stringify(current.map((p:any)=>[p.meta.id,p.meta.payloadHash,p.meta.status]))!==portalProof.signature)throw new ConflictException('As publicações mudaram durante a resposta. Consulte novamente.');}
+  if(insightProof&&this.insights){const current=await this.insights.read(t,insightProof.period.from,insightProof.period.to,insightProof.unitId);if(JSON.stringify(current)!==insightProof.signature)throw new ConflictException('A composição publicada mudou. Consulte novamente.');}
   return {...answer,...(publicationProofs?{officialSources:officialSources.filter(s=>answer.evidence?.some(e=>e.id===s.id))}:{}),context:{unitName:scope.unitName,period,kind:input.kind},checkedAt:new Date().toISOString()};
  }
 }
