@@ -1,0 +1,13 @@
+EVA: aprovação com disponibilização de resultados
+
+Problema: a decisão interna do fechamento assistido não alimentava as publicações financeiras lidas pelo dashboard e pelo portal. Esta entrega preserva o snapshot aprovado e publica uma projeção de valores, sem recalcular o fechamento ou simular uma validação do motor financeiro antigo.
+
+Duas tabelas privadas imutáveis: eva_closing_publications e eva_closing_publication_events. RLS forçado, acesso direto revogado; RPCs validam organização, licença, função e vínculo. O portal recebe apenas a projeção permitida do cliente exclusivamente vinculado. Notas internas, OCR, contratos e prompts não são publicados. Estimativas preservam indicação pública.
+
+Aprovar exige aceite explícito da disponibilização e registra aprovação/publicação em uma transação. Aprovações anteriores têm ação própria, sem repetir a decisão. Retirada cria evento auditado; não apaga histórico nem ressuscita um fechamento legado mais antigo. A última publicação por cliente/competência alimenta cards, gráficos e relatórios sem duplicação entre motores. EVA consulta a mesma projeção e reconfere a publicação após interpretar.
+
+Migração aditiva: 20261119_eva_approved_publications.sql. Novas flags inicialmente ausentes/desligadas: EVA_APPROVED_PUBLICATIONS_ENABLED e EVA_APPROVED_PORTAL_ENABLED. Ativação somente após checks e deploy. Rollback funcional: desligar essas flags; preservar tabelas e registros.
+
+Escopo autorizado de disponibilização anterior: setembro/2026 Del Rei v4 e Tennis Country v2, já aprovadas pelo usuário. Sem OCR, IA paga, consumo de documentos, nova decisão financeira, cobrança ou comunicação externa.
+
+Validação: testes de projeção exata, isolamento, assinatura, seleção por mês, estimativa, gaps, retirada, autorização, transação atômica e fonte de relatório; banco sintético PGlite e PostgreSQL descartável no CI; telas de dashboard/portal/decisão; builds Nest e Next. Ensaio transacional em produção com rollback confirmou as duas projeções e RLS sem escrever publicações.

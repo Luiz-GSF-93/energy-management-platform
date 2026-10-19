@@ -1,3 +1,4 @@
+import {evaPublication,latestPublications,publicFinancialCharts} from './eva-approved-publications';
 import {financialAnalytics,compareFinancialAnalytics} from './financial-analytics';
 import {Injectable,BadRequestException,ConflictException,ForbiddenException,InternalServerErrorException,NotFoundException,UnauthorizedException} from '@nestjs/common';
 import {SupabaseService} from '../../../services/supabase.service';
@@ -66,7 +67,16 @@ export class FinancialSettlementsService {
   const d=await validateWriteDto(PublishedFinancialQueryDto,input);
   return this.publishedRead(d,t);
  }
- private async publishedRead(d:PublishedFinancialQueryDto,t:TenantContext){
+ private evaEnabled(portal=false){return process.env.EVA_APPROVED_PUBLICATIONS_ENABLED==='true'&&(!portal||process.env.EVA_APPROVED_PORTAL_ENABLED==='true');}
+ private async evaPublications(d:PublishedFinancialQueryDto,t:TenantContext,portal=false){
+  if(!this.evaEnabled(portal))return [];
+  const r=await this.client().rpc('read_eva_closing_publications',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_from:d.from,p_to:d.to,p_customer:d.customerId??null});
+  if(r.error?.code==='42501')throw new ForbiddenException('Acesso à publicação indisponível.');this.fail(r.error);
+  if(!Array.isArray(r.data)||r.data.length>=500)throw new InternalServerErrorException('Publicações EVA indisponíveis.');
+  if(r.data.some((row:any)=>!['PUBLISHED','WITHDRAWN'].includes(row.state)))throw new InternalServerErrorException('Estado de publicação inválido.');
+  return r.data.map((row:any)=>evaPublication(row,t.organizationId,d));
+ }
+ private async publishedRead(d:PublishedFinancialQueryDto,t:TenantContext,portal=false,includeEva=true){
   const ordinal=(m:string)=>Number(m.slice(0,4))*12+Number(m.slice(5,7));
   if(d.from>d.to||ordinal(d.to)-ordinal(d.from)>=12)throw new BadRequestException('Selecione um período de até 12 meses, em ordem crescente.');
   if(d.customerId)await this.customer(d.customerId,t);
@@ -88,16 +98,17 @@ export class FinancialSettlementsService {
    if(loaded.first.status!=='PUBLISHED'||loaded.rows.some((r:any)=>r.validation_status!=='VALIDATED'||!r.approved_at||!r.published_at||!r.published_by)||loaded.first.customer_id!==row.customer_id||loaded.first.version_number!==row.version_number||loaded.first.financial_hash!==row.financial_hash||String(loaded.first.month)!==String(row.month))throw new InternalServerErrorException('A publicação mudou durante a consulta. Atualize o painel.');
    publications.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,customerName:loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===row.customer_id)?.company_name??row.customer_id,reservations:loaded.payload.reservations});
   }
-  return publishedFinancialSummary(t.organizationId,d,publications);
+  const selected=includeEva&&this.evaEnabled(portal)?latestPublications([...publications,...await this.evaPublications(d,t,portal)]):publications;
+  const summary=publishedFinancialSummary(t.organizationId,d,selected);return {...summary,charts:publicFinancialCharts(summary)};
  }
- async reports(input:FinancialAnalyticsQueryDto,t:TenantContext){
+ private async legacyReports(input:FinancialAnalyticsQueryDto,t:TenantContext){
   await this.allowed(t,P.DOCUMENTS_REPORTS_VIEW);
   const d=await validateWriteDto(FinancialAnalyticsQueryDto,input);
   if(Boolean(d.compareFrom)!==Boolean(d.compareTo)||(d.compareUnitId&&!d.compareFrom))throw new BadRequestException('Informe início e fim do período comparativo.');
   for(const id of new Set([d.unitId,d.compareUnitId].filter(Boolean))){const unit=await this.unit(id!,t);if(d.customerId&&unit.customer_id!==d.customerId)throw new BadRequestException('A unidade pertence a outro cliente. Confira o filtro.');}
   const capturedPrimary=new Map<string,{id:string;version:number;hash:string}>();
   const read=async(from:string,to:string,unitId?:string,primaryRead=false)=>{
-   const q={from,to,...(d.customerId?{customerId:d.customerId}:{})},summary=await this.published(q,t);
+   const q={from,to,...(d.customerId?{customerId:d.customerId}:{})},summary=this.evaEnabled()?await this.publishedRead(q,t,false,false):await this.published(q,t);
    for(const row of summary.rows){const key=row.customerId+'|'+row.month,old=capturedPrimary.get(key);if(!primaryRead&&old&&(old.id!==row.id||old.version!==row.version||old.hash!==row.payloadHash))throw new ConflictException('As versões mudaram entre os recortes. Consulte novamente.');if(primaryRead)capturedPrimary.set(key,{id:row.id,version:row.version,hash:row.payloadHash});}
    if(summary.rows.length>200)throw new BadRequestException('Relatório extenso. Reduza o período ou selecione um cliente.');
    const pubs=[];for(const row of summary.rows){const loaded=await this.load(row.id,t);if(loaded.first.status!=='PUBLISHED'||loaded.first.financial_hash!==row.payloadHash||loaded.first.customer_id!==row.customerId||loaded.first.version_number!==row.version)throw new ConflictException('A publicação mudou. Atualize o relatório.');pubs.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,preparations:loaded.payload.preparations,customerName:row.customerName,reservations:loaded.payload.reservations});}
@@ -117,6 +128,22 @@ export class FinancialSettlementsService {
    history.push({...this.summary(loaded.first),customerName:name,amounts:snapshot.totals,current:primary.publications.some(p=>p.id===id)});
   }
   return {organizationId:t.organizationId,primary,comparison,comparisonResult:comparison?compareFinancialAnalytics(primary,comparison):null,history,mode:'PUBLISHED_REPORTS',updatedAt:new Date().toISOString()};
+ }
+ async reports(input:FinancialAnalyticsQueryDto,t:TenantContext){
+  const base=await this.legacyReports(input,t);if(!this.evaEnabled())return base;
+  const d=await validateWriteDto(FinancialAnalyticsQueryDto,input);
+  const build=async(original:any,from:string,to:string,unitId?:string)=>{
+   const period={from,to,...(d.customerId?{customerId:d.customerId}:{})},eva=await this.evaPublications(period,t),legacy=[];
+   for(const row of original.publications){const p=await this.load(row.id,t);if(p.first.financial_hash!==row.payloadHash||p.first.status!=='PUBLISHED')throw new ConflictException('A publicação mudou durante a consulta.');legacy.push({meta:this.summary(p.first),financial:p.payload.financial,preparations:p.payload.preparations,customerName:row.customerName,reservations:p.payload.reservations});}
+   return {data:financialAnalytics(t.organizationId,period,latestPublications([...legacy,...eva]),unitId),eva,period};
+  };
+  const primary=await build(base.primary,d.from,d.to,d.unitId),comparison=base.comparison&&d.compareFrom&&d.compareTo?await build(base.comparison,d.compareFrom,d.compareTo,d.compareUnitId):null;
+  const selected=new Set(primary.data.publications.map((p:any)=>p.id));
+  const history=base.history.map(h=>({...h,current:selected.has(h.id)}));
+  for(const p of primary.eva){if(d.unitId&&!p.financial.units.some((u:any)=>u.id===d.unitId))continue;const snapshot=financialAnalytics(t.organizationId,primary.period,[p],d.unitId);history.push({...p.meta,customerName:p.customerName,amounts:snapshot.totals,current:selected.has(p.meta.id),reservations:p.reservations} as any);}
+  const signature=(items:any[])=>JSON.stringify(items.map(p=>[p.meta.id,p.meta.payloadHash,p.meta.publishedAt,p.meta.status]));
+  for(const result of [primary,comparison].filter(Boolean))if(signature(result!.eva)!==signature(await this.evaPublications(result!.period,t)))throw new ConflictException('As publicações mudaram durante a consulta. Atualize o painel.');
+  return {...base,primary:primary.data,comparison:comparison?.data??null,comparisonResult:comparison?compareFinancialAnalytics(primary.data,comparison.data):null,history,mode:'APPROVED_AND_PUBLISHED_REPORTS'};
  }
  private async portalMember(t:TenantContext){
   if(!t.organizationId||!t.userId)throw new UnauthorizedException('Contexto organizacional ausente.');
@@ -138,21 +165,29 @@ export class FinancialSettlementsService {
   if(!c.data||c.data.id!==member.exclusive_customer_id||c.data.organization_id!==t.organizationId||c.data.status!=='ACTIVE')throw new ForbiddenException('Cliente indisponível para consulta. Solicite a conferência à equipe de gestão.');
   return member.exclusive_customer_id as string;
  }
+ async portalApprovedPublications(input:PortalFinancialQueryDto,t:TenantContext){
+  if(!this.evaEnabled(true))return [];
+  const customerId=await this.portalCustomer(t),d=await validateWriteDto(PortalFinancialQueryDto,input);
+  const publications=await this.evaPublications({...d,customerId},t,true);
+  if(await this.portalCustomer(t)!==customerId)throw new ForbiddenException('O vínculo mudou durante a consulta.');
+  return publications;
+ }
  async portalFinancial(input:PortalFinancialQueryDto,t:TenantContext){
   const customerId=await this.portalCustomer(t),d=await validateWriteDto(PortalFinancialQueryDto,input);
-  const result=await this.publishedRead({...d,customerId},t);
+  const result=await this.publishedRead({...d,customerId},t,true);
   if(await this.portalCustomer(t)!==customerId)throw new ForbiddenException('O vínculo mudou durante a consulta. Atualize o portal.');
   return this.clientProjection(result,customerId);
  }
  async portalPreview(input:PublishedFinancialQueryDto,t:TenantContext){
   if(!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('A prévia do portal exige gestor ou administrador.');
   if(!input.customerId)throw new BadRequestException('Selecione um cliente publicado para conferir o portal.');
-  const result=await this.published(input,t);
+  await this.allowed(t,P.ORGANIZATION_CONTRACTS_VIEW);const d=await validateWriteDto(PublishedFinancialQueryDto,input);
+  const result=await this.publishedRead(d,t,false,this.evaEnabled(true));
   return this.clientProjection(result,input.customerId);
  }
  private clientProjection(result:ReturnType<typeof publishedFinancialSummary>,customerId:string){
   // Deliberately project published figures only; never expose OCR, captured tables or internal notes.
-  return {...result,audience:'client',customerId,disclosure:'Somente a última versão publicada de cada mês do seu cliente. Meses sem publicação não representam custo zero. Publicações com ressalvas exigem consulta à equipe de gestão sobre as condições desta versão.',rows:result.rows.map(row=>({id:row.id,customerId:row.customerId,customerName:row.customerName,month:row.month,version:row.version,publishedAt:row.publishedAt,payloadHash:row.payloadHash,units:row.units,amounts:row.amounts,publicationNote:'',reservations:row.reservations.length?['Resultado publicado com ressalvas. Consulte sua equipe de gestão para conhecer as condições desta versão.']:[]}))};
+  return {...result,charts:publicFinancialCharts(result),audience:'client',customerId,disclosure:'Somente a última versão publicada de cada mês do seu cliente. Meses sem publicação não representam custo zero. Publicações com ressalvas exigem consulta à equipe de gestão sobre as condições desta versão.',rows:result.rows.map(row=>({id:row.id,customerId:row.customerId,customerName:row.customerName,month:row.month,version:row.version,publishedAt:row.publishedAt,payloadHash:row.payloadHash,units:row.units,amounts:row.amounts,origin:row.origin,publicationNote:'',reservations:row.reservations.length?[row.origin==='EVA_APPROVED'?'Comparação estimada aprovada e disponibilizada pela equipe de gestão. Consulte a equipe sobre as hipóteses e referências utilizadas.':'Resultado publicado com ressalvas. Consulte sua equipe de gestão para conhecer as condições desta versão.']:[]}))};
  }
  async prepare(input:PrepareFinancialSettlementDto,t:TenantContext){
   await this.allowed(t,P.ORGANIZATION_CONTRACTS_CREATE);const d=await validateWriteDto(PrepareFinancialSettlementDto,input);const u=await this.unit(d.consumerUnitId,t);
