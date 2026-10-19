@@ -15,6 +15,10 @@ try{
  CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);INSERT INTO organizations VALUES('o1',NULL),('o2',NULL);
  CREATE TABLE customers(id text PRIMARY KEY,organization_id text,deleted_at timestamptz,status text DEFAULT 'ACTIVE');INSERT INTO customers (id,organization_id,deleted_at)VALUES('c1','o1',NULL),('c2','o2',NULL);
  CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,status text DEFAULT 'ACTIVE');INSERT INTO consumer_units (id,organization_id,customer_id)VALUES('u1','o1','c1'),('u2','o2','c2');
+ ALTER TABLE customers ADD company_name text,ADD document text,ADD contact_email text;
+ UPDATE customers SET company_name=CASE id WHEN 'c1' THEN 'Cliente primeiro' ELSE 'OUTRA EMPRESA PRIVADA' END,document=CASE id WHEN 'c1' THEN '11111111000111' ELSE '22222222000122' END,contact_email='PRIVATE_CONTACT';
+ ALTER TABLE consumer_units ADD name text,ADD consumer_unit_number text,ADD distributor text;
+ UPDATE consumer_units SET name=CASE id WHEN 'u1' THEN 'Unidade primeira' ELSE 'OUTRA UNIDADE PRIVADA' END,consumer_unit_number='INSTALACAO',distributor='Distribuidora sintética';
  CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,free_market_management boolean);
  INSERT INTO licenses VALUES('o1',true,'ACTIVE','2020-01-01','2099-12-31',true),('o2',true,'ACTIVE','2020-01-01','2099-12-31',true);
  CREATE TABLE roles(id uuid PRIMARY KEY,organization_id text,scope text,name text,permissions jsonb);
@@ -32,6 +36,7 @@ try{
  for(const migration of ['20260925_f1_34_monthly_inputs.sql','20260925_f1_48_billed_demand.sql','20261003_f3_1_operations.sql'])await db.exec(readFileSync(new URL('../../src/database/migrations/'+migration,import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261008_ccee_private_intake.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261113_ccee_private_readings.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261114_ccee_binding_review.sql',import.meta.url),'utf8'));
  const body={requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'123',principalProfileCode:'123',measurementPoint:'SYNTHETIC',representationKind:'PARTIAL',serviceScope:['POINTS','MEASUREMENTS','AGENDA'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'NO_LOSSES',evidenceReference:'Synthetic evidence only',reason:'Synthetic reviewed representation'};
  const draft=await action(author,'binding',null,body);ok(draft.status==='DRAFT');ok((await action(author,'binding',null,body)).id===draft.id);
  await denied(action(author,'binding',null,{...body,reason:'Changed payload'}));
@@ -39,6 +44,29 @@ try{
  await denied(action(author,'binding',null,{...body,requestId:randomUUID(),customerId:'c2',unitId:'u2'}));
  await denied(action(author,'approve_binding',draft.id,{requestId:randomUUID(),revision:1,reason:'Own review rejected'}));
  const approved=await action(reviewer,'approve_binding',draft.id,{requestId:randomUUID(),revision:1,reason:'Independent synthetic review'});ok(approved.status==='APPROVED'&&approved.revision===2);
+ const reviewOnly=randomUUID(),reviewRole=randomUUID();
+ await db.query(`INSERT INTO roles VALUES($1,'o1','organization','gestor',$2)`,[reviewRole,JSON.stringify(perm.slice(0,1).concat(perm[2]))]);
+ await db.query(`INSERT INTO organization_members VALUES('o1',$1,$2,'ACTIVE')`,[reviewOnly,reviewRole]);
+ const listed=await action(reviewOnly,'list');
+ const original=listed.bindings.find(x=>x.id===draft.id),decision=listed.bindings.find(x=>x.id===approved.id);
+ ok(original.customer_name==='Cliente primeiro'&&original.customer_document==='11111111000111');
+ ok(original.unit_name==='Unidade primeira'&&original.consumer_unit_number==='INSTALACAO'&&original.distributor==='Distribuidora sintética');
+ ok(original.identity_complete===true&&original.revision_reason===body.reason);
+ ok(decision.revision_reason==='Independent synthetic review'&&original.evidence_reference===body.evidenceReference);
+ ok(original.created_by===author&&decision.reviewed_by===reviewer&&decision.revision===2);
+ ok(!JSON.stringify(listed).includes('OUTRA EMPRESA PRIVADA')&&!JSON.stringify(listed).includes('OUTRA UNIDADE PRIVADA')&&!JSON.stringify(listed).includes('PRIVATE_CONTACT'));
+ await denied(action(reviewOnly,'binding',null,{...body,requestId:randomUUID()}));
+ await db.exec(`UPDATE consumer_units SET organization_id='o2' WHERE id='u1'`);
+ const mismatched=(await action(reviewOnly,'list')).bindings.find(x=>x.id===draft.id);
+ ok(mismatched.identity_complete===false&&mismatched.unit_name===null&&mismatched.consumer_unit_number===null);
+ await db.exec(`UPDATE consumer_units SET organization_id='o1' WHERE id='u1'`);
+ await db.exec(`UPDATE customers SET organization_id='o2' WHERE id='c1'`);
+ const customerMismatch=(await action(reviewOnly,'list')).bindings.find(x=>x.id===draft.id);
+ ok(customerMismatch.customer_name===null&&customerMismatch.customer_document===null&&customerMismatch.unit_name===null&&customerMismatch.identity_complete===false);
+ await db.exec(`UPDATE customers SET organization_id='o1' WHERE id='c1'`);
+ await db.exec('SET ROLE anon');await denied(action(reviewOnly,'list'));await db.exec('RESET ROLE');
+ await db.exec('SET ROLE authenticated');await denied(action(reviewOnly,'list'));await db.exec('RESET ROLE');
+
  await denied(action(author,'enqueue',null,{requestId:randomUUID(),kind:'MEASUREMENTS',month:'2021-01',authorizationId:draft.id,measurementKind:'FINAL'}));
  const enqueue={requestId:randomUUID(),kind:'MEASUREMENTS',month:'2021-01',authorizationId:approved.id,measurementKind:'FINAL'};
  const job=await action(author,'enqueue',null,enqueue);ok(job.state==='QUEUED');ok((await action(author,'enqueue',null,enqueue)).id===job.id);

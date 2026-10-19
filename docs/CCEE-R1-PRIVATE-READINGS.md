@@ -25,6 +25,29 @@ de fila. A consulta de métricas agrega somente registros locais.
 
 ## Banco e autorização
 
+### Revisão legível do vínculo (19/10/2026)
+
+Depois da R1, aplicar a migração aditiva
+`20261114_ccee_binding_review.sql`. Ela mantém a assinatura, autorização e
+operações de escrita de `ccee_data_action`, acrescentando ao retorno de lista
+a identificação atual de cliente/unidade e a justificativa do evento da exata
+revisão. Os joins exigem a mesma organização, cliente e unidade; campos de
+contato não são retornados. Não cria tabelas, concede perfis ou altera vínculos.
+O revisor recebe esses dados pela própria consulta CCEE autorizada, inclusive
+quando não tem permissão para listar os cadastros gerais.
+
+A lista e o modal mostram razão social, instalação, perfil, escopos, vigência,
+base da medição e evidência preservada. A identificação cadastral é atual, não
+um snapshot histórico. Ausências aparecem explicitamente. A decisão começa
+sem seleção; a aprovação independente continua obrigatória no backend.
+Datas documentais são exibidas sem conversão de fuso. A troca de organização
+descarta os dados e o modal de revisão. O DTO do seletor usa `company_name`,
+como a API de clientes existente.
+
+Validar a migração em transação descartável, aplicar banco antes do frontend
+e conferir uma revisão real sem registrar decisão pelo usuário. Preservar as
+flags em vigor: essa correção não autoriza leitura externa ou transmissão.
+
 Aplicar antes do backend a migração
 `backend/src/database/migrations/20261113_ccee_private_readings.sql`.
 O prefixo segue a sequência já existente do repositório; a data desta entrega
