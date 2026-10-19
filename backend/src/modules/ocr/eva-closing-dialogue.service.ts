@@ -64,7 +64,7 @@ export class EvaClosingDialogueService{
     const current=await this.ccee.reconciliations(t,b.consumerUnitId,b.month,0),rows=current.rows.slice(0,2);
     cceeSnapshot=JSON.stringify(rows.map((r:any)=>[r.id,r.payload_hash]));
     cceeAnswer=rows.length?rows.map((r:any)=>r.summary).join('\n'):'Nenhuma conciliação CCEE × fatura auditada nesta unidade e competência.';
-    base.push({id:'ccee-invoice-reconciliation',label:'Conciliação auditada CCEE × fatura, separada do fechamento',value:JSON.stringify({rows:rows.map((r:any)=>({id:r.id,version:r.version,hash:r.payload_hash,summary:r.summary,state:r.payload.state,issues:r.payload.issues,source:r.payload.source})),notice:'Valores são snapshots de conciliação, não compõem automaticamente o fechamento selecionado. Não atribuir causa à divergência; bases não comparáveis não sustentam percentual. A conciliação não é fonte normativa.'}),source:'Unidade e competência autorizadas; registros privados imutáveis. Sem nova chamada CCEE.'});
+    base.push({id:'ccee-invoice-reconciliation',label:'Conciliação auditada CCEE × fatura, separada do fechamento',value:JSON.stringify({rows:rows.map((r:any)=>({id:r.id,version:r.version,hash:r.payload_hash,summary:r.summary,state:r.payload.state,issues:r.payload.issues,source:r.payload.source,basisEvidence:r.payload.invoice?.basisEvidence??null})),notice:'Valores são snapshots de conciliação, não compõem automaticamente o fechamento selecionado. Não atribuir causa à divergência; bases não comparáveis não sustentam percentual. A conciliação não é fonte normativa.'}),source:'Unidade e competência autorizadas; registros privados imutáveis. Sem nova chamada CCEE.'});
    }catch(e){if(!(e instanceof ForbiddenException))throw e;}
   }
   if(paid&&intent.regulatory){
