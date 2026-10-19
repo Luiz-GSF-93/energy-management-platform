@@ -49,9 +49,12 @@ CREATE TABLE public.ccee_calendar_items(
  source_row integer NOT NULL CHECK(source_row>0),source_sheet text NOT NULL,applicability text NOT NULL CHECK(length(applicability) BETWEEN 3 AND 500),
  UNIQUE(version_id,code),CHECK(extract(day from month)=1)
 );
+ALTER TABLE public.ccee_integration_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ccee_integration_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ccee_calendar_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ccee_calendar_items ENABLE ROW LEVEL SECURITY;
 DO $$DECLARE t text;BEGIN
  FOREACH t IN ARRAY ARRAY['ccee_integration_jobs','ccee_integration_events','ccee_calendar_versions','ccee_calendar_items'] LOOP
-  EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);
   EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC,anon,authenticated,service_role',t);
  END LOOP;
 END$$;
