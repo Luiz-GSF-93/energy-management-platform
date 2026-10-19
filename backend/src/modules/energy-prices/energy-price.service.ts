@@ -6,6 +6,7 @@ import {validateWriteDto} from '../../common/validation/validate-write-dto';
 import {EnergyPriceQueryDto,EnergyPricePublishDto} from './energy-price.dto';
 import {energyPriceDashboard} from './energy-price-dashboard';
 import {baselineFromStudy} from './energy-price-score';
+import {clientPublishedInsight} from '../portal-insights/portal-insights.model';
 @Injectable()
 export class EnergyPriceService{
  constructor(private readonly db:SupabaseService,private readonly licenses:LicensesService){}
@@ -13,6 +14,7 @@ export class EnergyPriceService{
  private fail(e:any){if(!e)return;if(e.code==='42501')throw new ForbiddenException('Acesso ao indicador não autorizado.');if(e.code==='40001')throw new ConflictException('A fonte foi alterada. Atualize o estudo.');throw new InternalServerErrorException('Indicador indisponível; nenhum valor foi presumido.');}
  async read(input:unknown,t:TenantContext,portal=false){await this.scope(t,portal);const d=await validateWriteDto(EnergyPriceQueryDto,input as EnergyPriceQueryDto);if(portal&&d.customerId)throw new BadRequestException('O cliente é resolvido pelo vínculo de acesso.');
  const r=await this.db.getClient().rpc('energy_price_read',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_year:Number(d.year),p_customer:d.customerId??null,p_unit:d.unitId??null});this.fail(r.error);
+ if(r.data?.customerId){const modern=await this.db.getClient().rpc('read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_from:d.year+'-01',p_to:d.year+'-12',p_customer:r.data.customerId});this.fail(modern.error);if(!Array.isArray(modern.data)||modern.data.some((x:any)=>x.customerId!==r.data.customerId||!r.data.units.some((u:any)=>u.id===x.unitId)))throw new ConflictException('Escopo das fontes de preço divergente.');r.data.evaDetails=modern.data.map(clientPublishedInsight);}
  try{return energyPriceDashboard(t.organizationId,Number(d.year),r.data,portal);}catch{throw new ConflictException('Fontes ou escopo do indicador exigem conferência.');}
  }
  async publish(input:unknown,t:TenantContext){await this.scope(t,false);const d=await validateWriteDto(EnergyPricePublishDto,input as EnergyPricePublishDto);

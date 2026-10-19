@@ -29,9 +29,9 @@ export default function OrganizationSetup({ organization }: { organization: Orga
     try { await apiRequest('/api/v1/admin/organizations/'+encodeURIComponent(organization.id)+'/registration',{method:'PATCH',body:registration});setMessage('Dados cadastrais salvos.'); }
     catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}finally{setBusy(false);}
   }
-  async function enter(){
+  async function enter(branding=false){
     setBusy(true);setError('');
-    try{await enterOrganization(organization.id);router.push('/backoffice/dashboard');}
+    try{await enterOrganization(organization.id);router.push(branding?'/backoffice/settings':'/backoffice/dashboard');}
     catch(e){setError(e instanceof Error?e.message:'Não foi possível entrar.');}finally{setBusy(false);}
   }
   return <div>
@@ -46,6 +46,7 @@ export default function OrganizationSetup({ organization }: { organization: Orga
     </details>:null}
     {hasPermission(PLATFORM_PERMISSIONS.ORGANIZATIONS_OPERATE) ? <div className="organizations-card__actions">
       <Button disabled={busy} onClick={()=>void enter()}>{busy?'Aguarde...':'Administrar e operar organização'}</Button>
+      <Button variant="secondary" disabled={busy} onClick={()=>void enter(true)}>Nome e logomarca do Portal</Button>
     </div>:null}
   </div>;
 }

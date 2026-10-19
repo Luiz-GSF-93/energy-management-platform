@@ -14,7 +14,7 @@ const original=Module._load;Module._load=function(name,parent,main){
  if(name==='@/app/providers')return {useAuth:()=>({context,status:authStatus,logout,login,hasPermission:()=>true})};
  if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>{calls.push([p,o]);return api(p,o);}};
  if(name==='@/app/components/ui')return {Button:({children,variant,...p})=>React.createElement('button',p,children),Alert:({children})=>React.createElement('div',{role:'alert'},children),LoadingState:({title})=>React.createElement('p',null,title),Card:({children})=>React.createElement('section',null,children),Input:({label,...p})=>React.createElement('label',null,label,React.createElement('input',p))};
- if(['Sidebar','OperationNotificationBell','UserIdentity','BotEnergyBackoffice','EnergyOSLogo','AuthenticatorSettings','ClientPortalContent'].some(n=>name==='@/app/components/'+n))return {__esModule:true,default:()=>React.createElement('span',null,name.split('/').at(-1)),UserWelcome:()=>null};
+ if(['Sidebar','OperationNotificationBell','UserIdentity','BotEnergyBackoffice','EnergyOSLogo','AuthenticatorSettings','ClientPortalContent','PortalWorkspace'].some(n=>name==='@/app/components/'+n))return {__esModule:true,default:()=>React.createElement('span',null,name.split('/').at(-1)),UserWelcome:()=>null};
  if(name.startsWith('@/'))return original.call(this,path.resolve(__dirname,'..',name.slice(2)),parent,main);
  return original.call(this,name,parent,main);
 };
@@ -38,7 +38,7 @@ const render=async(Component=Entry)=>{routes=[];calls=[];await act(async()=>root
  context={...organization(),user:{id:'other'},organizations:[{id:'other-org',role:'consulta'}],currentOrganization:{id:'other-org',role:'consulta',permissions:[]}};api=async()=>({organizationId:'other-org',audience:'backoffice'});await act(async()=>root.render(React.createElement(Entry,{key:++sequence})));routes=[];await act(async()=>previousRelease({organizationId:'org',audience:'client'}));ok(!routes.length,'late previous identity response cannot redirect');
  context=organization();api=async()=>({organizationId:'org',audience:'client'});await render(Shell);ok(routes.join()==='/portal'&&!text().includes('PRIVATE SHELL')&&!text().includes('Sidebar'),'direct legacy client backoffice never renders administrative shell');
  api=async()=>({organizationId:'org',audience:'backoffice'});await render(Shell);ok(text().includes('PRIVATE SHELL'),'internal consulta keeps allowed shell');
- await render(Portal);ok(text().includes('ClientPortalContent')&&!text().includes('exige perfil'),'legacy client eligible for portal content, backend still validates customer');
+ await render(Portal);ok(text().includes('PortalWorkspace')&&!text().includes('exige perfil'),'legacy client eligible for portal content, backend still validates customer');
  authStatus='mfa_required';context=null;await render(Login);ok(routes.join()==='/auth/mfa'&&!text().includes('Fazer login'),'login MFA challenge cannot redirect to dashboard');
  await render(Mfa);ok(text().includes('AuthenticatorSettings')&&!routes.length,'MFA challenge stays available');
  authStatus='unauthenticated';await render(Login);ok(text().includes('Fazer login')&&!routes.length,'signed out sees login');

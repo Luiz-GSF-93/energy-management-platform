@@ -39,13 +39,23 @@ export function energyPriceDashboard(org:string,year:number,data:any,portal:bool
  const months=Array.from({length:12},(_,i)=>{
  const month=year+'-'+String(i+1).padStart(2,'0'),selected=units.map(u=>prices.find((p:any)=>p.unitId===u.id&&p.month===month)),covered=units.length>0&&selected.every(p=>p?.gross!==null&&p?.gross!==undefined&&p?.kwh);
  const volume=covered?selected.reduce((n:bigint,p:any)=>n+decimal(p.kwh),0n):0n;
- const acl=covered?specificPrice(selected.reduce((n:bigint,p:any)=>n+feeCents(p.gross),0n),volume):null;
+ let acl=covered?specificPrice(selected.reduce((n:bigint,p:any)=>n+feeCents(p.gross),0n),volume):null;
+ let monthAcr=acr,taxBasis='GROSS',priceNotice='Referência anual ACR e compra ACL com tributos explícitos.';
+ const modern:any[]=(data.evaDetails??[]).filter((r:any)=>r.month===month);
+ if(modern.length){
+  if(modern.some((r:any)=>r.customerId!==data.customerId||!units.some(u=>u.id===r.unitId))||new Set(modern.map((r:any)=>r.unitId)).size!==modern.length)throw Error('Escopo da referência EVA divergente.');
+  const full=modern.length===units.length&&modern.every((r:any)=>r.prices?.kwh&&r.prices.acrNet);
+  const totalVolume:bigint=full?modern.reduce((n:bigint,r:any)=>n+decimal(r.prices.kwh),0n):0n;
+  const weighted=(key:string)=>full&&modern.every((r:any)=>r.prices[key]!==null)?feeMoney((modern.reduce((n:bigint,r:any)=>n+feeCents(r.prices[key])*decimal(r.prices.kwh),0n)+totalVolume/2n)/totalVolume):null;
+  monthAcr=weighted('acrNet');acl=weighted('aclNet');taxBasis='NET';
+  priceNotice='Publicação EVA: TE ACR da biblioteca e ACL sem tributos somente quando explicitamente segregados. Parcela sem base fiscal não gera score. Não compare bases tributárias diferentes entre meses.';
+ }
  const codes=baselines.map(b=>b.baseline.submarket);let pld:string|null=null,pldReference:string|null=null;
  if(units.length>0&&codes[0]&&codes.every(c=>c===codes[0])){const record=data.pld.find((p:any)=>p.month===month&&p.submarket===codes[0]);if(record){pldReference=record.value;pld=feeMoney((decimal(record.value)*100n+500000000n)/1000000000n);}}
  else if(covered&&codes.every(c=>['SE_CO','S','NE','N'].includes(c))){const records=codes.map(c=>data.pld.find((p:any)=>p.month===month&&p.submarket===c));if(records.every(Boolean)){pldReference=quantity(records.reduce((n:bigint,p:any,j:number)=>n+decimal(p.value)*decimal(selected[j].kwh),0n)/volume);pld=feeMoney((records.reduce((n:bigint,p:any,j:number)=>n+decimal(p.value)*decimal(selected[j].kwh),0n)*100n+volume*500000000n)/(volume*1000000000n));}}
- const a=acr===null?null:feeCents(acr),b=acl===null?null:feeCents(acl),diff=a!==null&&b!==null?a-b:null;
+ const a=monthAcr===null?null:feeCents(monthAcr),b=acl===null?null:feeCents(acl),diff=a!==null&&b!==null?a-b:null;
  const score=a&&diff!==null?(diff<0n?'-':'')+feeMoney(((diff<0n?-diff:diff)*10000n+a/2n)/a):null;
- return {month,acr,acl,pld,...pldSpreadScenarios(pldReference),scorePercent:score,coveredUnits:selected.filter(p=>p?.gross!=null).length,totalUnits:units.length};
+ return {month,acr:monthAcr,acl,pld,...pldSpreadScenarios(pldReference),scorePercent:score,taxBasis,priceNotice,coveredUnits:modern.length?modern.filter((r:any)=>r.prices.acrNet&&r.prices.aclNet).length:selected.filter(p=>p?.gross!=null).length,totalUnits:units.length};
  });
  const completeMonths=new Set(months.filter(m=>m.acl!==null).map(m=>m.month));
  const actual=prices.filter((p:any)=>completeMonths.has(p.month)&&p.gross!==null&&p.kwh),grossAverage=actual.length?specificPrice(actual.reduce((n:bigint,p:any)=>n+feeCents(p.gross),0n),actual.reduce((n:bigint,p:any)=>n+decimal(p.kwh),0n)):null;

@@ -1,0 +1,57 @@
+name: Private portal identity and published insights
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/organization-branding/**'
+      - 'backend/src/modules/portal-insights/**'
+      - 'backend/src/modules/energy-prices/**'
+      - 'backend/src/modules/bot-reports/**'
+      - 'backend/src/database/migrations/20261120_portal_identity.sql'
+      - 'backend/src/database/migrations/20261121_portal_published_components.sql'
+      - 'backend/test/portal-identity.cjs'
+      - 'frontend/app/portal/**'
+      - 'frontend/app/components/PortalWorkspace.tsx'
+      - 'frontend/app/components/OrganizationBrandingEditor.tsx'
+      - 'frontend/app/components/PublishedClientInsights*'
+      - 'frontend/app/components/BotEnergyReports*'
+      - 'frontend/test/portal-identity-ui.cjs'
+      - '.github/workflows/portal-identity.yml'
+permissions:
+  contents: read
+jobs:
+  scoped-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55485:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/organization-branding src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts
+        working-directory: backend
+      - run: node test/portal-identity.cjs && node test/eva-approved-publications.cjs
+        working-directory: backend
+      - run: npm install --prefix /tmp/portal-pg-driver --ignore-scripts pg@8.16.3
+      - run: node test/portal-identity.cjs
+        working-directory: backend
+        env:
+          NODE_PATH: /tmp/portal-pg-driver/node_modules
+          PORTAL_IDENTITY_TEST_PG_PORT: '55485'
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/portal-identity-ui.cjs && node test/portal-login.cjs && node test/client-portal.cjs && node test/portal-license-ui.cjs && node test/eva-corpus-citations.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

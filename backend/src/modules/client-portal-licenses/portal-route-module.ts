@@ -3,6 +3,7 @@ const uuid='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA
 export function portalRouteModule(path:string,method:string):PortalModule|null {
  const route=path.replace(/^\/api\/v1(?=\/)/,'').replace(/\/$/,'');
  if(method==='GET'&&route==='/portal/financial')return 'reports';
+ if(method==='GET'&&route==='/portal/financial-details')return 'reports';
  if(method==='GET'&&route==='/portal/energy-forecasts')return 'forecasts';
  if(method==='GET'&&route==='/portal/energy-prices')return 'energy_prices';
  if(method==='GET'&&route==='/portal/acl-admissions')return 'acl';
