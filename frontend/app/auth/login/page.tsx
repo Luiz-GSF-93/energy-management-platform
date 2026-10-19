@@ -7,6 +7,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import EnergyOSLogo from '@/app/components/EnergyOSLogo';
+import AuthenticatedDestination from '@/app/components/AuthenticatedDestination';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -34,9 +35,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      router.replace('/backoffice/dashboard');
-    }
+    if (status === 'mfa_required') router.replace('/auth/mfa');
   }, [router, status]);
 
   const handleLogin = async (
@@ -53,9 +52,6 @@ export default function LoginPage() {
         password,
       });
 
-      router.replace(
-        '/backoffice/dashboard',
-      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -67,7 +63,9 @@ export default function LoginPage() {
     }
   };
 
-  if (status === 'loading') {
+  if (status === 'authenticated') return <AuthenticatedDestination/>;
+
+  if (status === 'loading' || status === 'mfa_required') {
     return (
       <main className="auth-page">
         <div className="auth-shell">

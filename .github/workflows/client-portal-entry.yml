@@ -1,0 +1,39 @@
+name: Client portal authenticated entry
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/auth/**'
+      - 'backend/src/common/guards/client-portal*'
+      - 'frontend/app/auth/**'
+      - 'frontend/app/lib/auth/**'
+      - 'frontend/app/lib/api/auth.ts'
+      - 'frontend/app/page.tsx'
+      - 'frontend/app/providers/AuthProvider.tsx'
+      - 'frontend/app/portal/**'
+      - 'frontend/app/components/AuthenticatedDestination.tsx'
+      - 'frontend/app/components/Backoffice*'
+      - 'frontend/test/portal-login.cjs'
+      - '.github/workflows/client-portal-entry.yml'
+permissions:
+  contents: read
+jobs:
+  authenticated-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.controller.platform-context.spec.ts src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/portal-login.cjs && node test/client-portal.cjs && node test/session-renewal.cjs && node test/resolve-context.mjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

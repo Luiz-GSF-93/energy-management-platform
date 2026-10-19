@@ -127,6 +127,7 @@ export class AuthService {
       const currentRole = currentMembership.roles;
 
       return {
+        scope: 'organization' as const,
         user: {
           id: tenant.userId,
           email: tenant.email,
