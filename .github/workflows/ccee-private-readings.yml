@@ -36,6 +36,8 @@ jobs:
         working-directory: frontend
       - run: node test/ccee-data.cjs
         working-directory: frontend
+      - run: node test/ccee-reconciliation.cjs
+        working-directory: frontend
       - run: node test/ccee-integration.cjs
         working-directory: frontend
       - run: npm run build

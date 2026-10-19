@@ -1,4 +1,5 @@
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
+import {invoiceConsumption,measurementCsv,reconcileConsumption,reconciliationSummary,verifiedInvoiceBasis} from './ccee-reconciliation';
 import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {LicensesService} from '../licenses/services/licenses.service';
@@ -26,7 +27,7 @@ export class CceeDataService{
  private action(t:TenantContext,action:string,id:string|null,body:object){return this.rpc('ccee_data_action',{p_org:t.organizationId,p_actor:t.userId,p_action:action,p_id:id,p_body:body});}
  async workspace(t:TenantContext,page=0){
   await this.allowed(t);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');
-  const flags=Object.fromEntries(CCEE_DATA_FLAGS.map(k=>[k,process.env[k]==='true']));
+  const flags=Object.fromEntries([...CCEE_DATA_FLAGS,'CCEE_RECONCILIATION_ENABLED'].map(k=>[k,process.env[k]==='true']));
   if(!flags.CCEE_DATA_WORKSPACE_ENABLED)return{organizationId:t.organizationId,enabled:false,flags,bindings:[],jobs:[],page,canManage:false,canReview:false};
   const data=await this.action(t,'list',null,{page});
   return{...data,enabled:true,flags,canManage:t.accessMode==='platform_operation'||t.permissions.includes(CCEE_DATA_PERMISSIONS.manage),canReview:t.accessMode==='platform_operation'||['admin_org','gestor'].includes(t.role)&&t.permissions.includes(CCEE_DATA_PERMISSIONS.review)};
@@ -50,7 +51,14 @@ export class CceeDataService{
   if(b.kind==='PLD'&&t.organizationId!==process.env.CCEE_ORGANIZATION_ID)throw new ForbiddenException('PLD de referência vinculado à organização configurada.');
   return this.action(t,'enqueue',null,b);
  }
- async job(t:TenantContext,id:string){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t);return this.action(t,'job',cceeUuid(id),{});}
+ async job(t:TenantContext,id:string){
+  cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t);const result=await this.action(t,'job',cceeUuid(id),{});
+  if(process.env.CCEE_READING_DIAGNOSTICS_ENABLED==='true'&&result.job.state==='FAILED'){
+   const history=await this.action(t,'history',id,{page:0}),event=history.rows.find((e:any)=>e.event==='READ_FAILED');
+   if(event)result.diagnostic={at:event.recorded_at,errorCode:result.job.error_code,requests:result.job.requests,bytes:result.job.bytes,durationMs:result.job.duration_ms,httpStatus:event.details.httpStatus??null,transactions:event.details.transactions??[],hashes:event.details.hashes??[]};
+  }
+  return result;
+ }
  async history(t:TenantContext,id:string|undefined,page=0){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');return this.action(t,'history',id?cceeUuid(id):null,{page});}
  async cancel(t:TenantContext,id:string,input:unknown){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t,'manage');const b=cceeObject(input,['requestId']);cceeUuid(b.requestId);return this.action(t,'cancel',cceeUuid(id),b);}
  async preparation(t:TenantContext,id:string){
@@ -92,6 +100,33 @@ export class CceeDataService{
   const bytes=await downloadCalendar(sourceUrl),grid=await isolatedCalendar(bytes),parsed=mappedCalendar(grid,mapping),sourceHash=createHash('sha256').update(bytes).digest('hex');
   const normalizedHash=createHash('sha256').update(JSON.stringify({mapping,...parsed})).digest('hex');
   return this.ownerCalendar(actor,'create',null,{requestId:b.requestId,sourceUrl,sourceHash,normalizedHash,year:mapping.year,mapping,coverage:parsed.coverage,issues:parsed.issues,items:parsed.items,reason:b.reason});
+ }
+ private reconciliationEnabled(){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');if(process.env.CCEE_RECONCILIATION_ENABLED!=='true')throw new ServiceUnavailableException('Conciliação CCEE × fatura desligada; aguardando homologação.');}
+ private async invoiceAccess(t:TenantContext,manage=false){
+  await this.allowed(t,manage?'manage':'view');
+  if(t.accessMode!=='platform_operation'&&!t.permissions.includes(PERMISSIONS.DOCUMENTS_VIEW))throw new ForbiddenException('Conciliação exige consulta dos documentos da unidade.');
+ }
+ async invoiceCandidates(t:TenantContext,id:string){
+  this.reconciliationEnabled();await this.invoiceAccess(t);return this.rpc('ccee_reconciliation_action',{p_org:t.organizationId,p_actor:t.userId,p_action:'candidates',p_id:cceeUuid(id),p_body:{}});
+ }
+ async reconcileInvoice(t:TenantContext,id:string,input:unknown){
+  this.reconciliationEnabled();await this.invoiceAccess(t,true);
+  const b=cceeObject(input,['documentId','requestId','reason'],['verifiedBasis']);cceeUuid(b.documentId);cceeUuid(b.requestId);cceeText(b.reason);cceeUuid(id);
+  const args={p_org:t.organizationId,p_actor:t.userId,p_id:id},source=await this.rpc('ccee_reconciliation_action',{...args,p_action:'source',p_body:{documentId:b.documentId}});
+  let invoice=invoiceConsumption(source.document,source.ocr);
+  if(b.verifiedBasis!==undefined)try{invoice=verifiedInvoiceBasis(invoice,b.verifiedBasis,t.userId);}catch{throw new BadRequestException('Informe intervalo, perdas e referência efetivamente conferidos na fatura; nenhuma base foi presumida.');}
+  const payload=reconcileConsumption(source.job,source.binding,invoice);
+  return this.rpc('ccee_reconciliation_action',{...args,p_action:'save',p_body:{documentId:b.documentId,requestId:b.requestId,reason:b.reason,sourceFingerprint:source.sourceFingerprint,payload}});
+ }
+ async reconciliations(t:TenantContext,unitId:string,month:string,page=0){
+  await this.invoiceAccess(t);cceeText(unitId,100,1);cceeMonth(month,false);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');
+  if(process.env.CCEE_RECONCILIATION_ENABLED!=='true'||process.env.CCEE_DATA_WORKSPACE_ENABLED!=='true')return {organizationId:t.organizationId,enabled:false,rows:[],page};
+  const result=await this.rpc('ccee_reconciliation_action',{p_org:t.organizationId,p_actor:t.userId,p_action:'list',p_id:null,p_body:{unitId,month,page}});
+  return {...result,enabled:true,rows:result.rows.map((r:any)=>({...r,summary:reconciliationSummary(r.payload)}))};
+ }
+ async exportMeasurements(t:TenantContext,id:string){
+  this.reconciliationEnabled();await this.allowed(t);const source=await this.job(t,id);
+  try{return measurementCsv(source.job,source.binding);}catch{throw new BadRequestException('Exportação exige medições completas, com qualidade e fonte conferidas.');}
  }
  async metrics(actor:string,month:unknown){
   cceeMonth(month,false);return this.rpc('ccee_data_metrics',{p_actor:actor,p_month:String(month)+'-01'});

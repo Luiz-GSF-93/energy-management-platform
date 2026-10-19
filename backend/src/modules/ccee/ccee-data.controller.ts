@@ -17,6 +17,10 @@ export class CceeDataController{
  @Post('jobs') enqueue(@Tenant()t:TenantContext,@Body()b:unknown){return this.data.enqueue(t,b);}
  @Get('history') @Header('Cache-Control','private, no-store') history(@Tenant()t:TenantContext,@Query('jobId')id?:string,@Query('page')page?:string){return this.data.history(t,id,page===undefined?0:Number(page));}
  @Get('jobs/:id') @Header('Cache-Control','private, no-store') job(@Tenant()t:TenantContext,@Param('id')id:string){return this.data.job(t,id);}
+ @Get('jobs/:id/invoices') @Header('Cache-Control','private, no-store') invoices(@Tenant()t:TenantContext,@Param('id')id:string){return this.data.invoiceCandidates(t,id);}
+ @Post('jobs/:id/reconciliations') reconcile(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.data.reconcileInvoice(t,id,b);}
+ @Get('reconciliations') @Header('Cache-Control','private, no-store') reconciliations(@Tenant()t:TenantContext,@Query('unitId')unit:string,@Query('month')month:string,@Query('page')page?:string){return this.data.reconciliations(t,unit,month,page===undefined?0:Number(page));}
+ @Get('jobs/:id/measurements.csv') @Header('Cache-Control','private, no-store') @Header('Content-Type','text/csv; charset=utf-8') @Header('Content-Disposition','attachment; filename="EnergyOS-CCEE-medicoes.csv"') exportMeasurements(@Tenant()t:TenantContext,@Param('id')id:string){return this.data.exportMeasurements(t,id);}
  @Post('jobs/:id/cancel') cancel(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.data.cancel(t,id,b);}
  @Get('jobs/:id/preparation') @Header('Cache-Control','private, no-store') preparation(@Tenant()t:TenantContext,@Param('id')id:string){return this.data.preparation(t,id);}
  @Post('jobs/:id/preparation') apply(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.data.applyPreparation(t,id,b);}
