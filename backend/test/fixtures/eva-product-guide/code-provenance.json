@@ -10,5 +10,11 @@
     "sha256": "725f064341b5e38ee6b0f6eaa37ac82dc79828422cd22804e5d0b5c89c62173b",
     "commit": "7b77d3dc758da6164bac74ad94a139c21016abfa",
     "fixture": "reports-725f064341b5e38ee6b0f6eaa37ac82dc79828422cd22804e5d0b5c89c62173b.txt"
+  },
+  {
+    "path": "backend/src/modules/bot-reports/report-evidence.ts",
+    "sha256": "e599a828fd0b10351b8c85b0a4b431d33ebf1ba6be9bccf2debc81e5aa3bc059",
+    "commit": "b8efa3f9e93179e2bae473153381e1e58b18b5a6",
+    "fixture": "reports-e599a828fd0b10351b8c85b0a4b431d33ebf1ba6be9bccf2debc81e5aa3bc059.txt"
   }
 ]

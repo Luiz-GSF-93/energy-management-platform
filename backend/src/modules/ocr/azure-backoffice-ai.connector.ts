@@ -69,7 +69,7 @@ export class AzureBackofficeAiConnector {
    if(choice?.finish_reason!=='stop'||choice?.message?.refusal||choice?.message?.tool_calls?.length)throw new BackofficeAiError('INVALID_RESPONSE');
    const result=validateInterpretation(JSON.parse(choice.message.content),evidence);
    if(reportAudience&&result.fields.length)throw new BackofficeAiError('UNGROUNDED_FIELD');
-   return {...result,usage,model:String(body.model??this.config.deployment).slice(0,100),promptVersion:reportAudience?'published-report-'+reportAudience+'-v3-client-guidance':AI_PROMPT_VERSION,evidenceHash:createHash('sha256').update(JSON.stringify(evidence)).digest('hex')};
+   return {...result,usage,model:String(body.model??this.config.deployment).slice(0,100),promptVersion:reportAudience?'published-report-'+reportAudience+'-v3-eva-client-guidance':AI_PROMPT_VERSION,evidenceHash:createHash('sha256').update(JSON.stringify(evidence)).digest('hex')};
   }catch(e){throw new BackofficeAiError(e instanceof BackofficeAiError?e.code:'INVALID_RESPONSE',billableUsage);}
  }
 }
