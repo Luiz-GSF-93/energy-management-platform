@@ -55,8 +55,15 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    if(!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)&&!e.comparative){ownMissing.push('Fornecedor: o preço de energia está proposto, mas a composição final de tributos/encargos não está demonstrada.');}
    if(e.comparative&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)){estimated=true;add('Fornecedor: preço usado como referência comparativa, com composição fiscal não demonstrada. Não representa isenção ou tributos incluídos confirmados.');}
    let extraAcl=0n,extraAcr=0n;
-   const costs=field(p,'costs:monthly')?.value;
-   if(!costs||!Array.isArray(costs.items)||typeof costs.noCosts!=='boolean'||costs.noCosts&&costs.items.length)ownMissing.push('Custos adicionais: revisão da competência não demonstrada.');
+   const costs=field(p,'costs:monthly')?.value,rawCosts=p.fields?.find((f:any)=>f.key==='costs:monthly'),proof=e.comparative?.invoiceProof;
+   const invoiceOnly=proof!==undefined&&e.comparative?.method==='SAME_INVOICE_AMOUNTS_V2'&&e.comparative.amount!==null&&!e.comparative.missing.length&&proof.documentId===c?.document?.id&&/^[a-f0-9]{64}$/.test(proof.sourceHash)&&proof.sourceHash===c?.document?.file_hash&&money(proof.amount)===invoice&&c.cost==null&&(!rawCosts||rawCosts.state==='PENDING'&&rawCosts.value===null&&!rawCosts.source);
+   if(invoiceOnly){
+    row.costCoverage={scope:'RECONCILED_INVOICE_ONLY',documentId:proof!.documentId,sourceHash:proof!.sourceHash,amount:proof!.amount};
+    const observation='Despesas e créditos conciliados da fatura incluídos uma única vez. Despesas externas não informadas ficam fora desta estimativa; não foi registrada declaração de ausência de custos.';
+    add(e.name+': '+observation);recommendations.push('Confira despesas externas ao documento antes de aprovar a estimativa.');
+    row.fields=row.fields.map((f:any)=>f.key==='costs:monthly'?{...f,state:'FILLED',value:row.costCoverage,source:'Fatura '+proof!.documentId+' · SHA-256 '+proof!.sourceHash,observation}:f);
+   }
+   else if(!costs||!Array.isArray(costs.items)||typeof costs.noCosts!=='boolean'||costs.noCosts&&costs.items.length)ownMissing.push('Custos adicionais: revisão da competência não demonstrada.');
    else for(const item of costs.items){
     if((item.scenario==='ACL'||e.comparative)&&item.source?.includes(c.document.id))continue;
     if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
@@ -65,6 +72,16 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    }
    row.aclBeforeFees=fmt(invoice+supplier+extraAcl);if(acr!==null)row.acr=fmt(acr+extraAcr);
    row.fixedFee=fmt(money(field(p,'fee:fixed')?.value));if(money(row.fixedFee)<0n)throw Error();
+   // The report displays the evidence used by this method, without editing legacy parameters.
+   if(e.comparative?.method==='SAME_INVOICE_AMOUNTS_V2'&&acr!==null&&!e.comparative.missing.length){
+    const comparison=e.comparative,lib=comparison.library;
+    row.sources={...row.sources,library:lib};
+    row.prepared={...row.prepared,acr:{identifiedAmount:fmt(comparison.lines.reduce((total:bigint,l:any)=>total+money(l.amount),0n)),lines:comparison.lines.map(l=>({...l,key:'ACR:'+l.component+':'+l.band,rate:l.value})),source:'Biblioteca '+lib.id+' v'+lib.version,method:comparison.method}};
+    row.fields=row.fields.filter((f:any)=>!f.key.startsWith('ACR:')&&!/^(ACL|ACR):tax:/.test(f.key));
+    row.fields.push({key:'ACR:library',label:'Biblioteca ACR selecionada',state:'FILLED',value:lib.id,unit:'',scenario:'ACR',source:'Biblioteca '+lib.id+' v'+lib.version+' · '+lib.source,observation:'Tarifas líquidas elegíveis para a metodologia comparativa.'});
+    for(const l of comparison.lines)row.fields.push({key:'ACR:'+l.component+':'+l.band,label:l.label,state:'FILLED',value:l.value,unit:l.measure,scenario:'ACR',source:l.source,observation:'Quantidade aplicada: '+l.quantity+' · '+l.quantitySource});
+    for(const t of comparison.taxes??[])for(const scenario of ['ACL','ACR'])row.fields.push({key:scenario+':tax:'+({icmsAmount:'ICMS',pisAmount:'PIS',cofinsAmount:'COFINS'} as any)[t.code],label:t.code,state:'FILLED',value:{amount:t.amount,printedRate:t.printedRate??null,method:t.method},unit:'BRL',scenario,source:t.summarySource,observation:t.note});
+   }
   }catch{ownMissing.push('Uma parcela monetária essencial está ausente ou inconsistente.');}
   if((c?.rates??[]).some((r:any)=>r.state==='CONFLICT')||c?.input?.status==='DRAFT'&&c?.monthlyChanges?.length)ownMissing.push('Há divergência material entre a fatura e o rascunho existente; confira a fonte antes da decisão.');
   const prior=c?.reference;

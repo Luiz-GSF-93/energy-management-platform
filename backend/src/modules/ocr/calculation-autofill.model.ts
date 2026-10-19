@@ -27,10 +27,12 @@ export function proposedRegularSupplierAmount(s:any,measurements:any):string|nul
   const divisor=10n**24n;return feeMoney((billed*price*100n+divisor/2n)/divisor);
  }catch{return null;}
 }
-export function selectAutofillLibrary(rows:any[],u:any,month:string){
+export function selectAutofillLibrary(rows:any[],u:any,month:string,requirements:{taxTreatment?:'NET'}={}){
  const p=monthPeriod(month),scoped=rows.filter(r=>r.organization_id===u.organization_id),heads=scoped.filter(r=>!scoped.some(n=>n.previous_id===r.id));
  const eligible=heads.filter(r=>{const x=r.profile;try{validateProfile(x);if(!x.source?.trim()||!x.items.length||x.items.length>20||x.items.some((i:any)=>!['TE','TUSD_ENERGY','TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED','REACTIVE'].includes(i.component)||!['PEAK','OFF_PEAK','INTERMEDIATE','ALL'].includes(i.band)||typeof i.value!=='string'||!/^(0|[1-9][0-9]{0,8})(\.\d{1,6})?$/.test(i.value)))return false;}catch{return false;}return x.startDate<=p.start&&x.endDate>=p.end&&distributor(x.distributor)===distributor(u.distributor)&&norm(x.group)===norm(u.tariff_group)&&norm(x.subgroup)===norm(u.tariff_subgroup)&&x.modality===u.tariff_modality&&(x.consumptionClass==='GENERAL'||tariffClass(x.consumptionClass)===tariffClass(u.consumption_class));});
- return {record:eligible.length===1?eligible[0]:null,state:eligible.length===1?'MATCHED':eligible.length?'AMBIGUOUS':'MISSING'};
+ // Resolve heads before applying method eligibility: never revive a superseded NET version.
+ const candidates=eligible.filter(r=>!requirements.taxTreatment||r.profile.taxTreatment===requirements.taxTreatment);
+ return {record:candidates.length===1?candidates[0]:null,state:candidates.length===1?'MATCHED':candidates.length?'AMBIGUOUS':'MISSING',excluded:eligible.filter(r=>!candidates.includes(r)).map(r=>({id:r.id,version:r.version,reason:'TAX_TREATMENT_NOT_NET'}))};
 }
 /** A candidate is not a financial validation. No fabricated zero or attestation. */
 export function calculationAutofillPlan(c:any,libraries:any[]){

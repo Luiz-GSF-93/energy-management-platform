@@ -30,9 +30,10 @@ function printedRate(layout:any,key:string){
 }
 /** User-requested comparison, not a fiscal reassessment. Never modifies the source invoice. */
 export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparison{
- const lib=selectAutofillLibrary(libraries,c.unit,c.month).record;
+ const selection=selectAutofillLibrary(libraries,c.unit,c.month,{taxTreatment:'NET'}),lib=selection.record;
  const result:InvoiceComparison={method:'SAME_INVOICE_AMOUNTS_V2',amount:null,lines:[],retained:[],taxes:[],observations:['Estimativa comparativa: tarifas ACR da biblioteca; quantidades, impostos em reais, reativos e despesas da fatura preservados. Alíquotas exibidas como leitura, sem reaplicação sobre nova base.'],missing:[],library:lib?{id:lib.id,version:lib.version,source:lib.profile.source,taxTreatment:lib.profile.taxTreatment}:null};
  const fail=(message:string)=>{result.missing.push(message);return result;};
+ for(const excluded of selection.excluded)result.observations.push('Biblioteca '+excluded.id+' v'+excluded.version+' não utilizada: tratamento líquido das tarifas não demonstrado para esta comparação.');
  if(!lib)return fail('Biblioteca vigente não encontrada ou enquadramento ambíguo.');
  if(lib.profile.taxTreatment!=='NET')return fail('Confirme em nova versão da biblioteca a origem líquida das tarifas; não somar impostos da fatura a tarifas brutas ou desconhecidas.');
  const layout=globalModelLayout(c.source?.raw??{}),rows=layout.operations.filter(r=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role));
@@ -98,6 +99,7 @@ export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparis
   for(const row of rows.filter(r=>replaced.has(r.component))){const component=({TE:'TE',TUSD_ENERGY:'TUSD_ENERGY',DEMAND_BILLED:'TUSD_DEMAND_USED',DEMAND_UNUSED:'TUSD_DEMAND_UNUSED'} as any)[row.component];if(!result.lines.some(l=>l.component===component&&l.band===band(row)))throw Error('Rubrica substituída sem tarifa compatível: '+row.source);}
   if(subtotal+kept<0n)throw Error('Comparativo total negativo inconsistente.');
   result.amount=money(subtotal+kept);
+  if(c.document?.id&&/^[a-f0-9]{64}$/.test(c.document.file_hash??''))result.invoiceProof={documentId:c.document.id,sourceHash:c.document.file_hash,amount:money(invoice)};
  }catch(error){result.missing.push(error instanceof Error?error.message:'Composição não demonstrada.');}
  return result;
 }
