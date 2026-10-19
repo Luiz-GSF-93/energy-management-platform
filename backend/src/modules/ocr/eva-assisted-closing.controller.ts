@@ -17,5 +17,6 @@ export class EvaAssistedClosingController{
  @Post('dialogue') @RequirePermission([P.INTELLIGENCE_AI_USE]) answer(@Body() b:any,@Tenant() t:TenantContext){return this.dialogue!.answer(b,t);}
  @Get() @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW]) history(@Query() q:any,@Tenant() t:TenantContext){return this.service.history(q,t);}
  @Post() @RequirePermission([P.ENERGIA_OCR_PROCESS]) prepare(@Body() b:any,@Tenant() t:TenantContext){return this.service.prepare(b,t);}
+ @Post('publication') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE]) publication(@Body() b:any,@Tenant() t:TenantContext){return this.service.publication(b,t);}
  @Post('decision') @RequirePermission([P.ORGANIZATION_CONTRACTS_UPDATE]) decide(@Body() b:any,@Tenant() t:TenantContext){return this.service.decide(b,t);}
 }

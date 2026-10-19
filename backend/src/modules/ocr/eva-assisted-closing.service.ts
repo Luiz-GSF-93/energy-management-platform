@@ -10,18 +10,20 @@ const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f
 @Injectable()
 export class EvaAssistedClosingService{
  constructor(private db:SupabaseService,private config:ConfigService,private autofill:CalculationAutofillService){}
+ private publicationEnabled(){return process.env.EVA_APPROVED_PUBLICATIONS_ENABLED==='true'&&process.env.EVA_APPROVED_PORTAL_ENABLED==='true';}
  private enabled(){return this.config.get('EVA_ASSISTED_CLOSING_ENABLED')==='true';}
  private scope(q:any){if(!q||Object.keys(q).sort().join(',')!=='consumerUnitId,month'||!uuid(q.consumerUnitId)||typeof q.month!=='string'||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(q.month))throw new BadRequestException('Unidade e competência inválidas.');return q;}
  private async rpc(action:string,q:any,t:TenantContext,id:string|null,body:any){
   if(!t?.organizationId||!t.userId||!t.roleId)throw new ForbiddenException('Contexto organizacional necessário.');
-  const r=await this.db.getClient().rpc('eva_assisted_closing_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body});
+  const disclose=action==='decide'&&this.publicationEnabled()&&body.disclose===true;
+  const r=await this.db.getClient().rpc(disclose?'decide_eva_with_publication':'eva_assisted_closing_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',...(!disclose?{p_action:action}:{}),p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body});
   if(!r.error&&r.data!=null)return r.data;
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso restrito ao backoffice autorizado.');
   if(['23505','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
   if(r.error?.code==='22023')throw new BadRequestException('Dados insuficientes ou decisão inválida.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }
- async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return {enabled:true,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',contextEnabled:this.config.get('EVA_CLOSING_CONTEXT_ENABLED')==='true',changesEnabled:this.config.get('EVA_CLOSING_CHANGES_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...await this.rpc('history',scope,t,null,{page:Number(page)})};}
+ async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');const history=await this.rpc('history',scope,t,null,{page:Number(page)});let publications:any[]=[];if(this.publicationEnabled()&&history.rows?.length){const r=await this.db.getClient().rpc('read_eva_closing_publications',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:false,p_from:scope.month,p_to:scope.month,p_customer:history.rows[0].customer_id});if(r.error||!Array.isArray(r.data))throw new ServiceUnavailableException('Não foi possível conferir a divulgação.');publications=r.data.map((p:any)=>({id:p.id,closingId:p.closingId,state:p.state}));}return {enabled:true,approvalPublishes:this.publicationEnabled(),publications,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',contextEnabled:this.config.get('EVA_CLOSING_CONTEXT_ENABLED')==='true',changesEnabled:this.config.get('EVA_CLOSING_CHANGES_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...history};}
  async dialogueUnit(q:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento desligado.');this.scope(q);
   const captured=await this.rpc('capture',q,t,null,{}),u=captured?.financial?.tables?.consumer_units?.find((u:any)=>u.id===q.consumerUnitId&&u.organization_id===t.organizationId);
@@ -52,7 +54,17 @@ export class EvaAssistedClosingService{
  }
  async decide(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento assistido desligado.');
-  if(!b||Object.keys(b).sort().join(',')!=='acknowledge,consumerUnitId,decision,hash,id,month,note'||!uuid(b.id)||typeof b.hash!=='string'||!/^[a-f0-9]{64}$/.test(b.hash)||!['APPROVE','REJECT'].includes(b.decision)||b.acknowledge!==true||typeof b.note!=='string'||b.note.trim().length<20||b.note.length>2000)throw new BadRequestException('Confirme a decisão e sua justificativa.');
-  return {row:await this.rpc('decide',this.scope({consumerUnitId:b.consumerUnitId,month:b.month}),t,b.id,{hash:b.hash,decision:b.decision,note:b.note.trim(),acknowledge:true})};
+  if(!b||!['acknowledge,consumerUnitId,decision,hash,id,month,note','acknowledge,consumerUnitId,decision,disclose,hash,id,month,note'].includes(Object.keys(b).sort().join(','))||!uuid(b.id)||typeof b.hash!=='string'||!/^[a-f0-9]{64}$/.test(b.hash)||!['APPROVE','REJECT'].includes(b.decision)||b.acknowledge!==true||typeof b.note!=='string'||b.note.trim().length<20||b.note.length>2000)throw new BadRequestException('Confirme a decisão e sua justificativa.');
+  if(b.disclose!==undefined&&typeof b.disclose!=='boolean'||b.decision==='APPROVE'&&this.publicationEnabled()&&b.disclose!==true)throw new BadRequestException('Atualize o relatório e confirme a disponibilização ao cliente.');
+  return {row:await this.rpc('decide',this.scope({consumerUnitId:b.consumerUnitId,month:b.month}),t,b.id,{hash:b.hash,decision:b.decision,note:b.note.trim(),acknowledge:true,...(b.decision==='APPROVE'&&this.publicationEnabled()?{disclose:true}:{})})};
  }
+ async publication(b:any,t:TenantContext){
+  if(!this.enabled()||!this.publicationEnabled())throw new ServiceUnavailableException('Divulgação de aprovados desligada.');
+  if(!b||Object.keys(b).sort().join(',')!=='acknowledge,action,consumerUnitId,hash,id,month,note'||b.acknowledge!==true||!['publish','withdraw'].includes(b.action)||!uuid(b.id)||typeof b.hash!=='string'||!/^[a-f0-9]{64}$/.test(b.hash)||typeof b.note!=='string'||b.note.trim().length<20||b.note.length>2000)throw new BadRequestException('Confira a divulgação e a justificativa.');
+  const q=this.scope({consumerUnitId:b.consumerUnitId,month:b.month}),h=await this.rpc('history',q,t,null,{page:0});
+  if(!h.canManage)throw new ForbiddenException('Divulgação restrita ao gestor autorizado.');
+  const r=await this.db.getClient().rpc('eva_closing_publication_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:b.action,p_unit:q.consumerUnitId,p_month:q.month,p_id:b.id,p_body:{hash:b.hash,note:b.note.trim()}});
+  if(r.error?.code==='42501')throw new ForbiddenException('Acesso à divulgação indisponível.');if(r.error)throw new ConflictException('Divulgação não confirmada. Confira o histórico e a versão aprovada.');return {publication:r.data};
+ }
+
 }

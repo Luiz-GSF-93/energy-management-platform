@@ -16,3 +16,12 @@ describe('assisted service',()=>{
  it.each([false,true])('uses the new comparison only under its existing flag: %s',async enabled=>{const compare=invoiceComparisonV2 as jest.Mock;compare.mockReset();compare.mockReturnValue({method:'SAME_INVOICE_AMOUNTS_V2',amount:'100.00',missing:[],observations:[],lines:[],retained:[]});const x=setup(true,enabled);x.snap.mockResolvedValueOnce({available:true,plan:{fields:[],operational:{state:'PARTIAL',invoice:{amount:'2.00'},supplier:{amount:'1.00'}}},c:{document:{id:'doc'}}} as any);await x.s.prepare(b,t);expect(compare).toHaveBeenCalledTimes(enabled?1:0);expect(x.payloads.find(p=>p.p_action==='reserve').p_body.report.methodology).toBe(enabled?'SAME_INVOICE_AMOUNTS_V2':'SOURCE_BILLING_V1')});
  it('does not retry source races',async()=>{const x=setup();x.set(()=>({error:{code:'40001'}}));await expect(x.s.history({consumerUnitId:unit,month:b.month},t)).rejects.toThrow('mudaram');expect(x.actions).toHaveLength(1)});
 });
+
+describe('Approved publication activation',()=>{
+ afterEach(()=>{delete process.env.EVA_APPROVED_PUBLICATIONS_ENABLED;delete process.env.EVA_APPROVED_PORTAL_ENABLED});
+ it('requires disclosure and routes approval to the atomic function only when both flags are enabled',async()=>{
+  process.env.EVA_APPROVED_PUBLICATIONS_ENABLED='true';process.env.EVA_APPROVED_PORTAL_ENABLED='true';
+  const rpc=jest.fn(async(..._args:any[])=>({data:{state:'APPROVED'}})),s=new EvaAssistedClosingService({getClient:()=>({rpc})} as any,{get:()=> 'true'} as any,{} as any),body={consumerUnitId:unit,month:b.month,id,decision:'APPROVE',hash:'a'.repeat(64),note:'Fontes e divulgação conferidas pelo usuário.',acknowledge:true};
+  await expect(s.decide(body,t)).rejects.toThrow('disponibilização');expect(rpc).not.toHaveBeenCalled();await s.decide({...body,disclose:true},t);expect(rpc).toHaveBeenCalledWith('decide_eva_with_publication',expect.objectContaining({p_body:expect.objectContaining({disclose:true})}));expect(rpc.mock.calls[0][1]).not.toHaveProperty('p_action');
+ });
+});

@@ -1,4 +1,5 @@
 'use client';
+import ApprovedFinancialCharts,{FinancialChartMonth} from './ApprovedFinancialCharts';
 import Link from 'next/link';
 import {FormEvent,useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
@@ -6,7 +7,7 @@ import {Alert,Button,Card} from '@/app/components/ui';
 
 type Amounts={acr:string;aclBeforeFees:string;totalFees:string;aclAfterFees:string;savingsBeforeFees:string;savingsAfterFees:string;savingsPercent:string|null};
 type Publication={id:string;customerId:string;customerName:string;month:string;version:number;payloadHash:string;publishedAt:string;publicationNote:string;units:{id:string;name:string}[];reservations:string[];amounts:Amounts};
-type Data={organizationId:string;audience?:string;customerId?:string;period:{from:string;to:string;customerId:string|null};updatedAt:string;publicationCount:number;customerCount:number;unitMonthCount:number;totals:Amounts|null;months:{month:string;publicationCount:number;totals:Amounts|null}[];rows:Publication[];disclosure:string};
+type Data={charts?:FinancialChartMonth[];organizationId:string;audience?:string;customerId?:string;period:{from:string;to:string;customerId:string|null};updatedAt:string;publicationCount:number;customerCount:number;unitMonthCount:number;totals:Amounts|null;months:{month:string;publicationCount:number;totals:Amounts|null}[];rows:Publication[];disclosure:string};
 type Filters={from:string;to:string;customerId:string};
 const labels:Record<keyof Amounts,string>={acr:'Custo ACR',aclBeforeFees:'ACL antes dos honorários',totalFees:'Honorários',aclAfterFees:'ACL com honorários',savingsBeforeFees:'Economia antes dos honorários',savingsAfterFees:'Economia após honorários',savingsPercent:'Economia / ACR'};
 // Exact decimal formatting only; all totals and percentages come from the backend.
@@ -52,6 +53,7 @@ export default function PublishedFinancialDashboard({organizationId,organization
     <h3>EnergyOS · Relatório financeiro publicado</h3><p>{organizationName} · {data.period.from} a {data.period.to}</p><p>Consulta em {new Date(data.updatedAt).toLocaleString('pt-BR')}. {data.publicationCount} publicações de cliente/mês; {data.customerCount} clientes; {data.unitMonthCount} unidades/mês.</p>
     <p>{data.disclosure}</p>
     {data.totals?<div className="published-financial__totals">{(Object.keys(labels) as (keyof Amounts)[]).map(key=><Card key={key} title={labels[key]}><strong>{financialDisplay(data.totals![key],key!=='savingsPercent')}</strong></Card>)}</div>:<Alert>Nenhuma apuração publicada neste período. Não há total financeiro disponível.</Alert>}
+    {data.charts?<ApprovedFinancialCharts months={data.charts}/>:null}
     <h4>Comparativo mensal</h4><div className="published-financial__table"><table><thead><tr><th>Competência</th><th>Publicações</th><th>ACR</th><th>ACL com honorários</th><th>Economia após honorários</th></tr></thead><tbody>{data.months.map(m=><tr key={m.month}><td>{m.month}</td><td>{m.publicationCount}</td><td>{m.totals?financialDisplay(m.totals.acr):'Sem publicação'}</td><td>{m.totals?financialDisplay(m.totals.aclAfterFees):'Não disponível'}</td><td>{m.totals?financialDisplay(m.totals.savingsAfterFees):'Não disponível'}</td></tr>)}</tbody></table></div>
     <h4>Publicações e ressalvas</h4>{data.rows.map(r=><article className="published-financial__publication" key={r.id}><h4>{r.customerName} · {r.month} · v{r.version} publicada</h4>{canPreview&&audience==='backoffice'?<p><Link href={'/backoffice/client-portal?customerId='+encodeURIComponent(r.customerId)}>Conferir visão do cliente</Link></p>:null}<p>Unidades: {r.units.map(u=>u.name||u.id).join(', ')}.</p><p>ACR {financialDisplay(r.amounts.acr)} · ACL com honorários {financialDisplay(r.amounts.aclAfterFees)} · economia {financialDisplay(r.amounts.savingsAfterFees)}.</p><p>Publicada em {new Date(r.publishedAt).toLocaleString('pt-BR')}. {r.publicationNote}</p><div><p><strong>Ressalvas e origem da versão</strong></p><ul>{r.reservations.map((note,i)=><li key={i}>{note}</li>)}</ul><p>Grupo: {r.id}<br/>Hash: <code>{r.payloadHash}</code></p></div></article>)}
     <p className="published-financial__signature">Powered by Expert Energy</p>
