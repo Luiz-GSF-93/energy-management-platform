@@ -104,6 +104,7 @@ describe('AuthService.getContext — Phase 5.5c', () => {
     expect(eqStatus).toHaveBeenCalledWith('status', 'active');
 
     expect(result).toEqual({
+      scope: 'organization',
       user: {
         id: tenant.userId,
         email: tenant.email,
@@ -165,6 +166,15 @@ describe('AuthService.getContext — Phase 5.5c', () => {
       role: 'manager',
       permissions: ['contracts.read'],
     });
+  });
+
+  it('keeps platform operation explicitly classified without loading ordinary memberships', async () => {
+    const { service, from } = createService([]);
+    const result = await service.getContext({ ...tenant, accessMode: 'platform_operation' });
+    expect(result.scope).toBe('organization');
+    expect(result.accessMode).toBe('platform_operation');
+    expect(result.currentOrganization.id).toBe(tenant.organizationId);
+    expect(from).not.toHaveBeenCalled();
   });
 
   it('C — excludes an inactive membership', async () => {

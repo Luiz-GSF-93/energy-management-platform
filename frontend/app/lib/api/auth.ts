@@ -1,6 +1,7 @@
 import {
   apiRequest,
 } from '@/app/lib/api/client';
+import { normalizeAuthContext } from '@/app/lib/auth/organization-context';
 import type {
   AuthContext,
   PlatformAuthContext,
@@ -29,10 +30,10 @@ export function getPlatformContext():
   );
 }
 
-export function getAuthContext(): Promise<AuthContext> {
-  return apiRequest<AuthContext>(
+export async function getAuthContext(): Promise<AuthContext> {
+  return normalizeAuthContext(await apiRequest<AuthContext>(
     '/api/v1/auth/context',
-  );
+  ));
 }
 
 export function switchOrganization(

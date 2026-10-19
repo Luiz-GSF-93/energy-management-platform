@@ -3,44 +3,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/providers";
 import AuthenticatorSettings from "@/app/components/AuthenticatorSettings";
-import { apiRequest } from "@/app/lib/api/client";
+import AuthenticatedDestination from "@/app/components/AuthenticatedDestination";
 export default function MfaPage() {
-  const { status, context } = useAuth(),
+  const { status } = useAuth(),
     router = useRouter();
   useEffect(() => {
-    const abort = new AbortController();
     if (status === "unauthenticated") router.replace("/auth/login");
-    else if (status === "authenticated") {
-      if (
-        context &&
-        context.scope !== "global" &&
-        context.currentOrganization.role === "consulta" &&
-        !context.accessMode
-      ) {
-        const organization = context.currentOrganization.id;
-        void apiRequest<{ organizationId: string; audience: string }>(
-          "/api/v1/portal/access",
-          { signal: abort.signal },
-        )
-          .then((data) => {
-            if (
-              !abort.signal.aborted &&
-              data.organizationId === organization &&
-              ["client", "backoffice"].includes(data.audience)
-            )
-              router.replace(
-                data.audience === "client"
-                  ? "/portal"
-                  : "/backoffice/dashboard",
-              );
-          })
-          .catch(() => {
-            if (!abort.signal.aborted) router.replace("/auth/login");
-          });
-      } else router.replace("/backoffice/dashboard");
-    }
-    return () => abort.abort();
-  }, [status, context, router]);
+  }, [status, router]);
+  if (status === 'authenticated') return <AuthenticatedDestination/>;
   return (
     <main className="auth-page">
       <div className="auth-card">
