@@ -1,0 +1,51 @@
+name: Private client invoices and support
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/portal-workspace/**'
+      - 'backend/src/modules/portal-insights/**'
+      - 'backend/src/modules/operations/**'
+      - 'backend/src/database/migrations/2026112*.sql'
+      - 'backend/test/portal-client-workspace.cjs'
+      - 'frontend/app/components/Portal*'
+      - 'frontend/test/portal-workspace-ui.cjs'
+      - '.github/workflows/portal-client-workspace.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55486:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts
+        working-directory: backend
+      - run: node test/portal-client-workspace.cjs
+        working-directory: backend
+      - run: npm install --prefix /tmp/portal-pg-driver --ignore-scripts pg@8.16.3
+      - run: node test/portal-client-workspace.cjs
+        working-directory: backend
+        env:
+          NODE_PATH: /tmp/portal-pg-driver/node_modules
+          PORTAL_WORKSPACE_TEST_PG_PORT: '55486'
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

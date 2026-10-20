@@ -1,3 +1,4 @@
+import {PortalWorkspaceModule} from './modules/portal-workspace/portal-workspace.module';
 import {SalesIntakeModule} from './modules/sales-intake/sales-intake.module';
 import {OrganizationBrandingModule} from './modules/organization-branding/organization-branding.module';
 import {PortalInsightsModule} from './modules/portal-insights/portal-insights.module';
@@ -43,7 +44,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
 @Module({
-  imports: [
+  imports: [PortalWorkspaceModule,
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
     OrganizationBrandingModule,

@@ -1,3 +1,4 @@
+import {normalizePublishedDetail} from './portal-legacy-detail';
 import {Module,Injectable,Controller,Get,Query,Header,ForbiddenException,BadRequestException,InternalServerErrorException} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -11,10 +12,10 @@ export class PortalInsightsService {
   if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(from??'')||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(to??'')||from>to||(Number(to.slice(0,4))-Number(from.slice(0,4)))*12+Number(to.slice(5))-Number(from.slice(5))>11)throw new BadRequestException('Selecione até 12 meses.');
   const db=this.db.getClient();const binding=await db.rpc('client_portal_entitlement',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_module:'reports'});
   if(binding.error||binding.data?.enabled!==true||binding.data.organizationId!==t.organizationId||!binding.data.customerId)throw new ForbiddenException('Licença ou vínculo indisponível.');
-  const customer=binding.data.customerId,r=await db.rpc('read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:false,p_portal:true,p_from:from,p_to:to,p_customer:customer});
+  const customer=binding.data.customerId,r=await db.rpc(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?'read_portal_financial_components_v2':'read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:false,p_portal:true,p_from:from,p_to:to,p_customer:customer});
   if(r.error||!Array.isArray(r.data))throw new InternalServerErrorException('Detalhes publicados indisponíveis.');
   if(r.data.some((x:any)=>x.customerId!==customer||x.month<from||x.month>to||typeof x.unitId!=='string'))throw new ForbiddenException('Escopo dos componentes divergente.');
-  const rows=r.data.filter((x:any)=>!unitId||x.unitId===unitId).map(clientPublishedInsight);
+  const rows=r.data.filter((x:any)=>!unitId||x.unitId===unitId).map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'));
   return {organizationId:t.organizationId,customerId:customer,from,to,rows};
  }
 }

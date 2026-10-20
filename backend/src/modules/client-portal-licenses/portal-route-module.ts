@@ -2,6 +2,11 @@ export type PortalModule='reports'|'forecasts'|'energy_prices'|'acl'|'documents'
 const uuid='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 export function portalRouteModule(path:string,method:string):PortalModule|null {
  const route=path.replace(/^\/api\/v1(?=\/)/,'').replace(/\/$/,'');
+ if(method==='GET'&&['/portal/workspace/context','/portal/workspace/invoices'].includes(route))return 'documents';
+ if(method==='GET'&&new RegExp('^/portal/workspace/invoices/'+uuid+'/(?:file|readout)$').test(route))return 'documents';
+ if(method==='POST'&&route==='/portal/workspace/uploads')return 'documents';
+ if(['GET','POST'].includes(method)&&route==='/portal/workspace/preferences')return 'notifications';
+ if(method==='GET'&&['/portal/workspace/service-context','/portal/workspace/requests','/portal/workspace/notifications'].includes(route)||method==='POST'&&(route==='/portal/workspace/requests'||new RegExp('^/portal/workspace/notifications/'+uuid+'/read$').test(route)))return 'notifications';
  if(method==='GET'&&route==='/portal/financial')return 'reports';
  if(method==='GET'&&route==='/portal/financial-details')return 'reports';
  if(method==='GET'&&route==='/portal/energy-forecasts')return 'forecasts';

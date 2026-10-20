@@ -2,8 +2,8 @@ import {customerTemplateName} from '../whatsapp-delivery/whatsapp-template-selec
 import {sendSms,smsReady} from '../sms-delivery/sms-delivery';
 import {reportProviderReady,ReportDeliveryResult} from '../reports/report-delivery';
 import {TemplateSnapshot} from '../whatsapp-delivery/whatsapp-templates.service';
-export const noticeTemplates:Record<string,string>={REQUEST:'energyos_solicitacao_cliente',AGENDA:'energyos_lembrete_prazo',DEADLINE:'energyos_lembrete_prazo',ACL_PUBLISHED:'energyos_adesao_atualizada'};
-export const noticeTexts:Record<string,string>={REQUEST:'EnergyOS: ha uma solicitacao atualizada para sua unidade.',AGENDA:'EnergyOS: sua agenda foi atualizada.',DEADLINE:'EnergyOS: ha um prazo nas proximas 24 horas.',ACL_PUBLISHED:'EnergyOS: o resultado aprovado da adesao ACL esta disponivel.'};
+export const noticeTemplates:Record<string,string>={PORTAL_UPDATE:'energyos_portal_atualizado',REQUEST:'energyos_solicitacao_cliente',AGENDA:'energyos_lembrete_prazo',DEADLINE:'energyos_lembrete_prazo',ACL_PUBLISHED:'energyos_adesao_atualizada'};
+export const noticeTexts:Record<string,string>={PORTAL_UPDATE:'EnergyOS: ha uma nova informacao no Portal do cliente.',REQUEST:'EnergyOS: ha uma solicitacao atualizada para sua unidade.',AGENDA:'EnergyOS: sua agenda foi atualizada.',DEADLINE:'EnergyOS: ha um prazo nas proximas 24 horas.',ACL_PUBLISHED:'EnergyOS: o resultado aprovado da adesao ACL esta disponivel.'};
 export function noticeReady(channel:string,event:string,templates?:TemplateSnapshot){
  if(!noticeTexts[event])return false;
  if(channel==='email')return reportProviderReady('email');if(channel==='sms')return smsReady();

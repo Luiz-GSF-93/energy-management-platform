@@ -35,10 +35,11 @@ export class DocumentsService {
     if (!data) throw new NotFoundException('Document not found');
     return data;
   }
-  async findAll(organizationId: string) {
+  async findAll(organizationId: string,actorUserId?:string) {
     await this.requireDocumentManagement(organizationId);
     const { data, error } = await this.table('documents_with_intake').select('*').eq('organization_id', organizationId);
     this.check(error);
+    if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED==='true'&&actorUserId){const origins=await this.supabaseService.getClient().rpc('portal_document_origins',{p_org:organizationId,p_actor:actorUserId});this.check(origins.error);return data.map((d:any)=>({...d,portalOrigin:(origins.data??[]).some((o:any)=>o.documentId===d.id)?'CLIENT':null}));}
     return data;
   }
   async findOne(id: string, organizationId: string) {

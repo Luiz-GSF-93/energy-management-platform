@@ -1,6 +1,8 @@
+import {financialDetail} from './portal-financial-detail';
 import {feeCents,feeMoney} from '../contracts/services/management-fee';
 import {decimal,specificPrice} from '../energy-prices/energy-price-score';
-export function clientPublishedInsight(r:any){
+type PublishedInsight={ [key:string]:any;composition:{key:string;label:string;amount:string;percent:string;offset:string}[]|null;indicators:{kind:string;label:string;amount:string;recommendation:string;notice:string}[];prices:Record<string,string|null>};
+export function clientPublishedInsight(r:any,extended=false):PublishedInsight{
  const amount=(v:unknown)=>{if(typeof v!=='string'||!/^(0|[1-9][0-9]{0,11})\.\d{2}$/.test(v))throw Error('Componente financeiro indisponível.');return feeCents(v);};
  const f=r.financial,parts:{key:string;label:string;amount:string;percent:string;offset:string}[]=[];
  let composition=false;try{const total=amount(f.aclAfterFees),invoice=amount(r.invoice),supplier=amount(r.supplier),fees=amount(f.fees);if(total>0n&&invoice+supplier+fees===total){let offset=0n;for(const [key,label,value] of [['distributor','Fatura da distribuidora',invoice],['supplier','Energia do fornecedor',supplier],['fees','Honorários da gestão',fees]] as const){const share=key==='fees'?10000n-offset:value*10000n/total;parts.push({key,label,amount:feeMoney(value),percent:feeMoney(share),offset:feeMoney(offset)});offset+=share;}composition=true;}}catch{/* A missing component is not a balancing amount. */}
@@ -12,5 +14,6 @@ export function clientPublishedInsight(r:any){
   if(['GROSS','INCLUDED'].includes(String(fields.get('supplier:tax'))))acl=specificPrice(amount(r.supplier),q);
   if(fields.get('supplier:tax')==='NET')aclNet=specificPrice(amount(r.supplier),q);
  }catch{netAcr=null;acl=null;aclNet=null;volume=null;}
- return {publicationId:r.publicationId,sourceHash:r.sourceHash,month:r.month,unitId:r.unitId,name:r.name,customerId:r.customerId,composition:composition?parts:null,compositionNotice:composition?'Distribuidora, fornecedor e honorários conciliados ao custo ACL publicado. Tributos embutidos não são somados novamente.':'Composição integral não demonstrada nesta publicação. Nenhuma diferença foi convertida em despesa estimada.',indicators,indicatorNotice:'Sem rubrica explícita publicada, não é possível concluir se houve ou não desperdício. Para aprofundar, fale com o consultor da sua organização.',prices:{acrNet:netAcr,aclNet,aclGross:acl,kwh:volume,notice:'TE ACR da biblioteca sem tributos; ACL só com tratamento fiscal explícito. Bases tributárias distintas não geram score comparável.'}};
+ const result={publicationId:r.publicationId,sourceHash:r.sourceHash,month:r.month,unitId:r.unitId,name:r.name,customerId:r.customerId,composition:composition?parts:null,compositionNotice:composition?'Distribuidora, fornecedor e honorários conciliados ao custo ACL publicado. Tributos embutidos não são somados novamente.':'Composição integral não demonstrada nesta publicação. Nenhuma diferença foi convertida em despesa estimada.',indicators,indicatorNotice:'Sem rubrica explícita publicada, não é possível concluir se houve ou não desperdício. Para aprofundar, fale com o consultor da sua organização.',prices:{acrNet:netAcr,aclNet,aclGross:acl,kwh:volume,notice:'TE ACR da biblioteca sem tributos; ACL só com tratamento fiscal explícito. Bases tributárias distintas não geram score comparável.'}};
+ return extended?financialDetail(r,result):result;
 }
