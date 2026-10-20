@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import type {InvoiceComparison} from './eva-tariff-workbench.model';
 import {feeMoney,allocateFee} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
@@ -43,7 +44,16 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
  let estimated=false;
  for(const e of entries){
   const p=e.plan,c=e.context,ownMissing:string[]=[],o=p?.operational;
-  const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,feePercentage:field(p,'fee:percentage')?.value??null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
+  const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{...(p?.sourcePreparation?{sourcePreparation:p.sourcePreparation}:{}),library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,feePercentage:field(p,'fee:percentage')?.value??null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
+  if(sourcePreparationEnabled()){
+   const supplier=c?.diagnosis?.contractSupplierCost;
+   if(supplier?.contract&&supplier.formulaVersion!=='spot-supplier-1.0'&&supplier.maxMwh!=null&&c?.measurements?.consumptionTotal!=null)try{
+    if(scale(c.measurements.consumptionTotal,12)/1000n>scale(supplier.maxMwh,12)&&supplier.extraAmount==null)ownMissing.push('Fornecedor: o consumo proposto excede o limite contratual. O custo e a fonte da compra extra precisam ser demonstrados; a parcela regular não representa o custo completo.');
+   }catch{ownMissing.push('Fornecedor: não foi possível conferir o limite de volume contra o consumo proposto.');}
+  }
+  if(sourcePreparationEnabled())for(const requirement of c?.diagnosis?.contractSupplierCost?.requirements??[])if(['EXTRA_PURCHASE','EXTRA_TAX','UNEXPECTED_EXTRA','EXTRA_CREDIT','INVOICE_DIFFERENCE','INVOICE_TAX','CONDITIONS','PARTIAL_RULE'].includes(requirement.code))ownMissing.push('Fornecedor: '+requirement.message);
+  if(sourcePreparationEnabled())for(const doc of p?.sourcePreparation?.documents??[])for(const conflict of doc.conflicts??[])ownMissing.push('Contrato/anexo: '+conflict);
+  if(sourcePreparationEnabled()&&o?.fixedFee?.source)try{const known=money(o.fixedFee.amount);if(known>=0n)row.fixedFee=fmt(known);}catch{/* independent known card remains unavailable */}
   if(e.unavailable||!p||o?.state==='UNAVAILABLE'){ownMissing.push(e.unavailable??'Vínculo ou fonte da fatura indisponível.');continue;}
   try{
    const acr=e.comparative?(e.comparative.amount===null?null:money(e.comparative.amount)):acrTotal(e,ownMissing);

@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from '../ocr/source-preparation-v3';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -25,7 +26,7 @@ export class PortalAutomationWorker implements OnModuleInit,OnModuleDestroy {
    const live=await this.db.getClient().rpc('revalidate_portal_invoice_automation',{p_id:job.id,p_reservation:job.reservation});if(live.error||!live.data)throw Error('PORTAL_AUTOMATION_REVOKED');
    const t:TenantContext={scope:'organization',organizationId:job.organizationId,userId:live.data.userId,roleId:live.data.roleId,role:live.data.role,permissions:live.data.permissions,email:''};
    if(stage==='OCR'){await this.ocr.enqueue(t.organizationId,job.documentId,t.userId);await finish('ANALYSING','Leitura encaminhada à fila existente, com suas cotas e limites.');return;}
-   const drafts=await this.assistant.prepareAutomatic(job.documentId,t);if(!drafts.complete)throw Error('DRAFT_REQUIRES_REVIEW');
+   const drafts=await this.assistant.prepareAutomatic(job.documentId,t);if(!drafts.complete&&!(sourcePreparationEnabled()&&'canContinue' in drafts&&drafts.canContinue===true))throw Error('DRAFT_REQUIRES_REVIEW');
    const query={consumerUnitId:job.unitId,month:job.month},preview:any=await this.autofill.inspect(query,t);
    if(!preview.available||preview.documentId!==job.documentId||preview.sourceHash!==job.fileHash||!preview.canPrepare)throw Error('CURRENT_INVOICE_NOT_ELIGIBLE');
    await this.autofill.prepare({...query,requestId:job.reservation,token:preview.token},t);

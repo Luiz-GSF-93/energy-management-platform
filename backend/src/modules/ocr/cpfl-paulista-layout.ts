@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractElektroLayout} from './elektro-layout';
 import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
 import {cpflPreparationPreview} from './cpfl-preparation-preview';
@@ -115,6 +116,13 @@ function extractCpflOnly(raw:any){
  if(!classifications.length)classificationLines.forEach((line,i)=>add('classification','Classificação tarifária — texto da fatura',{...line,boundingRegions:[{pageNumber:1}]},'pages[0].classification['+i+']'));
  for(const [k,[name,label]] of Object.entries(generic)){if(docs[0].fields?.[k])add(name,label,docs[0].fields[k],'documents[0].'+k);}
  pairs.slice(0,500).forEach((p,i)=>{const alias=aliases[norm(p?.key?.content)];if(alias)add(...alias,{...p.value,confidence:p.confidence},'keyValuePairs['+i+']');});
+ if(sourcePreparationEnabled()){
+  const address=docs[0].fields?.CustomerAddress;
+  if(address&&!fields.some(f=>f.name==='serviceAddress'))add('serviceAddress','Endereço do cliente — OCR',address,'documents[0].CustomerAddress');
+  const recipient=docs[0].fields?.CustomerAddressRecipient,content=text(recipient?.content),m=/\bCNPJ\s*:?\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/i.exec(content);
+  if(m&&!fields.some(f=>f.name==='customerTaxId')&&list(recipient.spans).length===1){const span=recipient.spans[0],at=content.indexOf(m[1]);if(text(raw.content).slice(span.offset,span.offset+span.length)===content)add('customerTaxId','CNPJ no destinatário — OCR',{...recipient,content:m[1],spans:[{offset:span.offset+at,length:m[1].length}]},'documents[0].CustomerAddressRecipient.CNPJ');}
+  pairs.slice(0,500).forEach((p,i)=>{if(norm(p?.key?.content)==='CODIGO DA INSTALACAO')add('unit','Código da instalação — OCR',{...p.value,confidence:p.confidence},'keyValuePairs['+i+']');});
+ }
  if(pairs.length>500||tables.length>50)issues.push('LAYOUT_LIMIT_REACHED');
  tables.slice(0,50).forEach((table,ti)=>{
   const cells=list(table.cells),rows=[...new Set<number>(cells.map(c=>c.rowIndex).filter(n=>Number.isInteger(n)&&n>=0))].sort((a,b)=>a-b);

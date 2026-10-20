@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {createHash} from 'node:crypto';
 import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {inspectOnce} from './ocr-read-scope';
@@ -164,6 +165,7 @@ export class OcrAssistantService {
   await this.queue.assertAutomaticIdentity(t.organizationId,document);
   const plan=await this.inspect(document,t);
   const selected=plan.operations.filter(op=>op.canCreate).map(op=>op.key);
+  if(!selected.length&&sourcePreparationEnabled())return {mode:'AUTOMATIC_DRAFT' as const,stage:'NO_ELIGIBLE_LEGACY_DRAFTS' as const,receipts:[],current:plan,complete:false,canContinue:true,preparationComplete:false,canPublish:false as const,message:'Eu, EVA, não encontrei novos lançamentos elegíveis nesta etapa. Vou conferir as fontes na preparação; o fechamento ainda não está completo.'};
   if(!selected.length)return {mode:'AUTOMATIC_DRAFT' as const,receipts:[],current:plan,complete:true,canPublish:false as const,message:'Nenhum novo lançamento elegível. Valores e dúvidas permanecem preenchidos para conferência.'};
   return {...await this.executeDraftPlan(document,t,plan,selected),mode:'AUTOMATIC_DRAFT' as const};
  }

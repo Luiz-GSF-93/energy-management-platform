@@ -76,3 +76,19 @@ describe('Private preparation orchestration',()=>{
  it('stops before legacy writes when sources change after reserve',async()=>{const s=setup();s.read.mockResolvedValueOnce(s.context).mockResolvedValue({...s.context,token:'e'.repeat(64)});await expect(s.service.prepare(s.body,s.t)).rejects.toThrow();expect(s.resolution.prepare).not.toHaveBeenCalled();});
  it('creates the first monthly draft with measured demand, never edits an existing draft',async()=>{const s=setup();s.context.c.input=null;await s.service.prepare(s.body,s.t);expect(s.inputs.create).toHaveBeenCalledWith(expect.objectContaining({measurements:expect.objectContaining({demandSingle:'20'}),sourceReference:expect.stringContaining('EVA')}),s.t);const old=setup();old.context.c.input={status:'DRAFT'};await old.service.prepare(old.body,old.t);expect(old.inputs.create).not.toHaveBeenCalled();});
 });
+
+
+describe('V3 source conflicts do not become an automatic closing',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ afterEach(()=>{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;});
+ it('retains annual base and normalized volume as proposals, blocking contradicted commercial costs',()=>{
+  process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const {c,library}=fixture();
+  c.captured.contracts=[{status:'ACTIVE',contract_type:'ENERGY_PURCHASE',start_date:'2026-01-01',end_date:'2026-12-31'}];
+  c.sourcePreparation={version:3,documents:[{documentId:'annex',sourceHash:'d'.repeat(64),conflicts:['Volume cadastrado diverge da fonte.'],annex:{state:'PROPOSED',price:'118.00',sources:[{page:21}],volumeTerms:{contractedMwh:'74.4'}}}]};
+  const before=JSON.stringify(c.captured),p=calculationAutofillPlan(c,[library]);
+  expect(p.fields.find(f=>f.key==='supplier:base-price')).toMatchObject({value:'118.00',state:'FILLED'});
+  expect(p.fields.find(f=>f.key==='supplier:price')?.value).toBeNull();
+  expect(p.readyForValidation).toBe(false);expect(p.financialApproval).toBe(false);
+  expect(JSON.stringify(c.captured)).toBe(before);expect(p.sourcePreparation).toEqual(c.sourcePreparation);
+ });
+});

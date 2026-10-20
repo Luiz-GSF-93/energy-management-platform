@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractPdfText} from './eva-pdf-text.extractor';
 export type InvoiceRegistration={customerName:string|null;taxId:string|null;unitNumber:string|null;address:string|null;month:string|null};
 const compact=(v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''):'';
@@ -18,14 +19,39 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
   if(named)found.push(named[2]+'-'+String(monthNames.indexOf(named[1].slice(0,3))+1).padStart(2,'0'));else if(numeric)found.push(numeric[2]+'-'+numeric[1].padStart(2,'0'));
  }
  checks.period=!r.month||!found.length?'REVIEW':found.every(m=>m===r.month)?'MATCH':'MISMATCH';
+ if(sourcePreparationEnabled()){
+  const explicit=[...t.matchAll(/(?:NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|UNIDADE\s+CONSUMIDORA|\bUC\b)\s*(?:N[º°.]?|:)?\s*([0-9][0-9.-]{4,30})\b/g)].map(m=>compact(m[1]));
+  checks.unit=!uc||!explicit.length?'REVIEW':explicit.every(n=>n===uc)?'MATCH':'MISMATCH';
+  const streets=(v:string)=>{const n=norm(v),found:string[]=[];for(const m of n.matchAll(/\b(?:RUA|R\.?|AVENIDA|AV\.?)\s+([A-Z][A-Z .'-]{1,80}?)(?:,\s*|\s+)(\d+)\b/g)){const zip=/\b(\d{5})[- ](\d{3})\b/.exec(n.slice(m.index!+m[0].length,m.index!+m[0].length+180));if(zip)found.push(compact(m[1])+'|'+m[2]+'|'+zip[1]+zip[2]);}return found;};
+  const registeredStreet=streets(r.address??'');if(registeredStreet.length===1&&streets(text).includes(registeredStreet[0]))checks.address='MATCH';
+  const name=compact(r.customerName);
+  const customerTax=taxes.filter(id=>{const match=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].find(m=>compact(m[0])===id&&compact(t.slice(Math.max(0,m.index!-220),m.index)).includes(name));return Boolean(name.length>=8&&match);});
+  checks.taxId=!tax?'REVIEW':customerTax.includes(tax)?'MATCH':customerTax.length?'MISMATCH':'REVIEW';
+  // CPFL's customer strip may print its labels as a background image. The native
+  // text retains the explicit customer CNPJ immediately followed by installation
+  // and month. Read this narrow sequence, never an arbitrary nearby account code.
+  if(all.includes('CPFLPAULISTA')||all.includes('COMPANHIAPAULISTADEFORCAELUZ')){
+   const blocks=[...t.matchAll(/\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\s*\/\s*\d{4}-?\d{2})\s+(\d{5,20})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/\s*(20\d{2})\b/g)]
+    .filter(m=>compact(m[1])===tax&&name.length>=8&&compact(t.slice(Math.max(0,m.index!-350),m.index)).includes(name));
+   if(blocks.length){checks.taxId='MATCH';checks.unit=uc&&blocks.every(m=>compact(m[2])===uc)?'MATCH':'MISMATCH';checks.period=r.month&&blocks.every(m=>m[4]+'-'+String(monthNames.indexOf(m[3])+1).padStart(2,'0')===r.month)?'MATCH':'MISMATCH';}
+  }
+
+ }
  return {state:Object.values(checks).includes('MISMATCH')?'MISMATCH':Object.values(checks).every(s=>s==='MATCH')?'MATCH':'REVIEW',checks} as {state:'MATCH'|'MISMATCH'|'REVIEW';checks:Record<string,string>};
 }
 /** Local bounded text extraction only. Images/scans need one initial OCR to identify;
  * that initial OCR is never permission to import, draft, approve or publish. */
-export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registration:InvoiceRegistration,fileHash:string){
+export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registration:InvoiceRegistration,fileHash:string,timeoutMs?:number){
  const base={version:'invoice-identity-preflight-v1',fileHash,registration};
  if(mime!=='application/pdf')return {...base,state:'OCR_REQUIRED',checks:{source:'IMAGE_REQUIRES_INITIAL_OCR'}};
- try{const extracted=await extractPdfText(bytes);if(extracted.ocrRequired)return {...base,state:'OCR_REQUIRED',checks:{source:'SCANNED_PDF_REQUIRES_INITIAL_OCR'}};
+ try{const extracted=await (timeoutMs===undefined?extractPdfText(bytes):extractPdfText(bytes,timeoutMs));
+  if(sourcePreparationEnabled()){
+   const pages=new Set(extracted.sections.filter(s=>s.issues.some(i=>['LAYOUT_REVIEW','EMPTY_PAGE'].includes(i))).map(s=>s.page));
+   const safe=extracted.sections.filter(s=>!pages.has(s.page));
+   const identity=invoiceIdentityText(safe.map(s=>s.text).join('\n'),registration);
+   if(identity.state!=='REVIEW'||!extracted.ocrRequired)return {...base,...identity,sourcePages:[...new Set(safe.map(s=>s.page))]};
+  }
+  if(extracted.ocrRequired)return {...base,state:'OCR_REQUIRED',checks:{source:'SCANNED_PDF_REQUIRES_INITIAL_OCR'}};
   return {...base,...invoiceIdentityText(extracted.sections.map(s=>s.text).join('\n'),registration)};
  }catch{return {...base,state:'REVIEW',checks:{source:'LOCAL_EXTRACTION_UNAVAILABLE'}};}
 }

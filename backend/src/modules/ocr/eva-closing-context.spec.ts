@@ -14,3 +14,9 @@ describe('Compact closing context',()=>{
   const fit=fitClosingEvidence(base,official);expect(Buffer.byteLength(JSON.stringify(fit.evidence))).toBeLessThanOrEqual(43000);expect(fit.omitted).toBeGreaterThan(0);for(const e of fit.evidence.filter(e=>e.id.startsWith('norm')))expect(e.value).toBe(official.find(o=>o.id===e.id)!.value);
  });
 });
+
+it('provides source candidates only for the selected unit without promoting base prices',()=>{
+ const row={report:{units:[{id:'one',sources:{sourcePreparation:{documents:[{annex:{price:'118.00',priceMode:'BASE'},sourceHash:'a'.repeat(64)}]}}},{id:'two',sources:{sourcePreparation:{secret:'foreign-contract'}}}]}};
+ const e=closingEvidence(row,'one','2026-04',{},'summary',[]),text=JSON.stringify(e);
+ expect(text).toContain('118.00');expect(text).toContain('Fontes candidatas');expect(text).not.toContain('foreign-contract');
+});

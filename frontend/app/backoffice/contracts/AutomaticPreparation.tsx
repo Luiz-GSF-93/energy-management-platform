@@ -3,11 +3,12 @@ import {useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {useAuth} from '@/app/providers';
 import {Card,Button,Alert} from '@/app/components/ui';
+import SourcePreparationEvidence from './SourcePreparationEvidence';
 import WorkflowModal from './WorkflowModal';
 import OperationalProposalView,{type OperationalProposal} from './OperationalProposalView';
 type Field={key:string;label:string;value:unknown;unit:string;scenario:string;source:string;state:string;observation:string|null};
 type Simple={state:string;coverage:{filled:number;total:number;percent:number};manualGroups:{key:string;label:string;pending:string[];fields:Field[]}[];summary:string[];recommendations:string[];missing:string[]};
-type Plan={operational?:OperationalProposal;manualOverrides?:Record<string,string>;simplified?:Simple;referenceUsed?:boolean;humanReviewPending?:boolean;financialApproval?:false;reference?:{id:string;month:string;version:number;hash:string}|null;enabled:boolean;available?:boolean;unitId?:string;month?:string;basis?:string;sourceHash?:string;token?:string;percent?:number;filled?:number;total?:number;pending?:number;canPrepare?:boolean;readyForValidation?:boolean;fields?:Field[];observations?:string[]};
+type Plan={sourcePreparation?:Parameters<typeof SourcePreparationEvidence>[0]['data'];operational?:OperationalProposal;manualOverrides?:Record<string,string>;simplified?:Simple;referenceUsed?:boolean;humanReviewPending?:boolean;financialApproval?:false;reference?:{id:string;month:string;version:number;hash:string}|null;enabled:boolean;available?:boolean;unitId?:string;month?:string;basis?:string;sourceHash?:string;token?:string;percent?:number;filled?:number;total?:number;pending?:number;canPrepare?:boolean;readyForValidation?:boolean;fields?:Field[];observations?:string[]};
 type Run={id:string;state:string;created_at:string;actor_id:string;consumer_unit_id:string;month:string;source_basis:string;source_hash:string;plan:Plan;events?:{sequence:number;state:string;created_at:string;receipts:{label:string;state:string}[]}[]};
 const value=(v:unknown):string=>v===null||v===undefined?'Aguardando fonte':typeof v==='object'?JSON.stringify(v):String(v);
 async function boundedRequest<T>(path:string,options:Parameters<typeof apiRequest>[1]={}):Promise<T>{
@@ -61,6 +62,7 @@ function PreparationScope({unitId,month,onEnabled,onPrepared,onValidate,onManual
  const progress=Math.min(plan.percent??0,needsRecheck||busy?99:100);
  const observations=Array.from(new Set([...(plan.observations??[]),...(plan.fields??[]).filter(f=>f.observation).map(f=>f.label+': '+f.observation)]));
  return <Card title='Preparação automática pela EVA'>
+  <SourcePreparationEvidence data={plan.sourcePreparation}/>
   {plan.operational&&!busy&&!needsRecheck?<div ref={proposalRef} tabIndex={-1}><OperationalProposalView data={plan.operational}/></div>:null}
   {plan.simplified?<><p role='status'>{busy?'A EVA está preparando os dados disponíveis…':needsRecheck?'Resultado ainda não confirmado — consulte o histórico.':'Dados preparados pela EVA — conferir resumo e condições comerciais'}</p><p>{plan.simplified.coverage.filled}/{plan.simplified.coverage.total} dados da fatura e cadastro disponíveis. A cobertura da extração não representa aprovação financeira.</p></>:null}
   <p role='status' hidden={!!plan.simplified}>{busy?'A EVA está conferindo fontes e preparando os preenchimentos…':needsRecheck?'Preparação exige reconferência — consulte a observação e o histórico.':complete?(plan.referenceUsed?'100% preenchido com referência — aguardando conferência':'100% preenchido — aguardando validação'):plan.pending?`${progress}% preenchido · ${plan.pending} informação(ões) aguardando fonte ou conferência`:`${progress}% preparado · confira a observação da EVA antes de validar`}</p>

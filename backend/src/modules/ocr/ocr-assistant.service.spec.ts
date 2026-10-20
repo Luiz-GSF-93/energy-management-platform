@@ -29,6 +29,13 @@ describe('OCR assistant safety and partial execution',()=>{
   expect(f.operations[0].create).toHaveBeenCalledTimes(1);expect(f.operations[1].create).not.toHaveBeenCalled();
   expect(f.review.list).toHaveBeenCalled();
  });
+ it('V3 never describes an empty legacy batch as a complete preparation and performs no write',async()=>{
+  const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+  try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const f=fixture();for(const op of f.operations)op.preview.mockResolvedValue({token:'pending',state:'REVIEWS_PENDING',canCreate:false,message:'Needs review'});
+   expect(await f.service.prepareAutomatic('doc',f.tenant)).toMatchObject({complete:false,canContinue:true,preparationComplete:false,canPublish:false});
+   expect(f.operations.every(op=>op.create.mock.calls.length===0)).toBe(true);expect(f.queue.assertAutomaticIdentity).toHaveBeenCalled();
+  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+ });
  it('denies automatic preparation to a read-only role and does not retry an uncertain write',async()=>{
   const f=fixture();await expect(f.service.prepareAutomatic('doc',{...f.tenant,role:'consulta'})).rejects.toThrow();
   expect(f.operations[0].create).not.toHaveBeenCalled();

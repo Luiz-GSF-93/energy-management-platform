@@ -1,0 +1,46 @@
+import {createHash} from 'node:crypto';
+import {normalizedTaxBlocks,normalizeContractVolume,contractAnnexEvidence,SOURCE_PREPARATION_FLAG,sameContractDecimal,contractPartyMatches} from './source-preparation-v3';
+import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
+import {invoiceIdentityText,invoiceIdentityPreflight} from './invoice-identity-preflight';
+import {operationalProposal} from './calculation-operational-proposal';
+import {assistedClosingReport} from './eva-assisted-closing.model';
+import {PDFDocument,StandardFonts} from 'pdf-lib';
+const f=(text:string,decimal:string|null=null):any=>({text,decimal,pages:[1],spans:[{offset:0,length:text.length}],confidence:null,issues:['MISSING_CONFIDENCE']});
+const taxes=():any=>({kind:'TAX_SUMMARY',source:'tables[4]',rows:[['Tributo','Base de Cálc. (R$)','Alíquota (%)','Valor (R$)'],['ICMS','999,00','18,00','1,00'],['PIS','999,00','0,93','1,00'],['COFINS','999,00','4,32','1,00'],['','','','']].map((cells,index)=>({index,cells:cells.map((text,column)=>({column,columnSpan:1,rowSpan:index===3&&column!==2?2:1,value:f(text)}))}))});
+const charge:any={source:'line1',role:'CHARGE',component:'TUSD_ENERGY',issues:[],fields:{icmsAmount:f('1,00','1.00'),pisAmount:f('1,00','1.00'),cofinsAmount:f('1,00','1.00')}};
+const r={customerName:'Empresa Exemplo LTDA',taxId:'12.345.678/0001-90',unitNumber:'0012345678',address:'R Exemplo, 123 Centro SP 14000-000',month:'2026-04'};
+const text='EMPRESA EXEMPLO LTDA CNPJ 12.345.678/0001-90\nCódigo da instalação: 0012345678\nSeu código: 99999888\nRUA EXEMPLO, 123 CENTRO SP\n14000-000\nReferência ABR/2026';
+describe('Source-backed preparation V3, initially disabled',()=>{
+ const previous=process.env[SOURCE_PREPARATION_FLAG];
+ beforeEach(()=>{process.env[SOURCE_PREPARATION_FLAG]='true';});
+ afterAll(()=>{if(previous===undefined)delete process.env[SOURCE_PREPARATION_FLAG];else process.env[SOURCE_PREPARATION_FLAG]=previous;});
+ it('accepts only empty continuation rows and preserves raw evidence/confidence',()=>{const b=taxes(),raw=JSON.stringify(b),normalized=normalizedTaxBlocks([b]);expect(normalized[0].rows[3].cells[3].rowSpan).toBe(1);expect(reconcileCpflTaxes([charge],[b]).checks[2]).toMatchObject({state:'MATCH_EXTRACTED',declared:'1.00'});expect(JSON.stringify(b)).toBe(raw);expect(normalized[0].rows[3].cells[3].value.confidence).toBeNull();});
+ it.each(['ICMS','0,01','texto inesperado'])('rejects a non-empty covered row: %s',value=>{const b=taxes();b.rows[4].cells[0].value=f(value);expect(reconcileCpflTaxes([charge],[b]).checks[2].state).toBe('AMBIGUOUS');});
+ it.each(['columnSpan','unverified','missingContinuation'])('does not flatten unsafe merges: %s',key=>{const b=taxes();if(key==='columnSpan')b.rows[3].cells[3].columnSpan=2;if(key==='unverified')b.rows[3].cells[3].value.issues=['UNVERIFIED_SOURCE'];if(key==='missingContinuation')b.rows.pop();expect(reconcileCpflTaxes([charge],[b]).checks[2].state).toBe('AMBIGUOUS');});
+ it('keeps old behavior when the feature is absent or not exactly true',()=>{for(const value of [undefined,'false','TRUE','1']){if(value===undefined)delete process.env[SOURCE_PREPARATION_FLAG];else process.env[SOURCE_PREPARATION_FLAG]=value;expect(reconcileCpflTaxes([charge],[taxes()]).checks[2].state).toBe('AMBIGUOUS');}});
+ it('distinguishes installation from account code, with matching street/number/postcode',()=>expect(invoiceIdentityText(text,r).state).toBe('MATCH'));
+ it.each([['0012345678','0012345768'],['123 CENTRO','124 CENTRO'],['14000-000','14000-001'],['ABR/2026','MAI/2026']])('does not repair or guess mismatched identity %s',(a,b)=>expect(invoiceIdentityText(text.replace(a,b),r).state).not.toBe('MATCH'));
+ it('does not accept the distributor CNPJ as customer identity',()=>expect(invoiceIdentityText('DISTRIBUIDORA CNPJ 12.345.678/0001-90\nEMPRESA EXEMPLO LTDA\n'+text.split('\n').slice(1).join('\n'),r).checks.taxId).toBe('REVIEW'));
+ it('reads the CPFL native customer strip when labels are background images, never another account or issuer CNPJ',()=>{
+  const native='COMPANHIA PAULISTA DE FORCA E LUZ CNPJ 22.333.444/0001-55 RUA EMITENTE, 99 CENTRO 13000-000\nSEU CODIGO 99999888\nEMPRESA EXEMPLO LTDA R EXEMPLO, 123 CENTRO SP 14000-000\nCNPJ: 12.345.678/0001-90\n0012345678\nABR/2026 21/05/2026';
+  expect(invoiceIdentityText(native,r).state).toBe('MATCH');
+  expect(invoiceIdentityText(native.replace('0012345678','0012345768'),r).state).toBe('MISMATCH');
+  expect(invoiceIdentityText(native.replace('CNPJ: 12.345.678/0001-90','CNPJ: 22.333.444/0001-55'),r).state).not.toBe('MATCH');
+  expect(invoiceIdentityText(native.replace('14000-000','14000-001'),r).state).not.toBe('MATCH');
+ });
+ it('uses complete safe digital identity even when another PDF page requires OCR',async()=>{const p=await PDFDocument.create(),page=p.addPage(),font=await p.embedFont(StandardFonts.Helvetica);page.drawText(text,{font,size:10,x:40,y:700,lineHeight:15});p.addPage();expect(await invoiceIdentityPreflight(Buffer.from(await p.save()),'application/pdf',r,'a'.repeat(64))).toMatchObject({state:'MATCH',fileHash:'a'.repeat(64),sourcePages:[1]});},30000);
+ it('checks the registered customer CNPJ in contract contents independently of filename and metadata',()=>{
+  const s={page:1,hash:'a'.repeat(64),issues:[],text:'Empresa Exemplo CNPJ 12.345.678/0001-90'};
+  expect(contractPartyMatches([s],'12345678000190')).toBe(true);expect(contractPartyMatches([s],'22.333.444/0001-55')).toBe(false);expect(contractPartyMatches([s],null)).toBe(false);
+ });
+ it('compares contract decimals without false formatting conflicts or floating point rounding',()=>{expect(sameContractDecimal('72.000000',72)).toBe(true);expect(sameContractDecimal('72.000001','72')).toBe(false);expect(sameContractDecimal(null,0)).toBe(false);});
+ it('converts MW average and multipliers exactly with calendar hours',()=>{expect(normalizeContractVolume('2026-04','0.100000','0.50','1.40')).toMatchObject({hours:720,contractedMwh:'72',minPercent:'50',maxPercent:'140',maxTolerancePercent:'40'});expect(normalizeContractVolume('2028-02','0.1','0.5','1.4').contractedMwh).toBe('69.6');});
+ it.each([['2026-13','0.1','0.5','1.4'],['2026-04','0.1','50','140'],['2026-04','-0.1','0.5','1.4'],['2026-04','0.1','0.5','0.4']])('rejects invalid units/period/factors %s',(month,mw,lo,hi)=>expect(()=>normalizeContractVolume(month,mw,lo,hi)).toThrow());
+ const annex=()=>{const a={page:21,hash:'',issues:[],text:'ANEXO I Período de Suprimento 01/04/2024 a 31/12/2027\nENERGIA CONTRATADA 0,100000 MW Médio\n01/01/2026 a 31/12/2026 118,00\nLimite Superior 1,40\nLimite Inferior 0,50\nModulação Flat\nIPCA/IBGE'};a.hash=createHash('sha256').update(a.text).digest('hex');return a;};
+ it('proposes an annual base with source, never an invented adjusted price or schedule',()=>expect(contractAnnexEvidence([annex()],'2026-04')).toMatchObject({state:'PROPOSED',price:'118.00',priceMode:'BASE',adjustedPrice:null,index:'IPCA/IBGE',modulation:'FLAT',volumeTerms:{contractedMwh:'72'},sources:[{page:21,sectionHash:annex().hash}],automaticFinancialApproval:false}));
+ it('does not truncate an unsupported decimal price into an integer',()=>{const a=annex();a.text=a.text.replace('118,00','118.35');a.hash=createHash('sha256').update(a.text).digest('hex');expect((contractAnnexEvidence([a],'2026-04') as any).price).toBeNull();});
+ it.each(['15/04/2026','01/01/2028'])('does not apply an annex outside or partially covering the month: %s',start=>{const a=annex();a.text=a.text.replace('01/04/2024',start);a.hash=createHash('sha256').update(a.text).digest('hex');expect(contractAnnexEvidence([a],'2026-04').state).toBe('REVIEW');});
+ it('rejects ambiguous annexes and unverified layout; never chooses first silently',()=>{expect(contractAnnexEvidence([annex(),annex()],'2026-04').state).toBe('REVIEW');expect(contractAnnexEvidence([{...annex(),issues:['LAYOUT_REVIEW']}],'2026-04').state).toBe('REVIEW');});
+ it('shows a sourced fixed fee while keeping financial approval blocked',()=>{const fields:any[]=[{key:'fee:fixed',state:'FILLED',value:1302.05,source:'Contrato de gestão vigente'}],c={ready:false,proposalReady:false};const operational=operationalProposal(fields,c,null);expect(operational).toMatchObject({state:'UNAVAILABLE',fixedFee:{amount:'1302.05'}});const report=assistedClosingReport('org','client','2026-04',[{unitId:'unit',name:'Exemplo',plan:{fields,operational}}]);expect(report.units[0].fixedFee).toBe('1302.05');expect(report.approvalEligible).toBe(false);expect(report.financial.savings).toBeNull();});
+ it('does not show a fee without a source or round fractional cents',()=>{for(const fee of [{value:'1.001',source:'Contrato'},{value:'1.00',source:''}])expect(operationalProposal([{key:'fee:fixed',state:'FILLED',...fee}] as any,{ready:false},null).fixedFee.amount).toBeNull();});
+});

@@ -1,3 +1,4 @@
+import {normalizedTaxBlocks,sourcePreparationEnabled} from './source-preparation-v3';
 import {decimalFromInvoice,type ElectricalField} from './electrical-evidence';
 import type {CpflOperation,Block} from './cpfl-paulista-layout';
 const taxes=[['icmsAmount','ICMS'],['pisAmount','PIS'],['cofinsAmount','Cofins']] as const;
@@ -7,7 +8,7 @@ function cents(s:string|null|undefined){if(typeof s!=='string'||!/^[-]?[0-9]{1,2
 const decimal=(n:bigint)=>{const abs=n<0n?-n:n;return (n<0n?'-':'')+(abs/100n).toString()+'.'+(abs%100n).toString().padStart(2,'0');};
 /** Arithmetic check of extracted CHARGE amounts against the printed summary; no incidence or financial approval. */
 export function reconcileCpflTaxes(operations:CpflOperation[],blocks:Block[]){
- const summaries=blocks.filter(b=>b.kind==='TAX_SUMMARY');
+ const summaries=(sourcePreparationEnabled()?normalizedTaxBlocks(blocks):blocks).filter(b=>b.kind==='TAX_SUMMARY');
  const charges=operations.filter(r=>r.role==='CHARGE');
  const supplierReferenceCount=charges.filter(r=>r.component==='ACL_DISTRIBUTOR_INFORMATION'&&taxes.every(([key])=>!r.fields[key]?.text.trim())).length;
  const rows=charges.filter(r=>!(r.component==='ACL_DISTRIBUTOR_INFORMATION'&&taxes.every(([key])=>!r.fields[key]?.text.trim())));

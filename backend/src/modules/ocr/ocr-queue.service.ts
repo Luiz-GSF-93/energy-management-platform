@@ -1,3 +1,5 @@
+import {SourcePreparationService} from './source-preparation.service';
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {identityPreview} from './identity-preview';
 import {ocrReadOnce} from './ocr-read-scope';
 import {elektroMeasurementAudit} from './elektro-measurement-audit';
@@ -14,7 +16,7 @@ import { LicensesService } from '../licenses/services/licenses.service';
 import { AzureInvoiceConnector } from './azure-invoice.connector';
 @Injectable()
 export class OcrQueueService {
- constructor(private readonly db:SupabaseService, private readonly licenses:LicensesService, private readonly connector:AzureInvoiceConnector){}
+ constructor(private readonly db:SupabaseService, private readonly licenses:LicensesService, private readonly connector:AzureInvoiceConnector,private readonly sourcePreparation?:SourcePreparationService){}
  async enqueue(org:string,document:string,actor:string){
   await this.licenses.requireEntitlement(org,'document_management');
   if(!this.connector.isConfigured()) throw new ServiceUnavailableException('A leitura automática ainda não está habilitada.');
@@ -33,6 +35,12 @@ export class OcrQueueService {
   const [c,u]=await Promise.all([db.from('customers').select('company_name,document').eq('organization_id',org).eq('id',source.doc.customer_id).is('deleted_at',null).maybeSingle(),db.from('consumer_units').select('consumer_unit_number,address,free_market').eq('organization_id',org).eq('customer_id',source.doc.customer_id).eq('id',source.doc.consumer_unit_id).maybeSingle()]);
   if(c.error||u.error||!c.data||!u.data)throw new ConflictException('A identidade cadastral requer conferência.');
   const identity=identityPreview(extractCpflPaulistaLayout(source.raw),{customer:c.data,unit:u.data,referenceMonth:String(source.doc.reference_month).slice(0,7),otherDocumentInPeriod:false});
+  if(sourcePreparationEnabled()&&this.sourcePreparation){
+   const original=await this.sourcePreparation.invoiceIdentity(org,source.doc.customer_id,source.doc.consumer_unit_id,document,{customerName:c.data.company_name,taxId:c.data.document,unitNumber:u.data.consumer_unit_number,address:u.data.address,month:String(source.doc.reference_month).slice(0,7)});
+   if(original&&original.fileHash!==source.doc.file_hash)throw new ConflictException('A fatura mudou durante a conferência da identidade. Atualize as fontes.');
+   if(original?.state==='MISMATCH')throw new ConflictException('Eu, EVA, encontrei divergência entre o original da fatura e o cadastro da unidade. Solicite conferência auditada antes do preenchimento.');
+   if(original?.state==='MATCH'&&original.fileHash===source.doc.file_hash)return {...identity,originalEvidence:original};
+  }
   const required=identity.checks.filter(f=>['taxId','unit','address','period'].includes(f.key));
   if(required.length!==4||required.some(f=>f.comparison!=='EQUAL'||!f.candidates.length||f.candidates.some(v=>!v.pages.length||v.issues.includes('UNVERIFIED_SOURCE'))))throw new ConflictException('EVA: UC, CNPJ, endereço ou competência não conferem com a unidade selecionada. Solicite atendimento; nenhum preenchimento automático foi iniciado.');
   return identity;

@@ -1,0 +1,52 @@
+EVA - Preparação por fontes V3 - entrega técnica desligada
+
+Ativação: EVA_SOURCE_PREPARATION_V3_ENABLED=true (ausente/false mantém desligada).
+A mudança de nome de Bot para EVA é visual e independe da flag.
+Sem novas tabelas ou migração. Não altera permissões, cotas ou limiar global de 90%.
+
+Original da fatura:
+- Metadados limitados à organização, cliente, unidade e documento escolhido.
+- Bucket privado, prefixo, tamanho de até 15 MiB e SHA-256 conferidos antes da extração.
+- Texto nativo seguro pode provar identidade mesmo havendo outra página vazia/scaneada.
+- CPFL: rótulos em imagem podem ser recuperados pela sequência nativa estrita CNPJ do destinatário → instalação → competência, sem usar código do cliente de outra região.
+- Instalação é distinta do código do cliente. Não corrige dígitos por semelhança.
+- CNPJ é conferido no contexto da razão social; endereço preserva rua, número e CEP.
+- Layout inseguro ou identidade insuficiente mantém conferência. A prova não eleva confiança OCR.
+- Identidade divergente não prepara rascunhos automaticamente, inclusive com confirmação antiga.
+
+Rubricas e tributos:
+- Continuação vertical vazia do resumo fiscal pode ser normalizada na projeção.
+- Valores sobrepostos, duas linhas de tributo, mescla horizontal ou origem não comprovada permanecem bloqueados.
+- Cofins usa o valor impresso e sua fonte, conciliado com a soma exata de centavos.
+- CDE-Covid com descrição e zero explícitos, ambos com evidência, é classificada sem declarar campos vazios como zero.
+- Nenhuma reaplicação de impostos embutidos. A comparação conserva valores lidos conforme método vigente.
+
+Anexo contratual:
+- Descobre até quatro candidatos PDF do mesmo escopo, inclusive nomes históricos de minutas cadastradas como nota de fornecedor.
+- Nome do arquivo apenas descobre candidatos; não prova assinatura nem vincula juridicamente o documento ao contrato.
+- Prefere o vínculo energy_contract_id existente e inclui arquivos classificados CONTRACT_ENERGY mesmo com nome genérico; contratos vinculados a outro cadastro são excluídos.
+- Confere o CNPJ do cliente no conteúdo antes de propor condições do anexo; nome de arquivo ou classificação não substituem essa conferência.
+- Lê localmente o anexo único com hash da seção, página, preço-base anual e fatores explícitos.
+- Limite máximo informativo de 140% é comparado ao total; a condição do motor usa separadamente a tolerância de 40%.
+- Converte MW médio em MWh pelas horas de calendário da competência; fator superior 1,40 representa tolerância adicional de 40%.
+- Opção de sazonalização não inventa distribuição mensal. Modulação Flat é distinta de acompanhamento de carga.
+- Preço-base não vira preço final por texto do índice. O motor existente exige fonte de reajuste ou preço final documentado.
+- Conflitos com volume/flexibilidade/modulação cadastral são exibidos e impedem consolidação automática.
+- Nenhum contrato, preço ou vigência cadastral é regravado silenciosamente. Anexos candidatos seguem conferência no fluxo auditado existente.
+- Extração contratual limitada a 8 segundos por PDF e orçamento de 12 segundos por consulta; exceder o tempo mantém revisão, sem chamada paga.
+- Cache de identidade: 16 provas por até 60 segundos, ligado ao cadastro e hash atuais, sempre após reconferência dos bytes. Falha transitória não é memorizada.
+- Cache de extração local: no máximo oito documentos, 60 segundos, chave com organização/cliente/unidade/id/hash; metadados e bytes são reconferidos a cada consulta.
+
+Apresentação:
+- Honorário fixo comprovado continua visível quando outra parte do estudo está incompleta.
+- Totais e economia continuam indisponíveis sem composição suficiente; não há aprovação/publicação automática.
+- Fontes contratuais e diferenças aparecem na preparação e na versão do relatório. A EVA recebe esse contexto da unidade selecionada.
+- Histórico e decisões humanas são preservados. O documento original e o score nativo não são alterados.
+
+Homologação posterior à entrega técnica:
+1. Conferir cadastro auditado da instalação contra o original, sem novo OCR por tentativa.
+2. Conferir vigência/classe da biblioteca ACR e declarar sua origem líquida, sem copiar tarifas futuras.
+3. Confirmar vínculo do anexo e evidência dos reajustes aplicáveis; conferir custo de eventual excedente e tributos do fornecedor.
+4. Após autorização da fase, habilitar apenas esta flag e preparar uma versão de teste com as fontes preservadas.
+5. Conferir preenchimento, conciliação, memória, ausência de duplicidade, permissões e cotas. Reverter somente esta flag se falhar.
+A etapa técnica não executa essa homologação, não consome documento/IA e não publica resultado financeiro.
