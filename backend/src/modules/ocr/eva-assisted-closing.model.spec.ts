@@ -16,3 +16,10 @@ describe('EVA assisted closing',()=>{
  it('handles zero and unavailable comparison',()=>{expect(historicalDifference('kWh','120','100','kWh')).toMatchObject({difference:'20.000000',percent:'20.00'});expect(historicalDifference('kWh','120','0','kWh').percent).toBeNull();expect(historicalDifference('kWh',null,'100','kWh').comparable).toBe(false)});
 });
 
+
+it('V3 requires demonstrated extra energy and invoice reconciliation instead of showing a partial supplier as final',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const e=entry();e.context.diagnosis={contractSupplierCost:{requirements:[{code:'EXTRA_PURCHASE',message:'Compra extra exige valor e fonte.'}]}};
+  const r=report([e]);expect(r.approvalEligible).toBe(false);expect(r.financial.savings).toBeNull();expect(r.missing.join(' ')).toContain('Compra extra exige valor e fonte.');
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});
