@@ -1,5 +1,6 @@
 'use client';
 import OcrAssistant from './OcrAssistant';
+import OcrIdentityResume from './OcrIdentityResume';
 import OcrElektroAudit,{type ElektroAudit} from './OcrElektroAudit';
 import OcrHomologation from './OcrHomologation';
 import OcrDemandReviews from './OcrDemandReviews';
@@ -14,7 +15,7 @@ import {apiRequest} from '@/app/lib/api/client';
 import type {InboxUpdate} from './assistant-inbox';
 type Job={id:string;state:string;errorCode:string|null};
 type Intake={elektroAudit?:ElektroAudit|null;layout?:LayoutEvidence;readoutSummary?:ReadoutSummary;gd?:GdEvidence;electrical?:ElectricalEvidence;decision:string;canImport:false;checkedAt:string;checks:{field:string;label:string;state:string;message:string;confidence:number|null;pages:number[]}[]};
-type Status={enabled:boolean;job:Job|null;intake?:Intake|null};
+type Status={enabled:boolean;job:Job|null;intake?:Intake|null;identityResumeEnabled?:boolean};
 const labels:Record<string,string>={QUEUED:'Na fila',SUBMITTING:'Enviando para leitura',POLLING:'Leitura em andamento',SUCCEEDED:'Extração recebida — aguarda conferência',FAILED:'Leitura interrompida',SUBMISSION_UNKNOWN:'Envio indeterminado — requer verificação administrativa'};
 export default function OcrDocumentStatus({id,canProcess,autoAssist=false,openRequest=0,onAssistantUpdate}:{id:string;canProcess:boolean;autoAssist?:boolean;openRequest?:number;onAssistantUpdate?:(id:string,update:InboxUpdate)=>void}){
  const [status,setStatus]=useState<Status|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [checkedAt,setCheckedAt]=useState<string|null>(null);const active=useRef(true);const loading=useRef(false);
@@ -42,6 +43,7 @@ export default function OcrDocumentStatus({id,canProcess,autoAssist=false,openRe
   {error&&<p role="alert">{error}</p>}
   <button type="button" disabled={busy} onClick={()=>void load(true)}>{busy?'Consultando status…':status?'Atualizar leitura':'Consultar leitura OCR'}</button>
   {canProcess&&status?.enabled&&!status.job&&<button type="button" disabled={busy} onClick={()=>void start()}>Iniciar leitura</button>}
+  {canProcess&&status?.enabled&&status.identityResumeEnabled&&status.job?.state==='FAILED'&&['IDENTITY_MISMATCH','IDENTITY_REVIEW_REQUIRED'].includes(status.job.errorCode??'')&&<OcrIdentityResume key={id+':'+status.job.id} id={id} onDone={()=>void load(true)}/>}
   {status?.job?.state==='SUCCEEDED'&&<p>A leitura exige conferência. Consulte Acompanhar homologação para verificar a integração dos consumos e as demais pendências.</p>}
   {status?.intake&&<details><summary>Conferência da fatura — importação bloqueada</summary>
    <p>Comparação preservada com o cadastro da data da conferência. Não representa aprovação da fatura.</p>
