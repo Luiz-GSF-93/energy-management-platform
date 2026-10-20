@@ -42,3 +42,20 @@ it('classifies only explicit verified zero CDE Covid without changing raw OCR or
   row.fields.amount=x.field('0.00');row.fields.amount.issues=['UNVERIFIED_SOURCE'];expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
 });
+
+it('V3 preserves a proven earlier-period CPFL TUSD complement as a monetary adjustment',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();x.layout.layoutId='cpfl-paulista-a';x.layout.fields.find((f:any)=>f.name==='reference').value=x.field('ABR/2026');
+  const adjustment:any={source:'historical',component:'TUSD_ENERGY',role:'CHARGE',issues:[],fields:{description:x.field('Compl TUSD JAN26'),amount:x.field('24.15')},arithmetic:{state:'NOT_VERIFIABLE'}};x.layout.operations.push(adjustment);
+  const before=JSON.stringify(adjustment);expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_BILLING_ADJUSTMENT');expect(JSON.stringify(adjustment)).toBe(before);
+  adjustment.fields.description=x.field('Compl TUSD ABR26');expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
+  adjustment.fields.description=x.field('Compl TUSD MAI26');expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
+  adjustment.fields.description=x.field('Compl TUSD JAN26');adjustment.fields.amount.issues=['UNVERIFIED_SOURCE'];expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});
+it('V3 tax coverage accounts for normalized zero charge rows without inventing their blank taxes',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();x.layout.operations.push({source:'covid',component:'OTHER',role:'UNKNOWN',issues:['UNMAPPED_COMPONENT'],fields:{description:x.field('CDE-COVID Fora Ponta'),amount:x.field('0.00')},arithmetic:{state:'NOT_VERIFIABLE'}});
+  const r=globalModelLayout(x.raw);expect(r.taxReconciliation.checks.find((c:any)=>c.key==='icmsAmount')).toMatchObject({count:1,expected:2,partial:true});expect(r.operations.at(-1)?.fields.icmsAmount).toBeUndefined();
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});

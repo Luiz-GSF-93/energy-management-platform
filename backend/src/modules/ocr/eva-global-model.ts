@@ -1,3 +1,5 @@
+import {cpflReference} from './cpfl-measurements';
+import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {transcriptionEvidence} from './transcription-evidence';
@@ -24,14 +26,21 @@ const labels=['Identificação e período','Enquadramento','Consumo e demanda','
 const fieldLabels:Record<string,string>={customerTaxId:'CNPJ do cliente',unit:'Unidade/instalação',reference:'Competência',classification:'Classificação tarifária',description:'Descrição da rubrica',quantity:'Quantidade faturada',rate:'Tarifa',amount:'Valor da rubrica',invoiceTotal:'Total da fatura',total:'Total',icmsAmount:'ICMS',pisAmount:'PIS',cofinsAmount:'Cofins'};
 /** Scoped V2 projection: never mutates the shared OCR parser or its historical result. */
 export function globalModelLayout(raw:any){
- const layout=extractCpflPaulistaLayout(raw);
- return {...layout,operations:layout.operations.map(row=>{
+ const layout=extractCpflPaulistaLayout(raw),sourceEnabled=sourcePreparationEnabled();
+ const references=sourceEnabled?[...new Set(layout.fields.filter(f=>f.name==='reference'&&globalFieldEvidence(raw,f.value).filled).map(f=>cpflReference(f.value.text)).filter(Boolean))]:[];
+ const operations=layout.operations.map(row=>{
   const label=String(row.fields.description?.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
   const amount=row.fields.amount?.decimal;
+  const adjustment=/^COMPL(?:EMENTO)?\s+(?:DE\s+)?TUSD\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/?\s*(\d{2}|20\d{2})$/.exec(label);
+  if(sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1&&adjustment&&row.component==='TUSD_ENERGY'&&row.role==='CHARGE'&&typeof amount==='string'&&/^\d+(?:\.\d{1,2})?$/.test(amount)&&globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled){
+   const month=(adjustment[2].length===2?'20':'')+adjustment[2]+'-'+String(['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'].indexOf(adjustment[1])+1).padStart(2,'0');
+   if(month<references[0]!)return {...row,component:'TUSD_BILLING_ADJUSTMENT'};
+  }
   if(sourcePreparationEnabled()&&row.role==='UNKNOWN'&&row.component==='OTHER'&&/^CDE[ -]COVID(?:\s+(?:PONTA|FORA PONTA|F PONTA))?$/.test(label)&&typeof amount==='string'&&/^0(?:\.0{1,9})?$/.test(amount)&&globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled)return {...row,component:'CDE_COVID',role:'CHARGE' as const,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
   if(row.role!=='UNKNOWN'||row.component!=='OTHER'||!/^ATUALIZACAO MONETARIA(?:\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/\d{2}(?:\d{2})?)?$/.test(label)||typeof amount!=='string'||! /^-?\d+(?:\.\d{1,2})?$/.test(amount)||!globalFieldEvidence(raw,row.fields.description).filled||!globalFieldEvidence(raw,row.fields.amount).filled)return row;
   return {...row,component:'MONETARY_CORRECTION',role:(amount.startsWith('-')?'CREDIT':'CHARGE') as typeof row.role,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
- })};
+ });
+ return {...layout,operations,...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(operations,layout.blocks??[])}:{})};
 }
 /** V2 aggregates five equally weighted sections. Coverage is never hidden by a high average. */
 export function globalModelConfidence(raw:any,threshold=0.9,profile?:any){
