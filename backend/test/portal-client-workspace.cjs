@@ -27,7 +27,7 @@ async function database(){
  CREATE FUNCTION assert_operation_actor(text,text,text,boolean,boolean DEFAULT false) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF $1<>'org' OR $2<>'${admin}' THEN RAISE EXCEPTION 'Not organizational team' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION assert_client_evidence_actor(text,text,text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF $1<>'org' OR $2<>'${client}' OR $3<>'customer' THEN RAISE EXCEPTION 'Not client';END IF;END$$;
  CREATE FUNCTION preserve_operation_history() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Immutable';END$$;
- CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,file_hash text,file_verified boolean,reference_month date,document_type text);
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,file_hash text,file_verified boolean,reference_month timestamp without time zone,document_type text);
  CREATE TABLE operation_records(id uuid PRIMARY KEY,organization_id text,kind text,customer_id text,consumer_unit_id text,title text,description text,priority text,status text,responsible_id text,due_at timestamptz,effective_date date,request_type text,revision integer,created_by text,updated_by text,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),operation_number bigint DEFAULT 1,requested_by_name text DEFAULT 'Synthetic');
  CREATE TABLE operation_record_history(organization_id text,record_id uuid,revision integer,request_id uuid,request_payload jsonb,action text,actor_id text,reason text,snapshot jsonb);
  CREATE TABLE operation_client_messages(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id text,record_id uuid,customer_id text,consumer_unit_id text,direction text,subject text,body text,document_ids text[] DEFAULT '{}',actor_id text,actor_name text,request_id uuid,created_at timestamptz DEFAULT now());
@@ -51,7 +51,7 @@ async function database(){
  ALTER TABLE document_ocr_jobs ADD COLUMN error_code text;ALTER TABLE document_ocr_jobs ADD COLUMN id uuid DEFAULT gen_random_uuid();ALTER TABLE document_ocr_jobs ADD COLUMN file_hash text;ALTER TABLE document_ocr_jobs ADD COLUMN lease_token uuid;ALTER TABLE document_ocr_jobs ADD COLUMN lease_until timestamptz;
  CREATE FUNCTION transition_document_ocr(uuid,uuid,text,text DEFAULT NULL,integer DEFAULT 5,text DEFAULT NULL,jsonb DEFAULT NULL,jsonb DEFAULT NULL) RETURNS public.document_ocr_jobs LANGUAGE plpgsql AS $$DECLARE j public.document_ocr_jobs;BEGIN SELECT * INTO j FROM public.document_ocr_jobs WHERE id=$1;RETURN j;END$$;
  CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text,public boolean,file_size_limit bigint);INSERT INTO storage.buckets VALUES('energy-documents-private',false,10485760);`);
- for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql','20261128_operation_actor_active_status.sql','20261129_portal_invoice_month_guard.sql','20261130_invoice_identity_preflight.sql','20261201_private_document_15mb.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
+ for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql','20261128_operation_actor_active_status.sql','20261129_portal_invoice_month_guard.sql','20261130_invoice_identity_preflight.sql','20261201_private_document_15mb.sql','20261203_portal_invoice_month_timestamp.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
  // Run the real operational authorization function, not the fixture stub.
  const actorCheck=()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['org',admin,'requests']);
  await actorCheck();checks++;
@@ -64,6 +64,10 @@ async function database(){
  await deny(()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['org',client,'requests']));
  await db.query('UPDATE roles SET permissions=permissions-$1 WHERE id=$2',['1479c0b7-9608-4e95-bd83-7e6899255a78',adminRole]);
  await deny(actorCheck);
+ // Match the production timestamp type, including a non-midnight reference.
+ await db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type) VALUES('timestamp-month','org','customer','unit',$1,true,'2026-02-01 13:45:00','INVOICE_DISTRIBUTOR')",['9'.repeat(64)]);
+ ok((await db.query("SELECT invoice_month_conflict('org','customer','unit','2026-02-01'::date,NULL) code")).rows[0].code==='P2091');
+ await deny(()=>db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type) VALUES('timestamp-duplicate','org','customer','unit',$1,true,'2026-02-28 23:59:00','INVOICE_DISTRIBUTOR')",['8'.repeat(64)]));
  await db.query('UPDATE roles SET permissions=permissions||$1::jsonb WHERE id=$2',[JSON.stringify(['1479c0b7-9608-4e95-bd83-7e6899255a78']),adminRole]);
  const call=(actor,r,action,id=null,body={})=>db.query('SELECT portal_workspace_action($1,$2,$3,false,$4,$5,$6) AS data',['org',actor,r,action,id,JSON.stringify(body)]).then(r=>r.rows[0].data);
  ok((await call(client,role,'context')).units[0].id==='unit');

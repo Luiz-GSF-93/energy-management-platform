@@ -8,6 +8,7 @@ on:
       - 'backend/src/database/migrations/2026112*.sql'
       - 'backend/src/database/migrations/20261130*.sql'
       - 'backend/src/database/migrations/20261201*.sql'
+      - 'backend/src/database/migrations/20261203*.sql'
       - 'backend/test/portal-client-workspace.cjs'
       - 'frontend/app/components/Portal*'
       - 'frontend/test/portal-workspace-ui.cjs'
