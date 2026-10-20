@@ -40,7 +40,7 @@ export type ContractTextSection={page:number;text:string;hash:string;issues:stri
  * Annual table prices remain BASE; no index, TRU or signature is invented. */
 export function contractAnnexEvidence(sections:ContractTextSection[],month:string){
  const valid=sections.length<=2000&&/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month);
- const candidates=valid?sections.filter(s=>s.text.length<=2800&&/ANEXO\s+I\b/.test(normalized(s.text))&&/ENERGIA\s+CONTRATADA/.test(normalized(s.text))):[];
+ const candidates=valid?sections.filter(s=>s.text.length<=2800&&/^\s*ANEXO\s+I\b/.test(normalized(s.text))&&/ENERGIA\s+CONTRATADA/.test(normalized(s.text))):[];
  if(candidates.length!==1)return {state:'REVIEW' as const,reason:'Anexo contratual único não identificado.',sources:[]};
  const s=candidates[0],t=normalized(s.text),sources=[{page:s.page,sectionHash:s.hash}];
  if(!/^[a-f0-9]{64}$/.test(s.hash)||createHash('sha256').update(s.text).digest('hex')!==s.hash||s.issues.some(i=>i!=='IMAGE_PRESENT'))return {state:'REVIEW' as const,reason:'Fonte ou disposição do anexo requer conferência.',sources};
@@ -50,13 +50,17 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  const [year,monthNumber]=month.split('-').map(Number),last=month+'-'+new Date(Date.UTC(year,monthNumber,0)).getUTCDate();
  if(!start||!end||start>month+'-01'||end<last)return {state:'REVIEW' as const,reason:'Vigência única do anexo não demonstrada para toda a competência.',sources};
  const num=(v:string)=>v.replace(/\./g,'').replace(',','.');
- const volume=[...t.matchAll(/\b(\d{1,4},\d{1,6})\s*MW\s*MEDIO\b/g)];
- const pricePattern=new RegExp('01[/.]01[/.]'+month.slice(0,4)+'\\s*(?:A|ATE|[-–])\\s*31[/.]12[/.]'+month.slice(0,4)+'\\s+(?:R\\$\\s*)?((?:\\d{1,3}\\.\\d{3}|\\d{1,6})(?:,\\d{1,6})?)(?=\\s|$)','g');
+ const volume=[...t.matchAll(/\b(\d{1,4},\d{1,6})\s*MW\s*MEDIO\b/g)].map(m=>num(m[1]));
+ // Some annexes print units in the table header. Only one complete row of the
+ // explicit energy table, with the same supply period, can supply its MW value.
+ const volumeTables=[...t.matchAll(/\bENERGIA\s+CONTRATADA\s+PERIODO\s+MW\s+MEDIO\s+INICIO\s+TERMINO\s+([\s\S]*?)(?=\b\d+\.\s*PRECO\b)/g)];
+ for(const table of volumeTables){const row=/^\s*(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,4},\d{1,6})\s*$/.exec(table[1]);if(row&&day(row[1])===start&&day(row[2])===end)volume.push(num(row[3]));}
+ const pricePattern=new RegExp('01[/.]01[/.]'+month.slice(0,4)+'\\s+(?:(?:A|ATE|[-–])\\s*)?31[/.]12[/.]'+month.slice(0,4)+'\\s+(?:R\\$\\s*)?((?:\\d{1,3}\\.\\d{3}|\\d{1,6})(?:,\\d{1,6})?)(?=\\s|$)','g');
  const prices=[...t.matchAll(pricePattern)];
  const lower=[...t.matchAll(/LIMITE\s+INFERIOR\s*[:=]?\s*(0,\d{1,6}|1,0{1,6})\b/g)],upper=[...t.matchAll(/LIMITE\s+SUPERIOR\s*[:=]?\s*(\d{1,2},\d{1,6})\b/g)];
  const price=prices.length===1?num(prices[0][1]):null;
  let volumeTerms:ReturnType<typeof normalizeContractVolume>|null=null;
- if(volume.length===1&&lower.length===1&&upper.length===1)try{volumeTerms=normalizeContractVolume(month,num(volume[0][1]),num(lower[0][1]),num(upper[0][1]));}catch{/* ambiguous terms remain pending */}
+ if(volume.length===1&&lower.length===1&&upper.length===1)try{volumeTerms=normalizeContractVolume(month,volume[0],num(lower[0][1]),num(upper[0][1]));}catch{/* ambiguous terms remain pending */}
  const index=/IPCA\s*\/\s*IBGE/.test(t)?'IPCA/IBGE':null;
  return {state:'PROPOSED' as const,period:{start,end},price,priceMode:'BASE' as const,adjustedPrice:null,volumeTerms,index,modulation:/MODULACAO\s*[:=]?\s*FLAT\b/.test(t)?'FLAT':null,sources,
   pending:['Conferir vínculo e vigência do contrato registrado com este anexo.','Comprovar reajustes aplicáveis antes de determinar o preço final.','Conferir tratamento da TRU, compra excedente e tributos conforme cláusulas e fontes.'],automaticFinancialApproval:false};

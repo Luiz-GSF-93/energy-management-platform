@@ -59,3 +59,24 @@ it('V3 tax coverage accounts for normalized zero charge rows without inventing t
   const r=globalModelLayout(x.raw);expect(r.taxReconciliation.checks.find((c:any)=>c.key==='icmsAmount')).toMatchObject({count:1,expected:2,partial:true});expect(r.operations.at(-1)?.fields.icmsAmount).toBeUndefined();
  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
 });
+
+it.each(['CDE-COVID Ponta [kWh] MAR/26','CDE-COVID Fora Ponta [kWh] ABR/26'])('V3 recognizes dated zero row %s with exact source evidence',label=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();
+  const row:any={source:'covid-dated',component:'OTHER',role:'UNKNOWN',issues:['UNMAPPED_COMPONENT'],fields:{description:x.field(label),amount:x.field('0.00')},arithmetic:{state:'NOT_VERIFIABLE'}};x.layout.operations.push(row);
+  const before=JSON.stringify({raw:x.raw,row});expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('CDE_COVID');expect(JSON.stringify({raw:x.raw,row})).toBe(before);
+  process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='false';expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
+  process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';row.fields.amount=x.field('0.01');expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
+  row.fields.amount=x.field('0.00');row.fields.description=x.field(label+' SERVICO NOVO');expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});
+it.each(['Compl.TUSD Mês JAN/26','Compl.TUSD Mês DEZ/25'])('V3 keeps historic monetary complement %s out of current quantity requirements',label=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();x.layout.layoutId='cpfl-paulista-a';x.layout.fields.find((f:any)=>f.name==='reference').value=x.field('ABR/2026');
+  const row:any={source:'historical-dated',component:'TUSD_ENERGY',role:'CHARGE',issues:[],fields:{description:x.field(label),amount:x.field('24.15')},arithmetic:{state:'NOT_VERIFIABLE'}};x.layout.operations.push(row);
+  expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_BILLING_ADJUSTMENT');expect(globalModelConfidence(x.raw)).toMatchObject({complete:true,consistent:true,state:'READY_FOR_REVIEW'});
+  row.fields.description=x.field('Compl.TUSD Mês ABR/26');expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
+  row.fields.description=x.field('Compl.TUSD Mês MAI/26');expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
+  row.fields.description=x.field(label);row.fields.description.issues=['UNVERIFIED_SOURCE'];expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});
