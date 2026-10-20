@@ -40,7 +40,7 @@ export type ContractTextSection={page:number;text:string;hash:string;issues:stri
  * Annual table prices remain BASE; no index, TRU or signature is invented. */
 export function contractAnnexEvidence(sections:ContractTextSection[],month:string){
  const valid=sections.length<=2000&&/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month);
- const candidates=valid?sections.filter(s=>s.text.length<=2800&&/^\s*ANEXO\s+I\b/.test(normalized(s.text))&&/ENERGIA\s+CONTRATADA/.test(normalized(s.text))):[];
+ const candidates=valid?sections.filter(s=>s.text.length<=2800&&/^\s*ANEXO\s+I\s+(?:CONDICOES\s+DE\s+SUPRIMENTO|PERIODO\s+(?:DE\s+)?SUPRIMENTO)\b/.test(normalized(s.text))&&/ENERGIA\s+CONTRATADA/.test(normalized(s.text))):[];
  if(candidates.length!==1)return {state:'REVIEW' as const,reason:'Anexo contratual único não identificado.',sources:[]};
  const s=candidates[0],t=normalized(s.text),sources=[{page:s.page,sectionHash:s.hash}];
  if(!/^[a-f0-9]{64}$/.test(s.hash)||createHash('sha256').update(s.text).digest('hex')!==s.hash||s.issues.some(i=>i!=='IMAGE_PRESENT'))return {state:'REVIEW' as const,reason:'Fonte ou disposição do anexo requer conferência.',sources};
