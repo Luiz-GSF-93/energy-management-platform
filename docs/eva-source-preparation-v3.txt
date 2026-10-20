@@ -19,6 +19,8 @@ Rubricas e tributos:
 - Valores sobrepostos, duas linhas de tributo, mescla horizontal ou origem não comprovada permanecem bloqueados.
 - Cofins usa o valor impresso e sua fonte, conciliado com a soma exata de centavos.
 - CDE-Covid com descrição e zero explícitos, ambos com evidência, é classificada sem declarar campos vazios como zero.
+- Complemento CPFL de TUSD com mês explicitamente anterior à referência verificada é preservado como ajuste monetário, sem aplicar tarifa/quantidade atual. Mês atual/futuro ou fonte inválida não recebe essa classificação.
+- Cobertura fiscal é recalculada sobre as rubricas normalizadas; tributos em branco de linha zero não viram zeros individuais.
 - Nenhuma reaplicação de impostos embutidos. A comparação conserva valores lidos conforme método vigente.
 
 Anexo contratual:
