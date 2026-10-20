@@ -6,7 +6,7 @@ import {TenantContext} from '../../../common/interfaces/tenant-context.interface
 import {INDEX_MEMORY_FLAG,indexMemoryParameters,indexMemoryPlan,indexMemoryHash,parseOfficialIpca,calculateIndexMemory} from './contract-index-memory.model';
 import {createHash} from 'node:crypto';
 import {extractPdfText} from '../../ocr/eva-pdf-text.extractor';
-import {contractAnnexEvidence} from '../../ocr/source-preparation-v3';
+import {contractAnnexEvidence,contractPartyMatches} from '../../ocr/source-preparation-v3';
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 @Injectable()
 export class ContractIndexMemoryService{
@@ -44,7 +44,9 @@ export class ContractIndexMemoryService{
   if(r.error||!d||!d.file_verified||d.storage_bucket!=='energy-documents-private'||!d.file_path?.startsWith(t.organizationId+'/'+c.consumer_unit_id+'/')||d.file_path.split('/').some((s:string)=>!s||s==='.'||s==='..')||!/^[a-f0-9]{64}$/.test(d.file_hash)||!Number.isSafeInteger(d.file_size_bytes)||d.file_size_bytes<20||d.file_size_bytes>15*1024*1024)throw new ForbiddenException('Documento contratual verificado e vinculado necessário.');
   const f=await db.storage.from(d.storage_bucket).download(d.file_path);if(f.error||!f.data)throw new ServiceUnavailableException('Fonte interna indisponível.');
   const bytes=Buffer.from(await f.data.arrayBuffer());if(bytes.length!==d.file_size_bytes||bytes.subarray(0,5).toString()!=='%PDF-'||createHash('sha256').update(bytes).digest('hex')!==d.file_hash)throw new ConflictException('Arquivo ou hash divergente.');
-  const extracted=await extractPdfText(bytes),annex=contractAnnexEvidence(extracted.sections,b.month);
+  const customer=await db.from('customers').select('document').eq('id',c.customer_id).eq('organization_id',t.organizationId).is('deleted_at',null).maybeSingle();
+  if(customer.error||!customer.data)throw new ForbiddenException('Cliente da fonte indisponível.');
+  const extracted=await extractPdfText(bytes),annex=contractPartyMatches(extracted.sections,customer.data.document)?contractAnnexEvidence(extracted.sections,b.month):{state:'REVIEW' as const,reason:'CNPJ do cliente não comprovado no texto do contrato. Confira o vínculo documental.',sources:[]};
   const sections=extracted.sections.filter(s=>annex.sources.some(source=>source.page===s.page&&source.sectionHash===s.hash));
   const normalized=sections.length===1?sections[0].text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase():'';
   const terms=[...normalized.matchAll(/REAJUSTE\s+DATA\s+BASE\s+1[Oº°]?\s*REAJUSTE\s+PERIODICIDADE\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,2})\s+MESES/g)];
