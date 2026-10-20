@@ -19,7 +19,7 @@ export function financialDetail(r:any,original:any){
     if(taxRows.length!==3||new Set(taxRows.map((t:any)=>t.code)).size!==3)throw Error();
     const taxes=Object.entries(codes).map(([code,label])=>{
       const row=taxRows.find((t:any)=>t.code===code);
-      if(!row||row.method!=='PRESERVED_INVOICE_AMOUNT'||money(row.amount)<0n||!Array.isArray(row.cells)||row.cells.reduce((sum:bigint,c:any)=>sum+money(c.amount),0n)!==money(row.amount))throw Error();
+      if(!row||row.method!=='PRESERVED_INVOICE_AMOUNT'||money(row.amount)<0n||!Array.isArray(row.cells)||row.cells.length===0||row.cells.reduce((sum:bigint,c:any)=>sum+money(c.amount),0n)!==money(row.amount))throw Error();
       return {key:code,label,amount:row.amount,printedRate:row.printedRate??null};
     });
     const taxTotal=taxes.reduce((sum,t)=>sum+money(t.amount),0n),gross=money(r.invoice),supplier=money(r.supplier),fees=money(r.financial.fees),total=money(r.financial.aclAfterFees);
