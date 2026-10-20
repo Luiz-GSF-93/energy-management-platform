@@ -66,6 +66,7 @@ async function database(){
  await deny(()=>call(client,role,'reserve_upload',null,{...upload,unitId:'foreign-unit'}));
  const receipt=await call(client,role,'reserve_upload',null,upload);ok(receipt.acquired);
  ok(!(await call(client,role,'reserve_upload',null,upload)).acquired);
+ ok((await call(client,role,'reserve_upload',null,{...upload,requestId:'30000000-0000-4000-8000-000000000099'})).id===receipt.id);
  await db.query('INSERT INTO documents VALUES($1,$2,$3,$4,$5,true,$6,$7)',['doc','org','customer','unit','a'.repeat(64),'2026-09-01','INVOICE_DISTRIBUTOR']);
  await deny(()=>call(client,role,'attach_upload',receipt.id,{documentId:'other-doc'}));
  ok((await call(client,role,'attach_upload',receipt.id,{documentId:'doc'})).documentId==='doc');

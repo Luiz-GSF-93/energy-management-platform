@@ -54,6 +54,7 @@ DO $$DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['portal_document_intakes','p
  IF t<>'portal_document_intakes' THEN EXECUTE format('CREATE TRIGGER preserve_portal_history BEFORE UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.preserve_operation_history()',t); END IF;
 END LOOP;END$$;
 CREATE INDEX portal_intakes_scope ON public.portal_document_intakes(organization_id,customer_id,created_at DESC,id);
+CREATE UNIQUE INDEX portal_invoice_hash_scope ON public.portal_document_intakes(organization_id,customer_id,consumer_unit_id,month,file_hash) WHERE kind='INVOICE';
 CREATE INDEX portal_notifications_recipient ON public.portal_notification_outbox(organization_id,recipient_id,created_at DESC,id);
 
 CREATE FUNCTION public.portal_workspace_actor(p_org text,p_actor text,p_role text,p_platform boolean,p_module text)
@@ -140,6 +141,11 @@ BEGIN
    IF FOUND THEN
     IF old.actor_id<>p_actor OR old.customer_id<>customer OR old.consumer_unit_id<>unit OR old.month IS DISTINCT FROM p_body->>'month' OR old.file_hash IS DISTINCT FROM p_body->>'fileHash' OR old.filename IS DISTINCT FROM p_body->>'filename' OR old.kind IS DISTINCT FROM p_body->>'kind' OR old.record_id IS DISTINCT FROM rec.id OR old.consent IS DISTINCT FROM coalesce((p_body->>'consent')::boolean,false) THEN RAISE EXCEPTION 'Upload request changed' USING ERRCODE='40001';END IF;
     RETURN jsonb_build_object('id',old.id,'documentId',old.document_id,'acquired',false);
+   END IF;
+   IF p_body->>'kind'='INVOICE' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('portal-invoice:'||p_org||customer||unit||(p_body->>'month')||(p_body->>'fileHash'),0));
+    SELECT * INTO old FROM public.portal_document_intakes WHERE organization_id=p_org AND customer_id=customer AND consumer_unit_id=unit AND month=p_body->>'month' AND file_hash=p_body->>'fileHash' AND kind='INVOICE';
+    IF FOUND THEN RETURN jsonb_build_object('id',old.id,'documentId',old.document_id,'acquired',false);END IF;
    END IF;
    INSERT INTO public.portal_document_intakes(organization_id,customer_id,consumer_unit_id,request_id,actor_id,record_id,month,kind,file_hash,filename,consent) VALUES(p_org,customer,unit,request,p_actor,rec.id,p_body->>'month',p_body->>'kind',p_body->>'fileHash',p_body->>'filename',coalesce((p_body->>'consent')::boolean,false)) RETURNING * INTO item;
    INSERT INTO public.portal_document_events(organization_id,intake_id,event_key,state,note) VALUES(p_org,item.id,'reserved','RESERVED','Arquivo em recebimento.');
