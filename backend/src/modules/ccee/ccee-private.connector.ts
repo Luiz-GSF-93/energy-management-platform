@@ -14,7 +14,7 @@ export class CceeReadingError extends Error{
  constructor(public readonly code:string,public readonly httpStatus:number|null=null,public readonly transactionId:string|null=null){super(code);}
 }
 // Validate namespaces before removing prefixes. Never use the provider's text as a local error.
-export function privateEnvelope(xml:string,version:number,operation:string){
+export function privateEnvelope(xml:string,version:number,operation:string,repeated:readonly string[]=[]){
  if(Buffer.byteLength(xml)>2097152||/<!DOCTYPE|<!ENTITY/i.test(xml)||XMLValidator.validate(xml)!==true)throw new CceeReadingError('INVALID_XML');
  const parsed=new XMLParser({ignoreAttributes:false,parseTagValue:false,processEntities:false,trimValues:true}).parse(xml);
  function child(parent:any,name:string,namespace:string,scope:Record<string,string>){
@@ -38,7 +38,7 @@ export function privateEnvelope(xml:string,version:number,operation:string){
    const sample=Array.isArray(v)?v[0]:v,local={...ns};
    for(const[a,b]of Object.entries(sample??{}))if(a==='@_xmlns')local['']=String(b);else if(a.startsWith('@_xmlns:'))local[a.slice(8)]=String(b);
    if(![uri('BM',version),uri('BO',version),uri('MH',version)].includes(local[k.includes(':')?k.split(':')[0]:'']))throw new CceeReadingError('INVALID_NAMESPACE');
-   if(Array.isArray(v)&&!['medida','pontoMedicao','medidor','participanteMercadoRelacionado','perfil','tipo'].includes(name))throw new CceeReadingError('DUPLICATE_SCALAR');
+   if(Array.isArray(v)&&!['medida','pontoMedicao','medidor','participanteMercadoRelacionado','perfil','tipo',...repeated].includes(name))throw new CceeReadingError('DUPLICATE_SCALAR');
    out[name]=strip(v,local,depth+1);
   }return out;
  }

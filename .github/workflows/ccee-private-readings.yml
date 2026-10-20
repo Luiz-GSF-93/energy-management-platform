@@ -24,8 +24,17 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/platform-costs/service-catalog.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/platform-costs/service-catalog.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts
         working-directory: backend
+      - run: node test/database/ccee-dri.test.mjs
+        working-directory: backend
+      - name: Disposable PostgreSQL DRI concurrency lab
+        working-directory: backend
+        run: |
+          docker run -d --name ccee-dri-lab-ci --network none -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+          trap 'docker rm -f ccee-dri-lab-ci' EXIT
+          for i in $(seq 1 30); do docker exec ccee-dri-lab-ci pg_isready -U postgres && break; sleep 1; done
+          CCEE_DRI_TEST_CONTAINER=ccee-dri-lab-ci node test/database/ccee-dri.test.mjs
       - run: node test/database/ccee-r1.test.mjs
         working-directory: backend
       - run: node test/database/ccee-private-intake.test.mjs
@@ -33,6 +42,8 @@ jobs:
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/ccee-dri.cjs
         working-directory: frontend
       - run: node test/ccee-data.cjs
         working-directory: frontend

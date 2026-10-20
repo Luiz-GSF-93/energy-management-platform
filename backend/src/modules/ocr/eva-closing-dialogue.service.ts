@@ -1,3 +1,4 @@
+import {CceeDriService} from '../ccee/ccee-dri.service';
 import {CceeDataService} from '../ccee/ccee-data.service';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,Optional,ServiceUnavailableException} from '@nestjs/common';
 import {EvaClosingChangesService} from './eva-closing-changes.service';
@@ -12,7 +13,7 @@ import {monthPeriod} from '../contracts/services/preparation';
 import {closingDataAnswer,closingEvidence,closingIntent,closingMarkets,fitClosingEvidence,validClosingMemory,CLOSING_CONTEXT_VERSION} from './eva-closing-context';
 @Injectable()
 export class EvaClosingDialogueService{
- constructor(private config:ConfigService,private closing:EvaAssistedClosingService,private rag:EvaKnowledgeRagService,private ai:BackofficeAiService,@Optional() private changes?:EvaClosingChangesService,@Optional() private ccee?:CceeDataService){}
+ constructor(private config:ConfigService,private closing:EvaAssistedClosingService,private rag:EvaKnowledgeRagService,private ai:BackofficeAiService,@Optional() private changes?:EvaClosingChangesService,@Optional() private ccee?:CceeDataService,@Optional() private dri?:CceeDriService){}
  enabled(){return this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true';}
  async answer(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Conversa do fechamento desligada.');
@@ -58,12 +59,18 @@ export class EvaClosingDialogueService{
   let sources:any[]=[],proofs:any[]=[],official:any[]=[],mode='CONTROLLED_DATA',answer:string;
   const paid=this.config.get('EVA_CLOSING_DIALOGUE_CALLS_ENABLED')==='true';
   const base=closingEvidence(row,b.consumerUnitId,b.month,unit,intent.topic,memory);
-  let cceeSnapshot:string|null=null,cceeAnswer='';
+  let cceeSnapshot:string|null=null,cceeAnswer='',driSnapshot:string|null=null;
+  if(this.config.get('CCEE_DRI_READ_ENABLED')==='true'&&this.dri&&/ccee|encarg|liquida|credito|custo/i.test(intent.text)){
+   try{const current=await this.dri.context(t,b.consumerUnitId,b.month);driSnapshot=JSON.stringify(current.rows);
+    base.push({id:'ccee-dri-sources',label:'Resultados DRI preservados, ainda não incorporados ao fechamento',value:JSON.stringify({sources:current.rows,notice:'Escopo do agente representado; sem rateio por unidade. Classificação financeira ainda pendente. Não comprova pagamento, não somar saldos e componentes, não recalcular o fechamento. Sem nova chamada CCEE.'}),source:'Snapshots privados imutáveis DRI da organização autorizada.'});
+    cceeAnswer=current.rows.length?'Há resultados DRI preservados para conferência do agente. Eles ainda não foram classificados nem incluídos neste fechamento.':'Não há resultado DRI preservado e autorizado para esta competência.';
+   }catch(e){if(!(e instanceof ForbiddenException))throw e;}
+  }
   if(this.config.get('CCEE_RECONCILIATION_ENABLED')==='true'&&this.ccee&&/ccee|medi[cç]|consum|diverg|fatura/i.test(intent.text)){
    try{
     const current=await this.ccee.reconciliations(t,b.consumerUnitId,b.month,0),rows=current.rows.slice(0,2);
     cceeSnapshot=JSON.stringify(rows.map((r:any)=>[r.id,r.payload_hash]));
-    cceeAnswer=rows.length?rows.map((r:any)=>r.summary).join('\n'):'Nenhuma conciliação CCEE × fatura auditada nesta unidade e competência.';
+    cceeAnswer+=(cceeAnswer?'\n':'')+(rows.length?rows.map((r:any)=>r.summary).join('\n'):'Nenhuma conciliação CCEE × fatura auditada nesta unidade e competência.');
     base.push({id:'ccee-invoice-reconciliation',label:'Conciliação auditada CCEE × fatura, separada do fechamento',value:JSON.stringify({rows:rows.map((r:any)=>({id:r.id,version:r.version,hash:r.payload_hash,summary:r.summary,state:r.payload.state,issues:r.payload.issues,source:r.payload.source,basisEvidence:r.payload.invoice?.basisEvidence??null})),notice:'Valores são snapshots de conciliação, não compõem automaticamente o fechamento selecionado. Não atribuir causa à divergência; bases não comparáveis não sustentam percentual. A conciliação não é fonte normativa.'}),source:'Unidade e competência autorizadas; registros privados imutáveis. Sem nova chamada CCEE.'});
    }catch(e){if(!(e instanceof ForbiddenException))throw e;}
   }
@@ -87,6 +94,7 @@ export class EvaClosingDialogueService{
    if(result.state==='NO_EVIDENCE'&&intent.financial){answer=(caveat||'Os trechos recuperados não sustentam uma conclusão normativa sobre esta pergunta. ')+closingDataAnswer(row,b.consumerUnitId);mode='FINANCIAL_ONLY';sources=[];}
   }else{answer='Consulta de IA desligada. '+(cceeAnswer||closingDataAnswer(row,b.consumerUnitId));}
   for(let i=0;i<proofs.length;i+=8)await this.rag.revalidate(t,proofs.slice(i,i+8));
+  if(driSnapshot!==null){const current=await this.dri!.context(t,b.consumerUnitId,b.month);if(JSON.stringify(current.rows)!==driSnapshot)throw new ConflictException('As fontes DRI mudaram durante a resposta.');}
   if(cceeSnapshot!==null){const current=await this.ccee!.reconciliations(t,b.consumerUnitId,b.month,0);if(JSON.stringify(current.rows.slice(0,2).map((r:any)=>[r.id,r.payload_hash]))!==cceeSnapshot)throw new ConflictException('A conciliação CCEE mudou durante a resposta.');}
   const fresh=await this.closing.history(q,t);if(!fresh.rows?.some((r:any)=>r.id===row.id&&r.payload_hash===row.payload_hash&&r.state===row.state))throw new ConflictException('A versão mudou durante a resposta.');
   return {name:'EVA',id:row.id,hash:row.payload_hash,answer,mode,sources,canApprove:false,canPublish:false,context:{version:CLOSING_CONTEXT_VERSION,questions:memory.length,topic:intent.topic,markets,officialAvailable:hasOfficial,omitted:fitted.omitted},checkedAt:new Date().toISOString()};
