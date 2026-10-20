@@ -23,3 +23,11 @@ it('V3 requires demonstrated extra energy and invoice reconciliation instead of 
   const r=report([e]);expect(r.approvalEligible).toBe(false);expect(r.financial.savings).toBeNull();expect(r.missing.join(' ')).toContain('Compra extra exige valor e fonte.');
  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
 });
+
+it('V3 detects extra energy from proposed OCR consumption even before monthly human validation',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const e=entry();e.context.measurements={consumptionTotal:'104301.260000'};e.context.diagnosis={contractSupplierCost:{contract:{id:'supplier'},maxMwh:'100.800000000000',extraAmount:null,requirements:[{code:'MONTHLY_VOLUME',message:'Conferência humana pendente'}]}};
+  expect(report([e]).approvalEligible).toBe(false);expect(report([e]).missing.join(' ')).toContain('compra extra');
+  e.context.measurements.consumptionTotal='100800.000000';expect(report([e]).approvalEligible).toBe(true);
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});
