@@ -11,6 +11,7 @@ export class SmsStatusController{
   const receipt=smsReceipt(req.originalUrl,req.headers['x-twilio-signature'],req.body);if(!receipt)throw new ForbiddenException('SMS signature rejected');
   const {error}=await this.db.getClient().rpc('record_sms_receipt',{p_delivery:receipt.deliveryId,p_message:receipt.messageSid,p_status:receipt.status,p_error:receipt.errorCode});
   if(error)throw new ServiceUnavailableException('SMS persistence unavailable');
+  if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED==='true'){const stored=await this.db.getClient().rpc('record_portal_sms_receipt',{p_delivery:receipt.deliveryId,p_message:receipt.messageSid,p_status:receipt.status});if(stored.error)throw new ServiceUnavailableException('Portal SMS persistence unavailable');}
  }
 }
 @Module({controllers:[SmsStatusController],providers:[SupabaseService]})

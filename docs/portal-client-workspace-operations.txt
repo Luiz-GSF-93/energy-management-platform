@@ -1,0 +1,74 @@
+Portal client workspace — technical delivery, initially OFF
+
+Flags (all exact string true; missing values are OFF):
+PORTAL_CLIENT_WORKSPACE_ENABLED: private invoice/support APIs and in-app alerts.
+PORTAL_INVOICE_AUTOMATION_ENABLED: durable invoice workflow, also requires workspace,
+explicit organization routing/delegation, consent on the individual invoice, active
+memberships, current source and the existing document/OCR/preparation quotas.
+PORTAL_FINANCIAL_DETAIL_V2_ENABLED: segregated published taxes, historical adapter,
+observed ACL price, official published PLD with registered supplier submarket,
+scoped client guidance and bounded conversational memory.
+PORTAL_EXTERNAL_NOTIFICATIONS_ENABLED: separate opt-in for actual provider sends.
+NEXT_PUBLIC_PORTAL_CLIENT_WORKSPACE_ENABLED: compile-time Portal UI switch.
+Never enable only the frontend without the corresponding API and licenses.
+
+Apply 20261122 through 20261127 in order, after disposable PostgreSQL tests.
+Six additive private tables; no direct authenticated or anonymous table access.
+The renamed legacy evidence gateway preserves old callers and histories.
+Existing publication, forecasting, evidence, document and provider controls remain.
+Rollback: disable only these flags and rebuild frontend; retain audit records.
+
+Activation is a separate bounded homologation. During technical implementation:
+no real upload/OCR, model call, document debit, CCEE query, financial decision,
+publication to a customer, email, SMS or WhatsApp send is authorized.
+
+Portal roles derive organization/customer from live authenticated membership.
+Documents and notifications modules must be licensed before their routes work.
+Routing uses designated internal organizational members; it never assigns the
+global platform_finance role. A manager/admin must be explicitly delegated for
+automation. Preparation can stop for missing evidence and never approves itself.
+Unknown outcomes stay reserved/stopped and require history reconciliation.
+
+Notification dispatch additionally requires existing reviewed active customer
+contact policies, matching confirmed login email, per-channel client preferences,
+provider readiness, approved parameterless WhatsApp template
+energyos_portal_atualizado and the existing SMS sender approval.
+Set concrete conservative per-message reservation ceilings before homologation:
+PORTAL_NOTIFICATION_MAX_DAILY (1..100 per organization),
+PORTAL_NOTIFICATION_MONTHLY_BUDGET_MICRO_USD (1..1000000000),
+PORTAL_NOTIFICATION_EMAIL_COST_MICRO_USD,
+PORTAL_NOTIFICATION_SMS_COST_MICRO_USD,
+PORTAL_NOTIFICATION_WHATSAPP_COST_MICRO_USD.
+Missing/nonpositive channel ceilings disable that channel. These are reserved
+budget ceilings, not proof of actual provider billing. No blind retry is made
+after a reserved transmission. Provider acceptance never means delivered.
+Twilio callbacks keep signature/account/SID validation and immutable receipts.
+WhatsApp delivery confirmation uses already verified provider status events.
+Email remains accepted until a separately verified delivery receipt exists.
+
+CCEE financial snapshots are a private ingestion boundary, not a promise that
+financial services are enabled. The current connector does not prove access to
+agent obligations, settlement, payment or unit allocations. No guessed endpoint
+or amount is used. Until an authorized official source and allocation are
+available, the Portal explicitly declares CCEE costs unavailable. Additional
+costs only become donut slices when linked to the exact immutable publication
+and reconciled to its total. Existing approved totals are never adjusted here.
+Payment claims require an explicit payment evidence hash.
+
+Historical publications are hash-checked in the service; raw payloads do not
+reach the browser. Segregated invoice taxes require all three unique codes and
+exact cell reconciliation. Missing supplier tax treatment still allows an
+observed price, but never a net tax-compatible score. Percent ACL versus PLD is
+a price difference, not final savings. Missing PLD, zero denominators, missing
+forecasts and unpublished norms remain explicit gaps.
+
+EVA memory is at most eight recent questions/3000 characters, in the current
+unit/period session. It resets on scope change, is untrusted conversational
+context and cannot authorize corrections. Financial values are re-read and
+publication proofs revalidated. Technical guidance asks the consultant and a
+qualified professional for assessment; no electrical intervention is prescribed.
+
+Tests: backend/test/portal-client-workspace.cjs supports PGlite and disposable
+PostgreSQL via PORTAL_WORKSPACE_TEST_PG_PORT; the latter checks concurrent claims.
+Frontend/test/portal-workspace-ui.cjs uses only synthetic data. Optional
+PORTAL_VISUAL_FIXTURE writes a static, clearly labeled fictitious QA page.

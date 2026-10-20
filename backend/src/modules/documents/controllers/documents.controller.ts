@@ -54,8 +54,8 @@ export class DocumentsController {
 
   @Get()
   @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
-  async findAll(@OrganizationId() organizationId: string) {
-    return this.documentsService.findAll(organizationId);
+  async findAll(@OrganizationId() organizationId: string,@UserId() actorUserId:string) {
+    return this.documentsService.findAll(organizationId,actorUserId);
   }
 
   @Get(':id')
