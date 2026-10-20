@@ -1,3 +1,4 @@
+import {driEnabled,isDri} from './ccee-dri.model';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {invoiceConsumption,measurementCsv,reconcileConsumption,reconciliationSummary,verifiedInvoiceBasis} from './ccee-reconciliation';
 import {createHash} from 'node:crypto';
@@ -27,17 +28,18 @@ export class CceeDataService{
  private action(t:TenantContext,action:string,id:string|null,body:object){return this.rpc('ccee_data_action',{p_org:t.organizationId,p_actor:t.userId,p_action:action,p_id:id,p_body:body});}
  async workspace(t:TenantContext,page=0){
   await this.allowed(t);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');
-  const flags=Object.fromEntries([...CCEE_DATA_FLAGS,'CCEE_RECONCILIATION_ENABLED'].map(k=>[k,process.env[k]==='true']));
+  const flags=Object.fromEntries([...CCEE_DATA_FLAGS,'CCEE_RECONCILIATION_ENABLED','CCEE_DRI_READ_ENABLED'].map(k=>[k,process.env[k]==='true']));
   if(!flags.CCEE_DATA_WORKSPACE_ENABLED)return{organizationId:t.organizationId,enabled:false,flags,bindings:[],jobs:[],page,canManage:false,canReview:false};
   const data=await this.action(t,'list',null,{page});
   return{...data,enabled:true,flags,canManage:t.accessMode==='platform_operation'||t.permissions.includes(CCEE_DATA_PERMISSIONS.manage),canReview:t.accessMode==='platform_operation'||['admin_org','gestor'].includes(t.role)&&t.permissions.includes(CCEE_DATA_PERMISSIONS.review)};
  }
  async binding(t:TenantContext,input:unknown){
   cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t,'manage');
-  const b=cceeObject(input,['requestId','customerId','unitId','profileCode','principalProfileCode','measurementPoint','representationKind','serviceScope','validFrom','validTo','measurementBasis','evidenceReference','reason'],['meterCode']);
+  const b=cceeObject(input,['requestId','customerId','unitId','profileCode','principalProfileCode','measurementPoint','representationKind','serviceScope','validFrom','validTo','measurementBasis','evidenceReference','reason'],['meterCode','driAgentCode','driTaxId']);
   cceeUuid(b.requestId);cceeUuid(b.customerId);cceeUuid(b.unitId);dateOnly(b.validFrom);if(b.validTo)dateOnly(b.validTo);
-  if(!Array.isArray(b.serviceScope)||b.serviceScope.length<1||b.serviceScope.length>3||new Set(b.serviceScope).size!==b.serviceScope.length||b.serviceScope.some((s:any)=>!['POINTS','MEASUREMENTS','AGENDA'].includes(s)))throw new BadRequestException('Selecione os serviços efetivamente autorizados.');
+  if(!Array.isArray(b.serviceScope)||b.serviceScope.length<1||b.serviceScope.length>4||new Set(b.serviceScope).size!==b.serviceScope.length||b.serviceScope.some((s:any)=>!['POINTS','MEASUREMENTS','AGENDA','DRI_READ'].includes(s)))throw new BadRequestException('Selecione os serviços efetivamente autorizados.');
   if(!/^\d{1,12}$/.test(b.profileCode)||b.principalProfileCode&&!/^\d{1,12}$/.test(b.principalProfileCode)||b.serviceScope.includes('MEASUREMENTS')&&!/^\d{1,12}$/.test(b.principalProfileCode)||!/^[-A-Za-z0-9_]{1,100}$/.test(b.measurementPoint)||b.meterCode&&!/^[-A-Za-z0-9_]{1,100}$/.test(b.meterCode)||!['TOTAL','PARTIAL'].includes(b.representationKind)||!['UNKNOWN','NO_LOSSES','WITH_LOSSES'].includes(b.measurementBasis))throw new BadRequestException('Confira perfil principal, ponto e escopo de representação.');
+  if(b.serviceScope.includes('DRI_READ')){driEnabled();if(!/^\d{1,12}$/.test(b.driAgentCode??'')||!/^\d{14}$/.test(b.driTaxId??''))throw new BadRequestException('Confira código do agente e CNPJ DRI.');}
   cceeText(b.evidenceReference,2000,10);cceeText(b.reason);return this.action(t,'binding',null,b);
  }
  async reviewBinding(t:TenantContext,id:string,action:string,input:unknown){
@@ -53,6 +55,7 @@ export class CceeDataService{
  }
  async job(t:TenantContext,id:string){
   cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t);const result=await this.action(t,'job',cceeUuid(id),{});
+  if(isDri(result.job.kind))driEnabled();
   if(process.env.CCEE_READING_DIAGNOSTICS_ENABLED==='true'&&result.job.state==='FAILED'){
    const history=await this.action(t,'history',id,{page:0}),event=history.rows.find((e:any)=>e.event==='READ_FAILED');
    if(event)result.diagnostic={at:event.recorded_at,errorCode:result.job.error_code,requests:result.job.requests,bytes:result.job.bytes,durationMs:result.job.duration_ms,httpStatus:event.details.httpStatus??null,transactions:event.details.transactions??[],hashes:event.details.hashes??[]};

@@ -4,14 +4,14 @@ export type Binding = {
  id:string;customer_id:string;consumer_unit_id:string;profile_code:string;
  principal_profile_code:string|null;measurement_point:string;status:string;revision:number;
  valid_from:string|null;valid_to:string|null;representation_kind:string|null;
- measurement_basis:string;service_scope:string[];meter_code?:string|null;
+ dri_agent_code?:string|null;dri_tax_id?:string|null;measurement_basis:string;service_scope:string[];meter_code?:string|null;
  evidence_reference?:string;revision_reason?:string|null;created_by?:string;
  created_at?:string;reviewed_by?:string|null;reviewed_at?:string|null;
  customer_name?:string|null;customer_document?:string|null;unit_name?:string|null;
  consumer_unit_number?:string|null;distributor?:string|null;identity_complete?:boolean;
 };
 const missing='Não disponível nesta consulta';
-const services:Record<string,string>={POINTS:'Conferir ponto',MEASUREMENTS:'Consultar medições',AGENDA:'Aplicar obrigações à unidade'};
+const services:Record<string,string>={POINTS:'Conferir ponto',MEASUREMENTS:'Consultar medições',AGENDA:'Aplicar obrigações à unidade',DRI_READ:'Consultar DRI no escopo do agente'};
 const bases:Record<string,string>={UNKNOWN:'A conferir — base de perdas não comprovada',NO_LOSSES:'Sem perdas, compatível com a conciliação',WITH_LOSSES:'Com perdas — conciliação necessária'};
 export function documentaryDate(value:string|null|undefined){
  // A documentary date has no time zone. Avoid converting midnight UTC to the previous day.

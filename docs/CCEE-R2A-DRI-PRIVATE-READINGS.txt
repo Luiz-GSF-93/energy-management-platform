@@ -1,0 +1,27 @@
+CCEE R2A — consultas DRI — entrega técnica inicialmente desligada
+
+Ativação: CCEE_DRI_READ_ENABLED=false. Ausência é desligado. A flag se soma ao workspace/worker existentes; não altera suas configurações. Nenhuma consulta real ou concessão de permissão faz parte da implementação.
+
+Aplicar 20261202_ccee_dri_private_readings.sql antes do backend. Acrescenta duas tabelas privadas imutáveis, campos opcionais de identificação do agente e escopo DRI_READ explícito, sem ampliar vínculos antigos. Migração compatível com fila/leases/RPCs existentes; o seletor legado ignora jobs DRI e o seletor DRI só é chamado sob a flag nova. Ambos preservam revisão/representação/licença e revogação atuais. Não aplica custos no fechamento.
+
+Serviços somente de leitura em produção:
+- /ws/v2/DivulgacaoEventoContabilBSv2 — listarDivulgacaoEventoContabil
+- /ws/v2/RelatorioBSv2 — listarRelatorio
+- /ws/v2/ResultadoRelatorioBSv2 — listarResultadoRelatorio
+Sem piloto para resultados DRI. Sem alterar bordas/fuso do conector de medições. Hosts, ações e parâmetros não são escolhidos pela interface.
+
+Vínculo DRI exige evidência de representação, código do perfil, código do agente distinto, CNPJ igual ao cadastro do cliente, vigência e revisão independente. Uma unidade identifica o vínculo existente, mas resultados permanecem PARTICIPANT: não inferir que todo valor do agente pertence a essa unidade, nem ratear automaticamente.
+Seleções de evento/relatório/quadro derivam somente de jobs anteriores completos do mesmo vínculo/mês. Parâmetros suportados inicialmente: CODIGO_AGENTE obrigatório e CODIGO_EVENTO_CONTABIL quando declarado. Quadros com parâmetros adicionais ficam bloqueados até adaptação revisada. Código do agente nunca é inferido do perfil.
+
+Limites: até 10 chamadas, 1000 linhas por resposta e 10000 por job, XML 2 MiB, agregado normalizado 1,8 MB, tempo total até 120 s (início de chamada limitado a 95 s, timeout de transporte 25 s). Paginação ausente/alterada, duplicidades, outro CNPJ/relatório, esquema desconhecido ou cobertura insuficiente encerram sem retry e sem consolidação parcial.
+Valores CSV single-quoted são preservados como strings: campos vazios, sinais e colunas originais. Sem IA para inferir tributos, unidades ou natureza financeira. CNPJ explícito no resultado é obrigatório para sua preservação. Resultados sem essa prova exigem outro adaptador/definição oficial.
+
+Snapshots conservam job, autorização, revisão, competência, evento/quadro, hashes de fonte e Transaction IDs. TLS permanece validado; credenciais e PFX somente no servidor. Nenhum XML bruto com credenciais é salvo, e falhas só persistem métricas limitadas. Tabelas sem acesso direto para anon/authenticated/service_role. RPCs conferem RBAC/licença/representação em cada leitura e escrita.
+
+Dados CCEE -> Resultados DRI mostra fila, catálogo dependente e fontes. EVA interna recebe disponibilidade e proveniência dos snapshots, com classificação pendente e sem incorporá-los ao relatório financeiro. Não é nova biblioteca normativa. Portal não recebe dados brutos.
+
+Limitação deliberada da R2A: financialState=UNMAPPED_REVIEW_REQUIRED. Não existem mapeamentos fiscais/financeiros automáticos aprovados para os quadros reais nesta entrega; não inventar classificação a partir do nome. A fase posterior deverá homologar relatório/quadro/versão, natureza de débito/crédito, componentes x total, unidades e tratamento tributário para usar o adaptador financeiro existente. Valor a liquidar não comprova pagamento. Nem todo custo CCEE necessariamente está disponível na DRI para o perfil.
+
+Homologação posterior: conferir migração e versão publicadas; preparar/revisar autorização DRI concreta sem elevar perfis; autorizar limite e escopo reais; consultar eventos -> relatórios -> quadro permitido, validar conteúdo/completude; deixar flag ligada apenas se a fase passar. Nenhuma transmissão, pagamento, alteração de fechamento aprovado ou assinatura de webhook está incluída.
+
+Referências: https://github.com/devccee/postman-collections ; manual listarDivulgacaoEventoContabilBSv2 e listarRelatorioBSv2 oficiais. O manual de resultados específico não pôde ser recuperado nesta sessão (acesso negado); estrutura request/response conferida na coleção pública oficial, sem presumir compatibilidade de quadros não presentes nas evidências.

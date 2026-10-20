@@ -38,6 +38,7 @@ try{
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261113_ccee_private_readings.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261114_ccee_binding_review.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261115_ccee_invoice_reconciliation.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261202_ccee_dri_private_readings.sql',import.meta.url),'utf8'));
  const body={requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'123',principalProfileCode:'123',measurementPoint:'SYNTHETIC',representationKind:'PARTIAL',serviceScope:['POINTS','MEASUREMENTS','AGENDA'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'NO_LOSSES',evidenceReference:'Synthetic evidence only',reason:'Synthetic reviewed representation'};
  const draft=await action(author,'binding',null,body);ok(draft.status==='DRAFT');ok((await action(author,'binding',null,body)).id===draft.id);
  await denied(action(author,'binding',null,{...body,reason:'Changed payload'}));
