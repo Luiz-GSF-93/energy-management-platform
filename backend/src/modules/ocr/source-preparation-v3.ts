@@ -54,7 +54,7 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  // Some annexes print units in the table header. Only one complete row of the
  // explicit energy table, with the same supply period, can supply its MW value.
  const volumeTables=[...t.matchAll(/\bENERGIA\s+CONTRATADA\s+PERIODO\s+MW\s+MEDIO\s+INICIO\s+TERMINO\s+([\s\S]*?)(?=\b\d+\.\s*PRECO\b)/g)];
- for(const table of volumeTables){const rows=[...table[1].matchAll(/(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,4},\d{1,6})(?=\s|$)/g)];if(rows.length===1&&day(rows[0][1])===start&&day(rows[0][2])===end)volume.push(num(rows[0][3]));}
+ for(const table of volumeTables){const row=/^\s*(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,4},\d{1,6})\s*$/.exec(table[1]);if(row&&day(row[1])===start&&day(row[2])===end)volume.push(num(row[3]));}
  const pricePattern=new RegExp('01[/.]01[/.]'+month.slice(0,4)+'\\s+(?:(?:A|ATE|[-–])\\s*)?31[/.]12[/.]'+month.slice(0,4)+'\\s+(?:R\\$\\s*)?((?:\\d{1,3}\\.\\d{3}|\\d{1,6})(?:,\\d{1,6})?)(?=\\s|$)','g');
  const prices=[...t.matchAll(pricePattern)];
  const lower=[...t.matchAll(/LIMITE\s+INFERIOR\s*[:=]?\s*(0,\d{1,6}|1,0{1,6})\b/g)],upper=[...t.matchAll(/LIMITE\s+SUPERIOR\s*[:=]?\s*(\d{1,2},\d{1,6})\b/g)];

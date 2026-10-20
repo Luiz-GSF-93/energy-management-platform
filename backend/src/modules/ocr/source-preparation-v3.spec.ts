@@ -43,7 +43,8 @@ describe('Source-backed preparation V3, initially disabled',()=>{
   const mention={...a,page:8,text:'Cláusula Energia Contratada: conforme ANEXO I do contrato.'};mention.hash=createHash('sha256').update(mention.text).digest('hex');
   const original=JSON.stringify([mention,a]);expect(contractAnnexEvidence([mention,a],'2026-04')).toMatchObject({state:'PROPOSED',price:'118.00',priceMode:'BASE',adjustedPrice:null,volumeTerms:{contractedMwh:'72',maxTolerancePercent:'40'},sources:[{page:21,sectionHash:a.hash}],automaticFinancialApproval:false});expect(JSON.stringify([mention,a])).toBe(original);
   expect(contractAnnexEvidence([a,{...a,page:22}],'2026-04').state).toBe('REVIEW');
-  a.text=a.text.replace('01/04/2024 31/12/2027 0,100000','01/04/2024 31/12/2027 0,100000\n01/04/2024 31/12/2027 0,200000');a.hash=createHash('sha256').update(a.text).digest('hex');expect((contractAnnexEvidence([a],'2026-04') as any).volumeTerms).toBeNull();
+  const validTable=a.text;
+  for(const extra of ['01/04/2024 31/12/2027 0,200000','volume ilegível']){a.text=validTable.replace('01/04/2024 31/12/2027 0,100000','01/04/2024 31/12/2027 0,100000\n'+extra);a.hash=createHash('sha256').update(a.text).digest('hex');expect((contractAnnexEvidence([a],'2026-04') as any).volumeTerms).toBeNull();}
  });
  it('does not truncate an unsupported decimal price into an integer',()=>{const a=annex();a.text=a.text.replace('118,00','118.35');a.hash=createHash('sha256').update(a.text).digest('hex');expect((contractAnnexEvidence([a],'2026-04') as any).price).toBeNull();});
  it.each(['15/04/2026','01/01/2028'])('does not apply an annex outside or partially covering the month: %s',start=>{const a=annex();a.text=a.text.replace('01/04/2024',start);a.hash=createHash('sha256').update(a.text).digest('hex');expect(contractAnnexEvidence([a],'2026-04').state).toBe('REVIEW');});
