@@ -1,3 +1,5 @@
+import {ContractIndexMemoryController} from './controllers/contract-index-memory.controller';
+import {ContractIndexMemoryService} from './services/contract-index-memory.service';
 import {FinancialSettlementsController} from './controllers/financial-settlements.controller';
 import {ClientPortalController} from './controllers/client-portal.controller';
 import {FinancialSettlementsService} from './services/financial-settlements.service';
@@ -34,8 +36,8 @@ import { LicensesModule } from '../licenses/licenses.module';
 
 @Module({
   imports: [LicensesModule,ConsumerUnitsModule],
-  controllers: [ClientPortalController,FinancialSettlementsController,TariffLibraryController,SpotReconciliationController,FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
-  providers: [FinancialSettlementsService,TariffLibraryService,SpotReconciliationService,FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
+  controllers: [ContractIndexMemoryController,ClientPortalController,FinancialSettlementsController,TariffLibraryController,SpotReconciliationController,FeeAdjustmentsController,ReviewSnapshotsController,SupplierBillingController,ManagementAllocationController,EntryDraftController,MonthlyCostsController,MonthlyInputsController,CalculationPreparationController,CalculationParametersController,ContractsController,ContractConfigurationsController],
+  providers: [ContractIndexMemoryService,FinancialSettlementsService,TariffLibraryService,SpotReconciliationService,FeeAdjustmentsService,ReviewSnapshotsService,SupplierBillingService,ManagementAllocationService,EntryDraftService,MonthlyCostsService,MonthlyInputsService,CalculationPreparationService,CalculationParametersService,ContractsService,ContractConfigurationsService, SupabaseService],
   exports: [ContractsService,FinancialSettlementsService],
 })
 export class ContractsModule {}

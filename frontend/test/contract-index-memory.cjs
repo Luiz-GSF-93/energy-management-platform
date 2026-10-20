@@ -1,0 +1,15 @@
+const fs=require('fs'),assert=require('node:assert/strict');
+const ui=fs.readFileSync('app/backoffice/contracts/ContractIndexMemory.tsx','utf8'),supply=fs.readFileSync('app/backoffice/contracts/SupplyContracts.tsx','utf8');
+assert(supply.includes('<ContractIndexMemory'));
+assert(ui.includes("[consent,setConsent]=useState(false)"));
+assert(ui.includes("setConsent(false)"));
+assert(ui.includes("kind==='authorize'&&!consent"));
+assert(ui.includes("hash:current.payload_hash,acknowledge:true,note"));
+assert(ui.includes("current.plan.periods.join(', ')"));
+assert(ui.includes('Cancelar sem consultar'));
+assert(ui.includes('Preparar memória sem consultar a internet'));
+assert(ui.includes('EVA · conferir anexo interno, sem internet'));
+assert(ui.includes('Nenhum valor foi aplicado'));
+assert(!ui.includes('dangerouslySetInnerHTML'));
+const effect=ui.split('useEffect(()=>')[1].split('async function readSource')[0];assert(!effect.includes("'/authorize'"));assert(!effect.includes('apisidra.ibge.gov.br'));
+console.log('Index memory UI: consent, provenance, history and no auto-fetch checked');
