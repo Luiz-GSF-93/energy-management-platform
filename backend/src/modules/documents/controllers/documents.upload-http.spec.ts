@@ -22,6 +22,7 @@ describe('Multipart document HTTP boundary',()=>{
   expect(upload).toHaveBeenCalledWith(expect.objectContaining({customerId:'customer'}),expect.objectContaining({buffer:expect.any(Buffer),originalname:'invoice.pdf'}),'org-a','actor-a');
  });
  it('checks permission before upload',async()=>{permitted=false;expect((await fetch(base+'/documents/upload',{method:'POST',body:form()})).status).toBe(403);expect(upload).not.toHaveBeenCalled();});
- it('rejects files over 10 MiB before the service',async()=>{expect((await fetch(base+'/documents/upload',{method:'POST',body:form(Buffer.alloc(10*1024*1024+1))})).status).toBe(413);expect(upload).not.toHaveBeenCalled();});
+ it('accepts a file at the 15 MiB boundary',async()=>{expect((await fetch(base+'/documents/upload',{method:'POST',body:form(Buffer.alloc(15*1024*1024))})).status).toBe(201);expect(upload).toHaveBeenCalledTimes(1);});
+ it('rejects files over 15 MiB before the service',async()=>{expect((await fetch(base+'/documents/upload',{method:'POST',body:form(Buffer.alloc(15*1024*1024+1))})).status).toBe(413);expect(upload).not.toHaveBeenCalled();});
  it('rejects a second file',async()=>{const f=form();f.append('file',new Blob(['extra']),'extra.pdf');expect((await fetch(base+'/documents/upload',{method:'POST',body:f})).status).toBe(400);expect(upload).not.toHaveBeenCalled();});
 });

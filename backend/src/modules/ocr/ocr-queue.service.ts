@@ -1,3 +1,4 @@
+import {identityPreview} from './identity-preview';
 import {ocrReadOnce} from './ocr-read-scope';
 import {elektroMeasurementAudit} from './elektro-measurement-audit';
 import {reconcileDemand} from './demand-reconciliation';
@@ -7,7 +8,7 @@ import {invoiceReadout,ocrReadoutSummary,ReadoutQuery} from './invoice-readout';
 import {extractGdEvidence} from './gd-evidence';
 import { extractElectricalEvidence } from './electrical-evidence';
 import { assessmentMatchesDocument } from './invoice-assessment';
-import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { AzureInvoiceConnector } from './azure-invoice.connector';
@@ -21,8 +22,20 @@ export class OcrQueueService {
   if(lookup)throw new ServiceUnavailableException('Não foi possível verificar o documento.');
   if(!doc)throw new NotFoundException('Documento não encontrado.');
   const {data,error}=await this.db.getClient().rpc('enqueue_document_ocr',{p_org:org,p_document:document,p_actor:actor});
+  if(['P2091','P2092'].includes(error?.code))throw new ConflictException('EVA: já existe uma fatura desta unidade e competência. Confira a leitura e as versões em Documentos; não inicie outra leitura.');
   if(error)throw new ServiceUnavailableException('Não foi possível enfileirar a leitura. O arquivo original permanece preservado.');
   return this.publicJob(data);
+ }
+ async assertAutomaticIdentity(org:string,document:string){
+  const source=await this.reviewSource(org,document),db=this.db.getClient();
+  const canonical=await db.rpc('assert_invoice_month_ocr',{p_org:org,p_document:document});
+  if(canonical.error)throw new ConflictException('EVA: fatura repetida ou versão superada. Solicite conferência no backoffice.');
+  const [c,u]=await Promise.all([db.from('customers').select('company_name,document').eq('organization_id',org).eq('id',source.doc.customer_id).is('deleted_at',null).maybeSingle(),db.from('consumer_units').select('consumer_unit_number,address,free_market').eq('organization_id',org).eq('customer_id',source.doc.customer_id).eq('id',source.doc.consumer_unit_id).maybeSingle()]);
+  if(c.error||u.error||!c.data||!u.data)throw new ConflictException('A identidade cadastral requer conferência.');
+  const identity=identityPreview(extractCpflPaulistaLayout(source.raw),{customer:c.data,unit:u.data,referenceMonth:String(source.doc.reference_month).slice(0,7),otherDocumentInPeriod:false});
+  const required=identity.checks.filter(f=>['taxId','unit','address','period'].includes(f.key));
+  if(required.length!==4||required.some(f=>f.comparison!=='EQUAL'||!f.candidates.length||f.candidates.some(v=>!v.pages.length||v.issues.includes('UNVERIFIED_SOURCE'))))throw new ConflictException('EVA: UC, CNPJ, endereço ou competência não conferem com a unidade selecionada. Solicite atendimento; nenhum preenchimento automático foi iniciado.');
+  return identity;
  }
  async status(org:string,document:string){
   await this.licenses.requireEntitlement(org,'document_management');

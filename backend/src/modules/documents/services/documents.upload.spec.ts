@@ -9,10 +9,11 @@ describe('Private document upload',()=>{
  beforeEach(()=>{
   inserted=undefined;
   storage={upload:jest.fn().mockResolvedValue({error:null}),remove:jest.fn().mockResolvedValue({error:null}),createSignedUrl:jest.fn().mockResolvedValue({data:{signedUrl:'https://storage.example/file'},error:null})};
-  docs={};for(const k of ['select','eq','is']) docs[k]=jest.fn(()=>docs);
+  docs={};for(const k of ['select','eq','is','limit']) docs[k]=jest.fn(()=>docs);
+  docs.then=(resolve:any)=>Promise.resolve({data:[],error:null}).then(resolve);
   docs.insert=jest.fn((rows)=>{inserted=rows[0];return docs;});
   docs.single=jest.fn(async()=>({data:{id,...inserted},error:null}));docs.maybeSingle=jest.fn().mockResolvedValue({data:null,error:null});
-  const parent:any={};for(const k of ['select','eq','is']) parent[k]=jest.fn(()=>parent);parent.maybeSingle=jest.fn().mockResolvedValue({data:{id,customer_id:id},error:null});
+  const parent:any={};for(const k of ['select','eq','is','limit']) parent[k]=jest.fn(()=>parent);parent.maybeSingle=jest.fn().mockResolvedValue({data:{id,customer_id:id},error:null});
   from=jest.fn(t=>t==='documents'?docs:parent);
   service=new DocumentsService({getClient:()=>({from,storage:{from:()=>storage}})} as any,{requireEntitlement:jest.fn()} as any);
  });
@@ -68,6 +69,8 @@ describe('Private document upload',()=>{
  it('does not sign a foreign document',async()=>{await expect(service.download(id,'org-b')).rejects.toMatchObject({status:404});expect(storage.createSignedUrl).not.toHaveBeenCalled();});
  it.each([Buffer.from('<html>bad</html>'),Buffer.from('%PDF-1.4 incomplete')])('rejects unsupported/truncated signature',buffer=>{expect(()=>inspectDocument({...file,buffer})).toThrow();});
  it('rejects mismatched declared MIME',()=>{expect(()=>inspectDocument({...file,mimetype:'image/png'})).toThrow();});
+ it('accepts exactly 15 MiB and rejects one extra byte',()=>{expect(MAX_DOCUMENT_BYTES).toBe(15*1024*1024);const b=Buffer.alloc(MAX_DOCUMENT_BYTES,32);b.write('%PDF-1.4');b.write('%%EOF',b.length-5);expect(inspectDocument({...file,buffer:b}).mime).toBe('application/pdf');expect(()=>inspectDocument({...file,buffer:Buffer.concat([b,Buffer.from('x')])})).toThrow('15 MB');});
+ it('stops a different file in the same month before storage or a new record',async()=>{docs.then=(resolve:any)=>Promise.resolve({data:[{id:'existing'}],error:null}).then(resolve);await expect(service.upload(dto,file,'org-a',id)).rejects.toMatchObject({status:409});expect(storage.upload).not.toHaveBeenCalled();expect(docs.insert).not.toHaveBeenCalled();});
  it('enforces actual buffer size',()=>{expect(()=>inspectDocument({...file,buffer:Buffer.alloc(MAX_DOCUMENT_BYTES+1)})).toThrow();});
  it('signs preview without forcing attachment, preserving private scope',async()=>{
   docs.maybeSingle.mockResolvedValue({data:{id,consumer_unit_id:id,file_verified:true,storage_bucket:'energy-documents-private',file_path:'org-a/'+id+'/file.pdf',original_filename:'invoice.pdf'},error:null});

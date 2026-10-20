@@ -6,6 +6,8 @@ on:
       - 'backend/src/modules/portal-insights/**'
       - 'backend/src/modules/operations/**'
       - 'backend/src/database/migrations/2026112*.sql'
+      - 'backend/src/database/migrations/20261130*.sql'
+      - 'backend/src/database/migrations/20261201*.sql'
       - 'backend/test/portal-client-workspace.cjs'
       - 'frontend/app/components/Portal*'
       - 'frontend/test/portal-workspace-ui.cjs'
@@ -31,7 +33,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
         working-directory: backend
       - run: node test/portal-client-workspace.cjs
         working-directory: backend

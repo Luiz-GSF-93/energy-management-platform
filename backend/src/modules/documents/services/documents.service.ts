@@ -20,6 +20,7 @@ export class DocumentsService {
   }
   private check(error: any) {
     if (!error) return;
+    if(error.code==='P2091'||error.code==='P2092')throw new ConflictException(error.code==='P2092'?'EVA: a fatura desta unidade e competência já foi lida. Solicite atendimento para corrigir a versão existente.':'EVA: já existe uma fatura recebida para esta unidade e competência. Solicite atendimento; não envie outra fatura.');
     if(error.code==='P3392')throw new ConflictException('O administrador da plataforma precisa vincular esta licença a um plano antes de novos cadastros.');
     if(error.code==='P3391')throw new ForbiddenException('Limite de documentos mantidos atingido. Solicite upgrade do plano.');
     if(error.code==='P3390')throw new ForbiddenException('É necessária uma licença ativa para enviar documentos.');
@@ -115,6 +116,11 @@ export class DocumentsService {
       const prior=duplicate.data;
       if(dto.documentType==='INVOICE_DISTRIBUTOR'&&prior.organization_id===organizationId&&prior.customer_id===dto.customerId&&prior.consumer_unit_id===dto.consumerUnitId&&prior.document_type===dto.documentType&&String(prior.reference_month).slice(0,10)===dto.referenceMonth&&prior.file_verified===true&&prior.file_hash===row.file_hash&&prior.file_size_bytes===bytes.length&&prior.storage_bucket===DOCUMENT_BUCKET&&prior.file_path?.startsWith(organizationId+'/'+dto.consumerUnitId+'/'))return {...prior,idempotentUpload:true};
       throw new ConflictException('Documento já cadastrado nesta organização; confira o vínculo e a versão, sem duplicar o arquivo.');
+    }
+    if(dto.documentType==='INVOICE_DISTRIBUTOR'&&!dto.previousDocumentId){
+      const existing=await this.table().select('id').eq('organization_id',organizationId).eq('customer_id',dto.customerId).eq('consumer_unit_id',dto.consumerUnitId).eq('document_type','INVOICE_DISTRIBUTOR').eq('reference_month',dto.referenceMonth).eq('file_verified',true).limit(1);
+      this.check(existing.error);
+      if(existing.data?.length)throw new ConflictException('EVA: já existe uma fatura desta unidade e competência. Solicite atendimento para conferir a leitura e corrigir a versão existente.');
     }
     const storage = this.supabaseService.getClient().storage.from(DOCUMENT_BUCKET);
     // Every attempt owns a fresh random key. Compensation never touches a

@@ -33,6 +33,6 @@ export class PortalAutomationWorker implements OnModuleInit,OnModuleDestroy {
    const prepared=await this.closing.prepare({...query,requestId:randomUUID()},t);
    if(prepared.row?.state!=='READY_FOR_REVIEW'){await finish('AUTOMATION_STOPPED','A versão foi preservada com pendências de evidência. A equipe deve conferir o resumo antes da validação.',prepared.row?.id??null);return;}
    await finish('VALIDATING','Preparação versionada disponível para conferência da equipe. Nenhuma aprovação ou publicação automática.',prepared.row?.id??null);
-  }catch{await finish('AUTOMATION_STOPPED','Preparação interrompida. A equipe deve conferir as fontes e o histórico antes de repetir.');}
+  }catch(e){const reason=e instanceof Error&&/EVA:|identidade|UC, CNPJ/i.test(e.message)?e.message.slice(0,350):'Preparação interrompida. A equipe deve conferir as fontes e o histórico antes de repetir.';await finish('AUTOMATION_STOPPED',reason);}
  }finally{this.busy=false;}}
 }

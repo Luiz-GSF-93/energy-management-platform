@@ -2,7 +2,8 @@
 process.env.NEXT_PUBLIC_PORTAL_CLIENT_WORKSPACE_ENABLED='true';
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid/portal',pretendToBeVisual:true});
-for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLFormElement','Event','MouseEvent','FormData'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLFormElement','Event','MouseEvent','FormData','File'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+let testFile=new dom.window.File(['%PDF-1.4 test %%EOF'],'test.pdf',{type:'application/pdf'});const NativeFormData=global.FormData;global.FormData=class extends NativeFormData{constructor(form){super(form);if(form?.querySelector('[name="file"]'))this.set('file',testFile);}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
 let calls=[],uploads=0,revision=0;const css=new Map(),units=[{id:'unit',name:'Unidade modelo'}],receipt={id:'invoice',documentId:'doc',unitId:'unit',unitName:'Unidade modelo',month:'2026-09',kind:'INVOICE',filename:'fatura-exemplo.pdf',createdAt:'2026-10-20T12:00:00Z',status:{code:'RECEIVED',label:'Enviado'},notice:null};
@@ -36,9 +37,10 @@ const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,
  document.querySelector('[name="unitId"]').value='unit';document.querySelector('[name="month"]').value='2026-09';document.querySelector('[name="consent"]').checked=true;
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  ok(uploads===1&&text().includes('Fatura recebida'),'single upload gives visible confirmation');
+ testFile=new dom.window.File([new Uint8Array(15*1024*1024+1)],'too-large.pdf',{type:'application/pdf'});await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));ok(uploads===1&&text().includes('15 MB'),'oversize file rejected before network or quota');testFile=new dom.window.File(['test'],'test.pdf',{type:'application/pdf'});
  const form=calls.find(([u,o])=>u.endsWith('/uploads'))[1].body;ok(form.get('unitId')==='unit'&&form.get('month')==='2026-09'&&form.get('consent')==='true','scope and consent transmitted, no permissions invented');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Visualizar fatura').click());
- ok(document.querySelector('iframe').getAttribute('sandbox')==='','preview is sandboxed');ok(document.querySelector('a[target="_blank"]').rel.includes('noopener'),'original document opens safely');
+ ok(!document.querySelector('iframe'),'PDF is not loaded inside the blocked sandboxed browser plugin');ok(document.querySelector('a[target="_blank"]').rel.includes('noopener'),'original document opens safely');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Leitura em HTML').click());ok(!document.querySelector('script')&&document.querySelector('pre').textContent.includes('<script>'),'OCR is escaped text, never executable HTML');
  await act(async()=>root.render(React.createElement(Notifications)));
  ok(text().includes('EVA · há notificações para você'),'EVA reports actual unread notifications');ok(text().includes('Prazo:'),'request deadline displayed');

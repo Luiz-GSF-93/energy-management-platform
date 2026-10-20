@@ -16,5 +16,11 @@
     "sha256": "e599a828fd0b10351b8c85b0a4b431d33ebf1ba6be9bccf2debc81e5aa3bc059",
     "commit": "b8efa3f9e93179e2bae473153381e1e58b18b5a6",
     "fixture": "reports-e599a828fd0b10351b8c85b0a4b431d33ebf1ba6be9bccf2debc81e5aa3bc059.txt"
+  },
+  {
+    "path": "backend/src/modules/ocr/ocr-assistant.service.ts",
+    "sha256": "6c81cf1b219f60e3c613443a20b62a083ea88c865725d37ebc507f7ab4d1e2f7",
+    "commit": "e0ea9256c83e1ccd667edc85db3c88705927cdf3",
+    "fixture": "documents-6c81cf1b219f60e3c613443a20b62a083ea88c865725d37ebc507f7ab4d1e2f7.txt"
   }
 ]
