@@ -11,7 +11,7 @@ export async function captureInvoiceAssessment(db:any,job:any,raw:Record<string,
  const [customer,unit,duplicates]=await Promise.all([
   db.from('customers').select('company_name,document').eq('organization_id',job.organization_id).eq('id',doc.customer_id).is('deleted_at',null).maybeSingle(),
   db.from('consumer_units').select('consumer_unit_number,address,free_market').eq('organization_id',job.organization_id).eq('id',doc.consumer_unit_id).eq('customer_id',doc.customer_id).maybeSingle(),
-  db.from('documents').select('id').eq('organization_id',job.organization_id).eq('consumer_unit_id',doc.consumer_unit_id).eq('reference_month',doc.reference_month).eq('document_type','INVOICE_DISTRIBUTOR').neq('id',doc.id).limit(1),
+  db.from('eva_operational_invoices').select('id').eq('organization_id',job.organization_id).eq('consumer_unit_id',doc.consumer_unit_id).eq('reference_month',doc.reference_month).eq('document_type','INVOICE_DISTRIBUTOR').neq('id',doc.id).limit(1),
  ]);
  if(customer.error||unit.error||duplicates.error)throw new Error('OCR_REGISTRATION_ASSESSMENT_PENDING');
  const context={customer:customer.data,unit:unit.data,referenceMonth:String(doc.reference_month??'').slice(0,7),otherDocumentInPeriod:!!duplicates.data?.length};

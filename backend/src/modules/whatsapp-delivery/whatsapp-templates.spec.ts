@@ -36,7 +36,7 @@ describe('Customer template approval metadata',()=>{
  });
  it('reports request failures safely without granting approval or retrying',async()=>{
   for(const fetcher of [transport({error:{message:'private error'}},403),jest.fn().mockRejectedValue(Error('private token'))]){
-   const result=await inspectCustomerTemplates(env,fetcher as any);expect(result.rows.every(row=>row.status==='UNAVAILABLE')).toBe(true);expect(fetcher).toHaveBeenCalledTimes(5);expect(JSON.stringify(result)).not.toContain('private');
+   const result=await inspectCustomerTemplates(env,fetcher as any);expect(result.rows.every(row=>row.status==='UNAVAILABLE')).toBe(true);expect(fetcher).toHaveBeenCalledTimes(customerTemplates.length);expect(JSON.stringify(result)).not.toContain('private');
   }
  });
 });

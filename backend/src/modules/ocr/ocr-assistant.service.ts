@@ -161,6 +161,7 @@ export class OcrAssistantService {
  // eligible drafts, but never manufactures PDF confirmation or approval.
  async prepareAutomatic(document:string,t:TenantContext){
   await this.allowed(t,true);
+  await this.queue.assertAutomaticIdentity(t.organizationId,document);
   const plan=await this.inspect(document,t);
   const selected=plan.operations.filter(op=>op.canCreate).map(op=>op.key);
   if(!selected.length)return {mode:'AUTOMATIC_DRAFT' as const,receipts:[],current:plan,complete:true,canPublish:false as const,message:'Nenhum novo lançamento elegível. Valores e dúvidas permanecem preenchidos para conferência.'};

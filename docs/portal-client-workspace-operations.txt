@@ -72,3 +72,30 @@ Tests: backend/test/portal-client-workspace.cjs supports PGlite and disposable
 PostgreSQL via PORTAL_WORKSPACE_TEST_PG_PORT; the latter checks concurrent claims.
 Frontend/test/portal-workspace-ui.cjs uses only synthetic data. Optional
 PORTAL_VISUAL_FIXTURE writes a static, clearly labeled fictitious QA page.
+
+20 October follow-up: private Document uploads accept at most 15 MiB; the browser
+checks size before transmission and the private bucket must use the same ceiling.
+Migrations 20261129, 20261130 and 20261201 reserve invoice months, guard Documents
+and OCR, record immutable preflight proofs, and increase only the private bucket
+size. They preserve previous documents, roles, permissions, MIME allowlists and
+published closing snapshots. Resolve historical duplicate roots through support;
+never delete them or manufacture a clean history. An authorized replacement is a
+linear catalog revision of the current source, not a second independent invoice.
+
+UC, customer CNPJ, full registered address and reference are checked by bounded
+local PDF text extraction before paid OCR. A mismatched or inconclusive digital
+PDF stops. Images and scanned PDFs explicitly need one initial OCR to identify
+them, under existing consent and quotas; identification is not permission to
+prepare or publish. Before automatic drafts, the parsed identity must match the
+current unit/registration. Unknown and partial identities require team review.
+The proof is tied to exact file hash, current lease and registration snapshot;
+a changed registration stops submission. Downloaded bytes are hash-checked.
+
+The Portal keeps its existing invoice cards and private file/HTML access. Native
+PDF browser plugins cannot run inside an empty sandbox in Edge, so original
+files open in a separate no-opener, no-referrer tab with a short-lived private
+URL. Do not remove browser security or relax server access checks to preview.
+
+The WhatsApp approval inspector now includes energyos_portal_atualizado (or its
+configured v2 name). A registered template is not an approved template. SMS still
+requires the actual Twilio sender approval. No channel limit means no send.

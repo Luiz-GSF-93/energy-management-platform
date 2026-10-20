@@ -5,7 +5,7 @@ const client='00000000-0000-4000-8000-000000000001',admin='00000000-0000-4000-80
 const role='10000000-0000-4000-8000-000000000001',adminRole='10000000-0000-4000-8000-000000000002',foreignRole='10000000-0000-4000-8000-000000000003';
 async function database(){
  const port=process.env.PORTAL_WORKSPACE_TEST_PG_PORT;if(!port)return new PGlite();
- if(!/^[0-9]{4,5}$/.test(port))throw Error('Local test port required');const {Client}=require('pg'),options={host:'127.0.0.1',port:Number(port),user:'postgres',database:'postgres'},admin=new Client(options);await admin.connect();const name='portal_workspace_'+process.pid;await admin.query('CREATE DATABASE '+name);const primary=new Client({...options,database:name});await primary.connect();return {exec:s=>primary.query(s),query:(s,p)=>primary.query(s,p),concurrent:async(s,p)=>{const other=new Client({...options,database:name});await other.connect();try{return await Promise.all([primary.query(s,p),other.query(s,p)]);}finally{await other.end();}},close:async()=>{await primary.end();await admin.query('DROP DATABASE '+name);await admin.end();}};
+ if(!/^[0-9]{4,5}$/.test(port))throw Error('Local test port required');const {Client}=require('pg'),options={host:'127.0.0.1',port:Number(port),user:'postgres',database:'postgres'},admin=new Client(options);await admin.connect();const name='portal_workspace_'+process.pid;await admin.query('CREATE DATABASE '+name);const primary=new Client({...options,database:name});await primary.connect();return {exec:s=>primary.query(s),query:(s,p)=>primary.query(s,p),concurrent:async(s,p)=>{const other=new Client({...options,database:name});await other.connect();try{return await Promise.all([primary.query(s,p),other.query(s,p)]);}finally{await other.end();}},race:async(s,a,b)=>{const other=new Client({...options,database:name});await other.connect();try{return await Promise.allSettled([primary.query(s,a),other.query(s,b)]);}finally{await other.end();}},close:async()=>{await primary.end();await admin.query('DROP DATABASE '+name);await admin.end();}};
 }
 (async()=>{const db=await database();let checks=0;const ok=(v)=>{assert.ok(v);checks++},deny=async(fn)=>{await assert.rejects(fn);checks++};try{
  await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
@@ -45,7 +45,13 @@ async function database(){
  CREATE FUNCTION energy_price_read(text,text,text,boolean,boolean,integer,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT '{"customerId":"customer","units":[{"id":"unit"}]}'::jsonb$$;
  CREATE TABLE energy_forecast_runs(id uuid,organization_id text,customer_id text);CREATE TABLE energy_forecast_events(organization_id text,run_id uuid,action text);
  CREATE FUNCTION append_operation_client_message(text,text,uuid,uuid,text,text,text,text[]) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Legacy shared gateway';END$$;`);
- for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql','20261128_operation_actor_active_status.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
+ await db.exec(`ALTER TABLE documents ADD COLUMN catalog_previous_id text;CREATE TABLE document_catalog(organization_id text,document_id text,tag text);
+ ALTER TABLE customers ADD COLUMN company_name text DEFAULT 'Synthetic';ALTER TABLE customers ADD COLUMN document text DEFAULT '12345678000190';
+ ALTER TABLE consumer_units ADD COLUMN consumer_unit_number text DEFAULT '0012345678';ALTER TABLE consumer_units ADD COLUMN address text DEFAULT 'Street 123';
+ ALTER TABLE document_ocr_jobs ADD COLUMN error_code text;ALTER TABLE document_ocr_jobs ADD COLUMN id uuid DEFAULT gen_random_uuid();ALTER TABLE document_ocr_jobs ADD COLUMN file_hash text;ALTER TABLE document_ocr_jobs ADD COLUMN lease_token uuid;ALTER TABLE document_ocr_jobs ADD COLUMN lease_until timestamptz;
+ CREATE FUNCTION transition_document_ocr(uuid,uuid,text,text DEFAULT NULL,integer DEFAULT 5,text DEFAULT NULL,jsonb DEFAULT NULL,jsonb DEFAULT NULL) RETURNS public.document_ocr_jobs LANGUAGE plpgsql AS $$DECLARE j public.document_ocr_jobs;BEGIN SELECT * INTO j FROM public.document_ocr_jobs WHERE id=$1;RETURN j;END$$;
+ CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text,public boolean,file_size_limit bigint);INSERT INTO storage.buckets VALUES('energy-documents-private',false,10485760);`);
+ for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql','20261128_operation_actor_active_status.sql','20261129_portal_invoice_month_guard.sql','20261130_invoice_identity_preflight.sql','20261201_private_document_15mb.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
  // Run the real operational authorization function, not the fixture stub.
  const actorCheck=()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['org',admin,'requests']);
  await actorCheck();checks++;
@@ -78,9 +84,10 @@ async function database(){
  const upload={requestId:'30000000-0000-4000-8000-000000000001',unitId:'unit',month:'2026-09',kind:'INVOICE',fileHash:'a'.repeat(64),filename:'invoice.pdf',recordId:null,consent:true};
  await deny(()=>call(client,role,'reserve_upload',null,{...upload,unitId:'foreign-unit'}));
  const receipt=await call(client,role,'reserve_upload',null,upload);ok(receipt.acquired);
+ await deny(()=>call(client,role,'reserve_upload',null,{...upload,requestId:'30000000-0000-4000-8000-000000000098',fileHash:'b'.repeat(64)}));
  ok(!(await call(client,role,'reserve_upload',null,upload)).acquired);
  ok((await call(client,role,'reserve_upload',null,{...upload,requestId:'30000000-0000-4000-8000-000000000099'})).id===receipt.id);
- await db.query('INSERT INTO documents VALUES($1,$2,$3,$4,$5,true,$6,$7)',['doc','org','customer','unit','a'.repeat(64),'2026-09-01','INVOICE_DISTRIBUTOR']);
+ await db.query('INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type) VALUES($1,$2,$3,$4,$5,true,$6,$7)',['doc','org','customer','unit','a'.repeat(64),'2026-09-01','INVOICE_DISTRIBUTOR']);
  await deny(()=>call(client,role,'attach_upload',receipt.id,{documentId:'other-doc'}));
  ok((await call(client,role,'attach_upload',receipt.id,{documentId:'doc'})).documentId==='doc');
  ok((await call(client,role,'file',receipt.id)).documentId==='doc');
@@ -119,6 +126,37 @@ async function database(){
  await db.query('SELECT finish_portal_notification($1,$2,$3,null)',[delivery.id,'ACCEPTED','synthetic-provider']);checks++;
  await deny(()=>db.query('SELECT finish_portal_notification($1,$2,$3,null)',[delivery.id,'ACCEPTED','different-provider']));
  ok((await db.query("SELECT count(*)::int AS count FROM portal_notification_deliveries WHERE state='DELIVERED'")).rows[0].count===0);
+ // Exact unit/month protection spans Portal, Documents and OCR, without real uploads.
+ ok((await db.query("SELECT file_size_limit FROM storage.buckets WHERE id='energy-documents-private'")).rows[0].file_size_limit==15728640);
+ await deny(()=>db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type) VALUES('duplicate','org','customer','unit',$1,true,'2026-09-01','INVOICE_DISTRIBUTOR')",['b'.repeat(64)]));
+ await db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type) VALUES('backoffice','org','customer','unit',$1,true,'2026-10-01','INVOICE_DISTRIBUTOR')",['c'.repeat(64)]);
+ await deny(()=>call(client,role,'reserve_upload',null,{...upload,month:'2026-10',requestId:'30000000-0000-4000-8000-000000000097',fileHash:'d'.repeat(64)}));
+ await db.query("SELECT assert_invoice_month_ocr('org','doc')");checks++;
+ const jobId='60000000-0000-4000-8000-000000000001',lease='70000000-0000-4000-8000-000000000001';
+ await db.query("INSERT INTO document_ocr_jobs(organization_id,document_id,state,id,file_hash,lease_token,lease_until) VALUES('org','doc','QUEUED',$1,$2,$3,now()+interval '1 minute')",[jobId,'a'.repeat(64),lease]);
+ await deny(()=>db.query("SELECT transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[jobId,lease]));
+ const registration=(await db.query("SELECT invoice_identity_registration('org','doc') r")).rows[0].r;
+ const proof={version:'invoice-identity-preflight-v1',state:'MATCH',fileHash:'a'.repeat(64),registration,checks:{unit:'MATCH',taxId:'MATCH',address:'MATCH',period:'MATCH'}};
+ await deny(()=>db.query('SELECT record_document_identity_preflight($1,$2,$3,$4)',[jobId,lease,'a'.repeat(64),JSON.stringify({...proof,version:undefined})]));
+ await deny(()=>db.query('SELECT record_document_identity_preflight($1,$2,$3,$4)',[jobId,lease,'a'.repeat(64),JSON.stringify({...proof,state:undefined})]));
+ await db.query('SELECT record_document_identity_preflight($1,$2,$3,$4)',[jobId,lease,'a'.repeat(64),JSON.stringify(proof)]);checks++;
+ await db.query("SELECT transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[jobId,lease]);checks++;
+ await db.query("UPDATE consumer_units SET address='Changed street 999' WHERE id='unit'");
+ await deny(()=>db.query("SELECT transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[jobId,lease]));
+ await db.query("UPDATE consumer_units SET address='Street 123' WHERE id='unit'");
+ // Explicit internal replacement is a linear audited chain; old source cannot be re-read.
+ await db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type,catalog_previous_id) VALUES('revised','org','customer','unit',$1,true,'2026-09-01','INVOICE_DISTRIBUTOR','doc')",['e'.repeat(64)]);
+ await deny(()=>db.query("SELECT assert_invoice_month_ocr('org','doc')"));
+ await db.query("SELECT assert_invoice_month_ocr('org','revised')");checks++;
+ ok((await db.query("SELECT count(*)::int n FROM eva_operational_invoices WHERE id='doc'")).rows[0].n===0);ok((await db.query("SELECT count(*)::int n FROM eva_operational_invoices WHERE id='revised'")).rows[0].n===1);
+ await deny(()=>db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type,catalog_previous_id) VALUES('branch','org','customer','unit',$1,true,'2026-09-01','INVOICE_DISTRIBUTOR','doc')",['f'.repeat(64)]));
+ if(db.race){
+  const insert="INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type) VALUES($1,'org','customer','unit',$2,true,'2026-11-01','INVOICE_DISTRIBUTOR')";
+  const competing=await db.race(insert,['race-one','1'.repeat(64)],['race-two','2'.repeat(64)]);ok(competing.filter(r=>r.status==='fulfilled').length===1);ok(competing.filter(r=>r.status==='rejected').length===1);
+  ok((await db.query("SELECT count(*)::int n FROM documents WHERE reference_month='2026-11-01'")).rows[0].n===1);
+  const invoke="SELECT portal_workspace_action('org',$1,$2,false,'reserve_upload',null,$3)";
+  const receive=await db.race(invoke,[client,role,JSON.stringify({...upload,month:'2026-12',requestId:'30000000-0000-4000-8000-000000000080',fileHash:'3'.repeat(64)})],[client,role,JSON.stringify({...upload,month:'2026-12',requestId:'30000000-0000-4000-8000-000000000081',fileHash:'4'.repeat(64)})]);ok(receive.filter(r=>r.status==='fulfilled').length===1);ok(receive.filter(r=>r.status==='rejected').length===1);
+ }
  await db.exec('UPDATE fixture_license SET enabled=false');await deny(()=>call(client,role,'list'));await db.exec('UPDATE fixture_license SET enabled=true');
  await deny(()=>db.exec('DELETE FROM portal_document_events'));
  await db.exec('SET ROLE authenticated');await deny(()=>db.exec('SELECT * FROM portal_notification_outbox'));await deny(()=>call(client,role,'context'));await db.exec('RESET ROLE');

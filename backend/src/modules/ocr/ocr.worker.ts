@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {invoiceIdentityPreflight} from './invoice-identity-preflight';
 import {extractGdEvidence} from './gd-evidence';
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
@@ -46,10 +48,18 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
    if(docError)throw new Error('OCR_SOURCE_LOOKUP_PENDING');
    const prefix=job.organization_id+'/'+doc?.consumer_unit_id+'/';
    if(!doc||doc.file_verified!==true||doc.document_type!=='INVOICE_DISTRIBUTOR'||doc.storage_bucket!==DOCUMENT_BUCKET||doc.file_hash!==job.file_hash||typeof doc.file_path!=='string'||!doc.file_path.startsWith(prefix)||doc.file_path.includes('..')||doc.file_path.slice(prefix.length).includes('/')||doc.file_size_bytes>MAX_DOCUMENT_BYTES){await this.change(job,'FAIL',{p_error:'SOURCE_INVALID'});return;}
+   const canonical=await this.db.getClient().rpc('assert_invoice_month_ocr',{p_org:job.organization_id,p_document:job.document_id});
+   if(canonical.error){await this.change(job,'FAIL',{p_error:'INVOICE_ALREADY_RECEIVED'});return;}
    const {data:blob,error:downloadError}=await this.db.getClient().storage.from(DOCUMENT_BUCKET).download(doc.file_path);
    if(downloadError||!blob)throw new Error('OCR_SOURCE_DOWNLOAD_PENDING');
    if(blob.size>MAX_DOCUMENT_BYTES){await this.change(job,'FAIL',{p_error:'SOURCE_INVALID'});return;}
    const file={buffer:Buffer.from(await blob.arrayBuffer()),size:doc.file_size_bytes,mimetype:doc.mime_type,originalname:doc.original_filename};
+   if(createHash('sha256').update(file.buffer).digest('hex')!==job.file_hash){await this.change(job,'FAIL',{p_error:'SOURCE_HASH_MISMATCH'});return;}
+   const registration=await this.db.getClient().rpc('invoice_identity_registration',{p_org:job.organization_id,p_document:job.document_id});
+   if(registration.error||!registration.data){await this.change(job,'FAIL',{p_error:'IDENTITY_REGISTRATION_UNAVAILABLE'});return;}
+   const proof=job.identity_preflight??await invoiceIdentityPreflight(file.buffer,file.mimetype,registration.data,job.file_hash);
+   const saved=await this.db.getClient().rpc('record_document_identity_preflight',{p_id:job.id,p_token:job.lease_token,p_hash:job.file_hash,p_proof:proof});
+   if(saved.error||!['MATCH','OCR_REQUIRED'].includes(proof.state)){await this.change(job,'FAIL',{p_error:proof.state==='MISMATCH'?'IDENTITY_MISMATCH':'IDENTITY_REVIEW_REQUIRED'});return;}
    // Commit the intent BEFORE POST. A crash after this point becomes UNKNOWN, not a second POST.
    await this.change(job,'BEGIN_SUBMISSION');
    let submitted;

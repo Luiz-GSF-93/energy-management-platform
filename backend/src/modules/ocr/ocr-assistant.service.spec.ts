@@ -10,7 +10,7 @@ function fixture(){
  query.then=(resolve:any)=>Promise.resolve({data:[],error:null}).then(resolve);
  const db:any={getClient:()=>({from:jest.fn(()=>query)})};
  const licenses:any={requireEntitlement:jest.fn(async()=>{})};
- const queue:any={reviewSource:jest.fn(async()=>source)};
+ const queue:any={assertAutomaticIdentity:jest.fn(async()=>({})),reviewSource:jest.fn(async()=>source)};
  const preparation:any={inspect:jest.fn(async(_input:any,_org:any,capture:any)=>{capture({unit:source.doc});return diagnosis;})};
  const review:any={list:jest.fn(async()=>({fields:[]}))};
  const operations=['first','second'].map(key=>({key,label:key,area:'monthly',preview:jest.fn(async()=>({token:key+'-token',state:'READY',canCreate:true,message:'Ready'})),create:jest.fn(async()=>({inputId:key}))}));
@@ -20,6 +20,7 @@ function fixture(){
  return {service,tenant,source,diagnosis,query,licenses,queue,review,operations,body};
 }
 describe('OCR assistant safety and partial execution',()=>{
+ it('does not create any draft when invoice identity fails',async()=>{const f=fixture();f.queue.assertAutomaticIdentity.mockRejectedValueOnce(Error('UC, CNPJ or address mismatch'));await expect(f.service.prepareAutomatic('doc',f.tenant)).rejects.toThrow('mismatch');expect(f.operations[0].create).not.toHaveBeenCalled();});
  it('automatically saves only eligible drafts and never confirms extracted fields or publishes',async()=>{
   const f=fixture();f.operations[1].preview.mockResolvedValue({token:'pending',state:'REVIEWS_PENDING',canCreate:false,message:'Needs review'});
   const result=await f.service.prepareAutomatic('doc',f.tenant);

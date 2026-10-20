@@ -1,12 +1,12 @@
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import {inflateRawSync} from 'node:zlib';
 export const DOCUMENT_BUCKET = 'energy-documents-private';
-export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+export const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 export interface DocumentFile { buffer: Buffer; originalname: string; mimetype: string; size: number; }
 export function inspectDocument(file?: DocumentFile, evidence=false) {
   if (!file || !Buffer.isBuffer(file.buffer) || !file.buffer.length) throw new BadRequestException('Selecione um arquivo');
   const b = file.buffer;
-  if (b.length > MAX_DOCUMENT_BYTES) throw new PayloadTooLargeException('O arquivo deve ter no máximo 10 MB');
+  if (b.length > MAX_DOCUMENT_BYTES) throw new PayloadTooLargeException('O arquivo deve ter no máximo 15 MB');
   let mime: string, extension: string;
   if (b.subarray(0,5).toString('ascii') === '%PDF-' && b.subarray(Math.max(0,b.length-1024)).includes(Buffer.from('%%EOF'))) { mime='application/pdf'; extension='pdf'; }
   else if (b.length >= 33 && b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) && b.subarray(12,16).toString('ascii') === 'IHDR' && b.subarray(-8,-4).toString('ascii') === 'IEND') { mime='image/png'; extension='png'; }
