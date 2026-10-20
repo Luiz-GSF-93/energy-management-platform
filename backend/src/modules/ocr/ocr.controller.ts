@@ -41,6 +41,12 @@ export class OcrController {
  @Post(':id/ocr')
  @RequirePermission([PERMISSIONS.ENERGIA_OCR_PROCESS])
  enqueue(@Param('id') id:string,@OrganizationId() org:string,@UserId() actor:string){return this.queue.enqueue(org,id,actor);}
+ @Get(':id/ocr/identity-resume')
+ @RequirePermission([PERMISSIONS.ENERGIA_OCR_PROCESS])
+ identityResumePreview(@Param('id') id:string,@Req() req:any){return this.queue.identityResumePreview(id,req.tenantContext);}
+ @Post(':id/ocr/identity-resume')
+ @RequirePermission([PERMISSIONS.ENERGIA_OCR_PROCESS])
+ identityResume(@Param('id') id:string,@Req() req:any,@Body() body:unknown){return this.queue.identityResume(id,req.tenantContext,body);}
  @Get(':id/ocr/readout')
  @RequirePermission([PERMISSIONS.DOCUMENTS_VIEW])
  readout(@Param('id') id:string,@OrganizationId() org:string,@Query() query:Record<string,unknown>){return this.queue.readout(org,id,query);}

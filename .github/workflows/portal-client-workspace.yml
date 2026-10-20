@@ -9,7 +9,14 @@ on:
       - 'backend/src/database/migrations/20261130*.sql'
       - 'backend/src/database/migrations/20261201*.sql'
       - 'backend/src/database/migrations/20261203*.sql'
+      - 'backend/src/database/migrations/20261204*.sql'
+      - 'backend/src/modules/ocr/ocr-identity-resume*'
+      - 'backend/src/modules/ocr/ocr-queue.service*'
+      - 'backend/src/modules/ocr/ocr.controller.ts'
+      - 'frontend/app/backoffice/documents/OcrIdentityResume.tsx'
+      - 'frontend/app/backoffice/documents/OcrDocumentStatus.tsx'
       - 'backend/test/portal-client-workspace.cjs'
+      - 'backend/test/ocr-identity-resume.cjs'
       - 'frontend/app/components/Portal*'
       - 'frontend/test/portal-workspace-ui.cjs'
       - '.github/workflows/portal-client-workspace.yml'
@@ -34,7 +41,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-queue.service.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
         working-directory: backend
       - run: node test/portal-client-workspace.cjs
         working-directory: backend

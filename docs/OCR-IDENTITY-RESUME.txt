@@ -1,0 +1,36 @@
+Audited identity-only OCR resume
+
+OCR_IDENTITY_RESUME_ENABLED defaults to false. Deploy migration
+20261204_ocr_identity_resume.sql before enabling the flag. V3 local source
+preparation and the existing OCR provider configuration must also be available.
+
+An authorized internal operator first requests a local identity preview. No paid
+provider is called by preview or resume. The operator confirms the preview and a
+20–500 character justification. The backend recaptures the job, original hash,
+registration and local PDF evidence; a changed token invalidates confirmation.
+
+The private transactional RPC requires an active internal OCR/document role or
+an existing platform operation session, one active document license, a verified
+canonical invoice and a corresponding immutable registration edit. Only FAILED
+IDENTITY_MISMATCH/IDENTITY_REVIEW_REQUIRED jobs with their original MISMATCH or
+REVIEW proof are eligible. Any submission intent, provider operation, result,
+lease, changed source, missing audit or incomplete current MATCH denies resume.
+
+The same job/document returns to QUEUED. The prior proof, error, attempt count,
+actor, request, reason and current proof are appended to protected history.
+Attempts are not reset; at most three audited resumes are permitted. Replays
+of the same request are idempotent. Parallel requests cannot enqueue twice.
+The worker records immutable submission intent before POST and rechecks native
+identity, canonical month and entitlement under its existing transport rules.
+No upload, extra document, financial write, approval or publication occurs.
+
+Migration is additive (two columns, protected history trigger and service-role
+RPC); no job is reopened automatically. Legacy jobs with accepted/uncertain
+submission or results receive a conservative submission marker. An old failed
+immutable non-MATCH preflight proves the identity gate prevented submission.
+
+Validation uses synthetic Portal fixtures in PGlite and real PostgreSQL,
+including permission/license denial, source/proof changes, preserved history,
+terminal provider states, result/lease rejection and concurrent idempotency.
+API tests additionally cover disabled mode, complete current proof, stale
+previews and uncertain responses without automatic retries.

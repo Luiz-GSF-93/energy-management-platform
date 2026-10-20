@@ -1,4 +1,9 @@
 import {SourcePreparationService} from './source-preparation.service';
+import {identityResumeEnabled} from './ocr-identity-resume';
+import {createHash} from 'node:crypto';
+import {TenantContext} from '../../common/interfaces/tenant-context.interface';
+import {ocrDraftRole} from './ocr-draft-access';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {identityPreview} from './identity-preview';
 import {ocrReadOnce} from './ocr-read-scope';
@@ -10,13 +15,49 @@ import {invoiceReadout,ocrReadoutSummary,ReadoutQuery} from './invoice-readout';
 import {extractGdEvidence} from './gd-evidence';
 import { extractElectricalEvidence } from './electrical-evidence';
 import { assessmentMatchesDocument } from './invoice-assessment';
-import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { SupabaseService } from '../../services/supabase.service';
 import { LicensesService } from '../licenses/services/licenses.service';
 import { AzureInvoiceConnector } from './azure-invoice.connector';
 @Injectable()
 export class OcrQueueService {
  constructor(private readonly db:SupabaseService, private readonly licenses:LicensesService, private readonly connector:AzureInvoiceConnector,private readonly sourcePreparation?:SourcePreparationService){}
+ private async identityResumeAccess(t:TenantContext){
+  if(!identityResumeEnabled())throw new ServiceUnavailableException('Retomada de identidade ainda não habilitada.');
+  if(!ocrDraftRole(t)||!t.roleId||!t.permissions?.includes(P.ENERGIA_OCR_PROCESS)||!t.permissions.includes(P.DOCUMENTS_VIEW))throw new ForbiddenException('Retomada restrita à equipe interna autorizada.');
+  await this.licenses.requireEntitlement(t.organizationId,'document_management');
+  if(!this.connector.isConfigured())throw new ServiceUnavailableException('Leitura automática indisponível.');
+ }
+ private async resumeRpc(document:string,t:TenantContext,action:string,extra:Record<string,unknown>={}){
+  const r=await this.db.getClient().rpc('ocr_identity_resume_action',{p_org:t.organizationId,p_document:document,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,...extra});
+  if(r.error?.code==='42501')throw new ForbiddenException('Cadastro, licença ou permissão de retomada indisponível.');
+  if(r.error?.code==='22023')throw new BadRequestException('Confira a identidade atual e a justificativa.');
+  if(r.error)throw new ConflictException('Retomada não confirmada. Consulte o status e o histórico antes de repetir.');
+  return r.data;
+ }
+ private async resumeSnapshot(document:string,t:TenantContext){
+  await this.identityResumeAccess(t);
+  const captured=await this.resumeRpc(document,t,'inspect');
+  if(!captured?.eligible)return {eligible:false as const,reason:captured?.reason??'Leitura sem elegibilidade para retomada.'};
+  if(!this.sourcePreparation)throw new ServiceUnavailableException('Conferência local da fonte indisponível.');
+  const proof=await this.sourcePreparation.invoiceIdentity(t.organizationId,captured.customerId,captured.unitId,document,captured.registration);
+  const checks:Record<string,unknown>=proof?.checks??{};
+  if(!proof||proof.state!=='MATCH'||proof.fileHash!==captured.job.fileHash||!['unit','taxId','address','period'].every(k=>checks[k]==='MATCH'))return {eligible:false as const,reason:'Eu, EVA, ainda não consegui conferir integralmente a identidade no original. Nenhuma retomada foi iniciada.'};
+  const token=createHash('sha256').update(JSON.stringify({document,org:t.organizationId,actor:t.userId,role:t.roleId,job:captured.job,proof})).digest('hex');
+  return {eligible:true as const,token,proof,jobId:captured.job.id};
+ }
+ async identityResumePreview(document:string,t:TenantContext){
+  if(!identityResumeEnabled())return {enabled:false,eligible:false};
+  const snapshot=await this.resumeSnapshot(document,t);
+  return {enabled:true,eligible:snapshot.eligible,...(snapshot.eligible?{token:snapshot.token,jobId:snapshot.jobId,checks:snapshot.proof.checks,message:'Identidade atual conferida. A retomada mantém este documento e o histórico; a primeira leitura usa as cotas vigentes.'}:{message:snapshot.reason})};
+ }
+ async identityResume(document:string,t:TenantContext,b:any){
+  await this.identityResumeAccess(t);
+  if(!b||Object.keys(b).sort().join(',')!=='acknowledge,reason,requestId,token'||b.acknowledge!==true||typeof b.requestId!=='string'||!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(b.requestId)||typeof b.token!=='string'||!/^[a-f0-9]{64}$/.test(b.token)||typeof b.reason!=='string'||b.reason.trim().length<20||b.reason.length>500)throw new BadRequestException('Confirme a prévia e justifique a retomada.');
+  const snapshot=await this.resumeSnapshot(document,t);
+  if(!snapshot.eligible||snapshot.token!==b.token)throw new ConflictException('As fontes mudaram ou a leitura não pode ser retomada. Atualize o status.');
+  return this.resumeRpc(document,t,'resume',{p_request:b.requestId,p_reason:b.reason.trim(),p_proof:snapshot.proof});
+ }
  async enqueue(org:string,document:string,actor:string){
   await this.licenses.requireEntitlement(org,'document_management');
   if(!this.connector.isConfigured()) throw new ServiceUnavailableException('A leitura automática ainda não está habilitada.');
@@ -50,7 +91,7 @@ export class OcrQueueService {
   const {data,error}=await this.db.getClient().from('document_ocr_jobs').select('id,state,created_at,updated_at,error_code').eq('organization_id',org).eq('document_id',document).maybeSingle();
   if(error)throw new ServiceUnavailableException('Não foi possível consultar a leitura.');
   const intake=data?.state==='SUCCEEDED'?await this.intake(org,document,data.id):null;
-  return {enabled:this.connector.isConfigured(),job:data?this.publicJob(data):null,intake};
+  return {enabled:this.connector.isConfigured(),job:data?this.publicJob(data):null,intake,...(identityResumeEnabled()?{identityResumeEnabled:true}:{})};
  }
  async readout(org:string,document:string,query:Record<string,unknown>){
   if(Object.keys(query).some(k=>!['page','section','offset'].includes(k)))throw new BadRequestException('Consulta inválida.');
