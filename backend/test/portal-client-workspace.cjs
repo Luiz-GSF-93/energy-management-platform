@@ -12,7 +12,7 @@ async function database(){
  CREATE TABLE organizations(id text PRIMARY KEY);INSERT INTO organizations VALUES('org'),('foreign');
  CREATE TABLE customers(id text PRIMARY KEY,organization_id text,status text,deleted_at timestamptz);INSERT INTO customers VALUES('customer','org','ACTIVE',null),('other','foreign','ACTIVE',null);
  CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,status text,name text);INSERT INTO consumer_units VALUES('unit','org','customer','ACTIVE','Unit'),('foreign-unit','foreign','other','ACTIVE','Foreign');
- CREATE TABLE roles(id uuid PRIMARY KEY,organization_id text,scope text,name text,permissions jsonb);INSERT INTO roles VALUES('${role}','org','organization','consulta','[]'),('${adminRole}','org','organization','admin_org','["8f105b02-4443-49de-b188-847e0284e7ed"]'),('${foreignRole}','foreign','organization','consulta','[]');
+ CREATE TABLE roles(id uuid PRIMARY KEY,organization_id text,scope text,name text,permissions jsonb);INSERT INTO roles VALUES('${role}','org','organization','consulta','[]'),('${adminRole}','org','organization','admin_org','["8f105b02-4443-49de-b188-847e0284e7ed","1479c0b7-9608-4e95-bd83-7e6899255a78","d1f1b3be-a842-41e7-aeb1-45fefeb2f4c1"]'),('${foreignRole}','foreign','organization','consulta','[]');
  CREATE TABLE organization_members(organization_id text,user_id text,role_id uuid,status text,affiliation_type text,exclusive_customer_id text);INSERT INTO organization_members VALUES('org','${client}','${role}','active','external','customer'),('org','${admin}','${adminRole}','ACTIVE','internal',null),('foreign','${foreign}','${foreignRole}','active','external','other');
  ALTER TABLE organization_members ADD COLUMN display_name text;
  CREATE TABLE platform_organization_sessions(organization_id text,user_id text,revoked_at timestamptz,expires_at timestamptz);
@@ -45,7 +45,20 @@ async function database(){
  CREATE FUNCTION energy_price_read(text,text,text,boolean,boolean,integer,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT '{"customerId":"customer","units":[{"id":"unit"}]}'::jsonb$$;
  CREATE TABLE energy_forecast_runs(id uuid,organization_id text,customer_id text);CREATE TABLE energy_forecast_events(organization_id text,run_id uuid,action text);
  CREATE FUNCTION append_operation_client_message(text,text,uuid,uuid,text,text,text,text[]) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Legacy shared gateway';END$$;`);
- for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
+ for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql','20261128_operation_actor_active_status.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
+ // Run the real operational authorization function, not the fixture stub.
+ const actorCheck=()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['org',admin,'requests']);
+ await actorCheck();checks++;
+ await db.query('UPDATE organization_members SET status=$1 WHERE user_id=$2',['active',admin]);
+ await actorCheck();checks++;
+ await db.query('UPDATE organization_members SET status=$1 WHERE user_id=$2',['inactive',admin]);
+ await deny(actorCheck);
+ await db.query('UPDATE organization_members SET status=$1 WHERE user_id=$2',['active',admin]);
+ await deny(()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['foreign',admin,'requests']));
+ await deny(()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['org',client,'requests']));
+ await db.query('UPDATE roles SET permissions=permissions-$1 WHERE id=$2',['1479c0b7-9608-4e95-bd83-7e6899255a78',adminRole]);
+ await deny(actorCheck);
+ await db.query('UPDATE roles SET permissions=permissions||$1::jsonb WHERE id=$2',[JSON.stringify(['1479c0b7-9608-4e95-bd83-7e6899255a78']),adminRole]);
  const call=(actor,r,action,id=null,body={})=>db.query('SELECT portal_workspace_action($1,$2,$3,false,$4,$5,$6) AS data',['org',actor,r,action,id,JSON.stringify(body)]).then(r=>r.rows[0].data);
  ok((await call(client,role,'context')).units[0].id==='unit');
  const prefs=await call(client,role,'preferences');ok(prefs.body.EMAIL===false);
