@@ -38,11 +38,12 @@ export class SourcePreparationService{
   const org=c.unit.organization_id,customer=c.unit.customer_id,unit=c.unit.id;
   const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===org&&r.customer_id===customer&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=c.period.start&&String(r.end_date??'9999-12-31').slice(0,10)>=c.period.end);
   if(contracts.length!==1)return {version:3,invoiceIdentity,state:'REVIEW',observations:['Contrato vigente único não identificado para consultar o anexo.'],documents:[]};
-  const db=this.db.getClient(),r=await db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,document_type,original_filename,file_verified,file_hash,file_size_bytes,storage_bucket,file_path').eq('organization_id',org).eq('customer_id',customer).eq('consumer_unit_id',unit).eq('file_verified',true).limit(101);
+  const db=this.db.getClient(),r=await db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,energy_contract_id,document_type,original_filename,file_verified,file_hash,file_size_bytes,storage_bucket,file_path').eq('organization_id',org).eq('customer_id',customer).eq('consumer_unit_id',unit).eq('file_verified',true).or('document_type.eq.CONTRACT_ENERGY,original_filename.ilike.*contrat*,original_filename.ilike.*minuta*,original_filename.ilike.*anexo*').limit(101);
   if(r.error||!Array.isArray(r.data)||r.data.length>100)throw new ServiceUnavailableException('Não foi possível conferir os anexos contratuais completos.');
   // Some historic contract PDFs were registered as supplier invoices. Their name
   // only discovers candidates; it never proves a contractual link or a price.
-  const docs=r.data.filter((d:any)=>/\b(contrat|minuta|anexo)/i.test(d.original_filename??'')&&/\.pdf$/i.test(d.original_filename??''));
+  const discovered=r.data.filter((d:any)=>(!d.energy_contract_id||d.energy_contract_id===contracts[0].id)&&(d.document_type==='CONTRACT_ENERGY'||/\b(contrat|minuta|anexo)/i.test(d.original_filename??''))&&/\.pdf$/i.test(d.original_filename??''));
+  const linked=discovered.filter((d:any)=>d.energy_contract_id===contracts[0].id),docs=linked.length?linked:discovered;
   if(docs.length>4)return {version:3,invoiceIdentity,state:'REVIEW',observations:['Mais de quatro candidatos contratuais; conferir o vínculo antes da extração.'],documents:[]};
   const evidence:any[]=[],deadline=Date.now()+12000;
   for(const d of docs){
@@ -62,7 +63,7 @@ export class SourcePreparationService{
     const billing=(c.captured.billingRules??[]).filter((r:any)=>r.organization_id===org&&r.customer_id===customer&&r.consumer_unit_id===unit&&r.contract_id===contract.id&&String(r.start_date).slice(0,10)<=c.period.start&&String(r.end_date).slice(0,10)>=c.period.end).sort((a:any,b:any)=>b.version-a.version)[0];
     if(terms&&billing&&(!sameContractDecimal(billing.min_percent,terms.minPercent)||!sameContractDecimal(billing.max_tolerance_percent,terms.maxTolerancePercent)))conflicts.push('Condição de faturamento diverge dos limites normalizados: mínimo sobre o volume e tolerância adicionada a 100%.');
     if('modulation' in annex&&annex.modulation==='FLAT'&&contract.modulation!=='FLAT')conflicts.push('Modulação cadastrada diverge de Flat no anexo.');
-    evidence.push({documentId:d.id,sourceHash:d.file_hash,contractId:contract.id,link:'CANDIDATE_REQUIRES_REVIEW',annex,conflicts});
+    evidence.push({documentId:d.id,sourceHash:d.file_hash,contractId:contract.id,link:d.energy_contract_id===contract.id?'REGISTERED_CONTRACT_DOCUMENT':'CANDIDATE_REQUIRES_REVIEW',annex,conflicts});
    }catch{evidence.push({documentId:d.id,sourceHash:d.file_hash,contractId:contracts[0].id,link:'CANDIDATE_REQUIRES_REVIEW',annex:{state:'REVIEW',reason:'Extração local indisponível; sem chamada paga automática.'},conflicts:[]});}
   }
   return {version:3,invoiceIdentity,state:'REVIEW',documents:evidence,observations:['Anexos consultados sem alterar o contrato. Preço-base não substitui preço reajustado, vínculo confirmado ou nota fiscal.'],automaticFinancialApproval:false};

@@ -44,6 +44,11 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  if(candidates.length!==1)return {state:'REVIEW' as const,reason:'Anexo contratual único não identificado.',sources:[]};
  const s=candidates[0],t=normalized(s.text),sources=[{page:s.page,sectionHash:s.hash}];
  if(!/^[a-f0-9]{64}$/.test(s.hash)||createHash('sha256').update(s.text).digest('hex')!==s.hash||s.issues.some(i=>i!=='IMAGE_PRESENT'))return {state:'REVIEW' as const,reason:'Fonte ou disposição do anexo requer conferência.',sources};
+ const periods=[...t.matchAll(/PERIODO\s+(?:DE\s+)?SUPRIMENTO\s*[:.]?\s*(?:DE\s+)?(\d{2}\/\d{2}\/\d{4})\s*(?:A|ATE|[-–])\s*(\d{2}\/\d{2}\/\d{4})/g)];
+ const day=(v:string)=>{const [d,m,y]=v.split('/'),iso=y+'-'+m+'-'+d;const date=new Date(iso+'T00:00:00Z');return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===iso?iso:null;};
+ const start=periods.length===1?day(periods[0][1]):null,end=periods.length===1?day(periods[0][2]):null;
+ const [year,monthNumber]=month.split('-').map(Number),last=month+'-'+new Date(Date.UTC(year,monthNumber,0)).getUTCDate();
+ if(!start||!end||start>month+'-01'||end<last)return {state:'REVIEW' as const,reason:'Vigência única do anexo não demonstrada para toda a competência.',sources};
  const num=(v:string)=>v.replace(/\./g,'').replace(',','.');
  const volume=[...t.matchAll(/\b(\d{1,4},\d{1,6})\s*MW\s*MEDIO\b/g)];
  const pricePattern=new RegExp('01[/.]01[/.]'+month.slice(0,4)+'\\s*(?:A|ATE|[-–])\\s*31[/.]12[/.]'+month.slice(0,4)+'\\s+(?:R\\$\\s*)?((?:\\d{1,3}\\.\\d{3}|\\d{1,6})(?:,\\d{1,6})?)(?=\\s|$)','g');
@@ -53,7 +58,7 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  let volumeTerms:ReturnType<typeof normalizeContractVolume>|null=null;
  if(volume.length===1&&lower.length===1&&upper.length===1)try{volumeTerms=normalizeContractVolume(month,num(volume[0][1]),num(lower[0][1]),num(upper[0][1]));}catch{/* ambiguous terms remain pending */}
  const index=/IPCA\s*\/\s*IBGE/.test(t)?'IPCA/IBGE':null;
- return {state:'PROPOSED' as const,price,priceMode:'BASE' as const,adjustedPrice:null,volumeTerms,index,modulation:/MODULACAO\s*[:=]?\s*FLAT\b/.test(t)?'FLAT':null,sources,
+ return {state:'PROPOSED' as const,period:{start,end},price,priceMode:'BASE' as const,adjustedPrice:null,volumeTerms,index,modulation:/MODULACAO\s*[:=]?\s*FLAT\b/.test(t)?'FLAT':null,sources,
   pending:['Conferir vínculo e vigência do contrato registrado com este anexo.','Comprovar reajustes aplicáveis antes de determinar o preço final.','Conferir tratamento da TRU, compra excedente e tributos conforme cláusulas e fontes.'],automaticFinancialApproval:false};
 }
 
