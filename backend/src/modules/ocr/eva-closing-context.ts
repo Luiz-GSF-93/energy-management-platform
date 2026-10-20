@@ -31,6 +31,7 @@ export function closingEvidence(row:any,unitId:string,month:string,unit:any,topi
   if(topic==='tariffs')candidates.push(...(m.lines??p.acr?.lines??[]).map((v:any)=>({kind:'tariff',...v})),...(m.retained??[]).map((v:any)=>({kind:'retained',...v})),...(m.taxes??[]).map((v:any)=>({kind:'tax',...v})));
   if(topic==='fees')candidates.push({kind:'feeSources',fixed:p.fixedFee,supplier:p.supplier},...(u.fields??[]).filter((f:any)=>/^fee:/.test(f.key)).map((f:any)=>({kind:'fee',...f})));
   if(topic==='history')candidates.push({kind:'previous',month:u.comparison?.month,version:u.comparison?.version,hash:u.comparison?.hash},...(u.comparison?.metrics??[]).map((v:any)=>({kind:'comparison',...v})),...(u.previousCandidateComparison?.metrics??[]).map((v:any)=>({kind:'candidateComparison',...v})));
+  if(u.sources?.sourcePreparation)candidates.push({kind:'contractSourceCandidates',value:u.sources.sourcePreparation,rules:'Fontes candidatas para conferência. Preço-base não é preço final reajustado, minuta não comprova assinatura. Não corrigir cadastro nem presumir imposto, índice ou compra excedente.'});
   if(topic==='summary')candidates.push({kind:'prepared',invoice:p.invoice,supplier:p.supplier,fixedFee:p.fixedFee});
  }
  candidates.push(...(r.missing??[]).map((v:any)=>({kind:'missing',value:v})),...(r.observations??[]).map((v:any)=>({kind:'observation',value:v})),...(r.recommendations??[]).map((v:any)=>({kind:'recommendation',value:v})));

@@ -1,3 +1,4 @@
+import {SourcePreparationService} from './source-preparation.service';
 import {commercialProposal,ManualCommercial} from './calculation-autofill-manual';
 import {previousCalculationReference} from './calculation-autofill-reference';
 import {CalculationParametersService} from '../contracts/services/parameters.service';
@@ -18,7 +19,7 @@ import {MonthlyInputsService} from '../contracts/services/monthly-inputs.service
 const uuid=(x:unknown)=>typeof x==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
 @Injectable()
 export class CalculationAutofillService{
- constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService){}
+ constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService,private sourcePreparation?:SourcePreparationService){}
  private enabled(){return this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true';}
  private canWrite(t:TenantContext){return ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions.includes(P.ENERGIA_OCR_PROCESS);}
  private async allowed(t:TenantContext,write=false){
@@ -58,9 +59,10 @@ export class CalculationAutofillService{
   if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
   c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
   c.libraryRecord=selectAutofillLibrary(libraries,u,month).record;
+  c.sourcePreparation=await this.sourcePreparation?.inspect(c)??null;
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
-  const basis=autofillHash({v:5,manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const basis=autofillHash({v:5,...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }

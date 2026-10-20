@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import type {FillField} from './calculation-autofill.model';
 
@@ -10,8 +11,11 @@ const format=(v:bigint)=>{const s=(v<0n?-v:v).toString().padStart(3,'0');return 
 export function operationalProposal(fields:FillField[],c:any,layout:any):OperationalProposal{
  const result:OperationalProposal={formatVersion:'eva-operational-proposal-1.0',state:'UNAVAILABLE',invoice:{amount:null,source:'',lines:[]},acr:{identifiedAmount:null,lines:[]},supplier:{amount:null,source:''},fixedFee:{amount:null,source:''},observations:[],financialApproval:false,canPublish:false};
  const note=(s:string)=>{if(!result.observations.includes(s))result.observations.push(s);};
- if(!(c.ready||c.proposalReady)){note('Vínculo ou leitura da fatura exige reconferência antes de calcular a proposta.');return result;}
  const get=(key:string)=>fields.find(f=>f.key===key&&f.state==='FILLED');
+ // A fee evidenced by its own contract is known even while invoice identity is pending.
+ const fee=get('fee:fixed'),feeValue=typeof fee?.value==='number'&&Number.isFinite(fee.value)?String(fee.value):fee?.value;
+ if(sourcePreparationEnabled()&&fee?.source?.trim()&&money(feeValue)&&cents(feeValue)>=0n)result.fixedFee={amount:format(cents(feeValue)),source:fee.source};
+ if(!(c.ready||c.proposalReady)){note('Vínculo ou leitura da fatura exige reconferência antes de calcular a proposta.');return result;}
  const source='Fatura '+c.document.id+' · SHA-256 '+c.document.file_hash;
  const rows=Array.isArray(layout?.operations)?layout.operations:[];
  const totals=rows.filter((r:any)=>r.component==='TOTAL_A_PAGAR');

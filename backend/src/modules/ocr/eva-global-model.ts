@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractCpflPaulistaLayout} from './cpfl-paulista-layout';
 import {transcriptionEvidence} from './transcription-evidence';
 import {AiEvidence} from './azure-backoffice-ai.connector';
@@ -27,6 +28,7 @@ export function globalModelLayout(raw:any){
  return {...layout,operations:layout.operations.map(row=>{
   const label=String(row.fields.description?.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
   const amount=row.fields.amount?.decimal;
+  if(sourcePreparationEnabled()&&row.role==='UNKNOWN'&&row.component==='OTHER'&&/^CDE[ -]COVID(?:\s+(?:PONTA|FORA PONTA|F PONTA))?$/.test(label)&&typeof amount==='string'&&/^0(?:\.0{1,9})?$/.test(amount)&&globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled)return {...row,component:'CDE_COVID',role:'CHARGE' as const,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
   if(row.role!=='UNKNOWN'||row.component!=='OTHER'||!/^ATUALIZACAO MONETARIA(?:\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/\d{2}(?:\d{2})?)?$/.test(label)||typeof amount!=='string'||! /^-?\d+(?:\.\d{1,2})?$/.test(amount)||!globalFieldEvidence(raw,row.fields.description).filled||!globalFieldEvidence(raw,row.fields.amount).filled)return row;
   return {...row,component:'MONETARY_CORRECTION',role:(amount.startsWith('-')?'CREDIT':'CHARGE') as typeof row.role,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
  })};

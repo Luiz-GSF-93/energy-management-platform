@@ -1,3 +1,4 @@
+import {normalizedTaxBlocks,sourcePreparationEnabled} from './source-preparation-v3';
 import {globalModelLayout} from './eva-global-model';
 import {selectAutofillLibrary} from './calculation-autofill.model';
 import {tariffProduct} from '../contracts/services/tariff-preview';
@@ -12,7 +13,7 @@ const band=(r:any)=>r.period==='UNSPECIFIED'?'ALL':r.period;
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
 function printedRate(layout:any,key:string){
  const code=({icmsAmount:'ICMS',pisAmount:'PIS',cofinsAmount:'COFINS'} as any)[key],found:any[]=[];
- for(const block of layout.blocks??[]){
+ for(const block of sourcePreparationEnabled()?normalizedTaxBlocks(layout.blocks??[]):layout.blocks??[]){
   if(block.kind!=='TAX_SUMMARY')continue;
   const headers=block.rows.filter((r:any)=>r.cells.some((c:any)=>norm(c.value.text)==='TRIBUTO'));
   if(headers.length!==1)continue;

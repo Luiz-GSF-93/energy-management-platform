@@ -1,3 +1,4 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractPdfText} from './eva-pdf-text.extractor';
 export type InvoiceRegistration={customerName:string|null;taxId:string|null;unitNumber:string|null;address:string|null;month:string|null};
 const compact=(v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''):'';
@@ -18,6 +19,15 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
   if(named)found.push(named[2]+'-'+String(monthNames.indexOf(named[1].slice(0,3))+1).padStart(2,'0'));else if(numeric)found.push(numeric[2]+'-'+numeric[1].padStart(2,'0'));
  }
  checks.period=!r.month||!found.length?'REVIEW':found.every(m=>m===r.month)?'MATCH':'MISMATCH';
+ if(sourcePreparationEnabled()){
+  const explicit=[...t.matchAll(/(?:NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|UNIDADE\s+CONSUMIDORA|\bUC\b)\s*(?:N[º°.]?|:)?\s*([0-9][0-9.-]{4,30})\b/g)].map(m=>compact(m[1]));
+  checks.unit=!uc||!explicit.length?'REVIEW':explicit.every(n=>n===uc)?'MATCH':'MISMATCH';
+  const street=(v:string)=>{const n=norm(v),m=/(?:^|\n)\s*(?:RUA|R\.?|AVENIDA|AV\.?)\s+([A-Z ]+?),?\s+(\d+)\b/.exec(n),zip=/\b(\d{5})[- ](\d{3})\b/.exec(n);return m&&zip?compact(m[1])+'|'+m[2]+'|'+zip[1]+zip[2]:null;};
+  const registeredStreet=street(r.address??'');if(registeredStreet&&street(text)===registeredStreet)checks.address='MATCH';
+  const name=compact(r.customerName);
+  const customerTax=taxes.filter(id=>{const match=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].find(m=>compact(m[0])===id&&compact(t.slice(Math.max(0,m.index!-220),m.index)).includes(name));return Boolean(name.length>=8&&match);});
+  checks.taxId=!tax?'REVIEW':customerTax.includes(tax)?'MATCH':customerTax.length?'MISMATCH':'REVIEW';
+ }
  return {state:Object.values(checks).includes('MISMATCH')?'MISMATCH':Object.values(checks).every(s=>s==='MATCH')?'MATCH':'REVIEW',checks} as {state:'MATCH'|'MISMATCH'|'REVIEW';checks:Record<string,string>};
 }
 /** Local bounded text extraction only. Images/scans need one initial OCR to identify;
@@ -25,7 +35,14 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
 export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registration:InvoiceRegistration,fileHash:string){
  const base={version:'invoice-identity-preflight-v1',fileHash,registration};
  if(mime!=='application/pdf')return {...base,state:'OCR_REQUIRED',checks:{source:'IMAGE_REQUIRES_INITIAL_OCR'}};
- try{const extracted=await extractPdfText(bytes);if(extracted.ocrRequired)return {...base,state:'OCR_REQUIRED',checks:{source:'SCANNED_PDF_REQUIRES_INITIAL_OCR'}};
+ try{const extracted=await extractPdfText(bytes);
+  if(sourcePreparationEnabled()){
+   const pages=new Set(extracted.sections.filter(s=>s.issues.some(i=>['LAYOUT_REVIEW','EMPTY_PAGE'].includes(i))).map(s=>s.page));
+   const safe=extracted.sections.filter(s=>!pages.has(s.page));
+   const identity=invoiceIdentityText(safe.map(s=>s.text).join('\n'),registration);
+   if(identity.state!=='REVIEW')return {...base,...identity,sourcePages:[...new Set(safe.map(s=>s.page))]};
+  }
+  if(extracted.ocrRequired)return {...base,state:'OCR_REQUIRED',checks:{source:'SCANNED_PDF_REQUIRES_INITIAL_OCR'}};
   return {...base,...invoiceIdentityText(extracted.sections.map(s=>s.text).join('\n'),registration)};
  }catch{return {...base,state:'REVIEW',checks:{source:'LOCAL_EXTRACTION_UNAVAILABLE'}};}
 }
