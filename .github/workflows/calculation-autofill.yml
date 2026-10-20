@@ -2,6 +2,14 @@ name: Source-backed automatic preparation
 on:
   pull_request:
     paths:
+      - 'backend/src/modules/contracts/services/contract-index-memory*'
+      - 'backend/src/modules/contracts/controllers/contract-index-memory*'
+      - 'backend/src/modules/contracts/contracts.module.ts'
+      - 'backend/src/database/migrations/20261205_contract_index_memories.sql'
+      - 'backend/test/contract-index-memory.cjs'
+      - 'frontend/app/backoffice/contracts/ContractIndexMemory.tsx'
+      - 'frontend/app/backoffice/contracts/SupplyContracts.tsx'
+      - 'frontend/test/contract-index-memory.cjs'
       - 'backend/src/modules/contracts/services/eva-approved-publications*'
       - 'backend/src/modules/contracts/services/financial-settlements.service.ts'
       - 'backend/src/modules/bot-reports/**'
@@ -90,6 +98,10 @@ jobs:
         working-directory: backend
       - run: node test/eva-assisted-closing.cjs
         working-directory: backend
+      - run: npx jest --runInBand contract-index-memory
+        working-directory: backend
+      - run: node test/contract-index-memory.cjs
+        working-directory: backend
       - run: node test/calculation-autofill.cjs
         working-directory: backend
       - run: npm install --prefix /tmp/calculation-pg-driver --ignore-scripts pg@8.16.3
@@ -98,6 +110,11 @@ jobs:
         env:
           NODE_PATH: /tmp/calculation-pg-driver/node_modules
           CALCULATION_AUTOFILL_TEST_PG_PORT: '55484'
+      - run: node test/contract-index-memory.cjs
+        working-directory: backend
+        env:
+          NODE_PATH: /tmp/calculation-pg-driver/node_modules
+          CONTRACT_INDEX_TEST_PG_PORT: '55484'
       - run: node test/eva-approved-publications.cjs
         working-directory: backend
         env:
@@ -122,7 +139,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
+      - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
