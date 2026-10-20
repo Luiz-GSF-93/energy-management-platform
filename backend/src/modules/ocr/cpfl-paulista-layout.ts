@@ -97,7 +97,7 @@ function extractCpflOnly(raw:any){
 
  const pageLines=list(list(raw.pages).find(p=>p.pageNumber===1)?.lines);
  const fiscalLines=pageLines.filter(l=>/^NOTA FISCAL N /.test(norm(l.content)));
- const ucLabels=pageLines.filter(l=>norm(l.content)==='NUMERO DA UC');
+ const ucLabels=pageLines.filter(l=>norm(l.content)==='NUMERO DA UC'||sourcePreparationEnabled()&&norm(l.content)==='CODIGO DA INSTALACAO');
  const part=(line:any,value:string,position?:number)=>{
   const spans=list(line.spans),at=position??text(line.content).indexOf(value);
   if(spans.length!==1||at<0||text(raw.content).slice(spans[0].offset,spans[0].offset+spans[0].length)!==line.content)return null;
