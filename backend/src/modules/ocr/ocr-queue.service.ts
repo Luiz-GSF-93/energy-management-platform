@@ -37,6 +37,7 @@ export class OcrQueueService {
   const identity=identityPreview(extractCpflPaulistaLayout(source.raw),{customer:c.data,unit:u.data,referenceMonth:String(source.doc.reference_month).slice(0,7),otherDocumentInPeriod:false});
   if(sourcePreparationEnabled()&&this.sourcePreparation){
    const original=await this.sourcePreparation.invoiceIdentity(org,source.doc.customer_id,source.doc.consumer_unit_id,document,{customerName:c.data.company_name,taxId:c.data.document,unitNumber:u.data.consumer_unit_number,address:u.data.address,month:String(source.doc.reference_month).slice(0,7)});
+   if(original&&original.fileHash!==source.doc.file_hash)throw new ConflictException('A fatura mudou durante a conferência da identidade. Atualize as fontes.');
    if(original?.state==='MISMATCH')throw new ConflictException('Eu, EVA, encontrei divergência entre o original da fatura e o cadastro da unidade. Solicite conferência auditada antes do preenchimento.');
    if(original?.state==='MATCH'&&original.fileHash===source.doc.file_hash)return {...identity,originalEvidence:original};
   }

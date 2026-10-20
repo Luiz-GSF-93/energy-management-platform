@@ -32,3 +32,13 @@ describe('Global model quality V2',()=>{
  it('uses one bounded summary with formatted numbers and no field-copy instructions',()=>{const x=fixture(),r=globalModelConfidence(x.raw),e=globalAdviceEvidence(r);expect(e).toHaveLength(1);expect(e[0].fieldKey).toBeUndefined();expect(JSON.parse(e[0].value).confidence).toBe('99.0%');expect(JSON.stringify(e)).not.toContain('spans');expect(Buffer.byteLength(JSON.stringify(e))).toBeLessThan(6000)});
  it('keeps 84 prepared fields out of the generation request and grounds formatted percentages',()=>{const x=fixture(),r=globalModelConfidence(x.raw);r.score=0.986;r.fields=Array.from({length:84},(_,i)=>({...r.fields[0],key:'field-'+i,value:'PRIVATE_FACT_NOT_NEEDED'}));const e=globalAdviceEvidence(r);expect(JSON.parse(e[0].value).preparedFields).toBe(84);expect(JSON.stringify(e)).not.toContain('PRIVATE_FACT_NOT_NEEDED');expect(()=>validateInterpretation({supported:true,answer:'Confiança global de 98,6%. Confira as fontes.',citations:['model-quality'],fields:[],doubts:[]},e)).not.toThrow();expect(()=>validateInterpretation({supported:true,answer:'Economia de 999 reais.',citations:['model-quality'],fields:[],doubts:[]},e)).toThrow();});
 });
+
+it('classifies only explicit verified zero CDE Covid without changing raw OCR or its confidence',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();
+  const row:any={source:'covid',component:'OTHER',role:'UNKNOWN',issues:['UNMAPPED_COMPONENT'],fields:{description:x.field('CDE-COVID Fora Ponta'),amount:x.field('0.00')},arithmetic:{state:'MATCH'}};x.layout.operations.push(row);
+  const before=JSON.stringify({raw:x.raw,row});expect(globalModelLayout(x.raw).operations.at(-1)).toMatchObject({component:'CDE_COVID',role:'CHARGE'});expect(JSON.stringify({raw:x.raw,row})).toBe(before);
+  row.fields.amount=x.field('1.00');expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
+  row.fields.amount=x.field('0.00');row.fields.amount.issues=['UNVERIFIED_SOURCE'];expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});

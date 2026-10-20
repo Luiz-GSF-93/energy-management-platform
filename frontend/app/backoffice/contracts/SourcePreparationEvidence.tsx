@@ -1,8 +1,9 @@
 'use client';
-type Evidence={version:number;observations?:string[];documents?:{documentId:string;sourceHash:string;contractId:string;annex:{state:string;reason?:string;price?:string|null;index?:string|null;modulation?:string|null;volumeTerms?:{hours:number;contractedMwh:string;minPercent:string;maxTolerancePercent:string}|null;pending?:string[];sources?:{page:number;sectionHash:string}[]};conflicts?:string[]}[]};
+type Evidence={version:number;invoiceIdentity?:{state:string;checks:Record<string,string>;fileHash:string}|null;observations?:string[];documents?:{documentId:string;sourceHash:string;contractId:string;annex:{state:string;reason?:string;price?:string|null;index?:string|null;modulation?:string|null;volumeTerms?:{hours:number;contractedMwh:string;minPercent:string;maxTolerancePercent:string}|null;pending?:string[];sources?:{page:number;sectionHash:string}[]};conflicts?:string[]}[]};
 export default function SourcePreparationEvidence({data}:{data?:Evidence|null}){
  if(!data)return null;
  return <details><summary>EVA · fontes e condições do contrato</summary>
+  {data.invoiceIdentity?<p>Conferência do PDF original: {data.invoiceIdentity.state==='MATCH'?'identidade compatível':data.invoiceIdentity.state==='MISMATCH'?'identidade divergente — confira o cadastro':'requer conferência'}. Esta conferência não altera o score OCR.</p>:null}
   {(data.observations??[]).map((s,i)=><p key={i}>{s}</p>)}
   {(data.documents??[]).map(d=><section key={d.documentId} aria-label='Anexo contratual para conferência'>
    <p>Documento {d.documentId} · contrato {d.contractId}</p>

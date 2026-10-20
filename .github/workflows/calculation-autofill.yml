@@ -9,6 +9,7 @@ on:
       - 'backend/test/eva-approved-publications.cjs'
       - 'frontend/app/components/*Financial*'
       - 'backend/src/modules/ocr/source-preparation*'
+      - 'backend/src/modules/ocr/eva-pdf-text.extractor*'
       - 'backend/src/modules/ocr/cpfl-tax-reconciliation*'
       - 'backend/src/modules/ocr/invoice-identity-preflight*'
       - 'backend/src/modules/ocr/cpfl-paulista-layout.ts'

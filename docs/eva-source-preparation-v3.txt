@@ -24,11 +24,14 @@ Anexo contratual:
 - Descobre até quatro candidatos PDF do mesmo escopo, inclusive nomes históricos de minutas cadastradas como nota de fornecedor.
 - Nome do arquivo apenas descobre candidatos; não prova assinatura nem vincula juridicamente o documento ao contrato.
 - Lê localmente o anexo único com hash da seção, página, preço-base anual e fatores explícitos.
+- Limite máximo informativo de 140% é comparado ao total; a condição do motor usa separadamente a tolerância de 40%.
 - Converte MW médio em MWh pelas horas de calendário da competência; fator superior 1,40 representa tolerância adicional de 40%.
 - Opção de sazonalização não inventa distribuição mensal. Modulação Flat é distinta de acompanhamento de carga.
 - Preço-base não vira preço final por texto do índice. O motor existente exige fonte de reajuste ou preço final documentado.
 - Conflitos com volume/flexibilidade/modulação cadastral são exibidos e impedem consolidação automática.
 - Nenhum contrato, preço ou vigência cadastral é regravado silenciosamente. Anexos candidatos seguem conferência no fluxo auditado existente.
+- Extração contratual limitada a 8 segundos por PDF e orçamento de 12 segundos por consulta; exceder o tempo mantém revisão, sem chamada paga.
+- Cache de identidade: 16 provas por até 60 segundos, ligado ao cadastro e hash atuais, sempre após reconferência dos bytes. Falha transitória não é memorizada.
 - Cache de extração local: no máximo oito documentos, 60 segundos, chave com organização/cliente/unidade/id/hash; metadados e bytes são reconferidos a cada consulta.
 
 Apresentação:

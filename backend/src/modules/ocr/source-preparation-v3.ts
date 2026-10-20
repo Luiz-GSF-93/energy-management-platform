@@ -32,7 +32,7 @@ export function normalizeContractVolume(month:string,mwAverage:string,lowerFacto
  if(mw<=0n||lo>1000000n||hi<1000000n||hi>10000000n||lo>hi)throw Error('Flexibilidade inconsistente.');
  const [year,m]=month.split('-').map(Number),hours=new Date(Date.UTC(year,m,0)).getUTCDate()*24;
  const fmt=(n:bigint)=>{const s=n.toString().padStart(7,'0');return (s.slice(0,-6)+'.'+s.slice(-6)).replace(/0+$/,'').replace(/\.$/,'');};
- return {hours,contractedMwh:fmt(mw*BigInt(hours)),minPercent:fmt(lo*100n),maxTolerancePercent:fmt((hi-1000000n)*100n),volumeBasis:'MONTHLY' as const,originUnit:'MW_AVERAGE' as const};
+ return {hours,contractedMwh:fmt(mw*BigInt(hours)),minPercent:fmt(lo*100n),maxPercent:fmt(hi*100n),maxTolerancePercent:fmt((hi-1000000n)*100n),volumeBasis:'MONTHLY' as const,originUnit:'MW_AVERAGE' as const};
 }
 
 export type ContractTextSection={page:number;text:string;hash:string;issues:string[]};
@@ -46,7 +46,7 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  if(!/^[a-f0-9]{64}$/.test(s.hash)||createHash('sha256').update(s.text).digest('hex')!==s.hash||s.issues.some(i=>i!=='IMAGE_PRESENT'))return {state:'REVIEW' as const,reason:'Fonte ou disposição do anexo requer conferência.',sources};
  const num=(v:string)=>v.replace(/\./g,'').replace(',','.');
  const volume=[...t.matchAll(/\b(\d{1,4},\d{1,6})\s*MW\s*MEDIO\b/g)];
- const pricePattern=new RegExp('01[/.]01[/.]'+month.slice(0,4)+'\\s*(?:A|ATE|[-–])\\s*31[/.]12[/.]'+month.slice(0,4)+'\\s+(?:R\\$\\s*)?(\\d{1,6}(?:,\\d{1,6})?)','g');
+ const pricePattern=new RegExp('01[/.]01[/.]'+month.slice(0,4)+'\\s*(?:A|ATE|[-–])\\s*31[/.]12[/.]'+month.slice(0,4)+'\\s+(?:R\\$\\s*)?((?:\\d{1,3}\\.\\d{3}|\\d{1,6})(?:,\\d{1,6})?)(?=\\s|$)','g');
  const prices=[...t.matchAll(pricePattern)];
  const lower=[...t.matchAll(/LIMITE\s+INFERIOR\s*[:=]?\s*(0,\d{1,6}|1,0{1,6})\b/g)],upper=[...t.matchAll(/LIMITE\s+SUPERIOR\s*[:=]?\s*(\d{1,2},\d{1,6})\b/g)];
  const price=prices.length===1?num(prices[0][1]):null;
@@ -55,4 +55,9 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  const index=/IPCA\s*\/\s*IBGE/.test(t)?'IPCA/IBGE':null;
  return {state:'PROPOSED' as const,price,priceMode:'BASE' as const,adjustedPrice:null,volumeTerms,index,modulation:/MODULACAO\s*[:=]?\s*FLAT\b/.test(t)?'FLAT':null,sources,
   pending:['Conferir vínculo e vigência do contrato registrado com este anexo.','Comprovar reajustes aplicáveis antes de determinar o preço final.','Conferir tratamento da TRU, compra excedente e tributos conforme cláusulas e fontes.'],automaticFinancialApproval:false};
+}
+
+export function sameContractDecimal(a:unknown,b:unknown){
+ const value=(v:unknown)=>{const s=String(v);if(!/^(0|[1-9]\d{0,11})(\.\d{1,6})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));};
+ const left=value(a),right=value(b);return left!==null&&right!==null&&left===right;
 }

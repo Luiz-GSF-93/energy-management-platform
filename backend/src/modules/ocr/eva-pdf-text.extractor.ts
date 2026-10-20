@@ -51,7 +51,8 @@ const fail=code=>{parentPort.postMessage({error:code});};
  }catch(e){fail(e?.name==='PasswordException'?'PDF_INVALID':'EXTRACTION_FAILED');}
  finally{if(pdf)await pdf.destroy();}
 })();`;
-export async function extractPdfText(bytes:Buffer):Promise<ExtractionResult>{
+export async function extractPdfText(bytes:Buffer,timeoutMs=EXTRACTION_LIMITS.timeoutMs):Promise<ExtractionResult>{
+ if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>EXTRACTION_LIMITS.timeoutMs)throw new ExtractionError('LIMIT');
  if(!Buffer.isBuffer(bytes)||bytes.length<20||bytes.length>EXTRACTION_LIMITS.bytes||!bytes.subarray(0,10).toString('ascii').startsWith('%PDF-'))throw new ExtractionError('PDF_INVALID');
  const module=pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.mjs')).href;
  const root=dirname(require.resolve('pdfjs-dist/package.json'));
@@ -60,7 +61,7 @@ export async function extractPdfText(bytes:Buffer):Promise<ExtractionResult>{
   const worker=new Worker(program,{eval:true,workerData:{bytes:Uint8Array.from(bytes),module,fontDir:asset('standard_fonts'),cMapDir:asset('cmaps'),wasmDir:asset('wasm')},resourceLimits:{maxOldGenerationSizeMb:256,maxYoungGenerationSizeMb:32,stackSizeMb:4}});
   let settled=false;
   const finish=(value?:ExtractionResult,code?:ExtractionError['code'])=>{if(settled)return;settled=true;clearTimeout(timer);void worker.terminate();value?resolve(value):reject(new ExtractionError(code??'EXTRACTION_FAILED'));};
-  const timer=setTimeout(()=>finish(undefined,'LIMIT'),EXTRACTION_LIMITS.timeoutMs);
+  const timer=setTimeout(()=>finish(undefined,'LIMIT'),timeoutMs);
   worker.once('message',v=>{if(v?.error)finish(undefined,['LIMIT','PDF_INVALID'].includes(v.error)?v.error:'EXTRACTION_FAILED');else if(validateExtractionResult(v))finish(v);else finish(undefined,'INTEGRITY')});
   worker.once('error',()=>finish());worker.once('exit',()=>finish());
  });
