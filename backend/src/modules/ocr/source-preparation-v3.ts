@@ -66,3 +66,10 @@ export function sameContractDecimal(a:unknown,b:unknown){
  const value=(v:unknown)=>{const s=String(v);if(!/^(0|[1-9]\d{0,11})(\.\d{1,6})?$/.test(s))return null;const [w,f='']=s.split('.');return BigInt(w)*1000000n+BigInt(f.padEnd(6,'0'));};
  const left=value(a),right=value(b);return left!==null&&right!==null&&left===right;
 }
+
+export function contractPartyMatches(sections:ContractTextSection[],taxId:unknown){
+ const compact=(v:string)=>v.toUpperCase().replace(/[^A-Z0-9]/g,'');
+ const expected=typeof taxId==='string'?compact(taxId):'';
+ if(!/^[A-Z0-9]{12}[0-9]{2}$/.test(expected)||sections.length>2000)return false;
+ return sections.some(s=>[...s.text.toUpperCase().matchAll(/\b[A-Z0-9]{2}\.?[A-Z0-9]{3}\.?[A-Z0-9]{3}\s*\/?\s*[A-Z0-9]{4}-?[0-9]{2}\b/g)].some(m=>compact(m[0])===expected));
+}

@@ -24,6 +24,8 @@ Rubricas e tributos:
 Anexo contratual:
 - Descobre até quatro candidatos PDF do mesmo escopo, inclusive nomes históricos de minutas cadastradas como nota de fornecedor.
 - Nome do arquivo apenas descobre candidatos; não prova assinatura nem vincula juridicamente o documento ao contrato.
+- Prefere o vínculo energy_contract_id existente e inclui arquivos classificados CONTRACT_ENERGY mesmo com nome genérico; contratos vinculados a outro cadastro são excluídos.
+- Confere o CNPJ do cliente no conteúdo antes de propor condições do anexo; nome de arquivo ou classificação não substituem essa conferência.
 - Lê localmente o anexo único com hash da seção, página, preço-base anual e fatores explícitos.
 - Limite máximo informativo de 140% é comparado ao total; a condição do motor usa separadamente a tolerância de 40%.
 - Converte MW médio em MWh pelas horas de calendário da competência; fator superior 1,40 representa tolerância adicional de 40%.

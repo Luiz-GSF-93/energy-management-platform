@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {normalizedTaxBlocks,normalizeContractVolume,contractAnnexEvidence,SOURCE_PREPARATION_FLAG,sameContractDecimal} from './source-preparation-v3';
+import {normalizedTaxBlocks,normalizeContractVolume,contractAnnexEvidence,SOURCE_PREPARATION_FLAG,sameContractDecimal,contractPartyMatches} from './source-preparation-v3';
 import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
 import {invoiceIdentityText,invoiceIdentityPreflight} from './invoice-identity-preflight';
 import {operationalProposal} from './calculation-operational-proposal';
@@ -29,6 +29,10 @@ describe('Source-backed preparation V3, initially disabled',()=>{
   expect(invoiceIdentityText(native.replace('14000-000','14000-001'),r).state).not.toBe('MATCH');
  });
  it('uses complete safe digital identity even when another PDF page requires OCR',async()=>{const p=await PDFDocument.create(),page=p.addPage(),font=await p.embedFont(StandardFonts.Helvetica);page.drawText(text,{font,size:10,x:40,y:700,lineHeight:15});p.addPage();expect(await invoiceIdentityPreflight(Buffer.from(await p.save()),'application/pdf',r,'a'.repeat(64))).toMatchObject({state:'MATCH',fileHash:'a'.repeat(64),sourcePages:[1]});},30000);
+ it('checks the registered customer CNPJ in contract contents independently of filename and metadata',()=>{
+  const s={page:1,hash:'a'.repeat(64),issues:[],text:'Empresa Exemplo CNPJ 12.345.678/0001-90'};
+  expect(contractPartyMatches([s],'12345678000190')).toBe(true);expect(contractPartyMatches([s],'22.333.444/0001-55')).toBe(false);expect(contractPartyMatches([s],null)).toBe(false);
+ });
  it('compares contract decimals without false formatting conflicts or floating point rounding',()=>{expect(sameContractDecimal('72.000000',72)).toBe(true);expect(sameContractDecimal('72.000001','72')).toBe(false);expect(sameContractDecimal(null,0)).toBe(false);});
  it('converts MW average and multipliers exactly with calendar hours',()=>{expect(normalizeContractVolume('2026-04','0.100000','0.50','1.40')).toMatchObject({hours:720,contractedMwh:'72',minPercent:'50',maxPercent:'140',maxTolerancePercent:'40'});expect(normalizeContractVolume('2028-02','0.1','0.5','1.4').contractedMwh).toBe('69.6');});
  it.each([['2026-13','0.1','0.5','1.4'],['2026-04','0.1','50','140'],['2026-04','-0.1','0.5','1.4'],['2026-04','0.1','0.5','0.4']])('rejects invalid units/period/factors %s',(month,mw,lo,hi)=>expect(()=>normalizeContractVolume(month,mw,lo,hi)).toThrow());

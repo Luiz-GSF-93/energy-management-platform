@@ -2,7 +2,7 @@ import {Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {extractPdfText} from './eva-pdf-text.extractor';
-import {contractAnnexEvidence,sourcePreparationEnabled,sameContractDecimal} from './source-preparation-v3';
+import {contractAnnexEvidence,sourcePreparationEnabled,sameContractDecimal,contractPartyMatches} from './source-preparation-v3';
 import {invoiceIdentityPreflight} from './invoice-identity-preflight';
 
 /** Read-only local extraction. Caller has already checked backoffice permissions,
@@ -55,7 +55,7 @@ export class SourcePreparationService{
    if(createHash('sha256').update(bytes).digest('hex')!==d.file_hash)throw new ServiceUnavailableException('O anexo contratual mudou. Reconfira a fonte.');
    try{
     const key=[org,customer,unit,d.id,d.file_hash].join(':'),cached=this.extracted.get(key);
-    const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(bytes,Math.max(1000,Math.min(8000,deadline-Date.now()))),annex=contractAnnexEvidence(extracted.sections,c.month);
+    const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(bytes,Math.max(1000,Math.min(8000,deadline-Date.now()))),annex=contractPartyMatches(extracted.sections,c.originalIdentity?.registration?.taxId)?contractAnnexEvidence(extracted.sections,c.month):{state:'REVIEW' as const,reason:'CNPJ do cliente não comprovado no texto do contrato/anexo. Conferir o vínculo documental.',sources:[]};
     if(!cached||cached.until<=Date.now()){if(this.extracted.size>=8)this.extracted.delete(this.extracted.keys().next().value!);this.extracted.set(key,{until:Date.now()+60000,value:extracted});}
     const conflicts:string[]=[];const terms='volumeTerms' in annex?annex.volumeTerms:null,contract=contracts[0];
     if(terms&&!sameContractDecimal(contract.contracted_volume_mwh,terms.contractedMwh))conflicts.push('Volume cadastrado diverge da conversão MW médio × horas da competência.');
