@@ -21,6 +21,13 @@ describe('Source-backed preparation V3, initially disabled',()=>{
  it('distinguishes installation from account code, with matching street/number/postcode',()=>expect(invoiceIdentityText(text,r).state).toBe('MATCH'));
  it.each([['0012345678','0012345768'],['123 CENTRO','124 CENTRO'],['14000-000','14000-001'],['ABR/2026','MAI/2026']])('does not repair or guess mismatched identity %s',(a,b)=>expect(invoiceIdentityText(text.replace(a,b),r).state).not.toBe('MATCH'));
  it('does not accept the distributor CNPJ as customer identity',()=>expect(invoiceIdentityText('DISTRIBUIDORA CNPJ 12.345.678/0001-90\nEMPRESA EXEMPLO LTDA\n'+text.split('\n').slice(1).join('\n'),r).checks.taxId).toBe('REVIEW'));
+ it('reads the CPFL native customer strip when labels are background images, never another account or issuer CNPJ',()=>{
+  const native='COMPANHIA PAULISTA DE FORCA E LUZ CNPJ 22.333.444/0001-55 RUA EMITENTE, 99 CENTRO 13000-000\nSEU CODIGO 99999888\nEMPRESA EXEMPLO LTDA R EXEMPLO, 123 CENTRO SP 14000-000\nCNPJ: 12.345.678/0001-90\n0012345678\nABR/2026 21/05/2026';
+  expect(invoiceIdentityText(native,r).state).toBe('MATCH');
+  expect(invoiceIdentityText(native.replace('0012345678','0012345768'),r).state).toBe('MISMATCH');
+  expect(invoiceIdentityText(native.replace('CNPJ: 12.345.678/0001-90','CNPJ: 22.333.444/0001-55'),r).state).not.toBe('MATCH');
+  expect(invoiceIdentityText(native.replace('14000-000','14000-001'),r).state).not.toBe('MATCH');
+ });
  it('uses complete safe digital identity even when another PDF page requires OCR',async()=>{const p=await PDFDocument.create(),page=p.addPage(),font=await p.embedFont(StandardFonts.Helvetica);page.drawText(text,{font,size:10,x:40,y:700,lineHeight:15});p.addPage();expect(await invoiceIdentityPreflight(Buffer.from(await p.save()),'application/pdf',r,'a'.repeat(64))).toMatchObject({state:'MATCH',fileHash:'a'.repeat(64),sourcePages:[1]});},30000);
  it('compares contract decimals without false formatting conflicts or floating point rounding',()=>{expect(sameContractDecimal('72.000000',72)).toBe(true);expect(sameContractDecimal('72.000001','72')).toBe(false);expect(sameContractDecimal(null,0)).toBe(false);});
  it('converts MW average and multipliers exactly with calendar hours',()=>{expect(normalizeContractVolume('2026-04','0.100000','0.50','1.40')).toMatchObject({hours:720,contractedMwh:'72',minPercent:'50',maxPercent:'140',maxTolerancePercent:'40'});expect(normalizeContractVolume('2028-02','0.1','0.5','1.4').contractedMwh).toBe('69.6');});

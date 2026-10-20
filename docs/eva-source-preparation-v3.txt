@@ -8,6 +8,7 @@ Original da fatura:
 - Metadados limitados à organização, cliente, unidade e documento escolhido.
 - Bucket privado, prefixo, tamanho de até 15 MiB e SHA-256 conferidos antes da extração.
 - Texto nativo seguro pode provar identidade mesmo havendo outra página vazia/scaneada.
+- CPFL: rótulos em imagem podem ser recuperados pela sequência nativa estrita CNPJ do destinatário → instalação → competência, sem usar código do cliente de outra região.
 - Instalação é distinta do código do cliente. Não corrige dígitos por semelhança.
 - CNPJ é conferido no contexto da razão social; endereço preserva rua, número e CEP.
 - Layout inseguro ou identidade insuficiente mantém conferência. A prova não eleva confiança OCR.
