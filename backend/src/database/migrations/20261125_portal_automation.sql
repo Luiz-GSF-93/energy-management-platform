@@ -46,6 +46,7 @@ DECLARE i public.portal_document_intakes; prior public.portal_document_events;
 BEGIN
  SELECT * INTO i FROM public.portal_document_intakes WHERE id=p_id;
  IF p_state NOT IN('ANALYSING','VALIDATING','AUTOMATION_STOPPED') OR length(p_note) NOT BETWEEN 3 AND 500 OR NOT EXISTS(SELECT 1 FROM public.portal_document_events WHERE id=p_reservation AND intake_id=p_id AND state='AUTOMATION_RESERVED') THEN RAISE EXCEPTION 'Invalid automation receipt' USING ERRCODE='22023';END IF;
+ IF p_state='VALIDATING' AND NOT EXISTS(SELECT 1 FROM public.eva_assisted_closing_versions v WHERE v.id::text=p_source AND v.organization_id=i.organization_id AND v.customer_id=i.customer_id AND v.month=i.month AND (SELECT state FROM public.eva_assisted_closing_events WHERE closing_id=v.id ORDER BY sequence DESC LIMIT 1)='READY_FOR_REVIEW' AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.report->'units') unit WHERE unit->>'id'=i.consumer_unit_id AND unit->>'documentId'=i.document_id AND unit->>'sourceHash'=i.file_hash)) THEN RAISE EXCEPTION 'Validated preparation source required' USING ERRCODE='42501';END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('portal-automation:'||i.id,0));
  SELECT * INTO prior FROM public.portal_document_events WHERE intake_id=p_id AND event_key='finish:'||p_reservation;
  IF FOUND THEN IF prior.state<>p_state OR prior.source_id IS DISTINCT FROM p_source THEN RAISE EXCEPTION 'Receipt changed' USING ERRCODE='40001';END IF;RETURN;END IF;

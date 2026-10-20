@@ -31,6 +31,7 @@ export class PortalAutomationWorker implements OnModuleInit,OnModuleDestroy {
    await this.autofill.prepare({...query,requestId:job.reservation,token:preview.token},t);
    // The closing service captures the full customer set; it never approves or publishes.
    const prepared=await this.closing.prepare({...query,requestId:randomUUID()},t);
+   if(prepared.row?.state!=='READY_FOR_REVIEW'){await finish('AUTOMATION_STOPPED','A versão foi preservada com pendências de evidência. A equipe deve conferir o resumo antes da validação.',prepared.row?.id??null);return;}
    await finish('VALIDATING','Preparação versionada disponível para conferência da equipe. Nenhuma aprovação ou publicação automática.',prepared.row?.id??null);
   }catch{await finish('AUTOMATION_STOPPED','Preparação interrompida. A equipe deve conferir as fontes e o histórico antes de repetir.');}
  }finally{this.busy=false;}}

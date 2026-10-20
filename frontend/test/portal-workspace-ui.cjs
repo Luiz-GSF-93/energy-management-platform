@@ -20,6 +20,7 @@ const original=Module._load;Module._load=function(name,parent,main){
  if(name.endsWith('.module.css')){const file=path.resolve(path.dirname(parent.filename),name);css.set(file,fs.readFileSync(file,'utf8'));return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};}
  if(name==='@/app/lib/api/client')return {apiRequest:api};
  if(name==='./EvidenceThread')return {__esModule:true,default:({id})=>React.createElement('p',null,'Conversa autorizada '+id)};
+ if(name.startsWith('@/'))return original.call(this,path.resolve(__dirname,'..',name.slice(2)),parent,main);
  return original.call(this,name,parent,main);
 };
 const Invoices=require('../app/components/PortalInvoices.tsx').default,Notifications=require('../app/components/PortalNotifications.tsx').default;

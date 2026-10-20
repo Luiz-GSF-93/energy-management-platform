@@ -13,6 +13,7 @@ export function financialDetail(r:any,original:any){
   if(new Set(ccee.map((c:any)=>c.sourceReference+'|'+c.label)).size!==ccee.length)throw Error('Ambiguous CCEE cost source');
   const additional=ccee.filter((c:any)=>c.includedInTotal===true&&c.accountingRole==='ADDITIONAL');
   const additionalTotal=additional.reduce((n:bigint,c:any)=>n+money(c.amount),0n);
+  result.unitContext=Object.fromEntries(['freeMarket','state','tariffGroup','tariffSubgroup','tariffModality','voltage'].map(k=>[k,k==='freeMarket'?(typeof r.unitContext?.[k]==='boolean'?r.unitContext[k]:null):(typeof r.unitContext?.[k]==='string'?r.unitContext[k].slice(0,100):null)]));
   const taxRows=Array.isArray(r.invoiceTaxes)?r.invoiceTaxes:[];
   try {
     if(taxRows.length!==3||new Set(taxRows.map((t:any)=>t.code)).size!==3)throw Error();
@@ -23,9 +24,11 @@ export function financialDetail(r:any,original:any){
     });
     const taxTotal=taxes.reduce((sum,t)=>sum+money(t.amount),0n),gross=money(r.invoice),supplier=money(r.supplier),fees=money(r.financial.fees),total=money(r.financial.aclAfterFees);
     if(gross<taxTotal||gross+supplier+fees+additionalTotal!==total||total<=0n)throw Error();
-    const values=[{key:'distributor',label:'Distribuidora sem ICMS/PIS/COFINS segregados',amount:feeMoney(gross-taxTotal)},...taxes,{key:'supplier',label:'Energia do fornecedor · base fiscal informada no fechamento',amount:r.supplier},{key:'fees',label:'Honorários da gestão',amount:r.financial.fees},...additional.map((c:any,i:number)=>({key:'ccee-'+i,label:'CCEE · '+c.label,amount:c.amount}))];
+    const values=[{key:'distributor',label:'Distribuidora · valor sem ICMS, PIS e COFINS',amount:feeMoney(gross-taxTotal)},...taxes,{key:'supplier',label:'Energia do fornecedor · base fiscal informada no fechamento',amount:r.supplier},{key:'fees',label:'Honorários da gestão',amount:r.financial.fees},...additional.map((c:any,i:number)=>({key:'ccee-'+i,label:'CCEE · '+c.label,amount:c.amount}))];
+    const shares=values.map(p=>money(p.amount)*10000n/total),largest=values.reduce((best,p,i)=>money(p.amount)>money(values[best].amount)?i:best,0);
+    shares[largest]+=10000n-shares.reduce((sum,n)=>sum+n,0n);
     let offset=0n;
-    result.composition=values.map((part,i)=>{const value=money(part.amount);if(value<0n)throw Error();const share=i===values.length-1?10000n-offset:value*10000n/total;const p={...part,percent:feeMoney(share),offset:feeMoney(offset)};offset+=share;return p;});
+    result.composition=values.map((part,i)=>{if(money(part.amount)<0n)throw Error();const share=shares[i];const p={...part,percent:feeMoney(share),offset:feeMoney(offset)};offset+=share;return p;});
     result.taxes=taxes;
     result.taxNotice='ICMS, PIS e COFINS da distribuidora foram retirados da parcela bruta antes de serem separados. Tributos do fornecedor sem segregação permanecem identificados na parcela correspondente; não foram presumidos.';
     result.compositionNotice='Total publicado preservado. Valores faturados/apurados não comprovam pagamento. '+result.taxNotice;

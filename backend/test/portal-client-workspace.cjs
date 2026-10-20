@@ -34,7 +34,7 @@ async function database(){
  CREATE TABLE operation_notification_reads(organization_id text,user_id text,notification_key text,PRIMARY KEY(organization_id,user_id,notification_key));
  CREATE TABLE document_ocr_jobs(organization_id text,document_id text,state text);
  CREATE TABLE calculation_preparation_runs(id uuid,organization_id text,document_id text,source_hash text);CREATE TABLE calculation_preparation_run_events(run_id uuid,organization_id text,sequence int,state text);
- CREATE TABLE eva_assisted_closing_versions(id uuid,organization_id text,customer_id text,month text,payload_hash text,report jsonb);
+ CREATE TABLE eva_assisted_closing_versions(id uuid,organization_id text,customer_id text,month text,payload_hash text,report jsonb,source_snapshot jsonb);
  CREATE TABLE eva_assisted_closing_events(closing_id uuid,state text,sequence int);
  CREATE TABLE eva_closing_publications(id uuid,organization_id text,customer_id text,closing_id uuid,source_hash text);
  CREATE TABLE eva_closing_publication_events(organization_id text,publication_id uuid,state text,sequence int);
@@ -76,6 +76,7 @@ async function database(){
  const auto=(await db.query('SELECT claim_portal_invoice_automation() AS data')).rows[0].data;ok(auto.stage==='OCR');
  ok((await db.query('SELECT claim_portal_invoice_automation() AS data')).rows[0].data===null);
  ok((await db.query('SELECT revalidate_portal_invoice_automation($1,$2) AS data',[auto.id,auto.reservation])).rows[0].data.userId===admin);
+ await deny(()=>db.query('SELECT finish_portal_invoice_automation($1,$2,$3,$4,$5)',[auto.id,auto.reservation,'VALIDATING','Not a real prepared version.','missing-closing']));
  await call(admin,adminRole,'routing',null,{...config,revision:2,body:{...config.body,automationEnabled:false}});
  await deny(()=>db.query('SELECT revalidate_portal_invoice_automation($1,$2)',[auto.id,auto.reservation]));
  ok((await call(client,role,'list')).rows[0].documentId==='doc');
