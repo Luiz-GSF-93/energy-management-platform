@@ -6,6 +6,9 @@ import {CalculationAutofillService} from './calculation-autofill.service';
 import {invoiceComparisonV2} from './invoice-comparison-v2';
 import {autofillHash} from './calculation-autofill.model';
 import {assistedClosingReport,ClosingEntry} from './eva-assisted-closing.model';
+import {resolutionId} from './ocr-resolution-plan';
+import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
+import {PERMISSIONS as P} from '../../common/constants/permissions';
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 @Injectable()
 export class EvaAssistedClosingService{
@@ -36,14 +39,33 @@ export class EvaAssistedClosingService{
   const q=this.scope({consumerUnitId:b.consumerUnitId,month:b.month});
   const rights=await this.rpc('history',q,t,null,{page:0});if(!rights.canPrepare)throw new ForbiddenException('Sem permissão para preparar.');
   const prior=rights.rows.find((r:any)=>r.id===b.requestId);if(prior)return {row:prior,replayed:true};
-  const sources=await this.rpc('capture',q,t,null,{}),all=sources?.financial?.tables?.consumer_units;
+  let sources=await this.rpc('capture',q,t,null,{});const all=sources?.financial?.tables?.consumer_units;
   if(!Array.isArray(all)||!all.length||all.length>100||new Set(all.map((u:any)=>u.id)).size!==all.length)throw new ConflictException('Conjunto completo de unidades indisponível.');
   const primary=all.find((u:any)=>u.id===q.consumerUnitId);if(!primary)throw new ForbiddenException('Unidade fora do escopo.');
+  // Check every unit before the first draft write, including inactive units.
+  if(all.some((u:any)=>u.organization_id!==t.organizationId||u.customer_id!==primary.customer_id))throw new ForbiddenException('Fontes fora do escopo.');
+  const snapshots=new Map<string,any>();let preparedDrafts=false;
+  if(this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true'&&ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions?.includes(P.ENERGIA_OCR_PROCESS)){
+   for(const u of [...all].sort((a,b)=>a.id.localeCompare(b.id))){
+    if(u.status!=='ACTIVE'||(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state)))continue;
+    const candidate=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);snapshots.set(u.id,candidate);
+    if(!candidate.available||!(candidate.c.ready||candidate.c.proposalReady))continue;
+    const result=await this.autofill.prepare({consumerUnitId:u.id,month:q.month,requestId:resolutionId(['assisted-autofill-1',t.organizationId,b.requestId,u.id,candidate.basis]),token:candidate.token},t);
+    if(!['PREPARED','PARTIAL'].includes(result.run?.state))throw new ServiceUnavailableException('Preparação dos rascunhos ainda não confirmada. Consulte o histórico antes de repetir.');
+    preparedDrafts=true;
+   }
+  }
+  if(preparedDrafts){
+   sources=await this.rpc('capture',q,t,null,{});
+   const current=sources?.financial?.tables?.consumer_units;
+   const scope=(rows:any[])=>rows.map(u=>({id:u.id,organization_id:u.organization_id,customer_id:u.customer_id,status:u.status})).sort((a,b)=>a.id.localeCompare(b.id));
+   if(!Array.isArray(current)||autofillHash(scope(current))!==autofillHash(scope(all)))throw new ConflictException('O conjunto de unidades mudou durante a preparação. Consulte os rascunhos antes de continuar.');
+  }
   const entries:ClosingEntry[]=[];
   for(const u of [...all].sort((a,b)=>a.id.localeCompare(b.id))){
    if(u.organization_id!==t.organizationId||u.customer_id!==primary.customer_id)throw new ForbiddenException('Fontes fora do escopo.');
    if(u.status!=='ACTIVE'){entries.push({unitId:u.id,name:u.name??u.id,unavailable:'Unidade inativa exige conferência da cobertura do cliente.'});continue;}
-   const c=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
+   const c=(!preparedDrafts&&snapshots.get(u.id))||await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
    const uncertain=(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state));
    entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:invoiceComparisonV2(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
   }
