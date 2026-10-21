@@ -48,7 +48,7 @@ const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,
  const paymentSelect=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='PAID'));await act(async()=>{paymentSelect.value='PAID';paymentSelect.dispatchEvent(new Event('change',{bubbles:true}));});
  ok(!calls.some(([u])=>u.endsWith('/payment-declaration')),'choosing payment state does not write before explicit confirmation');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar declaração').click());
- ok(text().includes('Você informou: Paga')&&text().includes('Não equivale a comprovante bancário'),'customer declaration is distinct from bank confirmation');
+ ok(text().includes('Cliente informou: Paga')&&text().includes('Não equivale a comprovante bancário'),'customer declaration is distinct from bank confirmation');
  await act(async()=>root.render(React.createElement(Notifications)));
  ok(text().includes('EVA · há notificações para você'),'EVA reports actual unread notifications');ok(text().includes('Prazo:'),'request deadline displayed');
  ok(!document.querySelector('[role="dialog"]'),'thread is not mounted or marked read before opening');
