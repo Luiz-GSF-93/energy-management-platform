@@ -2,6 +2,9 @@ import {indexMemoryParameters,indexMemoryPlan,indexMemoryHash,parseOfficialIpca,
 import {sameContractDecimal} from './source-preparation-v3';
 export const CONTRACT_CLOSING_DRAFT_FLAG='EVA_CONTRACT_CLOSING_DRAFTS_ENABLED';
 export const contractClosingDraftEnabled=()=>process.env[CONTRACT_CLOSING_DRAFT_FLAG]==='true';
+// Existing structured supplier flows remain available when there is no verified
+// indexed annex to propose. The feature does not require annexes for all clients.
+export const contractClosingDraftApplicable=(c:any)=>!!c.sourcePreparation?.documents?.some((d:any)=>d.link==='REGISTERED_CONTRACT_DOCUMENT'&&d.annex?.state==='PROPOSED'&&d.annex.index==='IPCA/IBGE');
 const day=(v:unknown)=>String(v??'').slice(0,10),hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const autofillHash=indexMemoryHash;
 const dec=(v:unknown)=>{const s=String(v);if(!/^(0|[1-9]\d{0,11})(\.\d{1,12})?$/.test(s))throw Error('Decimal sem fonte.');const [a,b='']=s.split('.');return BigInt(a)*10n**12n+BigInt(b.padEnd(12,'0'));};

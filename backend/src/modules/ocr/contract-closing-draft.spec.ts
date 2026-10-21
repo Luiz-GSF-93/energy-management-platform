@@ -1,4 +1,4 @@
-import {contractClosingDraft,contractClosingDraftEnabled,CONTRACT_CLOSING_DRAFT_FLAG} from './contract-closing-draft';
+import {contractClosingDraft,contractClosingDraftEnabled,contractClosingDraftApplicable,CONTRACT_CLOSING_DRAFT_FLAG} from './contract-closing-draft';
 import {indexMemoryHash,indexMemoryPlan,calculateIndexMemory} from '../contracts/services/contract-index-memory.model';
 import {normalizeContractVolume,contractAdjustmentTerms} from './source-preparation-v3';
 import {assistedClosingReport} from './eva-assisted-closing.model';
@@ -14,6 +14,7 @@ function fixture(month='2026-03'){
  return {c,memory};
 }
 describe('source-backed monthly contract draft',()=>{
+ it('preserves existing structured supplier flows without a verified indexed annex',()=>{const {c}=fixture();expect(contractClosingDraftApplicable(c)).toBe(true);c.sourcePreparation.documents[0].link='CANDIDATE_REQUIRES_REVIEW';expect(contractClosingDraftApplicable(c)).toBe(false);expect(contractClosingDraftApplicable({})).toBe(false);});
  it.each([['2026-03','74.4','104.160000000000','7.505796700000','128.372561'],['2026-04','72','100.800000000000','3.501260000000','133.690574']])('normalizes volume and recomputes the indexed price for %s',(month,volume,max,extra,price)=>{
   const {c,memory}=fixture(month),before=JSON.stringify(c),r=contractClosingDraft(c,[memory]);
   expect(r).toMatchObject({state:'COMPLETE',requiresHumanAcceptance:true,financialApproval:false,canPublish:false,supplier:{contractedMwh:volume,maxMwh:max,extraMwh:extra,pricePerMwh:price,extraAmount:'100.00'}});

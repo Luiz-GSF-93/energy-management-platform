@@ -1,5 +1,5 @@
 import {SourcePreparationService} from './source-preparation.service';
-import {contractClosingDraft,contractClosingDraftEnabled} from './contract-closing-draft';
+import {contractClosingDraft,contractClosingDraftEnabled,contractClosingDraftApplicable} from './contract-closing-draft';
 import {commercialProposal,ManualCommercial} from './calculation-autofill-manual';
 import {previousCalculationReference} from './calculation-autofill-reference';
 import {CalculationParametersService} from '../contracts/services/parameters.service';
@@ -61,7 +61,7 @@ export class CalculationAutofillService{
   c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
   c.libraryRecord=selectAutofillLibrary(libraries,u,month).record;
   c.sourcePreparation=await this.sourcePreparation?.inspect(c)??null;
-  if(contractClosingDraftEnabled()){
+  if(contractClosingDraftEnabled()&&contractClosingDraftApplicable(c)){
    c.indexMemories=[];
    const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===t.organizationId&&r.customer_id===u.customer_id&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=period.start&&String(r.end_date).slice(0,10)>=period.end);
    if(contracts.length===1){
