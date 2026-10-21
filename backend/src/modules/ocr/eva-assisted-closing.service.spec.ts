@@ -46,3 +46,19 @@ describe('Approved publication activation',()=>{
   await expect(s.decide(body,t)).rejects.toThrow('disponibilização');expect(rpc).not.toHaveBeenCalled();await s.decide({...body,disclose:true},t);expect(rpc).toHaveBeenCalledWith('decide_eva_with_publication',expect.objectContaining({p_body:expect.objectContaining({disclose:true})}));expect(rpc.mock.calls[0][1]).not.toHaveProperty('p_action');
  });
 });
+
+describe('isolated contract-memory capture path',()=>{
+ afterEach(()=>delete process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED);
+ it('uses only the service-only snapshot wrapper when explicitly enabled',async()=>{
+  process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED='true';
+  const rpc=jest.fn(async()=>({data:{rows:[]}}));
+  const s=new EvaAssistedClosingService({getClient:()=>({rpc})} as any,{get:()=> 'true'} as any,{} as any);
+  await s.history({consumerUnitId:unit,month:b.month},t);
+  expect(rpc).toHaveBeenCalledWith('eva_contract_closing_action',expect.objectContaining({p_action:'history',p_disclose:false,p_org:'org',p_actor:'actor'}));
+ });
+ it('rejects a memory not present in the captured tenant/unit snapshot before reservation',async()=>{
+  process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED='true';const x=setup();
+  x.snap.mockResolvedValue({available:true,plan:{fields:[],contractDraft:{memory:{id:'memory',hash:'a'.repeat(64)}}},c:{document:{id:'doc'}}} as any);
+  await expect(x.s.prepare(b,t)).rejects.toThrow('memória contratual mudou');expect(x.actions).not.toContain('reserve');expect(x.prepare).not.toHaveBeenCalled();
+ });
+});

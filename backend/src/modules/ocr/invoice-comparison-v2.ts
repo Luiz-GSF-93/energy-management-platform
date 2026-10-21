@@ -4,6 +4,7 @@ import {selectAutofillLibrary} from './calculation-autofill.model';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import {tariffMatrix,InvoiceComparison} from './eva-tariff-workbench.model';
 import {decimalFromInvoice} from './electrical-evidence';
+import {contractClosingDraftEnabled} from './contract-closing-draft';
 const decimal=(v:unknown):v is string=>typeof v==='string'&&/^(0|[1-9][0-9]{0,11})(\.\d{1,6})?$/.test(v);
 const cents=(v:unknown)=>{if(typeof v!=='string'||! /^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem fonte demonstrada.');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const money=(n:bigint)=>{const s=(n<0n?-n:n).toString().padStart(3,'0');return (n<0n?'-':'')+s.slice(0,-2)+'.'+s.slice(-2);};
@@ -35,7 +36,7 @@ export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparis
  const result:InvoiceComparison={method:'SAME_INVOICE_AMOUNTS_V2',amount:null,lines:[],retained:[],taxes:[],observations:['Estimativa comparativa: tarifas ACR da biblioteca; quantidades, impostos em reais, reativos e despesas da fatura preservados. Alíquotas exibidas como leitura, sem reaplicação sobre nova base.'],missing:[],library:lib?{id:lib.id,version:lib.version,source:lib.profile.source,taxTreatment:lib.profile.taxTreatment}:null};
  const fail=(message:string)=>{result.missing.push(message);return result;};
  for(const excluded of selection.excluded)result.observations.push('Biblioteca '+excluded.id+' v'+excluded.version+' não utilizada: tratamento líquido das tarifas não demonstrado para esta comparação.');
- if(!lib)return fail('Biblioteca vigente não encontrada ou enquadramento ambíguo.');
+ if(!lib)return fail(contractClosingDraftEnabled()?'Biblioteca ACR compatível não demonstrada para '+c.unit.distributor+' · '+c.unit.tariff_subgroup+' · '+c.unit.tariff_modality+' · '+c.unit.consumption_class+' · '+c.month+'. Confira a classe, a origem líquida e todas as vigências do período faturado; uma mudança de tarifa dentro do período exige evidência por trecho, sem estender uma única tabela ao mês inteiro.':'Biblioteca vigente não encontrada ou enquadramento ambíguo.');
  if(lib.profile.taxTreatment!=='NET')return fail('Confirme em nova versão da biblioteca a origem líquida das tarifas; não somar impostos da fatura a tarifas brutas ou desconhecidas.');
  const layout=globalModelLayout(c.source?.raw??{}),rows=layout.operations.filter(r=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role));
  if(layout.reconciliation.state!=='MATCH'||!rows.length)return fail('Rubricas da fatura ainda não conciliadas.');

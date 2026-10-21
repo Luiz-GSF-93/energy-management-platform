@@ -2,7 +2,10 @@ import {createHash} from 'node:crypto';
 
 export const INDEX_MEMORY_FLAG='CONTRACT_INDEX_MEMORY_ENABLED';
 export type IndexMemoryParameters={month:string;basePrice:string;baseDate:string;firstAdjustment:string;frequencyMonths:number;index:'IPCA';sourceDocumentId:string|null;sourceNote:string};
-export const indexMemoryHash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
+export const indexMemoryHash=(v:unknown)=>{
+ const canonical=(x:any):any=>Array.isArray(x)?x.map(canonical):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])):x;
+ return createHash('sha256').update(JSON.stringify(canonical(v))).digest('hex');
+};
 const monthPattern=/^(20|21)\d{2}-(0[1-9]|1[0-2])$/;
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 const serial=(m:string)=>Number(m.slice(0,4))*12+Number(m.slice(5,7))-1;

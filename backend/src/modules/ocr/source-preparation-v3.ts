@@ -36,6 +36,13 @@ export function normalizeContractVolume(month:string,mwAverage:string,lowerFacto
 }
 
 export type ContractTextSection={page:number;text:string;hash:string;issues:string[]};
+export function contractAdjustmentTerms(text:string){
+ const t=normalized(text),matches=[...t.matchAll(/REAJUSTE\s+DATA\s+BASE\s+1[Oº°]?\s*REAJUSTE\s+PERIODICIDADE\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,2})\s+MESES/g)];
+ if(matches.length!==1||!/IPCA\s*\/\s*IBGE/.test(t))return null;
+ const iso=(s:string)=>s.slice(6)+'-'+s.slice(3,5)+'-'+s.slice(0,2),baseDate=iso(matches[0][1]),firstAdjustment=iso(matches[0][2]),frequencyMonths=Number(matches[0][3]);
+ if(!/^(20|21)\d{2}-(0[1-9]|1[0-2])-01$/.test(baseDate)||!/^(20|21)\d{2}-(0[1-9]|1[0-2])-01$/.test(firstAdjustment)||firstAdjustment<=baseDate||![1,3,6,12].includes(frequencyMonths))return null;
+ return {index:'IPCA' as const,baseDate,firstAdjustment,frequencyMonths};
+}
 /** Bounded annex projection. Values retain their document/page/section source.
  * Annual table prices remain BASE; no index, TRU or signature is invented. */
 export function contractAnnexEvidence(sections:ContractTextSection[],month:string){
@@ -62,7 +69,7 @@ export function contractAnnexEvidence(sections:ContractTextSection[],month:strin
  let volumeTerms:ReturnType<typeof normalizeContractVolume>|null=null;
  if(volume.length===1&&lower.length===1&&upper.length===1)try{volumeTerms=normalizeContractVolume(month,volume[0],num(lower[0][1]),num(upper[0][1]));}catch{/* ambiguous terms remain pending */}
  const index=/IPCA\s*\/\s*IBGE/.test(t)?'IPCA/IBGE':null;
- return {state:'PROPOSED' as const,period:{start,end},price,priceMode:'BASE' as const,adjustedPrice:null,volumeTerms,index,modulation:/MODULACAO\s*[:=]?\s*FLAT\b/.test(t)?'FLAT':null,sources,
+ return {state:'PROPOSED' as const,period:{start,end},price,priceMode:'BASE' as const,adjustedPrice:null,volumeTerms,index,adjustment:contractAdjustmentTerms(s.text),modulation:/MODULACAO\s*[:=]?\s*FLAT\b/.test(t)?'FLAT':null,sources,
   pending:['Conferir vínculo e vigência do contrato registrado com este anexo.','Comprovar reajustes aplicáveis antes de determinar o preço final.','Conferir tratamento da TRU, compra excedente e tributos conforme cláusulas e fontes.'],automaticFinancialApproval:false};
 }
 
