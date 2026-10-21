@@ -1,4 +1,5 @@
 import {SourcePreparationService} from './source-preparation.service';
+import {contractClosingDraft,contractClosingDraftEnabled} from './contract-closing-draft';
 import {commercialProposal,ManualCommercial} from './calculation-autofill-manual';
 import {previousCalculationReference} from './calculation-autofill-reference';
 import {CalculationParametersService} from '../contracts/services/parameters.service';
@@ -60,9 +61,19 @@ export class CalculationAutofillService{
   c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
   c.libraryRecord=selectAutofillLibrary(libraries,u,month).record;
   c.sourcePreparation=await this.sourcePreparation?.inspect(c)??null;
+  if(contractClosingDraftEnabled()){
+   c.indexMemories=[];
+   const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===t.organizationId&&r.customer_id===u.customer_id&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=period.start&&String(r.end_date).slice(0,10)>=period.end);
+   if(contracts.length===1){
+    const h=this.fail(await db.rpc('contract_index_memory_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_contract:contracts[0].id,p_action:'history',p_id:null,p_body:{}}));
+    if(!Array.isArray(h.rows)||autofillHash(h.contract)!==autofillHash(contracts[0])||h.rows.some((m:any)=>m.organization_id!==t.organizationId||m.contract_id!==contracts[0].id||m.customer_id!==u.customer_id||m.consumer_unit_id!==unit))throw new ConflictException('As fontes da memória contratual mudaram. Reconfira a competência.');
+    c.indexMemories=h.rows;
+   }
+   c.contractDraft=contractClosingDraft(c,c.indexMemories);
+  }
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
-  const basis=autofillHash({v:5,...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const basis=autofillHash({v:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }

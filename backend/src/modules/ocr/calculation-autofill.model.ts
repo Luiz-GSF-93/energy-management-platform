@@ -1,3 +1,4 @@
+import {contractClosingDraftEnabled} from './contract-closing-draft';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {globalModelLayout} from './eva-global-model';
 import {operationalProposal} from './calculation-operational-proposal';
@@ -103,18 +104,24 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  for(const conflict of contractConflicts)observations.push('Contrato/anexo: '+conflict);
  // Do not calculate using registered terms contradicted by their source candidate.
  // Resolving a contract conflict requires its existing audited correction workflow.
- const currentSupplier=contractConflicts.length?null:c.diagnosis.contractSupplierCost;
+ const draft=contractClosingDraftEnabled()?c.contractDraft:null;
+ const currentSupplier=draft?draft.supplier:(contractConflicts.length?null:c.diagnosis.contractSupplierCost);
+ if(draft?.terms){const source='Proposta mensal do anexo '+draft.source.documentId+' · SHA-256 '+draft.source.fileHash;add('supplier:annex-terms','Condições mensais propostas pelo anexo',draft.terms,'','ACL',source,'Diferenças para o cadastro preservadas; exigem aceitação humana no fechamento.');}
+ if(draft?.memory)add('supplier:index-memory','Memória de reajuste conferida',draft.memory,'','ACL','Memória IPCA '+draft.memory.id+' v'+draft.memory.version);
+ if(draft)observations.push(...draft.requirements.map((r:any)=>r.message));
  const overlaps=(c.captured.contracts??[]).some((x:any)=>['ACTIVE','APPROVED'].includes(x.status)&&x.contract_type==='ENERGY_PURCHASE'&&String(x.start_date).slice(0,10)<=period.end&&String(x.end_date??'9999-12-31').slice(0,10)>=period.start);
  const activeSuppliers=(c.captured.contracts??[]).filter((x:any)=>['ACTIVE','APPROVED'].includes(x.status)&&x.contract_type==='ENERGY_PURCHASE'&&String(x.start_date).slice(0,10)<=period.end&&String(x.end_date??'9999-12-31').slice(0,10)>=period.start);
- const supplierReference=((!currentSupplier?.contract&&!overlaps)||currentSupplier?.contract&&!currentSupplier.pricePerMwh&&activeSuppliers.length<=1)&&reference?.supplier;
+ const supplierReference=!draft&&((!currentSupplier?.contract&&!overlaps)||currentSupplier?.contract&&!currentSupplier.pricePerMwh&&activeSuppliers.length<=1)&&reference?.supplier;
  const s=supplierReference?{...supplierReference,regularAmount:referenceEnergyAmount(supplierReference.pricePerMwh,c.measurements.consumptionTotal),contractedMwh:referenceMwh(c.measurements.consumptionTotal),requirements:[]}:currentSupplier;
  const supplierSource=supplierReference?reference.source+' · preço histórico aplicado ao consumo atual; não é contrato vigente':null;
  if(supplierReference)observations.push('Fornecedor sem condições completas para a competência: preço de '+reference.month+' aplicado ao consumo atual, sem copiar volume ou total anterior. Conferir compra, perdas, tributos e encargos atuais.');
- add('supplier:contract','Contrato fornecedor',s?.contract?.number??null,'','ACL',supplierSource??(s?.contract?'Contrato '+s.contract.id:''));
- add('supplier:price',supplierReference?'Preço de referência do fornecedor':'Preço vigente fornecedor',s?.pricePerMwh??null,'BRL_MWH','ACL',supplierSource??(s?.pricePerMwh?'Contrato '+s.contract.id+' · '+s.priceSource:''));
- add('supplier:volume',supplierReference?'Volume atual usado na referência':'Volume contratado',s?.contractedMwh??null,'MWh','ACL',supplierSource??(s?.contract?'Contrato '+s.contract.id:''));
+ const knownContract=s?.contract??(activeSuppliers.length===1?{id:activeSuppliers[0].id,number:activeSuppliers[0].contract_number}:null);
+ add('supplier:contract','Contrato fornecedor',knownContract?.number??null,'','ACL',supplierSource??(knownContract?'Contrato cadastrado '+knownContract.id:''));
+ add('supplier:price',supplierReference?'Preço de referência do fornecedor':'Preço vigente fornecedor',s?.pricePerMwh??null,'BRL_MWH','ACL',supplierSource??(draft?.memory?'Memória IPCA '+draft.memory.id+' v'+draft.memory.version:s?.pricePerMwh?'Contrato '+s.contract.id+' · '+s.priceSource:''));
+ add('supplier:volume',supplierReference?'Volume atual usado na referência':'Volume contratado',s?.contractedMwh??null,'MWh','ACL',supplierSource??(draft?.source?'Anexo '+draft.source.documentId+' · SHA-256 '+draft.source.fileHash:s?.contract?'Contrato '+s.contract.id:''));
  add('supplier:tax','Tributos fornecedor',s?.taxTreatment??null,'','ACL',supplierSource??(s?.rule?'Regra '+s.rule.id+' v'+s.rule.version+' · '+s.rule.source:''));
- add('supplier:regular','Energia regular proposta',proposedRegularSupplierAmount(s,c.measurements),'BRL','ACL',supplierSource??(s?.contract&&s?.rule?'Contrato '+s.contract.id+' · regra '+s.rule.id+' · '+src:''),'Proposta para conferência; não duplica a NF e não inclui compras extras ou tributos ainda não apurados.');
+ add('supplier:regular','Energia regular proposta',proposedRegularSupplierAmount(s,c.measurements),'BRL','ACL',supplierSource??(draft?.source&&s?.regularAmount!=null?'Anexo '+draft.source.documentId+' · memória '+(draft.memory?.id||'pendente'):s?.contract&&s?.rule?'Contrato '+s.contract.id+' · regra '+s.rule.id+' · '+src:''),'Proposta para conferência; não duplica a NF e não inclui compras extras ou tributos ainda não apurados.');
+ if(draft)add('supplier:total','Fornecedor · total mensal conciliado',draft.state==='COMPLETE'?draft.supplier?.totalAmount:null,'BRL','ACL',draft.state==='COMPLETE'?'Anexo '+draft.source.documentId+' · memória '+draft.memory.id+' · fontes de custos conciliadas':'','Energia regular e compra extra demonstradas; custos externos são contabilizados separadamente.');
  for(const r of s?.requirements??[])observations.push(r.message);
  if(!c.ready)observations.push('Identidade, leitura ou conciliação da fatura ainda exige conferência; nenhuma confirmação humana será simulada.');
  for(const r of c.rates)if(r.state==='CONFLICT')observations.push(r.label+': divergência com registro existente.');
@@ -131,9 +138,9 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  if(manual.supplierPricePerMwh!==undefined){setManual('supplier:price','Preço de referência do fornecedor',manual.supplierPricePerMwh,'BRL_MWH');const volume=referenceMwh(c.measurements.consumptionTotal),amount=referenceEnergyAmount(manual.supplierPricePerMwh,c.measurements.consumptionTotal);if(volume!==null)setManual('supplier:volume','Consumo atual usado na proposta',volume,'MWh');if(amount!==null)setManual('supplier:regular','Energia regular proposta',amount,'BRL');}
  if(Object.keys(manual).length)observations.push('Condições comerciais informadas pelo operador foram preservadas somente nesta proposta auditada. Tributos, perdas e encargos não informados não foram somados ao preço de referência.');
  const pending=fields.filter(f=>f.state==='PENDING').length,filled=fields.length-pending;
- const sourceConsistent=(c.ready||c.proposalReady)&&!contractConflicts.length&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict&&!measurementWarnings.length;
+ const sourceConsistent=(c.ready||c.proposalReady)&&(!contractConflicts.length||draft?.state==='COMPLETE')&&(!draft||draft.state==='COMPLETE')&&!c.rates.some((r:any)=>r.state==='CONFLICT')&&!monthlyConflict&&!costConflict&&!measurementWarnings.length;
  const percent=Math.min(sourceConsistent?100:99,fields.length?Math.floor(filled*100/fields.length):0);
  const simplified=simplifiedPreparation(fields,[...new Set(observations)],{proposalReady:!!(c.ready||c.proposalReady),library:lib?{id:lib.id,version:lib.version}:null,referenceUsed:!!(supplierReference||feeReference)});
  const operational=operationalProposal(fields,c,c.source?.raw?(sourcePreparationEnabled()?globalModelLayout(c.source.raw):extractCpflPaulistaLayout(c.source.raw)):null);
- return {...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),operational,manualOverrides:manual,manualAuthor:c.manualAuthor??null,simplified,reference:reference?{id:reference.id,month:reference.month,version:reference.version,hash:reference.hash}:null,referenceUsed:!!(supplierReference||feeReference),humanReviewPending:!c.ready,financialApproval:false,fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
+ return {...(draft?{contractDraft:draft}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),operational,manualOverrides:manual,manualAuthor:c.manualAuthor??null,simplified,reference:reference?{id:reference.id,month:reference.month,version:reference.version,hash:reference.hash}:null,referenceUsed:!!(supplierReference||feeReference),humanReviewPending:!c.ready,financialApproval:false,fields,observations:[...new Set(observations)],percent,filled,total:fields.length,pending,readyForValidation:pending===0&&sourceConsistent,library:lib?{id:lib.id,version:lib.version}:null,canPublish:false as const};
 }

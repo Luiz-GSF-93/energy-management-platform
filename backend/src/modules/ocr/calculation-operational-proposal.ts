@@ -1,8 +1,9 @@
+import {contractClosingDraftEnabled} from './contract-closing-draft';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import type {FillField} from './calculation-autofill.model';
 
-export type OperationalProposal={formatVersion:'eva-operational-proposal-1.0';state:'PROPOSED'|'PARTIAL'|'UNAVAILABLE';invoice:{amount:string|null;source:string;lines:{key:string;label:string;amount:string|null;source:string}[]};acr:{identifiedAmount:string|null;lines:{key:string;label:string;quantity:string;measure:string;rate:string;amount:string;source:string}[]};supplier:{amount:string|null;source:string};fixedFee:{amount:string|null;source:string};observations:string[];financialApproval:false;canPublish:false};
+export type OperationalProposal={formatVersion:'eva-operational-proposal-1.0';state:'PROPOSED'|'PARTIAL'|'UNAVAILABLE';invoice:{amount:string|null;source:string;lines:{key:string;label:string;amount:string|null;source:string}[]};acr:{identifiedAmount:string|null;lines:{key:string;label:string;quantity:string;measure:string;rate:string;amount:string;source:string}[]};supplier:{amount:string|null;source:string;regularAmount?:string|null;extraAmount?:string|null};fixedFee:{amount:string|null;source:string};observations:string[];financialApproval:false;canPublish:false};
 const decimal=(v:unknown):v is string=>typeof v==='string'&&/^(0|[1-9][0-9]{0,11})(\.\d{1,6})?$/.test(v);
 const money=(v:unknown):v is string=>typeof v==='string'&&/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v);
 const cents=(v:string)=>{const negative=v.startsWith('-'),[w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(negative?-1n:1n);};
@@ -27,7 +28,8 @@ export function operationalProposal(fields:FillField[],c:any,layout:any):Operati
   result.invoice.lines=rows.filter((r:any)=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role)).map((r:any)=>({key:r.source,label:r.fields.description?.text||'Rubrica sem descrição',amount:verified(r.fields.amount)?format(cents(r.fields.amount.decimal)):null,source:source+' · '+r.source}));
  }else note('Detalhamento da fatura excede o limite desta prévia; consulte o documento original.');
  // The invoice total is evidence, not a sum with the same CIP/credits or tax values again.
- for(const [key,target] of [['supplier:regular','supplier'],['fee:fixed','fixedFee']] as const){const f=get(key),value=typeof f?.value==='number'&&Number.isFinite(f.value)?String(f.value):f?.value;if(f&&money(value)&&cents(value)>=0n)result[target]={amount:format(cents(value)),source:f.source};}
+ for(const [key,target] of [[(contractClosingDraftEnabled()&&c.contractDraft?'supplier:total':'supplier:regular'),'supplier'],['fee:fixed','fixedFee']] as const){const f=get(key),value=typeof f?.value==='number'&&Number.isFinite(f.value)?String(f.value):f?.value;if(f&&money(value)&&cents(value)>=0n)result[target]={amount:format(cents(value)),source:f.source};}
+ if(contractClosingDraftEnabled()&&c.contractDraft?.supplier){result.supplier.regularAmount=c.contractDraft.supplier.regularAmount;result.supplier.extraAmount=c.contractDraft.supplier.extraAmount;}
  if(!result.supplier.amount)note('Preço ou valor do fornecedor sem fonte suficiente; confira somente as condições comerciais.');
  const rates=fields.filter(f=>f.key.startsWith('ACR:')&&!f.key.includes(':tax:')&&f.key!=='ACR:library');
  if(!rates.length)note('Biblioteca ACR compatível não disponível para esta competência.');
