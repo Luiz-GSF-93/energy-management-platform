@@ -24,15 +24,16 @@ export default function ClientPortalContent({entitlement}:{entitlement?:PortalEn
  const workspace=process.env.NEXT_PUBLIC_PORTAL_CLIENT_WORKSPACE_ENABLED==='true';
  const allowed=(module:PortalModule)=>!checkLicense||license.modules?.includes(module);
  const key=JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.permissions]);
- return <PortalUnitScope organizationId={context.currentOrganization.id}>{license.enabled?<p>Licença do Portal: {license.starts} a {license.ends}. Os resultados exibidos são publicados e pertencem à empresa vinculada ao seu usuário.</p>:null}
+ const content=<>{license.enabled?<p>Licença do Portal: {license.starts} a {license.ends}. Os resultados exibidos são publicados e pertencem à empresa vinculada ao seu usuário.</p>:null}
  {allowed('acl')?<div id="adesao"><AclAdmissionStatus key={'acl:'+key}/></div>:null}
  {allowed('documents')&&!workspace?<div id="documentos"><ClientEvidenceInbox key={'documents:'+key}/></div>:null}
  {workspace&&allowed('documents')?<PortalInvoices key={'invoices:'+key}/>:null}
  {workspace&&allowed('notifications')?<PortalNotifications key={'notices:'+key}/>:null}
- {allowed('reports')?<PortalUsageChart/>:null}
+ {workspace&&allowed('reports')?<PortalUsageChart/>:null}
  {allowed('reports')?<div id="financeiro"><PublishedFinancialDashboard key={'financial:'+key} audience="client" organizationId={context.currentOrganization.id} organizationName={context.currentOrganization.name||context.currentOrganization.id}/></div>:null}
  {allowed('energy_prices')?<div id="precos"><EnergyPriceDashboard key={'price:'+key} audience="client" organizationId={context.currentOrganization.id}/></div>:null}
  {allowed('forecasts')?<div id="previsao"><PublishedForecastDashboard key={'forecast:'+key}/></div>:null}
  {allowed('bot')?<div id="bot-energy"><BotEnergyReports key={'bot:'+key} audience="client"/></div>:null}
- {license.enabled&&!license.modules?.length?<Alert>Nenhum módulo foi incluído na licença do Portal. Solicite a conferência à equipe de gestão.</Alert>:null}</PortalUnitScope>;
+ {license.enabled&&!license.modules?.length?<Alert>Nenhum módulo foi incluído na licença do Portal. Solicite a conferência à equipe de gestão.</Alert>:null}</>;
+ return workspace?<PortalUnitScope organizationId={context.currentOrganization.id}>{content}</PortalUnitScope>:content;
 }
