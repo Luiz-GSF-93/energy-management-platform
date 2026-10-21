@@ -1,0 +1,26 @@
+Portal: atendimento compacto, consumo/demanda e declaração de pagamento
+
+Aplicar 20261207_portal_presentation_payment.sql antes de publicar o backend.
+PORTAL_CLIENT_WORKSPACE_ENABLED permanece a chave geral já existente. Após migração e deploy compatível, habilitar PORTAL_PAYMENT_DECLARATIONS_ENABLED=true para a EVA consultar declarações pelo gateway com licença de relatórios. Esse consentimento é a confirmação feita na própria tela, não uma confirmação de pagamento bancário. Não ativa nenhum canal externo nem OCR.
+
+As rotas novas são privadas e no-store:
+GET /portal/workspace/presentation/identity
+GET /portal/workspace/presentation/usage?from=YYYY-MM&to=YYYY-MM[&unitId=...]
+GET /portal/workspace/presentation/notices?offset=0
+GET /portal/workspace/presentation/requests?offset=0
+GET /portal/workspace/invoices/:id/details
+POST /portal/workspace/invoices/:id/payment-declaration
+
+Declaração aceita somente requestId UUID, revisão atual inteira e state PAID/UNPAID. Idempotência é por organização/requestId, vinculada também à fatura, ator, estado e revisão. Revisões concorrentes diferentes não podem sobrescrever uma à outra. A correção acrescenta evento; a tabela privada não aceita UPDATE/DELETE. Usuário externo exige vínculo, licença e unidade ativa. Nenhum endpoint dá baixa em contas a pagar, altera fechamento ou publica resultado.
+
+O vencimento vem exclusivamente da extração preservada do arquivo verificado; ausência, formato inválido e conflito de datas retornam null. A tela identifica pagamento como declaração do cliente e mostra autoria/data/revisão. A EVA recebe evidência tipada CLIENT_DECLARATION_NOT_BANK_CONFIRMATION e não pode afirmar quitação bancária. Para comprovação documental, usar atendimento/anexo existente.
+
+O cabeçalho identifica a empresa cliente e a unidade/UC cadastrada sem trocar a marca da organização contratante. O seletor compartilha o recorte do novo gráfico, dos envios e atendimentos. Os painéis financeiros, preços e EVA existentes mantêm seus próprios filtros identificados. A consolidação só inclui unidades do cliente autorizado.
+
+Consumo ponta/fora ponta: barras em kWh. Demanda medida: linhas tracejadas em kW, escala própria. Meses ausentes e fontes incompatíveis são lacunas, não zero. Demanda faturada não substitui medida. Postos de demanda distintos permanecem separados. O card apresenta a última demanda contratada disponível no recorte e a competência da publicação que a incorporou; não afirma que seja o valor contratual vigente hoje. Utilização = soma das demandas medidas / soma das demandas contratadas históricas dos mesmos meses/unidades. Exige cobertura completa das unidades no mês e denominador positivo; mostra número de meses comparáveis.
+
+Fontes modernas: campos FILLED nas versões aprovadas e publicadas, selecionadas pelo gateway existente de publicação. Fontes legadas: validar hash e escopo do payload imutável antes de extrair medições/contratação histórica. Nunca consultar medições correntes não publicadas como substituto.
+
+Notificações: até três resumos na página; atualizações, conversas, anexos, preferências e paginação no modal. Agrupar somente pelo atendimento ou documento real. Avisos sem identificador de origem permanecem distintos. Primeira data do aviso é consultada no histórico inteiro, não deduzida pelo primeiro item de uma página parcial. Marcação de leitura permanece por notificação/conversa efetivamente aberta.
+
+Implantação: banco -> backend -> frontend. O frontend mantém compatibilidade enquanto a Railway impedir o deploy: atendimento compacto usa APIs antigas, e gráfico/declarações só aparecem depois que a identidade for confirmada pela API nova. A falta dessa API gera aviso único de indisponibilidade e opção de atualizar. Não afirmar implantação completa antes do backend. Nenhuma fatura real deve ser reenviada para testar a interface. Dados de QA são inteiramente fictícios.

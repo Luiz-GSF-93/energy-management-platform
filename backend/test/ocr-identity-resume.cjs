@@ -4,7 +4,7 @@ module.exports=async function testResume(db,actor,role,external,externalRole,ok,
  await db.exec(`CREATE TABLE licenses(id text,organization_id text,active boolean,status text,start_date date,end_date date,document_management boolean);
  INSERT INTO licenses VALUES('license','org',true,'active',current_date-1,current_date+1,true);
  CREATE TABLE registration_edits(organization_id text,entity_kind text,entity_id text,before_record jsonb,after_record jsonb,created_at timestamptz);
- CREATE TABLE document_ocr_results(job_id uuid,organization_id text,document_id text);
+ CREATE TABLE IF NOT EXISTS document_ocr_results(job_id uuid,organization_id text,document_id text);
  ALTER TABLE document_ocr_jobs ADD COLUMN operation_url text,ADD COLUMN created_at timestamptz DEFAULT now(),ADD COLUMN updated_at timestamptz DEFAULT now(),ADD COLUMN next_attempt_at timestamptz DEFAULT now(),ADD COLUMN attempts integer DEFAULT 1;
  INSERT INTO consumer_units(id,organization_id,customer_id,status,name,consumer_unit_number,address) VALUES('resume-unit','org','customer','ACTIVE','Resume unit','0012345678','Street 123');`);
  await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261204_ocr_identity_resume.sql'),'utf8'));
@@ -50,7 +50,7 @@ module.exports=async function testResume(db,actor,role,external,externalRole,ok,
  }
  await db.query("UPDATE document_ocr_jobs SET state='FAILED',error_code='IDENTITY_MISMATCH' WHERE id=$1",[denyRow.id]);
  ok(!(await call('inspect',denyRow)).eligible); // Past submission intent remains terminal.
- const resultRow=await make(3);await db.query("INSERT INTO document_ocr_results VALUES($1,'org',$2)",[resultRow.id,resultRow.doc]);ok(!(await call('inspect',resultRow)).eligible);
+ const resultRow=await make(3);await db.query("INSERT INTO document_ocr_results(job_id,organization_id,document_id) VALUES($1,'org',$2)",[resultRow.id,resultRow.doc]);ok(!(await call('inspect',resultRow)).eligible);
  const leaseRow=await make(4);await db.query('UPDATE document_ocr_jobs SET lease_token=$1,lease_until=now()+interval \'1 minute\' WHERE id=$2',[randomUUID(),leaseRow.id]);ok(!(await call('inspect',leaseRow)).eligible);
  const sourceRow=await make(5);await db.query("UPDATE documents SET file_hash=$1 WHERE id=$2",['f'.repeat(64),sourceRow.doc]);ok(!(await call('inspect',sourceRow)).eligible);
  await db.exec("UPDATE licenses SET active=false");await deny(()=>call('inspect',first));await db.exec("UPDATE licenses SET active=true");
