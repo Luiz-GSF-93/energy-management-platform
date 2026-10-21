@@ -16,7 +16,13 @@ export class PortalInsightsService {
   if(r.error||!Array.isArray(r.data))throw new InternalServerErrorException('Detalhes publicados indisponíveis.');
   if(r.data.some((x:any)=>x.customerId!==customer||x.month<from||x.month>to||typeof x.unitId!=='string'))throw new ForbiddenException('Escopo dos componentes divergente.');
   const rows=r.data.filter((x:any)=>!unitId||x.unitId===unitId).map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'));
-  return {organizationId:t.organizationId,customerId:customer,from,to,rows};
+  let paymentDeclarations:any[]=[];
+  if(process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED==='true'){
+   const evidence=await db.rpc('portal_presentation_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_action:'payment_evidence',p_id:null,p_body:{from,to,...(unitId?{unitId}:{})}});
+   if(evidence.error||!Array.isArray(evidence.data))throw new InternalServerErrorException('Declarações do cliente indisponíveis.');
+   paymentDeclarations=evidence.data;
+  }
+  return {organizationId:t.organizationId,customerId:customer,from,to,rows,paymentDeclarations,paymentNotice:'Declaração do cliente com autoria/data; não é confirmação bancária, comprovante de quitação ou baixa financeira.'};
  }
 }
 @Controller('portal/financial-details')

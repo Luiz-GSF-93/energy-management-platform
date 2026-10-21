@@ -10,6 +10,7 @@ on:
       - 'backend/src/database/migrations/20261201*.sql'
       - 'backend/src/database/migrations/20261203*.sql'
       - 'backend/src/database/migrations/20261204*.sql'
+      - 'backend/src/database/migrations/20261207*.sql'
       - 'backend/src/modules/ocr/ocr-identity-resume*'
       - 'backend/src/modules/ocr/ocr-queue.service*'
       - 'backend/src/modules/ocr/ocr.controller.ts'
@@ -19,6 +20,7 @@ on:
       - 'backend/test/ocr-identity-resume.cjs'
       - 'frontend/app/components/Portal*'
       - 'frontend/test/portal-workspace-ui.cjs'
+      - 'frontend/test/portal-usage-ui.cjs'
       - '.github/workflows/portal-client-workspace.yml'
 permissions:
   contents: read
@@ -55,7 +57,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs
+      - run: node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs && node test/portal-usage-ui.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

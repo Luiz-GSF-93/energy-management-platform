@@ -31,4 +31,13 @@ describe('published client insight authorization',()=>{
   await expect(service.read(tenant,'2026-13','2026-13')).rejects.toThrow();
   expect(rpc).not.toHaveBeenCalled();
  });
+ it('binds customer declarations to the same authorized period and unit and fails closed on evidence failure',async()=>{
+  const before=process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED;process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED='true';
+  try{
+   const {rpc,service}=fixture();rpc.mockResolvedValueOnce({data:[{id:'receipt',unitId:'unit',month:'2026-03',basis:'CLIENT_DECLARATION_NOT_BANK_CONFIRMATION'}],error:null});
+   const result=await service.read(tenant,'2026-03','2026-04','unit');expect(result.paymentDeclarations).toHaveLength(1);
+   expect(rpc.mock.calls[2]).toEqual(['portal_presentation_action',{p_org:'org',p_actor:'user',p_role:'role',p_action:'payment_evidence',p_id:null,p_body:{from:'2026-03',to:'2026-04',unitId:'unit'}}]);
+   const failed=fixture();failed.rpc.mockResolvedValueOnce({data:null,error:{code:'42501'}});await expect(failed.service.read(tenant,'2026-03','2026-04','unit')).rejects.toThrow('Declarações do cliente indisponíveis');
+  }finally{if(before===undefined)delete process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED;else process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED=before;}
+ });
 });

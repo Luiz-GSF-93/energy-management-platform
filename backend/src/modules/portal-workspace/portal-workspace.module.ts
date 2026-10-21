@@ -1,3 +1,4 @@
+import {PortalPresentationService} from './portal-presentation.service';
 import {PortalNotificationsWorker} from './portal-notifications.worker';
 import {WhatsappTemplatesService} from '../whatsapp-delivery/whatsapp-templates.service';
 import {PortalAutomationWorker} from './portal-automation.worker';
@@ -13,7 +14,13 @@ import {DocumentFile,MAX_DOCUMENT_BYTES} from '../documents/services/document-fi
 import {PortalWorkspaceService} from './portal-workspace.service';
 @Controller('portal/workspace')
 class PortalWorkspaceController {
- constructor(private service:PortalWorkspaceService){}
+ constructor(private service:PortalWorkspaceService,private presentation:PortalPresentationService){}
+ @Get('presentation/identity') @Header('Cache-Control','no-store') identity(@Tenant() t:TenantContext){return this.presentation.action(t,'identity');}
+ @Get('presentation/usage') @Header('Cache-Control','no-store') usage(@Tenant() t:TenantContext,@Query() q:Record<string,string>){return this.presentation.usage(t,q);}
+ @Get('presentation/requests') @Header('Cache-Control','no-store') compactRequests(@Tenant() t:TenantContext,@Query() q:Record<string,string>){return this.presentation.action(t,'requests',null,q);}
+ @Get('presentation/notices') @Header('Cache-Control','no-store') notices(@Tenant() t:TenantContext,@Query() q:Record<string,string>){return this.presentation.action(t,'notices',null,q);}
+ @Get('invoices/:id/details') @Header('Cache-Control','no-store') details(@Tenant() t:TenantContext,@Param('id') id:string){return this.presentation.invoice(t,id);}
+ @Post('invoices/:id/payment-declaration') declaration(@Tenant() t:TenantContext,@Param('id') id:string,@Body() body:unknown){return this.presentation.declare(t,id,body);}
  @Get('context') @Header('Cache-Control','no-store') context(@Tenant() t:TenantContext){return this.service.action(t,'context');}
  @Get('service-context') @Header('Cache-Control','no-store') serviceContext(@Tenant() t:TenantContext){return this.service.action(t,'service_context');}
  @Get('invoices') @Header('Cache-Control','no-store') invoices(@Tenant() t:TenantContext){return this.service.list(t);}
@@ -33,5 +40,5 @@ class PortalRoutingController {
  @Get() @Header('Cache-Control','no-store') read(@Tenant() t:TenantContext){return this.service.action(t,'routing');}
  @Post() save(@Tenant() t:TenantContext,@Body() b:any){return this.service.action(t,'routing',null,b);}
 }
-@Module({imports:[LicensesModule,OcrModule],controllers:[PortalWorkspaceController,PortalRoutingController],providers:[SupabaseService,DocumentsService,PortalWorkspaceService,PortalAutomationWorker,PortalNotificationsWorker,WhatsappTemplatesService],exports:[PortalWorkspaceService]})
+@Module({imports:[LicensesModule,OcrModule],controllers:[PortalWorkspaceController,PortalRoutingController],providers:[PortalPresentationService,SupabaseService,DocumentsService,PortalWorkspaceService,PortalAutomationWorker,PortalNotificationsWorker,WhatsappTemplatesService],exports:[PortalWorkspaceService]})
 export class PortalWorkspaceModule{}

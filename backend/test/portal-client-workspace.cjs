@@ -22,7 +22,7 @@ async function database(){
  CREATE FUNCTION customer_notice_contacts(text,jsonb) RETURNS jsonb LANGUAGE sql AS $$SELECT contacts FROM public.customer_notice_policies LIMIT 1$$;
  CREATE TABLE platform_whatsapp_status_events(message_id text,status text);
  CREATE TABLE fixture_license(enabled boolean);INSERT INTO fixture_license VALUES(true);
- CREATE FUNCTION client_portal_entitlement(text,text,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('enabled',enabled,'customerId','customer') FROM public.fixture_license$$;
+ CREATE FUNCTION client_portal_entitlement(text,text,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('organizationId','org','enabled',enabled,'customerId','customer') FROM public.fixture_license$$;
  CREATE FUNCTION assert_license_platform_actor(uuid) RETURNS void LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Not platform';END$$;
  CREATE FUNCTION assert_operation_actor(text,text,text,boolean,boolean DEFAULT false) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF $1<>'org' OR $2<>'${admin}' THEN RAISE EXCEPTION 'Not organizational team' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION assert_client_evidence_actor(text,text,text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF $1<>'org' OR $2<>'${client}' OR $3<>'customer' THEN RAISE EXCEPTION 'Not client';END IF;END$$;
@@ -52,6 +52,8 @@ async function database(){
  CREATE FUNCTION transition_document_ocr(uuid,uuid,text,text DEFAULT NULL,integer DEFAULT 5,text DEFAULT NULL,jsonb DEFAULT NULL,jsonb DEFAULT NULL) RETURNS public.document_ocr_jobs LANGUAGE plpgsql AS $$DECLARE j public.document_ocr_jobs;BEGIN SELECT * INTO j FROM public.document_ocr_jobs WHERE id=$1;RETURN j;END$$;
  CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text,public boolean,file_size_limit bigint);INSERT INTO storage.buckets VALUES('energy-documents-private',false,10485760);`);
  for(const f of ['20261122_portal_client_workspace.sql','20261123_portal_financial_components.sql','20261124_portal_events.sql','20261125_portal_automation.sql','20261126_portal_notification_delivery.sql','20261127_portal_receipts.sql','20261128_operation_actor_active_status.sql','20261129_portal_invoice_month_guard.sql','20261130_invoice_identity_preflight.sql','20261201_private_document_15mb.sql','20261203_portal_invoice_month_timestamp.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
+ await db.exec('CREATE TABLE document_ocr_results(job_id uuid,organization_id text,document_id text,file_hash text,raw_result jsonb)');
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261207_portal_presentation_payment.sql'),'utf8'));
  // Run the real operational authorization function, not the fixture stub.
  const actorCheck=()=>db.query('SELECT assert_operation_actor($1,$2,$3,false)',['org',admin,'requests']);
  await actorCheck();checks++;
@@ -148,6 +150,30 @@ async function database(){
  await db.query("UPDATE consumer_units SET address='Changed street 999' WHERE id='unit'");
  await deny(()=>db.query("SELECT transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[jobId,lease]));
  await db.query("UPDATE consumer_units SET address='Street 123' WHERE id='unit'");
+ // Presentation gateway: isolated, append-only, idempotent customer declarations.
+ const present=(actor,roleId,action,id=null,body={})=>db.query('SELECT portal_presentation_action($1,$2,$3,$4,$5,$6) data',['org',actor,roleId,action,id,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const details=await present(client,role,'invoice',receipt.id);ok(details.id===receipt.id&&details.declaration===null);
+ const pay={requestId:'80000000-0000-4000-8000-000000000001',revision:0,state:'PAID'};
+ ok((await present(client,role,'declare',receipt.id,pay)).declaration.revision===1);
+ ok((await present(client,role,'declare',receipt.id,pay)).declaration.revision===1);
+ await deny(()=>present(client,role,'declare',receipt.id,{...pay,state:'UNPAID'}));
+ await deny(()=>present(client,role,'declare',receipt.id,{...pay,requestId:'80000000-0000-4000-8000-000000000002'}));
+ ok((await present(client,role,'declare',receipt.id,{...pay,requestId:'80000000-0000-4000-8000-000000000003',revision:1,state:'UNPAID'})).declaration.revision===2);
+ await deny(()=>present(foreign,foreignRole,'invoice',receipt.id));
+ await deny(()=>present(admin,adminRole,'declare',receipt.id,pay));
+ await deny(()=>present(client,role,'declare',receipt.id,{...pay,verifiedByBank:true}));
+ await deny(()=>db.exec('DELETE FROM portal_invoice_payment_declarations'));
+ ok((await db.query("SELECT count(*)::int n FROM portal_invoice_payment_declarations")).rows[0].n===2);
+ await db.exec('UPDATE fixture_license SET enabled=false');await deny(()=>present(client,role,'invoice',receipt.id));await db.exec('UPDATE fixture_license SET enabled=true');
+ const identity=await present(client,role,'identity');ok(identity.companyName==='Synthetic'&&identity.units.every(u=>u.id==='unit'));
+ ok((await present(client,role,'requests')).rows[0].openedAt);
+ ok(Array.isArray((await present(client,role,'usage',null,{from:'2026-01',to:'2026-12'})).rows));
+ const notices=await present(client,role,'notices');ok(notices.rows.every(n=>!n.title.includes('foreign')));
+ await deny(()=>present(client,role,'usage',null,{from:'2026-01',to:'2027-01'}));
+ await deny(()=>present(client,role,'usage',null,{from:'2026-01',to:'2026-12',unitId:'foreign-unit'}));
+ await deny(()=>present(client,role,'payment_evidence',null,{from:'2026-01',to:'2026-12',unitId:'foreign-unit'}));
+ const proofRows=await present(client,role,'payment_evidence',null,{from:'2026-01',to:'2026-12',unitId:'unit'});ok(proofRows.length===1&&proofRows[0].state==='UNPAID'&&proofRows[0].basis==='CLIENT_DECLARATION_NOT_BANK_CONFIRMATION');
+ if(db.race){const sql="SELECT portal_presentation_action('org',$1,$2,'declare',$3,$4)";const race=await db.race(sql,[client,role,receipt.id,JSON.stringify({...pay,revision:2,requestId:'80000000-0000-4000-8000-000000000004'})],[client,role,receipt.id,JSON.stringify({...pay,revision:2,requestId:'80000000-0000-4000-8000-000000000005',state:'UNPAID'})]);ok(race.filter(r=>r.status==='fulfilled').length===1);}
  // Explicit internal replacement is a linear audited chain; old source cannot be re-read.
  await db.query("INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type,catalog_previous_id) VALUES('revised','org','customer','unit',$1,true,'2026-09-01','INVOICE_DISTRIBUTOR','doc')",['e'.repeat(64)]);
  await deny(()=>db.query("SELECT assert_invoice_month_ocr('org','doc')"));
