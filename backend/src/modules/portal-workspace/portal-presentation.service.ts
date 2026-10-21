@@ -17,7 +17,7 @@ export function publishedUsage(rows:any[],org:string,unitIds:string[],from:strin
  const seen=new Set<string>();
  const sources=rows.map(r=>{
   const key=r.unitId+'|'+r.month;
-  if(!unitIds.includes(r.unitId)||r.month<from||r.month>to||seen.has(key))throw new ConflictException('Fontes publicadas divergentes.');seen.add(key);
+  if(!unitIds.includes(r.unitId)||typeof r.month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(r.month)||r.month<from||r.month>to||seen.has(key))throw new ConflictException('Fontes publicadas divergentes.');seen.add(key);
   let fields:Record<string,unknown>;
   if(r.legacyPayload){normalizePublishedDetail(r,org);const p=r.legacyPayload,prep=p.preparations?.[r.unitId],m=prep?.measurements?.validatedVersion?.measurements,u=p.sources?.tables?.consumer_units?.find((u:any)=>u.id===r.unitId&&u.organization_id===org);
    fields={...m,'unit:contracted_demand':u?.contracted_demand,'unit:contracted_demand_peak':u?.contracted_demand_peak,'unit:contracted_demand_off_peak':u?.contracted_demand_off_peak};
@@ -59,7 +59,7 @@ export class PortalPresentationService{
  async usage(t:TenantContext,q:Record<string,string>){
   if(Object.keys(q).some(k=>!['from','to','unitId'].includes(k)))throw new BadRequestException('Filtros inválidos.');
   const identity=await this.action(t,'identity'),raw=await this.action(t,'usage',null,q);
-  if(identity.customerId!==raw.customerId||raw.organizationId!==t.organizationId||!Array.isArray(raw.rows))throw new ForbiddenException('O vínculo mudou.');
+  if(identity.customerId!==raw.customerId||raw.organizationId!==t.organizationId||!Array.isArray(raw.rows)||raw.rows.some((r:any)=>r.customerId!==identity.customerId))throw new ForbiddenException('O vínculo mudou.');
   const ids=identity.units.filter((u:any)=>!q.unitId||u.id===q.unitId).map((u:any)=>u.id);
   return {organizationId:t.organizationId,customerId:identity.customerId,from:q.from,to:q.to,unitId:q.unitId??null,...publishedUsage(raw.rows,t.organizationId,ids,q.from,q.to)};
  }
