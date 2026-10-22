@@ -1,3 +1,4 @@
+import {documentedSettlementEnabled,documentedTariffPeriod,proportionalTariff,TariffPeriod} from './documented-tariff-period';
 import {normalizedTaxBlocks,sourcePreparationEnabled} from './source-preparation-v3';
 import {globalModelLayout} from './eva-global-model';
 import {selectAutofillLibrary} from './calculation-autofill.model';
@@ -32,13 +33,17 @@ function printedRate(layout:any,key:string){
 }
 /** User-requested comparison, not a fiscal reassessment. Never modifies the source invoice. */
 export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparison{
- const selection=selectAutofillLibrary(libraries,c.unit,c.month,{taxTreatment:'NET'}),lib=selection.record;
+ const selection=selectAutofillLibrary(libraries,c.unit,c.month,{taxTreatment:'NET'});let lib=selection.record;
+ const layout=globalModelLayout(c.source?.raw??{});let period:TariffPeriod|null=null,periodError='';
+ if(documentedSettlementEnabled())try{period=documentedTariffPeriod(libraries,c.unit,c.month,layout);if(period)lib=period.segments[0].record;}catch(e){periodError=e instanceof Error?e.message:'Ciclo tarifário sem prova.';}
  const result:InvoiceComparison={method:'SAME_INVOICE_AMOUNTS_V2',amount:null,lines:[],retained:[],taxes:[],observations:['Estimativa comparativa: tarifas ACR da biblioteca; quantidades, impostos em reais, reativos e despesas da fatura preservados. Alíquotas exibidas como leitura, sem reaplicação sobre nova base.'],missing:[],library:lib?{id:lib.id,version:lib.version,source:lib.profile.source,taxTreatment:lib.profile.taxTreatment}:null};
  const fail=(message:string)=>{result.missing.push(message);return result;};
+ if(periodError)return fail(periodError);
+ if(period&&period.segments.length>1)result.observations.push('Tarifa proporcional por dias de vigência: REN1000 art173§2. Consumos totais e impostos da fatura preservados, sem inventar medição diária.');
  for(const excluded of selection.excluded)result.observations.push('Biblioteca '+excluded.id+' v'+excluded.version+' não utilizada: tratamento líquido das tarifas não demonstrado para esta comparação.');
  if(!lib)return fail(contractClosingDraftEnabled()?'Biblioteca ACR compatível não demonstrada para '+c.unit.distributor+' · '+c.unit.tariff_subgroup+' · '+c.unit.tariff_modality+' · '+c.unit.consumption_class+' · '+c.month+'. Confira a classe, a origem líquida e todas as vigências do período faturado; uma mudança de tarifa dentro do período exige evidência por trecho, sem estender uma única tabela ao mês inteiro.':'Biblioteca vigente não encontrada ou enquadramento ambíguo.');
  if(lib.profile.taxTreatment!=='NET')return fail('Confirme em nova versão da biblioteca a origem líquida das tarifas; não somar impostos da fatura a tarifas brutas ou desconhecidas.');
- const layout=globalModelLayout(c.source?.raw??{}),rows=layout.operations.filter(r=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role));
+ const rows=layout.operations.filter(r=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role));
  if(layout.reconciliation.state!=='MATCH'||!rows.length)return fail('Rubricas da fatura ainda não conciliadas.');
  try{
   const sources=new Set<string>();let invoice=0n;
@@ -96,7 +101,7 @@ export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparis
     result.observations.push('Demanda '+i.band+': soma das quantidades faturadas identificadas, sem acrescentar demanda medida ou contratada do cadastro.');
    }else throw Error('Componente não suportado: '+i.component);
    if(!decimal(quantity)||!quantitySource)throw Error('Quantidade e fonte não demonstradas: '+i.component+' '+i.band);
-   const amount=tariffProduct(quantity,i.value,i.measure==='BRL_MWH').rounded;subtotal+=cents(amount);result.lines.push({...i,quantity,quantitySource,amount,source:'Biblioteca '+lib.id+' v'+lib.version});
+   const weighted=period?proportionalTariff(period,i,quantity):null,amount=weighted?.amount??tariffProduct(quantity,i.value,i.measure==='BRL_MWH').rounded;subtotal+=cents(amount);result.lines.push({...i,...(weighted?{value:weighted.displayRate,proportional:weighted.proof}:{}),quantity,quantitySource,amount,source:weighted?'REN1000 art173§2 · '+weighted.proof.segments.map(s=>'Biblioteca '+s.id+' v'+s.version+' · '+s.days+' dias').join('; '):'Biblioteca '+lib.id+' v'+lib.version});
   }
   for(const row of rows.filter(r=>replaced.has(r.component))){const component=({TE:'TE',TUSD_ENERGY:'TUSD_ENERGY',DEMAND_BILLED:'TUSD_DEMAND_USED',DEMAND_UNUSED:'TUSD_DEMAND_UNUSED'} as any)[row.component];if(!result.lines.some(l=>l.component===component&&l.band===band(row)))throw Error('Rubrica substituída sem tarifa compatível: '+row.source);}
   if(subtotal+kept<0n)throw Error('Comparativo total negativo inconsistente.');

@@ -1,0 +1,52 @@
+import {createHash} from 'node:crypto';
+export type SupplierSettlement={mode:'REGULAR_WITH_EXTRA'|'SPOT';documentId:string;fileHash:string;costItemId:string;quantityMwh:string;pricePerMwh:string;costId:string;costRevision:number;costsHash:string;reason:string;allocationAccepted:true;invoiceFinalAmountConfirmed:true;regularIcmsRate?:string;regularIcmsMode?:'INSIDE'|'OUTSIDE';regularTaxSource?:string;pisCofinsIncluded?:true;cceeFinalAmountsConfirmed?:boolean};
+const uuid=(s:any)=>typeof s==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s),hash=(s:any)=>typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);
+const decimal=(s:any)=>typeof s==='string'&&/^(0|[1-9]\d{0,11})(\.\d{1,6})?$/.test(s);
+const fixed=(n:bigint,p:number)=>{const s=n.toString().padStart(p+1,'0');return s.slice(0,-p)+'.'+s.slice(-p);};
+const scale=(s:string,p=6)=>{if(typeof s!=='string'||!new RegExp('^(0|[1-9]\\d{0,11})(\\.\\d{1,'+p+'})?$').test(s))throw Error('Decimal sem fonte.');const [a,b='']=s.split('.');return BigInt(a)*10n**BigInt(p)+BigInt(b.padEnd(p,'0'));};
+const round=(n:bigint,d:bigint)=>(n+d/2n)/d;
+export const settlementHash=(v:any):string=>{const sorted=(x:any):any=>Array.isArray(x)?x.map(sorted):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,sorted(x[k])])):x;return createHash('sha256').update(JSON.stringify(sorted(v))).digest('hex');};
+export function supplierSettlementInput(v:any):SupplierSettlement{
+ const keys=['mode','documentId','fileHash','costItemId','quantityMwh','pricePerMwh','costId','costRevision','costsHash','reason','allocationAccepted','invoiceFinalAmountConfirmed','regularIcmsRate','regularIcmsMode','regularTaxSource','pisCofinsIncluded','cceeFinalAmountsConfirmed'];
+ if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!keys.includes(k))||!['REGULAR_WITH_EXTRA','SPOT'].includes(v.mode)||!['documentId','costItemId','costId'].every(k=>uuid(v[k]))||!hash(v.fileHash)||!hash(v.costsHash)||!Number.isInteger(v.costRevision)||v.costRevision<1||!decimal(v.quantityMwh)||scale(v.quantityMwh)<=0n||!decimal(v.pricePerMwh)||scale(v.pricePerMwh)<=0n||typeof v.reason!=='string'||v.reason.trim().length<20||v.reason.length>1000||v.allocationAccepted!==true||v.invoiceFinalAmountConfirmed!==true||v.cceeFinalAmountsConfirmed!==undefined&&typeof v.cceeFinalAmountsConfirmed!=='boolean')throw Error('Confira documento, volume, preço, fonte, revisão e aceite da conciliação.');
+ if(v.mode==='REGULAR_WITH_EXTRA'){if(v.pisCofinsIncluded!==true||!decimal(v.regularIcmsRate)||(scale(v.regularIcmsRate)<=0n||scale(v.regularIcmsRate)>=100000000n)||v.regularIcmsMode!=='INSIDE'||typeof v.regularTaxSource!=='string'||v.regularTaxSource.trim().length<20||v.regularTaxSource.length>1000)throw Error('Confirme PIS/Cofins incluídos e a alíquota, base/método e fonte do ICMS da parcela regular.');}
+ else if(['regularIcmsRate','regularIcmsMode','regularTaxSource','pisCofinsIncluded'].some(k=>v[k]!==undefined))throw Error('Compra integral avulsa não utiliza os tributos ou o reajuste do contrato regular.');
+ return {...v,reason:v.reason.trim()};
+}
+/** Audited operator allocation over verified document + current cost revision.
+ * Does not change measured kWh, contracts, OCR confidence or financial approval. */
+export function documentedSupplierSettlement(c:any,regular?:{price:string;contractedMwh:string;contract?:any;minimum:string;maximum:string;source:any;memory:any}){
+ const input=c.manualOverrides?.supplierSettlement;if(!input)return null;
+ const requirements:any[]=[];const result:any={format:'documented-supplier-settlement-1',mode:input.mode,state:'PENDING',requirements,consumedCostSources:[],differences:[],source:null,memory:regular?.memory??null,terms:null,requiresHumanAcceptance:true,financialApproval:false,canPublish:false,supplier:null};
+ const need=(code:string,message:string,section='supply')=>requirements.push({code,message,section});
+ try{
+  const v=supplierSettlementInput(input),u=c.unit,d=c.documentedSupplierInvoice,cost=c.cost;
+  if(!c.manualAuthor||!(c.ready||c.proposalReady)||c.originalIdentity?.state!=='MATCH'||c.originalIdentity.fileHash!==c.document?.file_hash)throw Error('Identidade ou autor da proposta não comprovados.');
+  if(!d||d.id!==v.documentId||d.file_hash!==v.fileHash||d.file_verified!==true||d.document_type!=='INVOICE_SUPPLIER'||String(d.reference_month).slice(0,7)!==c.month||d.organization_id!==u.organization_id||d.customer_id!==u.customer_id||d.consumer_unit_id!==u.id||d.bytesVerified!==true)throw Error('Nota verificada da mesma organização, unidade e competência não demonstrada.');
+  if(!cost||cost.organization_id!==u.organization_id||cost.customer_id!==u.customer_id||cost.consumer_unit_id!==u.id||cost.month!==c.month||cost.id!==v.costId||cost.revision!==v.costRevision||!['DRAFT','VALIDATED'].includes(cost.status)||settlementHash(cost.costs)!==v.costsHash)throw Error('Os custos mudaram; confira novamente a revisão atual.');
+  const items=cost.costs?.items;if(!Array.isArray(items)||new Set(items.map((i:any)=>i.id)).size!==items.length)throw Error('Custos ausentes ou duplicados.');
+  const supplierItems=items.filter((i:any)=>['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(i.category)),matches=supplierItems.filter((i:any)=>i.id===v.costItemId&&i.category===(v.mode==='SPOT'?'SUPPLIER_INVOICE':'SUPPLIER_EXTRA_ENERGY')&&i.scenario==='ACL'&&i.effect==='COST'&&i.source?.includes(v.documentId)&&i.source?.includes(v.fileHash));
+  if(matches.length!==1||supplierItems.length!==1)throw Error('Concilie uma única nota/compra na fonte e no lançamento, sem dupla contagem.');
+  const item=matches[0],invoiceCents=scale(item.amount,2),q=scale(v.quantityMwh),price=scale(v.pricePerMwh),product=round(q*price*100n,1000000000000n);
+  if(product!==invoiceCents)throw Error('Quantidade × preço não confere com o total da nota ao centavo.');
+  const measured=scale(c.measurements.consumptionTotal,12)/1000n,q12=scale(v.quantityMwh,12);if(scale(c.measurements.consumptionPeak)+scale(c.measurements.consumptionOffPeak)!==scale(c.measurements.consumptionTotal))throw Error('Consumo ponta/fora ponta não concilia.');
+  const proof={id:item.id,costId:cost.id,hash:settlementHash(item)};result.consumedCostSources.push(proof);
+  result.source={documentId:d.id,fileHash:d.file_hash,costId:cost.id,costRevision:cost.revision,costsHash:v.costsHash,actor:c.manualAuthor,reason:v.reason,invoiceFinalAmountConfirmed:true};
+  const s:any={formulaVersion:'documented-supplier-1.0',contract:regular?.contract??null,pricePerMwh:v.pricePerMwh,priceSource:'NF '+d.id,contractedMwh:v.quantityMwh,consumedMwh:fixed(measured,12),regularAmount:null,extraAmount:'0.00',totalAmount:null,taxTreatment:'COMPONENTS_CONFIRMED',requirements};result.supplier=s;
+  if(v.mode==='SPOT'){
+   s.regularAmount=item.amount;s.totalAmount=item.amount;s.volumeDifferenceMwh=fixed(measured>=q12?measured-q12:q12-measured,12);
+   if(measured!==q12)result.differences.push('Volume comprado na NF difere do medido em '+s.volumeDifferenceMwh+' MWh. Alocação documental aceita pelo operador, sem atribuir a diferença a perdas ou alterar a medição.');
+  }else{
+   if(!regular?.price||!regular.memory||!regular.source||regular.price!==regular.memory.pricePerMwh)throw Error('Preço regular reajustado, anexo e memória verificados ainda pendentes.');
+   const regularVolume=measured-q12;if(regularVolume<0n||regularVolume<scale(regular.minimum,12)||regularVolume>scale(regular.maximum,12))throw Error('Saldo regular fora da faixa contratual ou compra extra maior que o consumo.');
+   const base=round(regularVolume*scale(regular.price,12)*100n,1000000000000000000000000n),rate=scale(v.regularIcmsRate!),tax=round(base*rate,v.regularIcmsMode==='INSIDE'?100000000n-rate:100000000n);
+   Object.assign(s,{contractedMwh:regular.contractedMwh,minMwh:regular.minimum,maxMwh:regular.maximum,billedMwh:fixed(regularVolume,12),pricePerMwh:regular.price,priceSource:'Memória IPCA '+regular.memory.id,regularMwh:fixed(regularVolume,12),extraMwh:v.quantityMwh,regularBase:fixed(base,2),regularIcms:fixed(tax,2),regularTaxComponents:{PIS:'INCLUDED',COFINS:'INCLUDED',ICMS:{mode:v.regularIcmsMode,rate:v.regularIcmsRate,base:fixed(base,2),amount:fixed(tax,2),source:v.regularTaxSource}},regularAmount:fixed(base+tax,2),extraAmount:item.amount,totalAmount:fixed(base+tax+invoiceCents,2)});
+   result.source.regular=regular.source;result.memory=regular.memory;result.terms={regularMwh:s.regularMwh,extraMwh:v.quantityMwh,minimum:regular.minimum,maximum:regular.maximum};
+  }
+  const ccee=items.filter((i:any)=>i.category==='CCEE'&&i.scenario==='ACL');
+  if(!ccee.length)need('CCEE_COVERAGE','Registre os encargos CCEE da competência ou uma declaração válida de não aplicação.','costs');
+  for(const i of ccee){if(!i.id||!i.source?.trim()||!['COST','CREDIT'].includes(i.effect)||!['INCLUDED','NOT_APPLICABLE'].includes(i.taxTreatment)&&v.cceeFinalAmountsConfirmed!==true)need('CCEE_CLASSIFICATION','CCEE recebido: confira o valor final e sua classificação. Documento recebido não é custo ausente.','costs');else{scale(i.amount,2);if(v.cceeFinalAmountsConfirmed)result.confirmedFinalCostSources??=[];if(v.cceeFinalAmountsConfirmed)result.confirmedFinalCostSources.push({id:i.id,costId:cost.id,hash:settlementHash(i),actor:c.manualAuthor,reason:v.reason});}}
+  result.state=requirements.length?'PENDING':'COMPLETE';
+ }catch(e){need('DOCUMENTED_SUPPLIER_REVIEW',e instanceof Error?e.message:'Conciliação documental incompleta.');}
+ return result;
+}

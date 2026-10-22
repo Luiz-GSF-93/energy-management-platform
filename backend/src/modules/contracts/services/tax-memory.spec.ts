@@ -94,3 +94,5 @@ describe('explicit common-base inside group',()=>{
 describe('explicit demand monetary tax base',()=>{
  it('uses approved net demand rubric only when explicitly referenced',()=>{const p={...tariff,component_code:'TUSD_DEMAND',measure:'BRL_KW',time_band:'ALL',amount_text:'20'};const m={...measurement,billed_demand:{ACR:{single:'15',source:'Regra ACR conferida'}}};expect(run([p,tax()],[m]).lines[0]).toMatchObject({base:'300.00',amount:'75.00'});blocked(run([p,tax()]));});
 });
+
+it.each(['CPFL Paulista','Cemig','Enel','Neoenergia Elektro'])('rejects unused demand in the ICMS base for %s without changing approved inputs',distributor=>{const u={...unit,distributor},p={...tariff,component_code:'TUSD_DEMAND_UNUSED',unit_context:u},t={...tax(),unit_context:u},ps=[p,t],before=JSON.stringify(ps);const r=run(ps,[{...measurement,unit_context:u}],u);expect(r.lines).toEqual([]);expect(r.pending.some(x=>x.reason.includes('não integra a base do ICMS'))).toBe(true);expect(JSON.stringify(ps)).toBe(before);});

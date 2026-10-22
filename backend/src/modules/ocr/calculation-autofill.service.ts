@@ -1,3 +1,5 @@
+import {documentedSettlementEnabled} from './documented-tariff-period';
+import {documentedSupplierSettlement,settlementHash} from './documented-supplier-settlement';
 import {SourcePreparationService} from './source-preparation.service';
 import {contractClosingDraft,contractClosingDraftEnabled,contractClosingDraftApplicable} from './contract-closing-draft';
 import {commercialProposal,ManualCommercial} from './calculation-autofill-manual';
@@ -71,9 +73,21 @@ export class CalculationAutofillService{
    }
    c.contractDraft=contractClosingDraft(c,c.indexMemories);
   }
+  if(documentedSettlementEnabled()){
+   const r=await db.from('documents').select('id,file_hash,original_filename,reference_month,file_verified').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('document_type','INVOICE_SUPPLIER').gte('reference_month',period.start).lte('reference_month',period.end).limit(101);
+   if(r.error||!Array.isArray(r.data)||r.data.length>100)throw new ServiceUnavailableException('Notas da competência indisponíveis.');
+   c.documentedSupplierOptions={enabled:true,documents:r.data.filter((d:any)=>d.file_verified&&/^[a-f0-9]{64}$/.test(d.file_hash??'')),cost:c.cost?{id:c.cost.id,revision:c.cost.revision,hash:settlementHash(c.cost.costs),items:c.cost.costs.items}:null};
+   const v=c.manualOverrides.supplierSettlement;
+   if(v){
+    if(!this.sourcePreparation)throw new ServiceUnavailableException('Verificação documental indisponível.');
+    try{c.documentedSupplierInvoice=await this.sourcePreparation.verifiedSupplierInvoice(c,v.documentId,v.fileHash);}catch{c.documentedSupplierInvoice=null;}
+    const prior=c.contractDraft,regular=prior?.memory&&prior?.source&&prior?.supplier?.pricePerMwh?{price:prior.supplier.pricePerMwh,contractedMwh:prior.supplier.contractedMwh,contract:prior.supplier.contract,minimum:prior.supplier.minMwh,maximum:prior.supplier.maxMwh,source:prior.source,memory:prior.memory}:undefined;
+    c.contractDraft=documentedSupplierSettlement(c,regular);
+   }
+  }
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
-  const basis=autofillHash({v:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const basis=autofillHash({v:documentedSettlementEnabled()?6:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),...(documentedSettlementEnabled()?{documentedInvoice:c.documentedSupplierInvoice??null}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }
@@ -81,7 +95,7 @@ export class CalculationAutofillService{
  async closingSnapshot(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())throw new ServiceUnavailableException('Preparação automática indisponível.');return this.context(q,t);}
  async inspect(q:Record<string,unknown>,t:TenantContext){if(!this.enabled())return {enabled:false};await this.allowed(t);this.query(q);return this.output(await this.context(q,t),t);}
  private async rpc(action:string,q:{unit:string;month:string},t:TenantContext,run:string|null,body:any){return this.fail(await this.db.getClient().rpc('calculation_autofill_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.unit,p_month:q.month,p_run:run,p_body:body}));}
- private manual(value:unknown){try{return commercialProposal(value);}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Valores comerciais inválidos.');}}
+ private manual(value:unknown){try{const parsed=commercialProposal(value);if(parsed.supplierSettlement&&!documentedSettlementEnabled())throw Error('Conciliação documentada ainda desligada.');return parsed;}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Valores comerciais inválidos.');}}
  async preview(body:any,t:TenantContext){await this.allowed(t,true);if(!this.enabled())throw new ServiceUnavailableException('Preenchimento automático desligado.');if(!body||Object.keys(body).sort().join(',')!=='consumerUnitId,manual,month')throw new BadRequestException('Proposta inválida.');const q={consumerUnitId:body.consumerUnitId,month:body.month};this.query(q);return this.output(await this.context(q,t,this.manual(body.manual)),t);}
  async history(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return this.rpc('history',this.query(scope),t,null,{page:Number(page)});}
  async prepare(body:any,t:TenantContext){

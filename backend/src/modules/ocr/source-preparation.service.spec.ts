@@ -31,3 +31,15 @@ describe('Private original sources without paid extraction',()=>{
  it('does not inspect a partial-month or ambiguous supplier contract',async()=>{const s=setup(),c=context();c.captured.contracts[0].start_date='2026-04-02';expect(await s.service.inspect(c)).toMatchObject({state:'REVIEW',documents:[]});expect(s.from).not.toHaveBeenCalled();});
  it('does not select a truncated subset of an excessive document collection',async()=>{const s=setup(Array.from({length:101},()=>document()));await expect(s.service.inspect(context())).rejects.toMatchObject({status:503});expect(s.download).not.toHaveBeenCalled();});
 });
+
+describe('Verified supplier invoices for the documented monthly allocation',()=>{
+ it('checks scope, month, metadata and actual bytes without OCR, and bounds replay downloads',async()=>{
+  const d={...document(),reference_month:'2026-04-01'},s=setup([d]);s.chain.maybeSingle=jest.fn(async()=>({data:d}));
+  expect(await s.service.verifiedSupplierInvoice(context(),'doc',d.file_hash)).toMatchObject({id:'doc',bytesVerified:true,reference_month:'2026-04-01'});
+  await s.service.verifiedSupplierInvoice(context(),'doc',d.file_hash);expect(s.download).toHaveBeenCalledTimes(1);expect(extractPdfText).not.toHaveBeenCalled();
+  expect(s.chain.eq.mock.calls).toEqual(expect.arrayContaining([['organization_id','org'],['customer_id','client'],['consumer_unit_id','unit'],['id','doc'],['document_type','INVOICE_SUPPLIER']]));
+ });
+ it.each(['id','organization_id','customer_id','consumer_unit_id','document_type','reference_month','file_hash'])('rejects altered invoice %s before downloading bytes',async key=>{
+  const d:any={...document(),reference_month:'2026-04-01'},hash=d.file_hash;d[key]='foreign';const s=setup([d]);s.chain.maybeSingle=jest.fn(async()=>({data:d}));await expect(s.service.verifiedSupplierInvoice(context(),'doc',hash)).rejects.toMatchObject({status:503});expect(s.download).not.toHaveBeenCalled();
+ });
+});

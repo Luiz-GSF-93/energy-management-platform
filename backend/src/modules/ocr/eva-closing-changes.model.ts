@@ -1,3 +1,4 @@
+import {documentedLineAmount} from './documented-tariff-period';
 import {historicalDifference} from './eva-assisted-closing.model';
 import {autofillHash} from './calculation-autofill.model';
 import {allocateFee} from '../contracts/services/management-fee';
@@ -83,7 +84,7 @@ export function reviseClosing(source:any,changes:ClosingChange[],question:string
  if(!diff.length)throw Error('Nenhuma alteração efetiva; não há desconto de documento.');
  for(const u of report.units){
   const a=u.adjustments??{},get=(k:string)=>a[k]?.value;
-  let acr=0n;for(const l of u.methodology.lines){const k=l.component+':'+l.band,q=get('QUANTITY:'+k+':')??l.quantity,v=get('TARIFF:'+k+':')??l.value;acr+=cents(tariffProduct(q,v,l.measure==='BRL_MWH').rounded);}
+  let acr=0n;for(const l of u.methodology.lines){const k=l.component+':'+l.band,q=get('QUANTITY:'+k+':')??l.quantity,v=get('TARIFF:'+k+':')??l.value;acr+=cents(documentedLineAmount(l,q,get('TARIFF:'+k+':')));}
   acr+=u.methodology.retained.reduce((s:bigint,r:any)=>s+cents(r.amount),0n);
   // Existing non-invoice costs remain part of the original complete report.
   acr+=cents(u.changeBase?.acr??u.acr)-cents(u.methodology.amount);

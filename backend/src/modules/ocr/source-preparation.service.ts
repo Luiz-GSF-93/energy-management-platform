@@ -1,3 +1,4 @@
+import {documentedSettlementEnabled} from './documented-tariff-period';
 import {Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -11,6 +12,7 @@ import {structuredSpotMonth} from './monthly-supplier-mode';
 @Injectable()
 export class SourcePreparationService{
  constructor(private readonly db:SupabaseService){}
+ private readonly verifiedBytes=new Map<string,number>();
  private readonly identities=new Map<string,{until:number;value:Awaited<ReturnType<typeof invoiceIdentityPreflight>>}>();
  private readonly extracted=new Map<string,{until:number;value:Awaited<ReturnType<typeof extractPdfText>>}>();
  private async text(d:any){
@@ -33,10 +35,17 @@ export class SourcePreparationService{
   if(['MATCH','MISMATCH'].includes(proof.state)){if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
   return proof;
  }
+ async verifiedSupplierInvoice(c:any,id:string,fileHash:string){
+  const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('document_type','INVOICE_SUPPLIER').eq('id',id).maybeSingle();
+  if(r.error||!r.data||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month||r.data.file_hash!==fileHash)throw new ServiceUnavailableException('Nota do fornecedor fora da competência ou fonte alterada.');
+  const key=[r.data.organization_id,r.data.customer_id,r.data.consumer_unit_id,id,fileHash,r.data.file_path,r.data.file_size_bytes].join(':');
+  if((this.verifiedBytes.get(key)??0)<Date.now()){await this.text(r.data);if(this.verifiedBytes.size>=16)this.verifiedBytes.delete(this.verifiedBytes.keys().next().value!);this.verifiedBytes.set(key,Date.now()+60000);}
+  return {...Object.fromEntries(['id','organization_id','customer_id','consumer_unit_id','document_type','file_hash','reference_month','file_verified','original_filename'].map(k=>[k,r.data[k]])),bytesVerified:true};
+ }
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;
   const invoiceIdentity=c.originalIdentity?{state:c.originalIdentity.state,checks:c.originalIdentity.checks,fileHash:c.originalIdentity.fileHash,sourcePages:c.originalIdentity.sourcePages??[]}:null;
-  if(structuredSpotMonth(c))return {version:3,invoiceIdentity,state:'REVIEW',documents:[],observations:['Compra avulsa estruturada nesta competência. A fonte mensal do fornecedor deve ser conciliada; preço, reajuste e flexibilidade do anexo regular não são aplicados.'],automaticFinancialApproval:false};
+  if(structuredSpotMonth(c)||documentedSettlementEnabled()&&c.manualOverrides?.supplierSettlement?.mode==='SPOT')return {version:3,invoiceIdentity,state:'REVIEW',documents:[],observations:['Compra avulsa estruturada nesta competência. A fonte mensal do fornecedor deve ser conciliada; preço, reajuste e flexibilidade do anexo regular não são aplicados.'],automaticFinancialApproval:false};
   const org=c.unit.organization_id,customer=c.unit.customer_id,unit=c.unit.id;
   const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===org&&r.customer_id===customer&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=c.period.start&&String(r.end_date??'9999-12-31').slice(0,10)>=c.period.end);
   if(contracts.length!==1)return {version:3,invoiceIdentity,state:'REVIEW',observations:['Contrato vigente único não identificado para consultar o anexo.'],documents:[]};
