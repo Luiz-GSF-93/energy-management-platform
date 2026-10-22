@@ -1,10 +1,11 @@
 import {indexMemoryParameters,indexMemoryPlan,indexMemoryHash,parseOfficialIpca,calculateIndexMemory} from '../contracts/services/contract-index-memory.model';
 import {sameContractDecimal} from './source-preparation-v3';
+import {structuredSpotMonth} from './monthly-supplier-mode';
 export const CONTRACT_CLOSING_DRAFT_FLAG='EVA_CONTRACT_CLOSING_DRAFTS_ENABLED';
 export const contractClosingDraftEnabled=()=>process.env[CONTRACT_CLOSING_DRAFT_FLAG]==='true';
 // Existing structured supplier flows remain available when there is no verified
 // indexed annex to propose. The feature does not require annexes for all clients.
-export const contractClosingDraftApplicable=(c:any)=>!!c.sourcePreparation?.documents?.some((d:any)=>d.link==='REGISTERED_CONTRACT_DOCUMENT'&&d.annex?.state==='PROPOSED'&&d.annex.index==='IPCA/IBGE');
+export const contractClosingDraftApplicable=(c:any)=>!structuredSpotMonth(c)&&!!c.sourcePreparation?.documents?.some((d:any)=>d.link==='REGISTERED_CONTRACT_DOCUMENT'&&d.annex?.state==='PROPOSED'&&d.annex.index==='IPCA/IBGE');
 const day=(v:unknown)=>String(v??'').slice(0,10),hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const autofillHash=indexMemoryHash;
 const dec=(v:unknown)=>{const s=String(v);if(!/^(0|[1-9]\d{0,11})(\.\d{1,12})?$/.test(s))throw Error('Decimal sem fonte.');const [a,b='']=s.split('.');return BigInt(a)*10n**12n+BigInt(b.padEnd(12,'0'));};
@@ -14,6 +15,7 @@ const money=(volume:bigint,price:bigint)=>fixed((volume*price*100n+10n**24n/2n)/
 export function contractClosingDraft(c:any,memories:any[]){
  const r:any={format:'eva-contract-closing-draft-1',month:c.month,state:'PENDING',contractId:null,source:null,terms:null,memory:null,supplier:null,consumedCostSources:[],differences:[],requirements:[],requiresHumanAcceptance:true,financialApproval:false,canPublish:false};
  const need=(code:string,message:string,section='supply')=>r.requirements.push({code,message,section});
+ if(structuredSpotMonth(c)){need('SPOT_MONTH','Compra avulsa deve seguir a conciliação mensal do fornecedor, sem reaplicar preço ou flexibilidade do anexo regular.');return r;}
  const unit=c.unit,period=c.period,scoped=(x:any)=>x.organization_id===unit.organization_id&&x.customer_id===unit.customer_id&&x.consumer_unit_id===unit.id;
  if(!(c.ready||c.proposalReady)||c.originalIdentity?.state!=='MATCH'||c.originalIdentity?.fileHash!==c.document?.file_hash){need('IDENTITY_SOURCE','Identidade e conciliação da fatura precisam estar comprovadas.','documents');return r;}
  const contracts=(c.captured?.contracts??[]).filter((x:any)=>scoped(x)&&x.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(x.status)&&day(x.start_date)<=period.end&&day(x.end_date)>=period.start);
