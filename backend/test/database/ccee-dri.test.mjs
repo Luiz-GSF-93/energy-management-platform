@@ -61,6 +61,9 @@ try{
  await finish(sclaim,[{columns:['CNPJ DO AGENTE','TOTAL'],cells:['11111111000111','-99.00'],reportId:'8',frameId:'31',financialState:'UNMAPPED_REVIEW_REQUIRED'}]);
  const open=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'9',frameId:'31'});ok(open.job.kind==='DRI_RESULTS');
  for(const reportId of ['10','11','12'])await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId,frameId:'31'}));
+ // Finish the open-period fixture before the independent concurrency lab.
+ const openClaim=await query('SELECT ccee_claim_dri_reading() result');ok(openClaim.id===open.job.id);
+ await query("SELECT ccee_finish_dri_reading($1,$2,NULL,'TEST_STOP') result",[openClaim.id,openClaim.lease_id]);
  ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
  await denied(db.exec("UPDATE ccee_dri_result_snapshots SET financial_state='OTHER'"));
  for(const table of ['ccee_dri_catalog_versions','ccee_dri_result_snapshots']){
