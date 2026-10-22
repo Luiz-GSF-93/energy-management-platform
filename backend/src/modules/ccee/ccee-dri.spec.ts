@@ -2,6 +2,7 @@ import {driCells,driCommand,driEnabled,driPage,driSoap} from './ccee-dri.model';
 import {CceeDriConnector} from './ccee-dri.connector';
 import {CceeDriService} from './ccee-dri.service';
 import {CceeDataWorker} from './ccee-data.worker';
+import {CceeReadingError} from './ccee-private.connector';
 const uuid='10000000-0000-4000-8000-000000000001',month='2026-09';
 const config:any={profile:'222',username:'1',password:'PRIVATE_PASSWORD',pfx:Buffer.alloc(0),passphrase:''};
 const selection:any={kind:'DRI_EVENTS',month};
@@ -17,6 +18,14 @@ describe('CCEE DRI private read-only adapter',()=>{
  it('requires parent selections and rejects arbitrary fields/endpoints',()=>{expect(driCommand({requestId:uuid,authorizationId:uuid,kind:'DRI_EVENTS',month}).kind).toBe('DRI_EVENTS');for(const patch of [{kind:'IMPORT_CONTRACT'},{url:'https://evil.invalid'},{eventCode:'1'},{kind:'DRI_REPORTS'}])expect(()=>driCommand({requestId:uuid,authorizationId:uuid,kind:'DRI_EVENTS',month,...patch})).toThrow();});
  it('validates events against the requested month',()=>{expect(driPage(events(),selection,1,'11111111000111').rows).toEqual([{code:'202609001000',name:'Evento sintético',month}]);expect(()=>driPage(events('202608001000','2026-08'),selection,1,'11111111000111')).toThrow('DRI_PERIOD_MISMATCH');});
  it('preserves blank cells and signed values without calculating or implying payment',()=>{const p=driPage(result(),{kind:'DRI_RESULTS',month,reportId:'8',frameId:'31'},1,'11111111000111');expect(p.rows[0]).toMatchObject({cells:['11111111000111','-123.31',''],scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED'});});
+ it('reads the official open-ended catalog shape while rejecting malformed or inverted dates',()=>{
+  const catalog=(end:string)=>wrap('listarRelatorio',`<b:relatorios><o:relatorio><o:id>8</o:id><o:nome>SUM001</o:nome><o:periodo><o:inicio>2020-01-01T00:00:00-03:00</o:inicio>${end}</o:periodo><o:quadros><o:quadro><o:id>31</o:id><o:nome>Q3</o:nome><o:parametros><o:parametro><o:nome>CODIGO_AGENTE</o:nome></o:parametro></o:parametros></o:quadro></o:quadros></o:relatorio></b:relatorios>`);
+  const s:any={kind:'DRI_REPORTS',month,eventCode:'202609001000'};
+  expect(driPage(catalog(''),s,1,'11111111000111').rows[0].period).toEqual({start:'2020-01-01T00:00:00-03:00',end:null});
+  expect(driPage(catalog('<o:fim>2027-01-01T00:00:00-03:00</o:fim>'),s,1,'11111111000111').rows[0].period.end).toBe('2027-01-01T00:00:00-03:00');
+  for(const end of ['bad','2019-01-01T00:00:00-03:00'])expect(()=>driPage(catalog(`<o:fim>${end}</o:fim>`),s,1,'11111111000111')).toThrow('DRI_CATALOG_REQUIRES_REVIEW');
+  expect(()=>driPage(catalog('').replace('<o:inicio>2020-01-01T00:00:00-03:00</o:inicio>',''),s,1,'11111111000111')).toThrow();
+ });
  it.each([['22222222000122','8','DRI_PARTICIPANT_MISMATCH'],['11111111000111','9','DRI_REPORT_MISMATCH']])('rejects another participant/report', (tax,report,error)=>{expect(()=>driPage(result(tax,report),{kind:'DRI_RESULTS',month,reportId:'8',frameId:'31'},1,'11111111000111')).toThrow(error);});
  it('refuses results without participant evidence or with a changed row shape',()=>{for(const xml of [result('11111111000111','8',"'1','2'"),result('11111111000111','8',"'1'","'TOTAL'")])expect(()=>driPage(xml,{kind:'DRI_RESULTS',month,reportId:'8',frameId:'31'},1,'11111111000111')).toThrow();});
  it('supports quoted commas/escaped quotes but rejects malformed CSV and oversized cells',()=>{expect(driCells("'a,b','c''d',''")).toEqual(['a,b',"c'd",'']);for(const value of ['a,b',"'a',","'not closed", "'"+'x'.repeat(4001)+"'"])expect(()=>driCells(value)).toThrow();});
@@ -31,4 +40,12 @@ describe('CCEE DRI private read-only adapter',()=>{
   try{const c=new CceeDriConnector();c.fetch=jest.fn(async()=>({xml:events('1','2026-08'),bytes:100,httpStatus:200}));await expect(c.execute({kind:'DRI_EVENTS',month:month+'-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:'11111111000111'},request_payload:selection},async()=>{})).rejects.toMatchObject({code:'DRI_PERIOD_MISMATCH',metrics:{requests:1,httpStatus:200}});expect(c.fetch).toHaveBeenCalledTimes(1);}finally{spy.mockRestore();process.env=old;}
  });
  it('never claims DRI while its gate is off',async()=>{const old={...process.env};Object.assign(process.env,{CCEE_DATA_WORKSPACE_ENABLED:'true',CCEE_SYNC_WORKER_ENABLED:'true',CCEE_DRI_READ_ENABLED:'false'});try{const rpc=jest.fn(async(_name:string,_args?:unknown)=>({data:null}));await new CceeDataWorker({getClient:()=>({rpc})}as any,{}as any,{}as any).runOnce();expect(rpc).toHaveBeenCalledTimes(1);expect(rpc.mock.calls[0][0]).toBe('ccee_claim_reading');}finally{process.env=old;}});
+ it('keeps rejection HTTP status in bounded audit metrics without retrying or persisting response text',async()=>{
+  const old={...process.env};process.env.CCEE_DRI_READ_ENABLED='true';const spy=jest.spyOn(require('./ccee-config'),'cceeConfig').mockReturnValue(config);
+  try{const c=new CceeDriConnector();c.fetch=jest.fn(async()=>{throw new CceeReadingError('PROVIDER_REJECTED',403);});await expect(c.execute({kind:'DRI_EVENTS',month:month+'-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:'11111111000111'},request_payload:selection},async()=>{})).rejects.toMatchObject({code:'PROVIDER_REJECTED',metrics:{requests:1,httpStatus:403}});expect(c.fetch).toHaveBeenCalledTimes(1);}finally{spy.mockRestore();process.env=old;}
+ });
+ it('caps provider calls before the next page and never returns a partial catalog as complete',async()=>{
+  const old={...process.env};Object.assign(process.env,{CCEE_DRI_READ_ENABLED:'true',CCEE_DRI_MAX_REQUESTS_PER_JOB:'1'});const spy=jest.spyOn(require('./ccee-config'),'cceeConfig').mockReturnValue(config);
+  try{const c=new CceeDriConnector();c.fetch=jest.fn(async()=>({xml:events().replace('<m:totalPaginas>1</m:totalPaginas>','<m:totalPaginas>2</m:totalPaginas>').replace('<m:quantidadeTotalItens>1</m:quantidadeTotalItens>','<m:quantidadeTotalItens>2</m:quantidadeTotalItens>'),bytes:100,httpStatus:200}));const job={kind:'DRI_EVENTS',month:month+'-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:'11111111000111'},request_payload:selection};await expect(c.execute(job,async()=>{})).rejects.toMatchObject({code:'RUN_TIME_LIMIT',metrics:{requests:1}});expect(c.fetch).toHaveBeenCalledTimes(1);process.env.CCEE_DRI_MAX_REQUESTS_PER_JOB='11';await expect(c.execute(job,async()=>{})).rejects.toMatchObject({code:'DRI_REQUEST_LIMIT_INVALID'});expect(c.fetch).toHaveBeenCalledTimes(1);}finally{spy.mockRestore();process.env=old;}
+ });
 });

@@ -20,12 +20,14 @@ export class CceeDriConnector{
  }
  async execute(job:any,revalidate:()=>Promise<void>){
   driEnabled();if(!isDri(job.kind)||job.environment!=='PRODUCTION'||!job.binding?.dri_agent_code||!job.binding?.dri_tax_id)throw new CceeReadingError('DRI_BINDING_REQUIRED');
+  const maxRequests=Number(process.env.CCEE_DRI_MAX_REQUESTS_PER_JOB??'10');
+  if(!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>10)throw new CceeReadingError('DRI_REQUEST_LIMIT_INVALID');
   const began=Date.now(),hashes:string[]=[],transactions:string[]=[],rows:any[]=[];let config:CceeConfig|undefined,requests=0,bytes=0,httpStatus:number|null=null;
   try{
    await revalidate();config={...cceeConfig(process.env),profile:job.binding.profile_code};
    const selection={...job.request_payload,month:job.month.slice(0,7)};let pages=1,total:number|null=null;const seen=new Set<string>();
    for(let page=1;page<=pages;page++){
-    driEnabled();if(Date.now()-began>95000||requests>=10)throw new CceeReadingError('RUN_TIME_LIMIT');await revalidate();
+    driEnabled();if(Date.now()-began>95000||requests>=maxRequests)throw new CceeReadingError('RUN_TIME_LIMIT');await revalidate();
     const payload=Buffer.from(driSoap(config,selection,job.binding.dri_agent_code,job.dri_parameters??[],page));let response:{xml:string;bytes:number;httpStatus:number};
     requests++;try{response=await this.fetch(config,job.kind,payload);}finally{payload.fill(0);}
     bytes+=response.bytes;httpStatus=response.httpStatus;const p=driPage(response.xml,selection,page,job.binding.dri_tax_id);
@@ -36,7 +38,7 @@ export class CceeDriConnector{
    }
    if(rows.length!==total)throw new CceeReadingError('DRI_COVERAGE_INCOMPLETE');await revalidate();
    return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes,transactions,data:{kind:job.kind,month:selection.month,eventCode:selection.eventCode??null,reportId:selection.reportId??null,frameId:selection.frameId??null,participantCode:job.binding.dri_agent_code,participantTaxId:job.binding.dri_tax_id,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED',sourceHash:driDigest(hashes),rows}};
-  }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('DRI_READ_NOT_CONFIRMED');error.metrics={requests,bytes,durationMs:Date.now()-began,hashes,transactions,httpStatus};throw error;}
+  }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('DRI_READ_NOT_CONFIRMED');error.metrics={requests,bytes,durationMs:Date.now()-began,hashes,transactions,httpStatus:error.httpStatus??httpStatus};throw error;}
   finally{config?.pfx.fill(0);}
  }
 }

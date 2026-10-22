@@ -50,8 +50,9 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
   const e=x.eventoContabil,code=id(e?.codigo);if(e?.periodoReferencia?.mesAno!==s.month)throw new CceeReadingError('DRI_PERIOD_MISMATCH');return{code,name:text(e.nome),month:s.month};
  });
  else if(s.kind==='DRI_REPORTS')rows=list(p.body?.relatorios?.relatorio).map(r=>{
-  const start=text(r.periodo?.inicio),end=text(r.periodo?.fim),frames=list(r.quadros?.quadro).map(f=>({id:id(f.id),name:text(f.nome),description:text(f.descricao??''),parameters:list(f.parametros?.parametro).map(x=>text(x.nome,80))}));
-  if(!/^20\d{2}-\d{2}-\d{2}T/.test(start)||!/^20\d{2}-\d{2}-\d{2}T/.test(end)||!Number.isFinite(Date.parse(start))||!Number.isFinite(Date.parse(end))||Date.parse(end)<Date.parse(start)||frames.length>100||new Set(frames.map(f=>f.id)).size!==frames.length||frames.some(f=>f.parameters.length>20||new Set(f.parameters).size!==f.parameters.length))throw new CceeReadingError('DRI_CATALOG_REQUIRES_REVIEW');
+  // Official catalogs may provide only inicio for a version with no end date.
+  const start=text(r.periodo?.inicio),end=r.periodo?.fim==null?null:text(r.periodo.fim),frames=list(r.quadros?.quadro).map(f=>({id:id(f.id),name:text(f.nome),description:text(f.descricao??''),parameters:list(f.parametros?.parametro).map(x=>text(x.nome,80))}));
+  if(!/^20\d{2}-\d{2}-\d{2}T/.test(start)||!Number.isFinite(Date.parse(start))||end!==null&&(!/^20\d{2}-\d{2}-\d{2}T/.test(end)||!Number.isFinite(Date.parse(end))||Date.parse(end)<Date.parse(start))||frames.length>100||new Set(frames.map(f=>f.id)).size!==frames.length||frames.some(f=>f.parameters.length>20||new Set(f.parameters).size!==f.parameters.length))throw new CceeReadingError('DRI_CATALOG_REQUIRES_REVIEW');
   return{id:id(r.id),name:text(r.nome),description:text(r.descricao??''),period:{start,end},frames};
  });
  else for(const r of list(p.body?.resultados?.resultadoRelatorio)){
