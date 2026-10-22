@@ -38,6 +38,7 @@ try{
 
  for(const migration of ['20260925_f1_34_monthly_inputs.sql','20260925_f1_48_billed_demand.sql','20261003_f3_1_operations.sql','20261008_ccee_private_intake.sql','20261113_ccee_private_readings.sql','20261114_ccee_binding_review.sql','20261115_ccee_invoice_reconciliation.sql','20261202_ccee_dri_private_readings.sql'])await db.exec(readFileSync(new URL('../../src/database/migrations/'+migration,import.meta.url),'utf8'));
  const dri=(actor,act,id,body={},org='o1')=>query('SELECT ccee_dri_action($1,$2,$3,$4,$5) result',[org,actor,act,id,JSON.stringify(body)]);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261213_ccee_dri_open_report_period.sql',import.meta.url),'utf8'));
  const draft=await action(author,'binding',null,{requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'222',principalProfileCode:null,measurementPoint:'P',meterCode:null,representationKind:'PARTIAL',serviceScope:['DRI_READ'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'UNKNOWN',evidenceReference:'Evidência sintética revisada',reason:'Teste isolado',driAgentCode:'111',driTaxId:'11111111000111'});
  await denied(action(author,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Não pode aprovar a própria preparação'}));
  const b=await action(reviewer,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Representação DRI conferida'});ok(b.dri_agent_code==='111');ok(b.service_scope.includes('DRI_READ'));
@@ -52,12 +53,14 @@ try{
  const catalog=await dri(author,'job',first.job.id);ok(catalog.job.state==='SUCCEEDED');ok((await db.query('SELECT count(*) n FROM ccee_dri_catalog_versions')).rows[0].n===1);
  await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_REPORTS',parentJobId:first.job.id,eventCode:'999'}));
  const reports=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_REPORTS',parentJobId:first.job.id,eventCode:'202609001000'});
- const rclaim=await query('SELECT ccee_claim_dri_reading() result');await finish(rclaim,[{id:'8',name:'Relatório',period:{start:'2021-01-01',end:'2099-12-31'},frames:[{id:'31',parameters:['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL']}]}]);
+ const rclaim=await query('SELECT ccee_claim_dri_reading() result');await finish(rclaim,[['8','2021-01-01','2099-12-31'],['9','2021-01-01',null],['10','2021-01-01','2026-08-31'],['11','2026-10-01',null],['12','2021-01-01',undefined]].map(([id,start,end])=>({id,name:'Relatório',period:{start,end},frames:[{id:'31',parameters:['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL']}]})));
  const results=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'8',frameId:'31'});
  await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'8',frameId:'99'}));
  const sclaim=await query('SELECT ccee_claim_dri_reading() result');ok(sclaim.dri_parameters.includes('CODIGO_AGENTE'));
  await denied(finish(sclaim,[{columns:['CNPJ DO AGENTE','TOTAL'],cells:['22222222000122','99'],reportId:'8',frameId:'31'}]));
  await finish(sclaim,[{columns:['CNPJ DO AGENTE','TOTAL'],cells:['11111111000111','-99.00'],reportId:'8',frameId:'31',financialState:'UNMAPPED_REVIEW_REQUIRED'}]);
+ const open=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'9',frameId:'31'});ok(open.job.kind==='DRI_RESULTS');
+ for(const reportId of ['10','11','12'])await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId,frameId:'31'}));
  ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
  await denied(db.exec("UPDATE ccee_dri_result_snapshots SET financial_state='OTHER'"));
  for(const table of ['ccee_dri_catalog_versions','ccee_dri_result_snapshots']){
