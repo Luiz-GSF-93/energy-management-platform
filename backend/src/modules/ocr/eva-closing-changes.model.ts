@@ -1,3 +1,4 @@
+import {repriceComponentGross} from './invoice-component-tax-v3';
 import {documentedLineAmount} from './documented-tariff-period';
 import {historicalDifference} from './eva-assisted-closing.model';
 import {autofillHash} from './calculation-autofill.model';
@@ -46,18 +47,18 @@ export function parseClosingChanges(question:string,unitId:string):ClosingChange
 }
 /** Pure calculation over an immutable source. No OCR writes, licensing or model calls. */
 export function reviseClosing(source:any,changes:ClosingChange[],question:string){
- if(!source||source.approvalEligible!==true||!['SAME_INVOICE_AMOUNTS_V2','EVA_CONFIRMED_CHANGES_V1'].includes(source.methodology)||!Array.isArray(source.units)||!source.units.length||source.units.length>100||!changes.length||changes.length>12)throw Error('Selecione um comparativo completo e compatível para corrigir.');
+ if(!source||source.approvalEligible!==true||!['SAME_INVOICE_AMOUNTS_V2','COMPONENT_TAXES_V3','EVA_CONFIRMED_CHANGES_V1'].includes(source.methodology)||!Array.isArray(source.units)||!source.units.length||source.units.length>100||!changes.length||changes.length>12)throw Error('Selecione um comparativo completo e compatível para corrigir.');
  const canonical=(v:string)=>v.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
  changes=changes.map(x=>({...x,...(dec(x.value)?{value:canonical(x.value)}:{}),...(dec(x.rate)?{rate:canonical(x.rate)}:{}),...(dec(x.base)?{base:canonical(x.base)}:{})}));
  const report=JSON.parse(JSON.stringify(source)),diff:any[]=[];
  for(const x of changes){
-  const u=report.units.find((u:any)=>u.id===x.unitId);if(!u||u.missing?.length||u.methodology?.method!=='SAME_INVOICE_AMOUNTS_V2')throw Error('Unidade sem memória compatível.');
+  const u=report.units.find((u:any)=>u.id===x.unitId);if(!u||u.missing?.length||!['SAME_INVOICE_AMOUNTS_V2','COMPONENT_TAXES_V3'].includes(u.methodology?.method))throw Error('Unidade sem memória compatível.');
   u.changeBase??={acr:u.acr,aclBeforeFees:u.aclBeforeFees,fixedFee:u.fixedFee,feePercentage:u.feePercentage};
   u.adjustments??={};const a=u.adjustments,key=x.kind+':'+x.target+':'+(x.scenario??''),before=a[key]??null;
   if(Object.keys(x).some(k=>!['unitId','kind','target','value','scenario','mode','rate','base','baseLabel'].includes(k)))throw Error('Operação desconhecida.');
   if(x.kind==='TAX'){
    if(!['ICMS','PIS','COFINS'].includes(x.target)||!['ACL','ACR'].includes(x.scenario!))throw Error('Imposto ou cenário inválido.');
-   const tax=u.methodology.taxes?.find((t:any)=>t.code===({ICMS:'icmsAmount',PIS:'pisAmount',COFINS:'cofinsAmount'} as any)[x.target]);if(!tax)throw Error('Imposto original sem conciliação.');
+   const tax=(x.scenario==='ACR'&&u.methodology.acrTaxes?u.methodology.acrTaxes:u.methodology.taxes)?.find((t:any)=>t.code===({ICMS:'icmsAmount',PIS:'pisAmount',COFINS:'cofinsAmount'} as any)[x.target]);if(!tax)throw Error('Imposto original sem conciliação.');
    let amount:string;
    if(x.mode==='FIXED'){if(x.rate!==undefined||x.base!==undefined||!dec(x.value))throw Error('Valor fixo inválido.');amount=fmt(cents(x.value));}
    else{if(!['INSIDE','OUTSIDE'].includes(x.mode!)||x.value!==undefined||!dec(x.rate)||!dec(x.base)||scale(x.rate)>=100000000n||!x.baseLabel||x.baseLabel.length>300)throw Error('Alíquota, base e tratamento explícitos são necessários.');const base=cents(x.base),rate=scale(x.rate);amount=fmt(round(base*rate,x.mode==='INSIDE'?100000000n-rate:100000000n));}
@@ -74,7 +75,7 @@ export function reviseClosing(source:any,changes:ClosingChange[],question:string
   let previous:any=before;
   if(!before){
    if(x.kind==='AMOUNT')previous=({invoice:u.prepared.invoice.amount,supplier:u.prepared.supplier.amount,fixedFee:u.fixedFee,supplierPrice:u.fields?.find((f:any)=>f.key==='supplier:price'&&f.state==='FILLED')?.value,extraAcr:'0',extraAcl:'0',creditAcr:'0',creditAcl:'0'} as any)[x.target];
-   if(x.kind==='TAX')previous={value:u.methodology.taxes.find((t:any)=>t.code===({ICMS:'icmsAmount',PIS:'pisAmount',COFINS:'cofinsAmount'} as any)[x.target]).amount,mode:'PRESERVED_INVOICE_AMOUNT'};
+   if(x.kind==='TAX')previous={value:(x.scenario==='ACR'&&u.methodology.acrTaxes?u.methodology.acrTaxes:u.methodology.taxes).find((t:any)=>t.code===({ICMS:'icmsAmount',PIS:'pisAmount',COFINS:'cofinsAmount'} as any)[x.target]).amount,mode:'PRESERVED_INVOICE_AMOUNT'};
    if(x.kind==='PERCENT')previous=u.feePercentage??'0';
    if(x.kind==='TARIFF'||x.kind==='QUANTITY'){const l=u.methodology.lines.find((l:any)=>l.component+':'+l.band===x.target);previous=x.kind==='TARIFF'?l.value:l.quantity;}
    if(previous!==undefined&&typeof previous==='string'&&dec(previous)&&x.value!==undefined&&dec(x.value)&&scale(previous)===scale(x.value)){delete a[key];continue;}
@@ -84,7 +85,7 @@ export function reviseClosing(source:any,changes:ClosingChange[],question:string
  if(!diff.length)throw Error('Nenhuma alteração efetiva; não há desconto de documento.');
  for(const u of report.units){
   const a=u.adjustments??{},get=(k:string)=>a[k]?.value;
-  let acr=0n;for(const l of u.methodology.lines){const k=l.component+':'+l.band,q=get('QUANTITY:'+k+':')??l.quantity,v=get('TARIFF:'+k+':')??l.value;acr+=cents(documentedLineAmount(l,q,get('TARIFF:'+k+':')));}
+  let acr=0n;for(const l of u.methodology.lines){const k=l.component+':'+l.band,q=get('QUANTITY:'+k+':')??l.quantity,v=get('TARIFF:'+k+':')??l.value;acr+=cents(u.methodology.method==='COMPONENT_TAXES_V3'?repriceComponentGross(l,q,get('TARIFF:'+k+':')):documentedLineAmount(l,q,get('TARIFF:'+k+':')));}
   acr+=u.methodology.retained.reduce((s:bigint,r:any)=>s+cents(r.amount),0n);
   // Existing non-invoice costs remain part of the original complete report.
   acr+=cents(u.changeBase?.acr??u.acr)-cents(u.methodology.amount);
