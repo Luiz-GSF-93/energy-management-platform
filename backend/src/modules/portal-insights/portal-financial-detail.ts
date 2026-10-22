@@ -20,7 +20,7 @@ export function financialDetail(r:any,original:any){
     if(new Set(publishedItems.map((c:any)=>c.id)).size!==publishedItems.length)throw Error();
     for(const c of publishedItems){
       if(typeof c.id!=='string'||!c.id||!['COST','CREDIT'].includes(c.effect)||typeof c.source!=='string'||!c.source.trim()||['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(c.category)||money(c.amount)<0n)throw Error();
-      const key=c.category==='CCEE'?'ccee-published':'other-published',label=c.category==='CCEE'?'CCEE · encargos e ajustes publicados':'Outros custos publicados';
+      const key=c.category==='CCEE'?'ccee-published':c.category==='TAX'?'tax-published':'other-published',label=c.category==='CCEE'?'CCEE · encargos e ajustes publicados':c.category==='TAX'?'Tributos adicionais publicados':'Outros custos publicados';
       const before=publishedGroups.get(key);publishedGroups.set(key,{key,label,amount:(before?.amount??0n)+(c.effect==='CREDIT'?-money(c.amount):money(c.amount))});
     }
     if([...publishedGroups.values()].some(c=>c.amount<0n))throw Error();
