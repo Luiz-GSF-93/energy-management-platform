@@ -6,6 +6,7 @@ import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {CalculationAutofillService} from './calculation-autofill.service';
 import {invoiceComparisonV2} from './invoice-comparison-v2';
+import {invoiceComponentTaxV3} from './invoice-component-tax-v3';
 import {autofillHash} from './calculation-autofill.model';
 import {assistedClosingReport,ClosingEntry} from './eva-assisted-closing.model';
 import {resolutionId} from './ocr-resolution-plan';
@@ -71,7 +72,7 @@ export class EvaAssistedClosingService{
    if(u.status!=='ACTIVE'){entries.push({unitId:u.id,name:u.name??u.id,unavailable:'Unidade inativa exige conferência da cobertura do cliente.'});continue;}
    const c=(!preparedDrafts&&snapshots.get(u.id))||await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
    const uncertain=(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state));
-   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:invoiceComparisonV2(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
+   entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:(this.config.get('EVA_COMPONENT_TAX_CLOSING_ENABLED')==='true'?invoiceComponentTaxV3:invoiceComparisonV2)(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
   }
   if(contractClosingDraftEnabled())for(const e of entries){const memory=e.plan?.contractDraft?.memory;if(memory&&!(sources.contractMemories??[]).some((m:any)=>m.id===memory.id&&m.organization_id===t.organizationId&&m.customer_id===primary.customer_id&&m.consumer_unit_id===e.unitId&&autofillHash(m)===memory.hash))throw new ConflictException('A memória contratual mudou durante a captura. Reconfira as fontes antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
