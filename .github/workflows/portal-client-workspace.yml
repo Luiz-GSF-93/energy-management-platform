@@ -11,6 +11,8 @@ on:
       - 'backend/src/database/migrations/20261203*.sql'
       - 'backend/src/database/migrations/20261204*.sql'
       - 'backend/src/database/migrations/20261207*.sql'
+      - 'backend/src/database/migrations/20261209*.sql'
+      - 'backend/src/database/migrations/20261210*.sql'
       - 'backend/src/modules/ocr/ocr-identity-resume*'
       - 'backend/src/modules/ocr/ocr-queue.service*'
       - 'backend/src/modules/ocr/ocr.controller.ts'

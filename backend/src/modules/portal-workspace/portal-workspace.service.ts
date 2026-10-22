@@ -1,5 +1,6 @@
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,NotFoundException,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
 import {createHash} from 'node:crypto';
+import {LicensesService} from '../licenses/services/licenses.service';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {DocumentsService} from '../documents/services/documents.service';
@@ -26,7 +27,7 @@ export function portalIntakeNotice(r:any){
 }
 @Injectable()
 export class PortalWorkspaceService {
- constructor(private db:SupabaseService,private documents:DocumentsService,private ocr:OcrQueueService){}
+ constructor(private db:SupabaseService,private documents:DocumentsService,private ocr:OcrQueueService,private licenses:LicensesService){}
  private enabled(){if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED!=='true')throw new ServiceUnavailableException('A ampliação do Portal ainda não foi habilitada.');}
  async action(t:TenantContext,action:string,id:string|null=null,body:unknown={}){
   this.enabled();if(!t.organizationId||!t.userId||!t.roleId||(t.scope as string)==='global'||id&&!uuid(id))throw new ForbiddenException('Contexto do Portal indisponível.');
@@ -41,6 +42,7 @@ export class PortalWorkspaceService {
  async list(t:TenantContext){const result=await this.action(t,'list');if(!Array.isArray(result.rows))throw new ServiceUnavailableException();return {rows:result.rows.map((r:any)=>({id:r.id,documentId:r.documentId,unitId:r.unitId,unitName:r.unitName,month:r.month,kind:r.kind,filename:r.filename,createdAt:r.createdAt,recordId:r.recordId,status:portalIntakeStatus(r),notice:r.ocrErrorCode==='INVOICE_ALREADY_RECEIVED'?'EVA: já existe uma fatura ou leitura para esta unidade e competência. Solicite atendimento para conferir a versão existente.':['IDENTITY_MISMATCH','IDENTITY_REVIEW_REQUIRED','IDENTITY_REGISTRATION_UNAVAILABLE'].includes(r.ocrErrorCode)?'EVA: UC, CNPJ, endereço ou competência precisam de conferência. Solicite atendimento; o preenchimento automático foi interrompido.':r.ocrErrorCode==='SOURCE_HASH_MISMATCH'?'O arquivo preservado requer conferência de integridade pela equipe.':r.ocrState==='QUEUED'?'Leitura enfileirada.':r.documentId&&!r.ocrState&&r.kind==='INVOICE'?'Arquivo preservado. A leitura depende da autorização, cota e disponibilidade do processamento.':null}))};}
  async library(t:TenantContext,input:any){
   this.enabled();if(t.accessMode||t.role!=='consulta'||!t.organizationId||!t.userId||!t.roleId||!input||Object.keys(input).some(k=>k!=='year')||!/^20\d{2}$/.test(input.year??''))throw new ForbiddenException('Biblioteca do cliente indisponível.');
+  await this.licenses.requireEntitlement(t.organizationId,'document_management');
   const r=await this.db.getClient().rpc('portal_invoice_library',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_year:input.year});
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo ou unidade indisponível.');
   if(r.error||!Array.isArray(r.data?.rows))throw new ServiceUnavailableException('Biblioteca ainda não atualizada. Tente novamente.');
@@ -48,6 +50,7 @@ export class PortalWorkspaceService {
  }
  async content(t:TenantContext,id:string){
   this.enabled();if(t.accessMode||t.role!=='consulta'||!uuid(id))throw new ForbiddenException();
+  await this.licenses.requireEntitlement(t.organizationId,'document_management');
   const client=this.db.getClient(),r=await client.rpc('portal_invoice_content_source',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_id:id});
   if(r.error?.code==='42501')throw new ForbiddenException('Fatura indisponível para este vínculo.');
   if(r.error||!r.data)throw new ServiceUnavailableException('Arquivo indisponível.');const d=r.data;
