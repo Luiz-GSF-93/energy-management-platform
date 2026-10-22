@@ -1,15 +1,16 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {apiRequest} from '@/app/lib/api/client';
+import {apiRequest,ApiError} from '@/app/lib/api/client';
 import {Button,Alert} from '@/app/components/ui';
 type Options={enabled:boolean;documents:{id:string;file_hash:string;original_filename:string}[];cost:{id:string;revision:number;hash:string;items:any[]}|null};
 export default function DocumentedSupplierSettlement({unitId,month,onSaved,disabled=false}:{unitId:string;month:string;onSaved:()=>void;disabled?:boolean}){
  const [plan,setPlan]=useState<any>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[mode,setMode]=useState('REGULAR_WITH_EXTRA'),[documentId,setDocument]=useState(''),[itemId,setItem]=useState(''),[quantity,setQuantity]=useState(''),[price,setPrice]=useState(''),[rate,setRate]=useState(''),[taxMode,setTaxMode]=useState('INSIDE'),[taxSource,setTaxSource]=useState(''),[reason,setReason]=useState(''),[ack,setAck]=useState(false),[final,setFinal]=useState(false),[ccee,setCcee]=useState(false),[pis,setPis]=useState(false),[uncertain,setUncertain]=useState<string|null>(null);
  const working=useRef(false),live=useRef(true),key=unitId+'|'+month,scope=useRef(key);scope.current=key;
+ const [refreshRequired,setRefreshRequired]=useState(false);
  const query=new URLSearchParams({consumerUnitId:unitId,month}).toString(),opts:Options|undefined=plan?.documentedSupplierOptions;
  useEffect(()=>{live.current=true;let active=true;apiRequest<any>('/api/v1/calculation-autofill?'+query).then(p=>{if(active&&p.unitId===unitId&&p.month===month)setPlan(p);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;live.current=false;};},[query,unitId,month]);
  async function save(){
-  if(disabled||working.current||!opts?.cost||!plan?.canPrepare||!ack||!final||uncertain)return;
+  if(disabled||working.current||refreshRequired||!opts?.cost||!plan?.canPrepare||!ack||!final||uncertain)return;
   working.current=true;setBusy(true);setError('');let sent=false;const requestId=crypto.randomUUID(),captured=key;
   try{
    const d=opts.documents.find(d=>d.id===documentId);if(!d)throw Error('Selecione a nota verificada desta competência.');
@@ -20,14 +21,23 @@ export default function DocumentedSupplierSettlement({unitId,month,onSaved,disab
    sent=true;const r=await apiRequest<any>('/api/v1/calculation-autofill',{method:'POST',body:{consumerUnitId:unitId,month,manual,requestId,token:preview.token}});
    if(!live.current||scope.current!==captured)return;if(r.current?.unitId!==unitId||r.current?.month!==month||!['PREPARED','PARTIAL'].includes(r.run?.state))throw Error('Resultado não confirmado. Consulte o histórico antes de repetir.');
    setPlan(r.current);setAck(false);setFinal(false);onSaved();
-  }catch(e){if(live.current&&scope.current===captured){if(sent)setUncertain(requestId);setError(e instanceof Error?e.message:'Conciliação não confirmada.');}}
+  }catch(e){if(live.current&&scope.current===captured){
+   // This exact server response is emitted before reserve: no write was started.
+   // Unknown/network/other failures still require the durable receipt check.
+   const beforeReserve=e instanceof ApiError&&e.status===409&&e.message==='Atualize as fontes antes de preparar.';
+   if(sent&&!beforeReserve)setUncertain(requestId);
+   if(beforeReserve){setRefreshRequired(true);setAck(false);setFinal(false);setCcee(false);}
+   setError(e instanceof Error?e.message:'Conciliação não confirmada.');
+  }}
   finally{working.current=false;if(live.current)setBusy(false);}
  }
  async function inspect(){if(working.current||!uncertain)return;working.current=true;setBusy(true);try{const h=await apiRequest<any>('/api/v1/calculation-autofill/history?'+query+'&page=0'),r=h.rows?.find((r:any)=>r.id===uncertain&&r.consumer_unit_id===unitId&&r.month===month);if(!r||!['PREPARED','PARTIAL'].includes(r.state))throw Error('A gravação ainda não está confirmada; não reenviar.');if(live.current){setUncertain(null);setError('');onSaved();}}catch(e){if(live.current)setError(e instanceof Error?e.message:'Histórico indisponível.');}finally{working.current=false;if(live.current)setBusy(false);}}
+ async function refresh(){if(working.current||!refreshRequired||uncertain)return;working.current=true;setBusy(true);const captured=key;try{const p=await apiRequest<any>('/api/v1/calculation-autofill?'+query);if(!live.current||scope.current!==captured)return;if(p.unitId!==unitId||p.month!==month)throw Error('Fontes fora da seleção.');setPlan(p);setDocument('');setItem('');setRefreshRequired(false);setError('');}catch(e){if(live.current&&scope.current===captured)setError(e instanceof Error?e.message:'Fontes indisponíveis.');}finally{working.current=false;if(live.current)setBusy(false);}}
  if(!opts?.enabled||!plan?.canPrepare)return null;
  const items=(opts.cost?.items??[]).filter((i:any)=>i.category===(mode==='SPOT'?'SUPPLIER_INVOICE':'SUPPLIER_EXTRA_ENERGY')&&i.scenario==='ACL'&&i.effect==='COST');
  return <details><summary>Conferir nota, alocação e tributos do fornecedor</summary><p>Conciliação documentada desta unidade e competência. Preserva a medição, o contrato e as fontes OCR. A aprovação financeira continua separada.</p>{error?<Alert variant='error'>{error}</Alert>:null}
- <fieldset disabled={disabled||busy||!!uncertain}><label>Modalidade da compra<select value={mode} onChange={e=>{setMode(e.target.value);setItem('');setAck(false);setFinal(false);}}><option value='REGULAR_WITH_EXTRA'>Contrato regular e compra excedente</option><option value='SPOT'>Compra avulsa integral da competência</option></select></label>
+ {refreshRequired?<Button disabled={disabled||busy||!!uncertain} onClick={()=>void refresh()}>Atualizar fontes da conciliação</Button>:null}
+ <fieldset disabled={disabled||busy||!!uncertain||refreshRequired}><label>Modalidade da compra<select value={mode} onChange={e=>{setMode(e.target.value);setItem('');setAck(false);setFinal(false);}}><option value='REGULAR_WITH_EXTRA'>Contrato regular e compra excedente</option><option value='SPOT'>Compra avulsa integral da competência</option></select></label>
  <label>Nota do fornecedor verificada<select value={documentId} onChange={e=>{setDocument(e.target.value);setAck(false);setFinal(false);}}><option value=''>Selecione</option>{opts.documents.map(d=><option key={d.id} value={d.id}>{d.original_filename}</option>)}</select></label>
  <label>Lançamento da nota em custos mensais<select value={itemId} onChange={e=>{setItem(e.target.value);setAck(false);setFinal(false);}}><option value=''>Selecione</option>{items.map(i=><option key={i.id} value={i.id}>{i.label} · R$ {i.amount}</option>)}</select></label>
  <p>Consumo medido da unidade: {String(plan.fields?.find((f:any)=>f.key==='consumptionTotal')?.value??'aguardando fonte')} kWh. Quantidade comprada e medição são preservadas separadamente.</p><label>Quantidade da nota (MWh)<input inputMode='decimal' value={quantity} onChange={e=>{setQuantity(e.target.value);setAck(false);}}/></label><label>Preço unitário da nota (R$/MWh)<input inputMode='decimal' value={price} onChange={e=>{setPrice(e.target.value);setFinal(false);}}/></label>
