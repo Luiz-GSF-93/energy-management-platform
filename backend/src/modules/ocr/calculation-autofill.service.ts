@@ -72,7 +72,7 @@ export class CalculationAutofillService{
     return rows.map(r=>({...r,evidenceFormat:'EVA_APPROVED',version_number:r.version}));
    }));
    history.push(...closingHistory.flat());
-   c.cceeEstimate=cceeCostEstimate(history,u,month,c.cost?.costs?.items??[]);
+   c.cceeEstimate=cceeCostEstimate(history,u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
   }
   let restored:any=null;
   if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
