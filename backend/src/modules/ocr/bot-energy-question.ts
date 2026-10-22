@@ -22,6 +22,7 @@ export function questionIntent(question:string){const q=questionText(question);r
 export function questionEvidence(question:string,evidence:AiEvidence[],publishedOfficial=false):AiEvidence[]{
  const intent=questionIntent(question),words=questionText(question).split(/[^a-z0-9]+/).filter(w=>w.length>3);
  const score=(e:AiEvidence)=>{
+  if(e.id==='contract-exposure'&&/contrat|flexibil|exced|limite|avuls|cobertura|proje/.test(questionText(question)))return 110;
   if(['context','library-availability','financial-coverage'].includes(e.id))return 100;
   if(intent==='supplier'&&e.id.startsWith('supplier-'))return 90;
   if(intent==='economy'&&e.id.startsWith('published-unit-'))return 90;

@@ -1,3 +1,4 @@
+import {calculateContractExposure} from './contract-exposure';
 import ExcelJS from 'exceljs';
 import {reportExcel,reportPdf} from '../reports/report.render';
 describe('captured forecast exports',()=>{
@@ -5,4 +6,13 @@ describe('captured forecast exports',()=>{
  const row={id:'test-report',payload_hash:'a'.repeat(64),body:{kind:'OPERATIONAL',formatVersion:'energy-report-1.0',generatedAt:'2026-09-02T00:00:00Z',header:{organizationName:'Test organization',customerName:'Test customer',unitName:'Test unit',unitCode:'TEST',distributor:'Test distributor'},period:{from:'2026-08',to:'2026-08'},totals:{acr:'100.00',aclAfterFees:'90.00',totalFees:'0.00',savingsAfterFees:'10.00',savingsPercent:'10.00'},months:[],coverage:{publishedMonths:0,requestedMonths:0,missingMonths:[]},invoices:[],composition:null,publications:[],events:[],unavailable:[],disclosure:'Synthetic fixture',context:'Tests only',annualProjection:forecast}};
  it('exports exact forecast strings and independent audit sheets',async()=>{const before=JSON.stringify(row),w=new ExcelJS.Workbook();await w.xlsx.load(await reportExcel(row) as any);expect(w.getWorksheet('Projeção anual')!.getCell('B2').value).toBe('3000.123456');expect(w.getWorksheet('Projeção anual')!.getCell('B3').value).toBe('3200.123456');expect(w.getWorksheet('Auditoria da previsão')!.getCell('B4').value).toBe('c'.repeat(64));expect(JSON.stringify(row)).toBe(before);});
  it('renders the captured forecast without mutating historical inputs',async()=>{const before=JSON.stringify(row),pdf=await reportPdf(row);expect(pdf.subarray(0,4).toString()).toBe('%PDF');expect(JSON.stringify(row)).toBe(before);});
+ it('exports the same captured contract exposure without computing new financial totals',async()=>{
+ const scope={organizationId:'test-org',customerId:'test-client',unitId:'test-unit'};
+ const exposure=calculateContractExposure(scope,[{month:'2026-09',predictedKwh:'150000'}],[{...scope,contractId:'test-contract',revision:'1',sourceHash:'a'.repeat(64),source:'Synthetic annex',from:'2026-01-01',to:'2026-12-31',mode:'REGULAR',confirmed:true,basis:'MONTHLY_MWH',volume:'100',minimumPercent:'50',maximumPercent:'140'}],'2026-08-01T00:00:00Z');
+ const captured={...row,body:{...row.body,annualProjection:{...forecast,contractExposure:exposure}}},before=JSON.stringify(captured),w=new ExcelJS.Workbook();
+ await w.xlsx.load(await reportExcel(captured) as any);
+ const sheet=w.getWorksheet('Limites contratuais')!;
+ expect(sheet.getCell('C2').value).toBe('150.000000');expect(sheet.getCell('F2').value).toBe('140.000000');expect(sheet.getCell('H2').value).toBe('10.000000');
+ expect((await reportPdf(captured)).subarray(0,4).toString()).toBe('%PDF');expect(JSON.stringify(captured)).toBe(before);
+ });
 });

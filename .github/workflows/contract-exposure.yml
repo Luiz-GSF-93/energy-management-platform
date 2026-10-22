@@ -1,0 +1,31 @@
+name: Contract exposure forecasts and operational reports
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/energy-forecast/**'
+      - 'backend/src/modules/reports/**'
+      - 'backend/src/modules/bot-reports/**'
+      - 'backend/src/modules/ocr/bot-energy-question.ts'
+      - 'frontend/app/backoffice/reports/**'
+      - '.github/workflows/contract-exposure.yml'
+permissions:
+  contents: read
+jobs:
+  forecast-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/energy-forecast src/modules/bot-reports src/modules/ocr/bot-energy-question.spec.ts
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

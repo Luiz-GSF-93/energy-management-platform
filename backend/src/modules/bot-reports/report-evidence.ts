@@ -55,6 +55,7 @@ export function reportEvidence(a:any,scope:{unitId:string;unitName:string;audien
   }
  }
  if(consumption&&consumption.length===invoices.length&&a.totals){const sum=consumption.reduce((n,x)=>n+scaled(x.value),0n);if(sum>0n)add('specific-period','Custo específico ACL ponderado do período R$/kWh',decimal((scaled(a.totals.aclAfterFees)*1000000n+sum/2n)/sum),REPORT_BOT_FORMULA+' · custo total publicado / consumo publicado; inclui honorários');}
+ if(forecast?.contractExposure)add('contract-exposure','EVA · limites contratuais projetados e orientação, sem compra automática',forecast.contractExposure,'Previsão validada e publicada · volume em MWh, não demanda em kW; sem presumir multa ou custo');
  if(forecast)add('published-forecast','Previsão publicada; estimativa, não medição',forecast,'Motor de previsão · versão publicada; não substituir por rascunho validado');
  return out;
 }
