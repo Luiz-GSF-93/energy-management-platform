@@ -16,7 +16,7 @@ export class CceeDataService{
   if(!t?.userId||!t.organizationId||(t.scope as string)==='global'||!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('Leituras CCEE exigem backoffice organizacional.');
   if(t.accessMode!=='platform_operation'&&(!t.permissions.includes(CCEE_DATA_PERMISSIONS.view)||!t.permissions.includes(CCEE_DATA_PERMISSIONS[action])))throw new ForbiddenException('Permissão CCEE ausente.');
   if(action==='review'&&!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('Revisão exige Gestor ou Administrador.');
-  await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
+  try{await this.licenses.requireEntitlement(t.organizationId,'ccee_data');}catch(e){if(e instanceof ForbiddenException)throw new ForbiddenException('Dados CCEE precisa estar habilitado na licença vigente desta organização e configurado separadamente.');throw e;}
  }
  async rpc(name:string,args:Record<string,unknown>){
   const{data,error}=await this.db.getClient().rpc(name,args);

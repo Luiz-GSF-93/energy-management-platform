@@ -10,6 +10,11 @@ on:
       - 'frontend/app/components/Ccee*'
       - 'frontend/app/backoffice/platform-costs/CceeMetrics.tsx'
       - 'frontend/test/ccee*'
+      - 'frontend/app/lib/api/plans.ts'
+      - 'frontend/app/components/LicenseFromPlan.tsx'
+      - 'frontend/app/backoffice/plans/**'
+      - 'backend/src/modules/plans/**'
+      - 'backend/src/modules/licenses/**'
       - '.github/workflows/ccee-private-readings.yml'
 permissions:
   contents: read
@@ -27,6 +32,8 @@ jobs:
       - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/platform-costs/service-catalog.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts
         working-directory: backend
       - run: node test/database/ccee-dri.test.mjs
+        working-directory: backend
+      - run: node test/database/ccee-data-license.test.mjs
         working-directory: backend
       - name: Disposable PostgreSQL DRI concurrency lab
         working-directory: backend
@@ -46,6 +53,8 @@ jobs:
       - run: node test/ccee-dri.cjs
         working-directory: frontend
       - run: node test/ccee-data.cjs
+        working-directory: frontend
+      - run: node test/license-governance.cjs
         working-directory: frontend
       - run: node test/ccee-reconciliation.cjs
         working-directory: frontend

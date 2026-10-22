@@ -1,0 +1,24 @@
+Dados CCEE: habilitação independente por organização
+
+O catálogo expõe ccee_data separadamente de free_market_management e ccee_registrations.
+Disponibilidade no plano não ativa o serviço: uma nova licença, chamada legada ou seleção
+de plano mantém Dados CCEE desmarcado. A seleção existente é preservada em clientes legados.
+As colunas são adicionadas como false; a migração não habilita organizações nem concede RBAC.
+
+Aplicar 20261212_ccee_data_license.sql antes do código. Somente o administrador da plataforma
+pode alterar plano/licença; a rotina existente preserva revisão, vigência, cotas e auditoria.
+O módulo requer licença vigente ccee_data=true. A fila, validação de cada página e persistência
+usam a mesma fronteira SQL. Sem fallback para a licença de Gestão do Mercado Livre.
+
+Depois da seleção explícita por organização, configurar ccee_data.view/manage/review nos
+papéis autorizados, credenciais/certificado, representação e vínculos específicos por serviço.
+Não copiar credenciais, vínculos ou dados entre organizações. Habilitação de módulo não
+concede acesso aos dados privados de outro participante. DRI usa revisão independente do
+vínculo; importar dados oficiais homologados não exige aprovação humana por importação.
+
+Ativação da Expert Energy e concessão pontual das permissões são operações administrativas
+separadas da migração. Nenhuma outra organização deve receber ativação automática.
+
+Testes: backend/test/database/ccee-data-license.test.mjs; src/modules/ccee/ccee-data.spec.ts;
+frontend/test/license-governance.cjs. O fluxo não aprova/publica fechamentos financeiros,
+não consulta provedores durante a implementação e não altera certificados existentes.

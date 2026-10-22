@@ -32,6 +32,13 @@ describe('CCEE R1 closed preparation boundaries',()=>{
   const rpc=jest.fn(),s=new CceeDataService({getClient:()=>({rpc})}as any,{requireEntitlement:jest.fn().mockRejectedValue(Error('license'))}as any);
   await expect(s.workspace(context)).rejects.toThrow('license');expect(rpc).not.toHaveBeenCalled();
  });
+ it('requires the independent CCEE capability even when operating from the platform',async()=>{
+  process.env.CCEE_DATA_WORKSPACE_ENABLED='true';
+  const rpc=jest.fn().mockResolvedValue({data:{organizationId:'org',bindings:[],jobs:[]}}),requireEntitlement=jest.fn();
+  const s=new CceeDataService({getClient:()=>({rpc})}as any,{requireEntitlement}as any);
+  await s.workspace({...context,accessMode:'platform_operation',permissions:[]});
+  expect(requireEntitlement).toHaveBeenCalledWith('org','ccee_data');expect(requireEntitlement).toHaveBeenCalledTimes(1);
+ });
  it('never permits caller-selected endpoints, tenants, environments or open months',()=>{
   expect(()=>readingCommand({requestId:id,kind:'MEASUREMENTS',month:'2021-01',authorizationId:id,measurementKind:'FINAL',environment:'PILOT'})).toThrow();
   expect(()=>readingCommand({requestId:id,kind:'PLD',month:'2021-01',organizationId:'foreign'})).toThrow();expect(()=>cceeMonth('2099-01')).toThrow();
