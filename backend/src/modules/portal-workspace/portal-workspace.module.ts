@@ -23,6 +23,8 @@ class PortalWorkspaceController {
  @Post('invoices/:id/payment-declaration') declaration(@Tenant() t:TenantContext,@Param('id') id:string,@Body() body:unknown){return this.presentation.declare(t,id,body);}
  @Get('context') @Header('Cache-Control','no-store') context(@Tenant() t:TenantContext){return this.service.action(t,'context');}
  @Get('service-context') @Header('Cache-Control','no-store') serviceContext(@Tenant() t:TenantContext){return this.service.action(t,'service_context');}
+ @Post('invoices/library') @Header('Cache-Control','no-store') library(@Tenant() t:TenantContext,@Body() b:any){return this.service.library(t,b);}
+ @Get('invoices/:id/content') @Header('Cache-Control','private, no-store') @Header('X-Content-Type-Options','nosniff') content(@Tenant() t:TenantContext,@Param('id') id:string){return this.service.content(t,id);}
  @Get('invoices') @Header('Cache-Control','no-store') invoices(@Tenant() t:TenantContext){return this.service.list(t);}
  @Post('uploads') @UseInterceptors(FileInterceptor('file',{limits:{fileSize:MAX_DOCUMENT_BYTES,files:1,fields:6,fieldSize:256,parts:7}})) upload(@Tenant() t:TenantContext,@Body() b:any,@UploadedFile() f:DocumentFile){return this.service.upload(t,b,f);}
  @Get('invoices/:id/readout') @Header('Cache-Control','no-store') readout(@Tenant() t:TenantContext,@Param('id') id:string,@Query() q:Record<string,string>){return this.service.readout(t,id,q);}

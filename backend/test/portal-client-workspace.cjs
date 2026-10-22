@@ -191,5 +191,6 @@ async function database(){
  await deny(()=>db.exec('DELETE FROM portal_document_events'));
  await db.exec('SET ROLE authenticated');await deny(()=>db.exec('SELECT * FROM portal_notification_outbox'));await deny(()=>call(client,role,'context'));await db.exec('RESET ROLE');
  await require('./ocr-identity-resume.cjs')(db,admin,adminRole,client,role,ok,deny);
+ await require('./portal-invoice-library.cjs')(db,client,role,foreign,foreignRole,ok,deny);
  console.log(checks+' portal workspace SQL checks passed');
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

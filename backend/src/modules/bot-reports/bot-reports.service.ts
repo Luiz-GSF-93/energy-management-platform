@@ -48,7 +48,7 @@ export class BotReportsService {
    const approved=await this.financial.portalApprovedPublications(period,t);
    portalProof={period,signature:JSON.stringify(approved.map((p:any)=>[p.meta.id,p.meta.payloadHash,p.meta.status]))};
    analytics=clientReportAnalytics(data,t.organizationId,period,input.unitId,approved);
-   if(this.insights){const details=await this.insights.read(t,period.from,period.to,input.unitId);const visible=new Set(analytics.publications.map((p:any)=>p.id));analytics.clientInsights=details.rows.filter((r:any)=>visible.has(r.publicationId));analytics.clientPaymentDeclarations=details.paymentDeclarations;analytics.clientPaymentNotice=details.paymentNotice;insightProof={period,unitId:input.unitId,signature:JSON.stringify(details)};}
+   if(this.insights){const details=await this.insights.read(t,period.from,period.to,input.unitId);const visible=new Set(analytics.publications.map((p:any)=>p.id));analytics.clientInsights=details.rows.filter((r:any)=>visible.has(r.publicationId));analytics.clientWasteCorrections=details.corrections;analytics.clientPaymentDeclarations=details.paymentDeclarations;analytics.clientPaymentNotice=details.paymentNotice;insightProof={period,unitId:input.unitId,signature:JSON.stringify(details)};}
    if(this.config.get('ENERGY_FORECAST_ENABLED')==='true'){const published=await this.clientForecast.list(t);forecast=published.rows.filter((f:any)=>f.unitId===input.unitId&&f.asOfMonth<=period.to).sort((a:any,b:any)=>b.asOfMonth.localeCompare(a.asOfMonth)||b.version-a.version)[0]??null;}
    scope={unitId:input.unitId,unitName:data.units.find((u:any)=>u.id===input.unitId)?.name,audience};
   }else{

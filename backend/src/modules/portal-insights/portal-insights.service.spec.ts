@@ -2,7 +2,7 @@ import {PortalInsightsService} from './portal-insights.module';
 describe('published client insight authorization',()=>{
  const tenant:any={organizationId:'org',userId:'user',roleId:'role',role:'consulta'};
  function fixture(binding:any={enabled:true,organizationId:'org',customerId:'client'},rows:any[]=[]){
-  const rpc=jest.fn().mockResolvedValueOnce({data:binding,error:null}).mockResolvedValueOnce({data:rows,error:null});
+  const rpc=jest.fn().mockResolvedValueOnce({data:binding,error:null}).mockResolvedValueOnce({data:rows,error:null}).mockResolvedValueOnce({data:[],error:null});
   return {rpc,service:new PortalInsightsService({getClient:()=>({rpc})} as any)};
  }
  it('rejects internal and platform callers before reading any data',async()=>{
@@ -36,7 +36,7 @@ describe('published client insight authorization',()=>{
   try{
    const {rpc,service}=fixture();rpc.mockResolvedValueOnce({data:[{id:'receipt',unitId:'unit',month:'2026-03',basis:'CLIENT_DECLARATION_NOT_BANK_CONFIRMATION'}],error:null});
    const result=await service.read(tenant,'2026-03','2026-04','unit');expect(result.paymentDeclarations).toHaveLength(1);
-   expect(rpc.mock.calls[2]).toEqual(['portal_presentation_action',{p_org:'org',p_actor:'user',p_role:'role',p_action:'payment_evidence',p_id:null,p_body:{from:'2026-03',to:'2026-04',unitId:'unit'}}]);
+   expect(rpc.mock.calls[3]).toEqual(['portal_presentation_action',{p_org:'org',p_actor:'user',p_role:'role',p_action:'payment_evidence',p_id:null,p_body:{from:'2026-03',to:'2026-04',unitId:'unit'}}]);
    const failed=fixture();failed.rpc.mockResolvedValueOnce({data:null,error:{code:'42501'}});await expect(failed.service.read(tenant,'2026-03','2026-04','unit')).rejects.toThrow('Declarações do cliente indisponíveis');
   }finally{if(before===undefined)delete process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED;else process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED=before;}
  });
