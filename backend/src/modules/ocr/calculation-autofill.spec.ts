@@ -92,3 +92,8 @@ describe('V3 source conflicts do not become an automatic closing',()=>{
   expect(JSON.stringify(c.captured)).toBe(before);expect(p.sourcePreparation).toEqual(c.sourcePreparation);
  });
 });
+
+it('displays an integral documented purchase without dereferencing a nonexistent regular IPCA memory',()=>{
+ const old=process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED='true';
+ try{const {c,library}=fixture();(c as any).contractDraft={format:'documented-supplier-settlement-1',mode:'SPOT',state:'COMPLETE',requirements:[],source:{documentId:'nf',fileHash:'a'.repeat(64)},memory:null,supplier:{contract:null,pricePerMwh:'245.38',contractedMwh:'105.0700',regularAmount:'25782.08',extraAmount:'0.00',totalAmount:'25782.08',taxTreatment:'COMPONENTS_CONFIRMED',requirements:[]}};const p=calculationAutofillPlan(c,[library]);expect(p.fields.find(f=>f.key==='supplier:total')).toMatchObject({value:'25782.08',source:expect.stringContaining('Nota verificada nf')});expect(p.fields.find(f=>f.key==='supplier:contract')?.value).toBe('Compra avulsa integral');expect(p.financialApproval).toBe(false);}finally{if(old===undefined)delete process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;else process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED=old;}
+});

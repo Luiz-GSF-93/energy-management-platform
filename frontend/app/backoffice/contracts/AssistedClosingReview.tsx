@@ -1,4 +1,5 @@
 'use client';
+import DocumentedSupplierSettlement from './DocumentedSupplierSettlement';
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {useAuth} from '@/app/providers';
@@ -76,7 +77,7 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
  const publication=h.publications?.find(p=>p.closingId===row?.id);
  const report=row?.report,final=!!row&&['APPROVED','REJECTED','SUPERSEDED'].includes(row.state),ready=row?.state==='READY_FOR_REVIEW'&&report?.approvalEligible;
  return <section className={styles.layout} data-eva-assisted='true'><div className={styles.report}>
- <Card title='Fechamento assistido pela EVA'><p role='status'>{busy?'A EVA está conferindo as fontes…':row?row.state==='APPROVED'&&publication?.state==='PUBLISHED'?'Aprovado e disponibilizado':labels[row.state]:'A EVA pode preparar o relatório desta competência.'}</p><p>Competência {month} · todas as unidades do cliente · {h.approvalPublishes?'aprovação com disponibilização ao cliente vinculado.':'decisão interna do backoffice.'}</p>
+ <Card title='Fechamento assistido pela EVA'>{h.canPrepare&&!final&&!ready?<DocumentedSupplierSettlement key={unitId+month+(row?.id??'')} unitId={unitId} month={month} disabled={busy} onSaved={()=>void prepare()}/>:null}<p role='status'>{busy?'A EVA está conferindo as fontes…':row?row.state==='APPROVED'&&publication?.state==='PUBLISHED'?'Aprovado e disponibilizado':labels[row.state]:'A EVA pode preparar o relatório desta competência.'}</p><p>Competência {month} · todas as unidades do cliente · {h.approvalPublishes?'aprovação com disponibilização ao cliente vinculado.':'decisão interna do backoffice.'}</p>
  {error?<Alert variant='error'>{error}</Alert>:null}
  {!row||row.state==='REJECTED'?<Button disabled={busy||commercialUncertain.current||!h.canPrepare} onClick={prepare}>{row?'Preparar nova versão após correções':'Preparar relatório pela EVA'}</Button>:null}
  {row?<><p>Versão {row.version} · Preenchido pela EVA</p><p>{report.justification}</p>

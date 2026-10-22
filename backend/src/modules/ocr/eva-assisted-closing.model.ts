@@ -1,3 +1,4 @@
+import {documentedSettlementEnabled} from './documented-tariff-period';
 import {contractClosingDraftEnabled} from './contract-closing-draft';
 import {indexMemoryHash} from '../contracts/services/contract-index-memory.model';
 import {sourcePreparationEnabled} from './source-preparation-v3';
@@ -68,8 +69,9 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    // The reference is an explicitly estimated energy price, never an assertion of a current contract.
    if(p.referenceUsed||Object.keys(p.manualOverrides??{}).length){estimated=true;add('Preço/condição de referência ou valor comercial do operador usado na competência atual; sem prorrogar contrato.');}
    const supplierTax=field(p,'supplier:tax')?.value;
-   if(!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)&&!e.comparative){ownMissing.push('Fornecedor: o preço de energia está proposto, mas a composição final de tributos/encargos não está demonstrada.');}
-   if(e.comparative&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)){estimated=true;add('Fornecedor: preço usado como referência comparativa, com composição fiscal não demonstrada. Não representa isenção ou tributos incluídos confirmados.');}
+   const documentedTax=documentedSettlementEnabled()&&draft?.format==='documented-supplier-settlement-1'&&draft.state==='COMPLETE'&&supplierTax==='COMPONENTS_CONFIRMED';
+   if(!documentedTax&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)&&!e.comparative){ownMissing.push('Fornecedor: o preço de energia está proposto, mas a composição final de tributos/encargos não está demonstrada.');}
+   if(e.comparative&&!documentedTax&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)){estimated=true;add('Fornecedor: preço usado como referência comparativa, com composição fiscal não demonstrada. Não representa isenção ou tributos incluídos confirmados.');}
    let extraAcl=0n,extraAcr=0n;
    const costs=field(p,'costs:monthly')?.value,rawCosts=p.fields?.find((f:any)=>f.key==='costs:monthly'),proof=e.comparative?.invoiceProof;
    const invoiceOnly=proof!==undefined&&e.comparative?.method==='SAME_INVOICE_AMOUNTS_V2'&&e.comparative.amount!==null&&!e.comparative.missing.length&&proof.documentId===c?.document?.id&&/^[a-f0-9]{64}$/.test(proof.sourceHash)&&proof.sourceHash===c?.document?.file_hash&&money(proof.amount)===invoice&&c.cost==null&&(!rawCosts||rawCosts.state==='PENDING'&&rawCosts.value===null&&!rawCosts.source);
@@ -84,7 +86,8 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
     if(draft?.state==='COMPLETE'&&draft.consumedCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item)))continue;
     if((item.scenario==='ACL'||e.comparative)&&item.source?.includes(c.document.id))continue;
     if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
-    if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte ou tratamento final demonstrado.');continue;}
+    const confirmedFinal=documentedTax&&(draft.confirmedFinalCostSources??[]).some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item));
+    if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!confirmedFinal&&!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte ou tratamento final demonstrado.');continue;}
     const amount=money(item.amount);if(amount<0n)throw Error();if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
    }
    row.aclBeforeFees=fmt(invoice+supplier+extraAcl);if(acr!==null)row.acr=fmt(acr+extraAcr);

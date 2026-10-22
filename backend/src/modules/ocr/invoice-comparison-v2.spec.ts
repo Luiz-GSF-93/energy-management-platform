@@ -40,3 +40,8 @@ it('keeps a historical TUSD complement and its amount once instead of repricing 
  const x=setup();x.layout.operations.push(row('TUSD_BILLING_ADJUSTMENT','24.15','historical-jan'));x.p.operational.invoice.amount='204.15';
  const r=x.run();expect(r.amount).toBe('219.15');expect(r.retained.filter(i=>i.source==='historical-jan')).toEqual([expect.objectContaining({amount:'24.15'})]);expect(r.lines.some(i=>i.quantitySource==='historical-jan')).toBe(false);
 });
+
+it('uses documented cycle periods end-to-end without repricing reactive amounts or taxes',()=>{
+ const prior=process.env.EVA_DOCUMENTED_SETTLEMENTS_ENABLED;process.env.EVA_DOCUMENTED_SETTLEMENTS_ENABLED='true';
+ try{const x=setup();x.c.month='2026-04';x.lib.profile.endDate='2026-04-23';x.layout.fields=[['previousReading','31/03/2026'],['currentReading','30/04/2026'],['billingDays','30']].map(([name,text])=>({name,source:'dates:'+name,value:{text,issues:[]}}));const next=structuredClone(x.lib);next.id='next';next.profile.startDate='2026-04-24';next.profile.endDate='2026-12-31';next.profile.items[0].value='2';next.profile.items[1].value='1';const r=invoiceComparisonV2(x.c,x.p,[x.lib,next]);expect(r.amount).toBe('230.00');expect(r.lines[0].proportional.segments.map((s:any)=>s.days)).toEqual([23,7]);expect(r.taxes![0].amount).toBe('12.00');expect(r.retained.find(i=>i.kind==='REACTIVE').amount).toBe('20.00');}finally{if(prior===undefined)delete process.env.EVA_DOCUMENTED_SETTLEMENTS_ENABLED;else process.env.EVA_DOCUMENTED_SETTLEMENTS_ENABLED=prior;}
+});

@@ -41,6 +41,7 @@ export function taxMemory(unit:any,month:string,parameters:any[],tariffs:TariffP
  let base=0n,error='';const references:TaxMemory['lines'][number]['references']=[];
  for(const item of items){const refs=scoped.filter(r=>r.id===item.parameterId&&r.scenario===p.scenario&&r.kind!=='TAX');const ref=refs[0];
  if(refs.length!==1||ref.status!=='APPROVED'||ref.revision!==item.revision||!day(ref.start_date)||!day(ref.end_date)||ref.start_date>p.start_date||ref.end_date<p.end_date){error='Uma referência foi alterada, retirada ou não cobre a vigência do tributo.';break;}
+ if(p.component_code==='ICMS'&&ref.component_code==='TUSD_DEMAND_UNUSED'&&item.operation==='INCLUDE'){error='Demanda não utilizada não integra a base do ICMS. Revise a incidência desta parcela.';break;}
  if(item.operation==='EXCLUDE'){references.push({id:ref.id,revision:ref.revision,label:ref.label,operation:'EXCLUDE',exactAmount:null});continue;}
  const lines=baseMemory.lines.filter(l=>l.parameterId===ref.id&&l.revision===ref.revision&&l.scenario===p.scenario);const line=lines[0];
  if((ref.kind!=='TARIFF'&&!(ref.kind==='COST'&&ref.monetary_source&&operational?.lines.some(l=>l.parameterId===ref.id&&l.revision===ref.revision)))||ref.treatment!=='NET'||ref.direction!=='DEBIT'||lines.length!==1||line.treatment!=='NET'||line.startDate>period.start||line.endDate<period.end||baseMemory.pending.some(l=>l.parameterId===ref.id)){error='Uma rubrica incluída não possui memória líquida válida para esta competência. Revise tarifas, medições e tratamento tributário.';break;}

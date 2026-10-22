@@ -1,3 +1,4 @@
+import {documentedSettlementEnabled} from './documented-tariff-period';
 import {contractClosingDraftEnabled} from './contract-closing-draft';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
@@ -21,7 +22,8 @@ export class EvaAssistedClosingService{
   if(!t?.organizationId||!t.userId||!t.roleId)throw new ForbiddenException('Contexto organizacional necessário.');
   const disclose=action==='decide'&&this.publicationEnabled()&&body.disclose===true;
   const contractDraft=contractClosingDraftEnabled();
-  const r=await this.db.getClient().rpc(contractDraft?'eva_contract_closing_action':disclose?'decide_eva_with_publication':'eva_assisted_closing_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',...(!disclose||contractDraft?{p_action:action}:{}),...(contractDraft?{p_disclose:disclose}:{}),p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body});
+  const documented=documentedSettlementEnabled()&&contractDraft;
+  const r=await this.db.getClient().rpc(documented?'eva_documented_closing_action':contractDraft?'eva_contract_closing_action':disclose?'decide_eva_with_publication':'eva_assisted_closing_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',...(!disclose||contractDraft?{p_action:action}:{}),...(contractDraft?{p_disclose:disclose}:{}),p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body});
   if(!r.error&&r.data!=null)return r.data;
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso restrito ao backoffice autorizado.');
   if(['23505','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
@@ -72,6 +74,7 @@ export class EvaAssistedClosingService{
    entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:c.c,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:invoiceComparisonV2(c.c,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});
   }
   if(contractClosingDraftEnabled())for(const e of entries){const memory=e.plan?.contractDraft?.memory;if(memory&&!(sources.contractMemories??[]).some((m:any)=>m.id===memory.id&&m.organization_id===t.organizationId&&m.customer_id===primary.customer_id&&m.consumer_unit_id===e.unitId&&autofillHash(m)===memory.hash))throw new ConflictException('A memória contratual mudou durante a captura. Reconfira as fontes antes de preparar.');}
+  if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   const r=await this.rpc('reserve',q,t,b.requestId,{basis,hash,report,sources});
   if(!r.acquired)return {row:r.row,replayed:true};
@@ -88,7 +91,7 @@ export class EvaAssistedClosingService{
   if(!b||Object.keys(b).sort().join(',')!=='acknowledge,action,consumerUnitId,hash,id,month,note'||b.acknowledge!==true||!['publish','withdraw'].includes(b.action)||!uuid(b.id)||typeof b.hash!=='string'||!/^[a-f0-9]{64}$/.test(b.hash)||typeof b.note!=='string'||b.note.trim().length<20||b.note.length>2000)throw new BadRequestException('Confira a divulgação e a justificativa.');
   const q=this.scope({consumerUnitId:b.consumerUnitId,month:b.month}),h=await this.rpc('history',q,t,null,{page:0});
   if(!h.canManage)throw new ForbiddenException('Divulgação restrita ao gestor autorizado.');
-  const r=await this.db.getClient().rpc(contractClosingDraftEnabled()?'eva_contract_closing_action':'eva_closing_publication_action',{...(contractClosingDraftEnabled()?{p_disclose:false}:{}),p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:b.action,p_unit:q.consumerUnitId,p_month:q.month,p_id:b.id,p_body:{hash:b.hash,note:b.note.trim()}});
+  const r=await this.db.getClient().rpc(documentedSettlementEnabled()&&contractClosingDraftEnabled()?'eva_documented_closing_action':contractClosingDraftEnabled()?'eva_contract_closing_action':'eva_closing_publication_action',{...(contractClosingDraftEnabled()?{p_disclose:false}:{}),p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:b.action,p_unit:q.consumerUnitId,p_month:q.month,p_id:b.id,p_body:{hash:b.hash,note:b.note.trim()}});
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso à divulgação indisponível.');if(r.error)throw new ConflictException('Divulgação não confirmada. Confira o histórico e a versão aprovada.');return {publication:r.data};
  }
 
