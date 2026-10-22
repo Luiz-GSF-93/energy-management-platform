@@ -48,6 +48,8 @@ on:
       - 'backend/test/eva-assisted-closing.cjs'
       - 'frontend/app/backoffice/contracts/AssistedClosingReview*'
       - 'frontend/test/eva-assisted-closing.cjs'
+      - 'frontend/app/backoffice/contracts/CceeCostReview.tsx'
+      - 'frontend/test/ccee-cost-review.cjs'
       - 'backend/src/modules/ocr/calculation-operational-proposal*'
       - 'frontend/app/backoffice/contracts/OperationalProposalView.tsx'
       - 'backend/src/modules/ocr/ocr-resolution.service.ts'
@@ -162,7 +164,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
+      - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/ccee-cost-review.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
