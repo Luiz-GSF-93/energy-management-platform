@@ -4,6 +4,9 @@ on:
     paths:
       - 'backend/src/modules/auth/**'
       - 'backend/src/common/guards/client-portal*'
+      - 'backend/src/common/guards/portal-presentation-access.spec.ts'
+      - 'backend/src/modules/client-portal-licenses/**'
+      - 'backend/src/modules/portal-workspace/portal-presentation*'
       - 'frontend/app/auth/**'
       - 'frontend/app/lib/auth/**'
       - 'frontend/app/lib/api/auth.ts'
@@ -27,7 +30,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.controller.platform-context.spec.ts src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.controller.platform-context.spec.ts src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts src/common/guards/portal-presentation-access.spec.ts src/modules/client-portal-licenses/portal-license.spec.ts src/modules/portal-workspace/portal-presentation.spec.ts
         working-directory: backend
       - run: npm run build
         working-directory: backend
