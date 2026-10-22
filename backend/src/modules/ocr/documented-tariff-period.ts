@@ -14,15 +14,18 @@ export function documentedTariffPeriod(rows:any[],unit:any,month:string,layout:a
  const fields=layout.fields??[],find=(key:string)=>fields.filter((f:any)=>f.name===key);
  const starts=find('previousReading'),ends=find('currentReading');
  if(!starts.length&&!ends.length)return null;
- if(starts.length!==1||ends.length!==1||[...starts,...ends].some(f=>!f.source||!f.value?.text?.trim()||f.value.issues?.some((i:string)=>i!=='MISSING_CONFIDENCE')))throw Error('Datas do ciclo ausentes, ambíguas ou sem fonte íntegra.');
+ // The key/value and table projections can corroborate the same printed date.
+ // Multiple verified sources are not multiple billing cycles; differing dates still block.
+ const unique=(fs:any[])=>new Set(fs.map(f=>f.value?.text?.trim())).size===1;
+ if(!starts.length||!ends.length||[...starts,...ends].some(f=>!f.source||!f.value?.text?.trim()||f.value.issues?.some((i:string)=>i!=='MISSING_CONFIDENCE'))||!unique(starts)||!unique(ends))throw Error('Datas do ciclo ausentes, ambíguas ou sem fonte íntegra.');
  const previous=date(starts[0].value.text.trim()),end=date(ends[0].value.text.trim()),a=Date.parse(previous+'T00:00:00Z'),b=Date.parse(end+'T00:00:00Z'),days=(b-a)/dayMs;
  if(!Number.isInteger(days)||days<1||days>62||end.slice(0,7)!==month)throw Error('Ciclo de leitura incompatível com a competência.');
- const printed=find('billingDays');if(printed.length>1||printed.length===1&&(!/^\d+$/.test(printed[0].value?.text?.trim()??'')||Number(printed[0].value.text.trim())!==days))throw Error('Dias impressos divergem das datas de leitura.');
+ const printed=find('billingDays');if(printed.length&&(!unique(printed)||printed.some((f:any)=>!f.source||f.value?.issues?.some((i:string)=>i!=='MISSING_CONFIDENCE')||!/^\d+$/.test(f.value?.text?.trim()??'')||Number(f.value.text.trim())!==days)))throw Error('Dias impressos divergem das datas de leitura.');
  const scoped=rows.filter(r=>r.organization_id===unit.organization_id),heads=scoped.filter(r=>!scoped.some(n=>n.previous_id===r.id));
  const eligible=heads.filter(r=>{const p=r.profile;try{validateProfile(p);date(p.startDate);date(p.endDate);}catch{return false;}return p.taxTreatment==='NET'&&p.source?.trim()&&normalize(p.distributor).replace(/^NEOENERGIAELEKTRO$/,'ELEKTRO')===normalize(unit.distributor).replace(/^NEOENERGIAELEKTRO$/,'ELEKTRO')&&normalize(p.group)===normalize(unit.tariff_group)&&normalize(p.subgroup)===normalize(unit.tariff_subgroup)&&p.modality===unit.tariff_modality&&(p.consumptionClass==='GENERAL'||normalize(p.consumptionClass)===normalize(unit.consumption_class));});
  const segments:TariffPeriod['segments']=[];
  for(let at=a+dayMs;at<=b;at+=dayMs){const d=new Date(at).toISOString().slice(0,10),matches=eligible.filter(r=>r.profile.startDate<=d&&r.profile.endDate>=d);if(matches.length!==1)throw Error('Tarifa líquida única não demonstrada para '+d+'. Confira lacunas, sobreposições e origem fiscal.');const record=matches[0],last=segments[segments.length-1];if(last?.record.id===record.id&&last.record.version===record.version){last.end=d;last.days++;}else segments.push({start:d,end:d,days:1,record});}
- return {start:new Date(a+dayMs).toISOString().slice(0,10),end,days,readingSources:[starts[0].source,ends[0].source,...printed.map((f:any)=>f.source)],segments};
+ return {start:new Date(a+dayMs).toISOString().slice(0,10),end,days,readingSources:[...new Set([...starts,...ends,...printed].map((f:any)=>f.source))],segments};
 }
 export function proportionalTariff(period:TariffPeriod,item:any,quantity:string){
  let weighted=0n;const proofs:any[]=[];
