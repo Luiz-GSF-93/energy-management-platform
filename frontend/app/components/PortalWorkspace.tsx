@@ -33,7 +33,7 @@ export default function PortalWorkspace({settings=false,invoices=false}:{setting
   apiRequest<{organizationId:string;name:string;logo:string}>('/api/v1/organization-branding',{cache:'no-store',signal:abort.signal}).then(b=>{if(live&&b.organizationId===org&&typeof b.name==='string'&&typeof b.logo==='string'&&(b.logo===''||/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(b.logo)))setBranding(b);}).catch(()=>{/* Name from the authenticated context remains the safe fallback. */});
   return()=>{live=false;abort.abort();};
  },[org,attempt]);
- useEffect(()=>{if(!settings&&!invoices&&window.location.hash==='#minhas-faturas')router.replace('/portal/invoices');},[settings,invoices,router]);
+ useEffect(()=>{const followInvoiceLink=()=>{if(!settings&&!invoices&&window.location.hash==='#minhas-faturas')router.replace('/portal/invoices');};followInvoiceLink();window.addEventListener('hashchange',followInvoiceLink);return()=>window.removeEventListener('hashchange',followInvoiceLink);},[settings,invoices,router]);
  const workspace=process.env.NEXT_PUBLIC_PORTAL_CLIENT_WORKSPACE_ENABLED==='true';
  const modules=portalNavigation.filter(item=>(workspace?item.id!=='documentos':!['minhas-faturas','notificacoes'].includes(item.id))&&license&&(!check||license.enabled&&license.modules?.includes(item.module as PortalModule)));
  const name=branding?.organizationId===org?branding.name:context?.scope==='organization'?context.currentOrganization.name||'Organização contratante':'Organização contratante';
