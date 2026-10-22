@@ -54,12 +54,19 @@ export function financialDetail(r:any,original:any){
     if(!publishedCostsValid||gross<taxTotal||gross+supplier+fees+extra!==total||total<=0n)throw Error();
     usedPublishedCosts=hasPublishedCosts;
     const values=[{key:'distributor',label:'Distribuidora · valor sem ICMS, PIS e COFINS',amount:feeMoney(gross-taxTotal)},...taxes,{key:'supplier',label:'Energia do fornecedor · base fiscal informada no fechamento',amount:r.supplier},{key:'fees',label:'Honorários da gestão',amount:r.financial.fees},...(usedPublishedCosts?[...publishedGroups.values()].map(c=>({key:c.key,label:c.label,amount:feeMoney(c.amount)})):additional.map((c:any,i:number)=>({key:'ccee-'+i,label:'CCEE · '+c.label,amount:c.amount})))];
+    const supplierTax=(r.fields??[]).find((f:any)=>f.key==='supplier:tax')?.value;
+    if(supplierTax?.policy==='COMPONENT_TAXES_V3'&&supplierTax.method==='ICMS_INSIDE'&&supplierTax.additional===true){
+      if(money(supplierTax.amount)!==supplier||money(supplierTax.base)+money(supplierTax.icmsAmount)!==supplier||money(supplierTax.base)<0n||money(supplierTax.icmsAmount)<0n||!supplierTax.source?.trim())throw Error();
+      const entry=values.find(p=>p.key==='supplier')!;entry.amount=supplierTax.base;entry.label='Energia do fornecedor · sem ICMS';
+      values.push({key:'icmsSupplierAmount',label:'ICMS do fornecedor · por dentro',amount:supplierTax.icmsAmount});
+      result.supplierIcms={base:supplierTax.base,amount:supplierTax.icmsAmount,rate:supplierTax.rate,method:'ICMS_INSIDE',includedInTotal:true};
+    }
     const shares=values.map(p=>money(p.amount)*10000n/total),largest=values.reduce((best,p,i)=>money(p.amount)>money(values[best].amount)?i:best,0);
     shares[largest]+=10000n-shares.reduce((sum,n)=>sum+n,0n);
     let offset=0n;
     result.composition=values.map((part,i)=>{if(money(part.amount)<0n)throw Error();const share=shares[i];const p={...part,percent:feeMoney(share),offset:feeMoney(offset)};offset+=share;return p;});
     result.taxes=taxes;
-    result.taxNotice='ICMS, PIS e COFINS da distribuidora foram retirados da parcela bruta antes de serem separados. Tributos do fornecedor sem segregação permanecem identificados na parcela correspondente; não foram presumidos.';
+    result.taxNotice='ICMS, PIS e COFINS da distribuidora foram retirados da parcela bruta antes de serem separados. '+(result.supplierIcms?'ICMS por dentro do fornecedor destacado separadamente, já incluído no fechamento.':'Tributos do fornecedor sem segregação permanecem identificados na parcela correspondente; não foram presumidos.');
     result.compositionNotice='Total publicado preservado. Valores faturados/apurados não comprovam pagamento. '+result.taxNotice;
   } catch {result.compositionNotice=result.compositionNotice+' '+result.taxNotice;}
   // CCEE items must be tied to this exact immutable closing; never add them to an old total.
