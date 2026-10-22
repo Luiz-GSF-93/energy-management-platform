@@ -23,9 +23,9 @@ function evidence(r:any,unit:any,month:string){
  return {items:cost.costs.items,costId:cost.id,revision:cost.revision,approvalEventId:null,approvedBy:null,approvedAt:cost.validatedAt,financialHash:r.financial_hash};
 }
 /** Private proposal only. Confirmed settlement hashes and cost revisions remain the sources. */
-export function cceeCostEstimate(rows:any[],unit:any,month:string,currentItems:any[]=[]){
+export function cceeCostEstimate(rows:any[],unit:any,month:string,currentItems:any[]=[],currentNoCosts=false){
  const result:any={format:'ccee-weighted-estimate-1',month,state:'UNAVAILABLE',method:'RECENCY_3_2_1',items:[],total:null,reviewRequired:true,financialApproval:false,observations:['Estimativa CCEE: revisar no backoffice antes de aprovar. Garantias e penalidades não são projetadas automaticamente.']};
- if(currentItems.some(i=>i.category==='CCEE'&&i.scenario==='ACL'))return {...result,state:'CURRENT_RECORD',observations:['Registro CCEE atual preservado; nenhuma estimativa o substitui.']};
+ if(currentNoCosts||currentItems.some(i=>i.category==='CCEE'&&i.scenario==='ACL'))return {...result,state:'CURRENT_RECORD',observations:['Registro ou declaração atual preservado; nenhuma estimativa o substitui.']};
  const scoped=rows.filter(r=>r.organization_id===unit.organization_id&&r.customer_id===unit.customer_id&&(r.evidenceFormat==='EVA_APPROVED'||r.consumer_unit_id===unit.id)&&String(r.month).slice(0,7)<month&&monthNumber(month)-monthNumber(String(r.month).slice(0,7))<=6);
  const months=[...new Set(scoped.map(r=>String(r.month).slice(0,7)))].sort().reverse();
  const samples=new Map<string,any[]>();
