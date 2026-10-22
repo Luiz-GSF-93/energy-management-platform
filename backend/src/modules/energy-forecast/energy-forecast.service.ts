@@ -1,3 +1,5 @@
+import {ContractContextService} from './contract-context.service';
+import {publicContractExposure,ContractExposure} from './contract-exposure';
 import {auditAuthorNames} from '../contracts/services/audit-author-names';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
@@ -20,11 +22,11 @@ import {OcrQueueService} from '../ocr/ocr-queue.service';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import {aclHistoryDraft,aclInvoiceReferenceMonth} from '../acl-admissions/acl-invoice-history';
 import {decimal,quantity,monthIndex} from './consumption-forecast';
-type ForecastSnapshot = Omit<ReturnType<typeof calculateConsumptionForecast>, 'method' | 'weatherApplied'> & {historyWindow:ReturnType<typeof selectForecastHistoryWindow>['historyWindow'];method:string;weatherApplied:boolean;weather:Awaited<ReturnType<typeof loadNasaTemperature>>|null;weatherStatus:string;inputVersion:string;calculatedAt:string;calculatedBy:string};
+type ForecastSnapshot = Omit<ReturnType<typeof calculateConsumptionForecast>, 'method' | 'weatherApplied'> & {contractExposure?:ContractExposure;historyWindow:ReturnType<typeof selectForecastHistoryWindow>['historyWindow'];method:string;weatherApplied:boolean;weather:Awaited<ReturnType<typeof loadNasaTemperature>>|null;weatherStatus:string;inputVersion:string;calculatedAt:string;calculatedBy:string};
 @Injectable()
 export class EnergyForecastService {
  private acl:AclAdmissionService;
- constructor(private db:SupabaseService,private licenses:LicensesService,private config:ConfigService,private ocr:OcrQueueService){this.acl=new AclAdmissionService(db,licenses,config);}
+ constructor(private db:SupabaseService,private licenses:LicensesService,private config:ConfigService,private ocr:OcrQueueService,private contractContext?:ContractContextService){this.acl=new AclAdmissionService(db,licenses,config);}
  get enabled(){return this.config.get<string>('ENERGY_FORECAST_ENABLED')==='true';}
  private params(t:TenantContext){return {p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation'};}
  private async rpc(name:string,parameters:any){const r=await this.db.getClient().rpc(name,parameters);if(r.error){const c=r.error.code;if(c==='42501')throw new ForbiddenException('Vínculo, permissão ou licença indisponível.');if(['40001','23505'].includes(c))throw new ConflictException('Fonte ou previsão alterada. Gere uma nova versão.');if(['22023','23514','22P02'].includes(c))throw new BadRequestException('Revise as fontes e a transição.');if(['P3862','P4102'].includes(c))throw new NotFoundException('Previsão indisponível nesta organização.');throw new InternalServerErrorException('Não foi possível consultar a previsão.');}return r.data;}
@@ -93,16 +95,22 @@ export class EnergyForecastService {
    }
    if(historyWindow.excludedMonths.length)body.qualifications.push(`Janela de cálculo: ${historyWindow.from} a ${historyWindow.to}; ${historyWindow.selectedMonths} de ${historyWindow.availableMonths} meses disponíveis. Meses anteriores preservados nas fontes, excluídos apenas desta execução.`);
   }catch(e){if(e instanceof BadRequestException)throw e;throw new BadRequestException('Histórico incompleto, conflitante ou premissa inválida. Revise as fontes antes de calcular.');}
-  body.inputVersion=reportHash({sources,historyWindow:body.historyWindow,expansions:body.expansions,weather:body.weather,weatherStatus:body.weatherStatus});
+  if(this.contractContext)body.contractExposure=await this.contractContext.capture(scope,body.future,body.calculatedAt,t);
+  body.inputVersion=reportHash({sources,contractExposure:body.contractExposure??null,historyWindow:body.historyWindow,expansions:body.expansions,weather:body.weather,weatherStatus:body.weatherStatus});
   const r=await this.rpc('energy_forecast_prepare',{...this.params(t),p_request:d,p_sources:sources,p_body:body,p_hash:reportHash(body)});
   return this.verify(r,t);
  }
- async transition(id:string,input:unknown,t:TenantContext){const a=await this.access(t,true,true);if(!a?.canApprove)throw new ForbiddenException('A validação e publicação exigem Gestor ou Administrador autorizado.');const d=await validateWriteDto(TransitionForecastDto,input as TransitionForecastDto);await this.rpc('energy_forecast_transition',{...this.params(t),p_run:id,p_request:d.requestId,p_hash:d.payloadHash,p_action:d.action,p_note:d.note});return this.one(id,t);}
+ async transition(id:string,input:unknown,t:TenantContext){const a=await this.access(t,true,true);if(!a?.canApprove)throw new ForbiddenException('A validação e publicação exigem Gestor ou Administrador autorizado.');const d=await validateWriteDto(TransitionForecastDto,input as TransitionForecastDto);
+  if(this.contractContext){const current=await this.one(id,t);if(current.body.contractExposure&&!current.events.some((e:any)=>e.action===d.action)){
+   const b=current.body,latest=await this.contractContext.capture({organizationId:t.organizationId,customerId:current.customer_id,unitId:current.consumer_unit_id},b.future,b.calculatedAt,t);
+   if(reportHash(latest)!==reportHash(b.contractExposure))throw new ConflictException('Fontes ou revisões contratuais alteradas. Prepare uma nova previsão antes de validar ou publicar.');
+  }}
+  await this.rpc('energy_forecast_transition',{...this.params(t),p_run:id,p_request:d.requestId,p_hash:d.payloadHash,p_action:d.action,p_note:d.note});return this.one(id,t);}
  async publishedForReport(customer:string,unit:string,cutoff:string,t:TenantContext){
   if(!this.enabled)return null;await this.access(t);
   const r=await this.rpc('energy_forecast_published',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit,p_cutoff:cutoff});if(!r)return null;this.verify(r,t);const b=r.body,publication=r.events.find((e:any)=>e.action==='PUBLISHED');
   if(r.customer_id!==customer||r.consumer_unit_id!==unit||b.asOfMonth!==cutoff)throw new InternalServerErrorException('Recorte da previsão incompatível com o relatório.');
   if(!publication)throw new InternalServerErrorException('Previsão sem publicação.');
-  return {id:r.id,version:r.version,payloadHash:r.payload_hash,organizationId:t.organizationId,customerId:customer,unitId:unit,asOfMonth:cutoff,publishedAt:publication.created_at,formulaVersion:b.formulaVersion,inputVersion:b.inputVersion,method:b.method,actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh,billedDays:a.billedDays})),future:b.future,observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh,weatherStatus:b.weatherStatus,weatherApplied:b.weatherApplied,qualifications:b.qualifications,climateSummary:climateCycleSummary(b.climateAssessment)};
+  return {id:r.id,version:r.version,payloadHash:r.payload_hash,organizationId:t.organizationId,customerId:customer,unitId:unit,asOfMonth:cutoff,publishedAt:publication.created_at,formulaVersion:b.formulaVersion,inputVersion:b.inputVersion,method:b.method,actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh,billedDays:a.billedDays})),future:b.future,observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh,weatherStatus:b.weatherStatus,weatherApplied:b.weatherApplied,qualifications:b.qualifications,climateSummary:climateCycleSummary(b.climateAssessment),contractExposure:publicContractExposure(b.contractExposure)};
  }
 }

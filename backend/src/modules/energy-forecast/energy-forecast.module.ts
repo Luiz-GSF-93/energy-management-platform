@@ -1,3 +1,5 @@
+import {ContractContextService} from './contract-context.service';
+import {OperationsService} from '../operations/operations.service';
 import {Body,Controller,Get,Header,Module,Param,ParseUUIDPipe,Post,Query} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -11,7 +13,9 @@ import {PublishedClientForecastController} from './published-client-forecast.con
 import {OcrModule} from '../ocr/ocr.module';
 @Controller('energy-forecasts')
 class EnergyForecastController {
- constructor(private service:EnergyForecastService){}
+ constructor(private service:EnergyForecastService,private context:ContractContextService){}
+ @Get('contract-context') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) async contractContext(@Tenant() t:TenantContext,@Query('customerId') c:string,@Query('unitId') u:string){await this.service.access(t,false,true);return this.context.options(c,u,t);}
+ @Post('contract-context') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_CREATE]) async saveContext(@Tenant() t:TenantContext,@Body() d:unknown){await this.service.access(t,true,true);return this.context.save(d,t);}
  @Get('workspace') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) workspace(@Tenant() t:TenantContext,@Query('customerId') c:string,@Query('unitId') u:string){return this.service.workspace(t,c,u);}
  @Get('access') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) access(@Tenant() t:TenantContext){return this.service.access(t,false,true);}
  @Get('documents') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_VIEW]) documents(@Tenant() t:TenantContext){return this.service.documents(t);}
@@ -25,5 +29,5 @@ class EnergyForecastController {
  @Post() @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_CREATE]) prepare(@Body() d:unknown,@Tenant() t:TenantContext){return this.service.prepare(d,t);}
  @Post(':id/transitions') @Header('Cache-Control','private, no-store') @RequirePermission([P.DOCUMENTS_REPORTS_CREATE]) transition(@Param('id',ParseUUIDPipe) id:string,@Body() d:unknown,@Tenant() t:TenantContext){return this.service.transition(id,d,t);}
 }
-@Module({imports:[LicensesModule,OcrModule],controllers:[EnergyForecastController,PublishedClientForecastController],providers:[EnergyForecastService,PublishedClientForecastService,SupabaseService],exports:[EnergyForecastService,PublishedClientForecastService]})
+@Module({imports:[LicensesModule,OcrModule],controllers:[EnergyForecastController,PublishedClientForecastController],providers:[ContractContextService,OperationsService,EnergyForecastService,PublishedClientForecastService,SupabaseService],exports:[EnergyForecastService,PublishedClientForecastService]})
 export class EnergyForecastModule {}

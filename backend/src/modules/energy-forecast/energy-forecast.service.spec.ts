@@ -75,4 +75,18 @@ describe('isolated auditable forecast service',()=>{
  it('returns no forecast to existing reports while disabled',async()=>{enabled=false;await expect(service.publishedForReport(customer,unit,'2026-08',t)).resolves.toBeNull();expect(rpc).not.toHaveBeenCalled();});
  it('exports only a recipient-safe published projection',async()=>{const run=await service.prepare(input,t);run.version=1;run.events=[{action:'PUBLISHED',created_at:'2026-09-02T00:00:00Z'}];rpc.mockImplementation(async name=>({error:null,data:name==='energy_forecast_published'?run:null}));const projection=await service.publishedForReport(customer,unit,'2026-08',t);expect(projection!.actual[0].evidence).toBeUndefined();expect(projection!.actual[0].consumptionKwh).toBe('3000.000000');expect(projection).not.toHaveProperty('sources');expect(projection).not.toHaveProperty('expansions');expect(projection).not.toHaveProperty('weather');});
  it('blocks a published forecast from another cut',async()=>{const run=await service.prepare(input,t);run.events=[{action:'PUBLISHED',created_at:'2026-09-02T00:00:00Z'}];rpc.mockImplementation(async name=>({error:null,data:name==='energy_forecast_published'?run:null}));await expect(service.publishedForReport(customer,unit,'2026-07',t)).rejects.toThrow('Recorte');});
+
+ it('requires a new proposal when contractual sources change after preparation',async()=>{
+  const captured={formulaVersion:'CONTRACT_EXPOSURE_1',rows:[],calculatedAt:'2026-08-01T00:00:00Z'},context={capture:jest.fn().mockResolvedValue({...captured,rows:[{status:'SOURCE_PENDING'}]})};
+  (service as any).contractContext=context;
+  jest.spyOn(service,'one').mockResolvedValue({customer_id:customer,consumer_unit_id:unit,body:{contractExposure:captured,future:[],calculatedAt:captured.calculatedAt},events:[]} as any);
+  await expect(service.transition(history,{requestId,payloadHash:'a'.repeat(64),action:'VALIDATED',note:'Synthetic review of contractual sources'},t)).rejects.toThrow('Fontes ou revisões');
+  expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_transition')).toBe(false);
+ });
+ it('does not change sources or recompute an already published action on retry',async()=>{
+  const context={capture:jest.fn()};(service as any).contractContext=context;
+  jest.spyOn(service,'one').mockResolvedValue({body:{contractExposure:{rows:[]}},events:[{action:'PUBLISHED'}]} as any);
+  await service.transition(history,{requestId,payloadHash:'a'.repeat(64),action:'PUBLISHED',note:'Synthetic publication retry preserves snapshot'},t);
+  expect(context.capture).not.toHaveBeenCalled();expect(rpc.mock.calls.some(([n])=>n==='energy_forecast_transition')).toBe(true);
+ });
 });

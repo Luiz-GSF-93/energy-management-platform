@@ -1,5 +1,6 @@
 'use client';
 
+import ContractContextEditor from './ContractContextEditor';
 import AuditIdentity,{type Identity} from '../../components/AuditIdentity';
 import {useEffect,useRef,useState} from 'react';
 
@@ -69,7 +70,7 @@ export default function ForecastWorkspace({canCreate,customerId,unitId}:{canCrea
 
  const open=(id:string)=>act(async n=>{const r=await apiRequest<Run>('/api/v1/energy-forecasts/'+id);if(n===generation.current){setSelected(r);setNote('');}});
 
- return <Card title="Previsão de consumo"><details><summary>Preparar e validar a projeção anual</summary><p>Reúna de 12 a 36 competências consecutivas de faturas conferidas. A Adesão ACL é uma fonte opcional. A previsão publicada será incluída nas novas versões operacionais com a mesma unidade e competência de corte.</p><Button variant="secondary" disabled={busy} onClick={()=>void act(()=>refresh())}>{loaded?'Atualizar históricos e previsões':'Consultar históricos e previsões'}</Button>{busy?<p role="status">Consultando…</p>:null}{error?<Alert variant="error">{error}</Alert>:null}
+ return <Card title="Previsão de consumo"><ContractContextEditor customerId={customerId} unitId={unitId}/><details><summary>Preparar e validar a projeção anual</summary><p>Reúna de 12 a 36 competências consecutivas de faturas conferidas. A Adesão ACL é uma fonte opcional. A previsão publicada será incluída nas novas versões operacionais com a mesma unidade e competência de corte.</p><Button variant="secondary" disabled={busy} onClick={()=>void act(()=>refresh())}>{loaded?'Atualizar históricos e previsões':'Consultar históricos e previsões'}</Button>{busy?<p role="status">Consultando…</p>:null}{error?<Alert variant="error">{error}</Alert>:null}
 
  {loaded?<><fieldset disabled={busy}><legend>Fontes validadas</legend>{available.length?available.map(s=><label key={key(s)}><input type="checkbox" checked={chosen.includes(key(s))} onChange={e=>{reset();if(e.target.checked){setChosen(a=>[...a,key(s)]);if(!cutoff)setCutoff(s.lastMonth);}else setChosen(a=>a.filter(v=>v!==key(s)));}}/>{s.customerName} · {s.unitName} · até {s.lastMonth} · {s.historyId?'Fatura cadastrada':'Adesão ACL'}</label>):<p>Nenhum histórico validado disponível. Confira uma fatura abaixo para preparar o histórico.</p>}{chosen.length?<Button variant="secondary" onClick={()=>{reset();setChosen([]);setCutoff('');setExpansions([]);setSelected(null);setWeather(false);setConsent(false);setLatitude('');setLongitude('');setSensitivity('UNKNOWN');setClimateNote('');setDocumentedPeriods(false);setPeriods({});}}>Limpar fontes selecionadas</Button>:null}<label>Competência de corte<input type="month" value={cutoff} onChange={e=>{reset();setCutoff(e.target.value);}}/></label></fieldset>
 
