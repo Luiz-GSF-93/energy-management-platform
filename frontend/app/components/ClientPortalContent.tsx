@@ -2,6 +2,7 @@
 import PortalUnitScope from './PortalUnitScope';
 import PortalUsageChart from './PortalUsageChart';
 import PortalInvoices from './PortalInvoices';
+import PortalInvoiceEva from './PortalInvoiceEva';
 import PortalNotifications from './PortalNotifications';
 import {useEffect,useState} from 'react';
 import {loadPortalLicense,PortalEntitlement,PortalModule} from '@/app/lib/api/portal-licenses';
@@ -13,7 +14,7 @@ import AclAdmissionStatus from './AclAdmissionStatus';
 import PublishedForecastDashboard from './PublishedForecastDashboard';
 import PublishedFinancialDashboard from './PublishedFinancialDashboard';
 import BotEnergyReports from './BotEnergyReports';
-export default function ClientPortalContent({entitlement}:{entitlement?:PortalEntitlement}={}){
+export default function ClientPortalContent({entitlement,invoices=false}:{entitlement?:PortalEntitlement;invoices?:boolean}={}){
  const checkLicense=process.env.NEXT_PUBLIC_CLIENT_PORTAL_LICENSES_ENABLED==='true';
  const {context}=useAuth();const [loadedLicense,setLicense]=useState<PortalEntitlement|null>(checkLicense?null:{enabled:false}),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);const license=entitlement??loadedLicense;
  useEffect(()=>{if(!checkLicense||entitlement)return;let active=true;loadPortalLicense<PortalEntitlement>('/api/v1/portal/license',{enabled:false}).then(value=>{if(active){if(typeof value?.enabled!=='boolean'||(value.enabled&&!Array.isArray(value.modules)))throw new Error('Não foi possível confirmar as condições do Portal.');setLicense(value);}}).catch(e=>{if(active)setError(e instanceof Error?e.message:'Licença não confirmada.');});return()=>{active=false;};},[attempt,checkLicense,entitlement]);
@@ -24,10 +25,11 @@ export default function ClientPortalContent({entitlement}:{entitlement?:PortalEn
  const workspace=process.env.NEXT_PUBLIC_PORTAL_CLIENT_WORKSPACE_ENABLED==='true';
  const allowed=(module:PortalModule)=>!checkLicense||license.modules?.includes(module);
  const key=JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.permissions]);
+ if(invoices)return workspace&&allowed('documents')?<PortalUnitScope showFilter={false} organizationId={context.currentOrganization.id}><PortalInvoices/><PortalInvoiceEva enabled={!!allowed('bot')}/></PortalUnitScope>:<Alert>Minhas faturas não está disponível nesta licença.</Alert>;
  const content=<>{license.enabled?<p>Licença do Portal: {license.starts} a {license.ends}. Os resultados exibidos são publicados e pertencem à empresa vinculada ao seu usuário.</p>:null}
  {allowed('acl')?<div id="adesao"><AclAdmissionStatus key={'acl:'+key}/></div>:null}
  {allowed('documents')&&!workspace?<div id="documentos"><ClientEvidenceInbox key={'documents:'+key}/></div>:null}
- {workspace&&allowed('documents')?<PortalInvoices key={'invoices:'+key}/>:null}
+
  {workspace&&allowed('notifications')?<PortalNotifications key={'notices:'+key}/>:null}
  {workspace&&allowed('reports')?<PortalUsageChart/>:null}
  {allowed('reports')?<div id="financeiro"><PublishedFinancialDashboard key={'financial:'+key} audience="client" organizationId={context.currentOrganization.id} organizationName={context.currentOrganization.name||context.currentOrganization.id}/></div>:null}

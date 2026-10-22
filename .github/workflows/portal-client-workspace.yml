@@ -57,7 +57,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs && node test/portal-usage-ui.cjs
+      - run: node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs && node test/portal-usage-ui.cjs && node test/portal-composition-corrections.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

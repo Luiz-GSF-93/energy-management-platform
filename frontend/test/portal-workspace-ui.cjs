@@ -10,6 +10,7 @@ let calls=[],uploads=0,revision=0;const css=new Map(),units=[{id:'unit',name:'Un
 async function api(url,opt={}){calls.push([url,opt]);if(opt.signal?.aborted)throw Error('Aborted');
  if(url.startsWith('/api/v1/operations/notifications'))return {rows:[{key:'portal:notice',id:'notice',origin:'portal',read:false}]};
  if(url.endsWith('/context')||url.endsWith('/service-context'))return {units};
+ if(url.endsWith('/invoices/library'))return {rows:[receipt],year:opt.body.year,conflicts:0};
  if(url.endsWith('/invoices'))return {rows:[receipt]};
  if(url.endsWith('/preferences'))return opt.method==='POST'?{revision:++revision,body:opt.body.body}:{revision,body:{EMAIL:false,SMS:false,WHATSAPP:false}};
  if(url.endsWith('/notifications')||url.endsWith('/presentation/notices'))return {rows:[{id:'notice',title:'Novo resultado publicado',href:'/portal#financeiro',read:false,date:'2026-10-20T12:00:00Z',recordId:null}]};
@@ -23,6 +24,7 @@ async function api(url,opt={}){calls.push([url,opt]);if(opt.signal?.aborted)thro
 }
 const original=Module._load;Module._load=function(name,parent,main){
  if(name.endsWith('.module.css')){const file=path.resolve(path.dirname(parent.filename),name);css.set(file,fs.readFileSync(file,'utf8'));return {__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})};}
+ if(name==='./PortalInvoiceViewer')return {__esModule:true,default:({filename})=>React.createElement('p',{'aria-label':'Visualizador privado'},filename)};
  if(name==='next/link')return {__esModule:true,default:({children,...p})=>React.createElement('a',p,children)};
  if(name==='@/app/providers')return {useAuth:()=>({context:{scope:'organization',user:{id:'actor'},currentOrganization:{id:'org',permissions:[]}},hasPermission:()=>true})};
  if(name==='@/app/lib/api/client')return {apiRequest:api};
@@ -35,15 +37,21 @@ const Invoices=require('../app/components/PortalInvoices.tsx').default,Notificat
 const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,m)=>{assert.ok(v,m);checks++;},text=()=>document.body.textContent;
 (async()=>{try{
  await act(async()=>root.render(React.createElement(Invoices)));
- ok(text().includes('Minhas faturas')&&text().includes('Enviado'),'real status label rendered');
+ ok(document.querySelectorAll('button[aria-label*="faturas"]').length===12,'annual library has twelve months');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Enviar nova fatura').click());
  document.querySelector('[name="unitId"]').value='unit';document.querySelector('[name="month"]').value='2026-09';document.querySelector('[name="consent"]').checked=true;
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  ok(uploads===1&&text().includes('Fatura recebida'),'single upload gives visible confirmation');
  testFile=new dom.window.File([new Uint8Array(15*1024*1024+1)],'too-large.pdf',{type:'application/pdf'});await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));ok(uploads===1&&text().includes('15 MB'),'oversize file rejected before network or quota');testFile=new dom.window.File(['test'],'test.pdf',{type:'application/pdf'});
  const form=calls.find(([u,o])=>u.endsWith('/uploads'))[1].body;ok(form.get('unitId')==='unit'&&form.get('month')==='2026-09'&&form.get('consent')==='true','scope and consent transmitted, no permissions invented');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Fechar envio').click());
+ await act(async()=>document.querySelector('button[aria-label^="Setembro"]').click());
+ ok(text().includes('Enviado'),'actual receipt status displayed in selected month');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Visualizar fatura').click());
- ok(!document.querySelector('iframe'),'PDF is not loaded inside the blocked sandboxed browser plugin');ok(document.querySelector('a[target="_blank"]').rel.includes('noopener'),'original document opens safely');
+ ok(!document.querySelector('iframe'),'PDF is not loaded inside the blocked sandboxed browser plugin');ok(document.querySelector('[aria-label="Visualizador privado"]'),'original document opens in a private modal');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Voltar às faturas do mês').click());
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Leitura em HTML').click());ok(!document.querySelector('script')&&document.querySelector('pre').textContent.includes('<script>'),'OCR is escaped text, never executable HTML');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Voltar às faturas do mês').click());
  ok(text().includes('15/10/2026'),'due date comes from existing extracted evidence');
  const paymentSelect=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='PAID'));await act(async()=>{paymentSelect.value='PAID';paymentSelect.dispatchEvent(new Event('change',{bubbles:true}));});
  ok(!calls.some(([u])=>u.endsWith('/payment-declaration')),'choosing payment state does not write before explicit confirmation');

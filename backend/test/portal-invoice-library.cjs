@@ -1,0 +1,28 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+module.exports=async(db,client,role,foreign,foreignRole,ok,deny)=>{
+ await db.exec(`ALTER TABLE documents ADD COLUMN storage_bucket text,ADD COLUMN file_path text,ADD COLUMN original_filename text,ADD COLUMN mime_type text,ADD COLUMN file_size_bytes bigint;`);
+ for(const file of ['20261209_portal_invoice_library.sql','20261210_portal_waste_corrections.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',file),'utf8'));
+ const library=(actor=client,roleId=role,year='2027')=>db.query('SELECT portal_invoice_library($1,$2,$3,$4) data',['org',actor,roleId,year]).then(r=>r.rows[0].data);
+ await db.exec(`INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type,storage_bucket,file_path,original_filename,mime_type,file_size_bytes) VALUES('legacy-july','org','customer','unit',repeat('b',64),true,'2027-07-01','INVOICE_DISTRIBUTOR','energy-documents-private','org/unit/old.pdf','Julho.pdf','application/pdf',100);`);
+ const jobs=(await db.query('SELECT count(*)::int n FROM document_ocr_jobs')).rows[0].n,notices=(await db.query('SELECT count(*)::int n FROM portal_notification_outbox')).rows[0].n;
+ const first=await library();ok(first.year==='2027'&&first.rows.length===1&&first.rows[0].filename==='Julho.pdf');
+ const receipt=first.rows[0];await library();ok((await db.query("SELECT count(*)::int n FROM portal_document_intakes WHERE document_id='legacy-july'")).rows[0].n===1);
+ ok((await db.query('SELECT consent FROM portal_document_intakes WHERE id=$1',[receipt.id])).rows[0].consent===false);
+ ok((await db.query('SELECT count(*)::int n FROM document_ocr_jobs')).rows[0].n===jobs);ok((await db.query('SELECT count(*)::int n FROM portal_notification_outbox')).rows[0].n===notices);
+ ok((await library(client,role,'2028')).rows.length===0);await deny(()=>library(foreign,foreignRole));await deny(()=>library(client,role,'2027 OR true'));
+ const source=()=>db.query('SELECT portal_invoice_content_source($1,$2,$3,$4) data',['org',client,role,receipt.id]).then(r=>r.rows[0].data);
+ ok((await source()).hash==='b'.repeat(64));await db.exec("UPDATE documents SET file_hash=repeat('c',64) WHERE id='legacy-july'");await deny(source);await db.exec("UPDATE documents SET file_hash=repeat('b',64) WHERE id='legacy-july'");
+ await db.exec('ALTER TABLE documents DISABLE TRIGGER guard_invoice_month_document');
+ await db.exec(`INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,file_hash,file_verified,reference_month,document_type,storage_bucket,file_path,original_filename) VALUES('ambiguous-a','org','customer','unit',repeat('d',64),true,'2027-08-01','INVOICE_DISTRIBUTOR','energy-documents-private','org/unit/a.pdf','A.pdf'),('ambiguous-b','org','customer','unit',repeat('e',64),true,'2027-08-01','INVOICE_DISTRIBUTOR','energy-documents-private','org/unit/b.pdf','B.pdf');`);
+ await db.exec('ALTER TABLE documents ENABLE TRIGGER guard_invoice_month_document');const ambiguous=await library();ok(ambiguous.rows.length===1&&ambiguous.conflicts===2);
+ const hash='f'.repeat(64),publication='20000000-0000-4000-8000-000000000099';
+ await db.exec(`CREATE OR REPLACE FUNCTION read_portal_financial_components_v2(p_org text,p_actor text,p_role text,p_platform boolean,p_portal boolean,p_from text,p_to text,p_customer text) RETURNS jsonb LANGUAGE sql AS $$ SELECT '[{"publicationId":"${publication}","sourceHash":"${hash}","unitId":"unit","customerId":"customer","month":"2027-07"}]'::jsonb $$;`);
+ const change={publicationId:publication,sourceHash:hash,unitId:'unit',month:'2027-07',key:'REACTIVE_EXCESS:0',label:'Reativo excedente faturado',amount:'12.34',corrected:true,revision:0,requestId:'30000000-0000-4000-8000-000000000099'};
+ const correction=(action,body)=>db.query('SELECT portal_waste_correction_action($1,$2,$3,$4,$5) data',['org',client,role,action,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const saved=await correction('save',change);ok(saved.corrected===true&&saved.revision===1);ok((await correction('save',change)).id===saved.id);
+ await deny(()=>correction('save',{...change,corrected:false}));await deny(()=>correction('save',{...change,sourceHash:'0'.repeat(64),requestId:'30000000-0000-4000-8000-000000000088'}));
+ await correction('save',{...change,corrected:false,revision:1,requestId:'30000000-0000-4000-8000-000000000077'});
+ const current=await correction('read',{from:'2027-01',to:'2027-12'});ok(current.length===1&&current[0].corrected===false&&current[0].revision===2);ok((await db.query('SELECT count(*)::int n FROM portal_waste_corrections')).rows[0].n===2);
+ await deny(()=>db.exec('DELETE FROM portal_waste_corrections'));
+ await db.exec('SET ROLE authenticated');await deny(()=>library());await deny(()=>source());await deny(()=>db.exec('SELECT * FROM portal_waste_corrections'));await db.exec('RESET ROLE');
+};

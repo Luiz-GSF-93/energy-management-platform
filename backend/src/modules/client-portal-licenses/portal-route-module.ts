@@ -7,11 +7,13 @@ export function portalRouteModule(path:string,method:string):PortalModule|null {
  if(method==='GET'&&new RegExp('^/portal/workspace/invoices/'+uuid+'/details$').test(route))return 'documents';
  if(method==='POST'&&new RegExp('^/portal/workspace/invoices/'+uuid+'/payment-declaration$').test(route))return 'documents';
  if(method==='GET'&&['/portal/workspace/context','/portal/workspace/invoices'].includes(route))return 'documents';
- if(method==='GET'&&new RegExp('^/portal/workspace/invoices/'+uuid+'/(?:file|readout)$').test(route))return 'documents';
+ if(method==='GET'&&new RegExp('^/portal/workspace/invoices/'+uuid+'/(?:file|readout|content)$').test(route))return 'documents';
+ if(method==='POST'&&route==='/portal/workspace/invoices/library')return 'documents';
  if(method==='POST'&&route==='/portal/workspace/uploads')return 'documents';
  if(['GET','POST'].includes(method)&&route==='/portal/workspace/preferences')return 'notifications';
  if(method==='GET'&&['/portal/workspace/service-context','/portal/workspace/requests','/portal/workspace/notifications'].includes(route)||method==='POST'&&(route==='/portal/workspace/requests'||new RegExp('^/portal/workspace/notifications/'+uuid+'/read$').test(route)))return 'notifications';
  if(method==='GET'&&route==='/portal/financial')return 'reports';
+ if(method==='POST'&&route==='/portal/financial-details/corrections')return 'reports';
  if(method==='GET'&&route==='/portal/financial-details')return 'reports';
  if(method==='GET'&&route==='/portal/energy-forecasts')return 'forecasts';
  if(method==='GET'&&route==='/portal/energy-prices')return 'energy_prices';
