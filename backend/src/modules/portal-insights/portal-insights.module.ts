@@ -9,16 +9,18 @@ import {clientPublishedInsight} from './portal-insights.model';
 @Injectable()
 export class PortalInsightsService {
  constructor(private db:SupabaseService){}
- async read(t:TenantContext,from:string,to:string,unitId?:string,month?:string){
+ async read(t:TenantContext,from:string,to:string,unitId?:string,month?:string,months?:string){
   if(t.role!=='consulta'||t.accessMode||!t.organizationId||!t.userId||!t.roleId)throw new ForbiddenException('Use o Portal do cliente.');
   if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(from??'')||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(to??'')||from>to||(Number(to.slice(0,4))-Number(from.slice(0,4)))*12+Number(to.slice(5))-Number(from.slice(5))>11)throw new BadRequestException('Selecione até 12 meses.');
   if(unitId&&!/^[A-Za-z0-9_-]{1,100}$/.test(unitId)||month&&(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)||month<from||month>to))throw new BadRequestException('Filtro de composição inválido.');
+  const selectedMonths=months===undefined?null:months.split(',');
+  if(selectedMonths&&(!selectedMonths.length||selectedMonths.length>12||new Set(selectedMonths).size!==selectedMonths.length||month||selectedMonths.some(m=>!/^20\d{2}-(0[1-9]|1[0-2])$/.test(m)||m<from||m>to)))throw new BadRequestException('Selecione meses válidos dentro do período.');
   const db=this.db.getClient();const binding=await db.rpc('client_portal_entitlement',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_module:'reports'});
   if(binding.error||binding.data?.enabled!==true||binding.data.organizationId!==t.organizationId||!binding.data.customerId)throw new ForbiddenException('Licença ou vínculo indisponível.');
   const customer=binding.data.customerId,r=await db.rpc(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?'read_portal_financial_components_v2':'read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:false,p_portal:true,p_from:from,p_to:to,p_customer:customer});
   if(r.error||!Array.isArray(r.data))throw new InternalServerErrorException('Detalhes publicados indisponíveis.');
   if(r.data.some((x:any)=>x.customerId!==customer||x.month<from||x.month>to||typeof x.unitId!=='string'))throw new ForbiddenException('Escopo dos componentes divergente.');
-  const rows=r.data.filter((x:any)=>(!unitId||x.unitId===unitId)&&(!month||x.month===month)).map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'));
+  const rows=r.data.filter((x:any)=>(!unitId||x.unitId===unitId)&&(!month||x.month===month)&&(!selectedMonths||selectedMonths.includes(x.month))).map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'));
   rows.forEach((r:any)=>{r.indicators=r.indicators.map((i:any,index:number)=>({...i,key:i.kind+':'+index}));});
   const corrections=await db.rpc('portal_waste_correction_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_action:'read',p_body:{from,to,...(unitId?{unitId}:{})}});
   if(corrections.error||!Array.isArray(corrections.data))throw new InternalServerErrorException('Histórico de correções indisponível.');
@@ -29,7 +31,7 @@ export class PortalInsightsService {
    paymentDeclarations=evidence.data;
   }
   const visibleCorrections=corrections.data.filter((c:any)=>rows.some((r:any)=>r.publicationId===c.publicationId&&r.unitId===c.unitId&&r.sourceHash===c.sourceHash&&r.indicators.some((i:any)=>i.key===c.key&&i.amount===c.amount)));
-  return {organizationId:t.organizationId,customerId:customer,from,to,rows,consolidated:consolidatePublishedComposition(rows),corrections:visibleCorrections,correctionTotal:feeMoney(visibleCorrections.filter((c:any)=>c.corrected===true).reduce((n:bigint,c:any)=>n+feeCents(c.amount),0n)),paymentDeclarations,paymentNotice:'Declaração do cliente com autoria/data; não é confirmação bancária, comprovante de quitação ou baixa financeira.'};
+  return {organizationId:t.organizationId,customerId:customer,from,to,availableMonths:[...new Set(r.data.filter((x:any)=>!unitId||x.unitId===unitId).map((x:any)=>x.month))].sort(),availableUnits:[...new Map(r.data.map((x:any)=>[x.unitId,{id:x.unitId,name:x.name}])).values()],rows,consolidated:consolidatePublishedComposition(rows),corrections:visibleCorrections,correctionTotal:feeMoney(visibleCorrections.filter((c:any)=>c.corrected===true).reduce((n:bigint,c:any)=>n+feeCents(c.amount),0n)),paymentDeclarations,paymentNotice:'Declaração do cliente com autoria/data; não é confirmação bancária, comprovante de quitação ou baixa financeira.'};
  }
  async correct(t:TenantContext,body:any){
   if(!body||Object.keys(body).some(k=>!['publicationId','unitId','sourceHash','key','month','corrected','revision','requestId'].includes(k))||typeof body.corrected!=='boolean'||!Number.isSafeInteger(body.revision)||body.revision<0||typeof body.key!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(body.month??'')||!/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(body.requestId??''))throw new BadRequestException('Confira a declaração de correção.');
@@ -45,7 +47,7 @@ export class PortalInsightsService {
 @Controller('portal/financial-details')
 class PortalInsightsController {
  constructor(private service:PortalInsightsService){}
- @Get() @Header('Cache-Control','no-store') read(@Tenant() t:TenantContext,@Query() q:Record<string,string>){if(Object.keys(q).some(k=>!['from','to','unitId','month'].includes(k)))throw new BadRequestException('Filtros inválidos.');return this.service.read(t,q.from,q.to,q.unitId,q.month);}
+ @Get() @Header('Cache-Control','no-store') read(@Tenant() t:TenantContext,@Query() q:Record<string,string>){if(Object.keys(q).some(k=>!['from','to','unitId','month','months'].includes(k)))throw new BadRequestException('Filtros inválidos.');return this.service.read(t,q.from,q.to,q.unitId,q.month,q.months);}
  @Post('corrections') @Header('Cache-Control','no-store') correct(@Tenant()t:TenantContext,@Body()body:any){return this.service.correct(t,body);}
 }
 @Module({controllers:[PortalInsightsController],providers:[SupabaseService,PortalInsightsService],exports:[PortalInsightsService]})

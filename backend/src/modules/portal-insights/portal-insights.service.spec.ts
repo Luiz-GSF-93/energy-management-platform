@@ -41,3 +41,16 @@ describe('published client insight authorization',()=>{
   }finally{if(before===undefined)delete process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED;else process.env.PORTAL_PAYMENT_DECLARATIONS_ENABLED=before;}
  });
 });
+
+describe('published composition month selection',()=>{
+ const tenant:any={organizationId:'org',userId:'user',roleId:'role',role:'consulta'};
+ it('filters nonconsecutive months on the server and scopes corrections to visible publications',async()=>{
+  const rows=['2026-03','2026-04','2026-09'].map((month,i)=>({customerId:'client',month,unitId:'unit',publicationId:'p'+i,sourceHash:'a'.repeat(64),name:'Unit',invoice:'100.00',supplier:'40.00',financial:{aclAfterFees:'150.00',fees:'10.00'}}));
+  const rpc=jest.fn().mockResolvedValueOnce({data:{enabled:true,organizationId:'org',customerId:'client'}}).mockResolvedValueOnce({data:rows}).mockResolvedValueOnce({data:[]});
+  const result=await new PortalInsightsService({getClient:()=>({rpc})} as any).read(tenant,'2026-01','2026-12','unit',undefined,'2026-03,2026-09');
+  expect(result.rows.map((r:any)=>r.month)).toEqual(['2026-03','2026-09']);expect(result.consolidated?.find(p=>p.key==='distributor')?.amount).toBe('200.00');expect(result.availableMonths).toEqual(['2026-03','2026-04','2026-09']);
+ });
+ it.each(['2026-03,2026-03','2025-12','2026-13',''])('rejects invalid or out-of-period month sets: %s',async months=>{
+  const rpc=jest.fn();await expect(new PortalInsightsService({getClient:()=>({rpc})} as any).read(tenant,'2026-01','2026-12',undefined,undefined,months)).rejects.toThrow();expect(rpc).not.toHaveBeenCalled();
+ });
+});
