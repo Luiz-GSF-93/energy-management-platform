@@ -36,7 +36,7 @@ export class CceeDriConnector{
    }
    if(rows.length!==total)throw new CceeReadingError('DRI_COVERAGE_INCOMPLETE');await revalidate();
    return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes,transactions,data:{kind:job.kind,month:selection.month,eventCode:selection.eventCode??null,reportId:selection.reportId??null,frameId:selection.frameId??null,participantCode:job.binding.dri_agent_code,participantTaxId:job.binding.dri_tax_id,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED',sourceHash:driDigest(hashes),rows}};
-  }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('DRI_READ_NOT_CONFIRMED');error.metrics={requests,bytes,durationMs:Date.now()-began,hashes,transactions,httpStatus};throw error;}
+  }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('DRI_READ_NOT_CONFIRMED');error.metrics={requests,bytes,durationMs:Date.now()-began,hashes,transactions,httpStatus:error.httpStatus??httpStatus};throw error;}
   finally{config?.pfx.fill(0);}
  }
 }
