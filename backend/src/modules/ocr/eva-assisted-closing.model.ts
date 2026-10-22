@@ -50,7 +50,9 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   const draft=contractClosingDraftEnabled()&&p?.contractDraft&&c?.contractDraft&&indexMemoryHash(p.contractDraft)===indexMemoryHash(c.contractDraft)?p.contractDraft:null;
   if(draft)pendingActions.push(...draft.requirements.map((r:any)=>({...r,unitId:e.unitId})));
   if(contractClosingDraftEnabled()&&e.comparative?.missing.length)pendingActions.push({code:'ACR_COMPARISON',unitId:e.unitId,section:'library',message:[...new Set(e.comparative.missing)].join(' ')});
-  const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{...(p?.sourcePreparation?{sourcePreparation:p.sourcePreparation}:{}),...(draft?{contractDraft:draft}:{}),library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,feePercentage:field(p,'fee:percentage')?.value??null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
+  const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{...(p?.sourcePreparation?{sourcePreparation:p.sourcePreparation}:{}),...(draft?{contractDraft:draft}:{}),library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,feePercentage:field(p,'fee:percentage')?.value??null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{ccee:p?.cceeEstimate??null,invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
+  if(p?.cceeEstimate?.state==='ESTIMATED'){estimated=true;const message='CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.';ownMissing.push(message);pendingActions.push({code:'CCEE_ESTIMATE_REVIEW',unitId:e.unitId,section:'costs',message});row.sources.cceeEstimate=p.cceeEstimate;}
+  if(p?.supplierInvoiceProposal){row.sources.supplierInvoiceProposal=p.supplierInvoiceProposal;add('Fornecedor: NF integral proposta, volume comprado preservado separadamente da medição. Conferir composição tributária.');}
   if(sourcePreparationEnabled()&&!draft){
    const supplier=c?.diagnosis?.contractSupplierCost;
    if(supplier?.contract&&supplier.formulaVersion!=='spot-supplier-1.0'&&supplier.maxMwh!=null&&c?.measurements?.consumptionTotal!=null)try{
@@ -90,6 +92,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
     if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!confirmedFinal&&!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte ou tratamento final demonstrado.');continue;}
     const amount=money(item.amount);if(amount<0n)throw Error();if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
    }
+   if(p?.cceeEstimate?.state==='ESTIMATED'){if((costs?.items??[]).some((i:any)=>i.category==='CCEE'&&i.scenario==='ACL'))ownMissing.push('CCEE: registro atual e estimativa concorrentes; reconferir fontes.');else extraAcl+=money(p.cceeEstimate.total);}
    row.aclBeforeFees=fmt(invoice+supplier+extraAcl);if(acr!==null)row.acr=fmt(acr+extraAcr);
    row.fixedFee=fmt(money(field(p,'fee:fixed')?.value));if(money(row.fixedFee)<0n)throw Error();
    // The report displays the evidence used by this method, without editing legacy parameters.
