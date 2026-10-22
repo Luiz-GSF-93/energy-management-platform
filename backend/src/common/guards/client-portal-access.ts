@@ -4,6 +4,8 @@ import {portalRouteModule} from '../../modules/client-portal-licenses/portal-rou
 export function restrictClientPortalRequest(member:any,role:any,path:string,method:string){
  if(role?.name!=='consulta'||member?.affiliation_type!=='external'||typeof member.exclusive_customer_id!=='string'||!member.exclusive_customer_id)return false;
  const normalized=path.replace(/^\/api\/v1(?=\/)/,'').replace(/\/$/,'');
- const existingRead=method==='GET'&&['/portal/access','/portal/financial','/portal/acl-admissions','/portal/license','/auth/context','/auth/profile','/organization-branding'].includes(normalized);
+ // The identity gateway checks the exclusive binding and any licensed reports,
+ // documents or notifications module itself; it must also work without reports.
+ const existingRead=method==='GET'&&['/portal/access','/portal/financial','/portal/acl-admissions','/portal/license','/auth/context','/auth/profile','/organization-branding','/portal/workspace/presentation/identity'].includes(normalized);
  return !existingRead&&portalRouteModule(normalized,method)===null;
 }
