@@ -4,6 +4,7 @@ import {SupabaseService} from '../../services/supabase.service';
 import {extractPdfText} from './eva-pdf-text.extractor';
 import {contractAnnexEvidence,sourcePreparationEnabled,sameContractDecimal,contractPartyMatches} from './source-preparation-v3';
 import {invoiceIdentityPreflight} from './invoice-identity-preflight';
+import {structuredSpotMonth} from './monthly-supplier-mode';
 
 /** Read-only local extraction. Caller has already checked backoffice permissions,
  * entitlements and the selected tenant/unit. No provider, OCR or financial write. */
@@ -35,6 +36,7 @@ export class SourcePreparationService{
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;
   const invoiceIdentity=c.originalIdentity?{state:c.originalIdentity.state,checks:c.originalIdentity.checks,fileHash:c.originalIdentity.fileHash,sourcePages:c.originalIdentity.sourcePages??[]}:null;
+  if(structuredSpotMonth(c))return {version:3,invoiceIdentity,state:'REVIEW',documents:[],observations:['Compra avulsa estruturada nesta competência. A fonte mensal do fornecedor deve ser conciliada; preço, reajuste e flexibilidade do anexo regular não são aplicados.'],automaticFinancialApproval:false};
   const org=c.unit.organization_id,customer=c.unit.customer_id,unit=c.unit.id;
   const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===org&&r.customer_id===customer&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=c.period.start&&String(r.end_date??'9999-12-31').slice(0,10)>=c.period.end);
   if(contracts.length!==1)return {version:3,invoiceIdentity,state:'REVIEW',observations:['Contrato vigente único não identificado para consultar o anexo.'],documents:[]};
