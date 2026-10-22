@@ -7,7 +7,7 @@ import WorkflowModal from './WorkflowModal';
 import {PERM} from './types';
 
 export default function CceeCostReview({unit,month,closingId,closingHash,customerId,organizationId,onClose,onValidated}:{unit:any;month:string;closingId:string;closingHash:string;customerId:string;organizationId:string;onClose:()=>void;onValidated:()=>Promise<void>}){
- const {hasPermission}=useAuth(),[base,setBase]=useState<any>(null),[loaded,setLoaded]=useState(false),[canValidate,setCanValidate]=useState(false),[items,setItems]=useState<any[]>(()=>unit.prepared.ccee.items.map((i:any)=>({...i,id:crypto.randomUUID(),amount:i.amount}))),[ack,setAck]=useState(false),[note,setNote]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[uncertain,setUncertain]=useState(false),[saved,setSaved]=useState<any>(null),[done,setDone]=useState(false);
+ const {hasPermission}=useAuth(),[base,setBase]=useState<any>(null),[loaded,setLoaded]=useState(false),[canValidate,setCanValidate]=useState(false),[items,setItems]=useState<any[]>(()=>unit.prepared.ccee.items.map((i:any)=>({...i,id:crypto.randomUUID(),amount:i.amount}))),[ack,setAck]=useState(false),[note,setNote]=useState('Estimativa histórica CCEE conferida para esta unidade e competência.'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[uncertain,setUncertain]=useState(false),[saved,setSaved]=useState<any>(null),[done,setDone]=useState(false);
  const live=useRef(true),working=useRef(false),query=new URLSearchParams({consumerUnitId:unit.id,month}).toString();
  const scoped=(r:any)=>r.organization_id===organizationId&&r.customer_id===customerId&&r.consumer_unit_id===unit.id&&r.month===month;
  const fingerprint=(r:any)=>JSON.stringify(r?[r.id,r.revision,r.status,r.costs]:null);
