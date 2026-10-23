@@ -28,7 +28,7 @@ export const CONTRACT_CONTEXT_FORMAT='ENERGYOS_CONTRACT_CONTEXT_1';
 export class ContractContextService {
  constructor(private db:SupabaseService,private licenses:LicensesService,private operations:OperationsService){}
  private async allowed(t:TenantContext){
-  if(!t.organizationId||!t.userId||(!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')||!t.permissions?.includes(P.ORGANIZATION_CONTRACTS_VIEW)||!t.permissions.includes(P.DOCUMENTS_REPORTS_VIEW)||!t.permissions.includes(P.OPERACAO_EVENTS_VIEW))throw new ForbiddenException('Consulta contratual exige permissões de contratos, relatórios e eventos no backoffice.');
+  if(!t.organizationId||!t.userId||(!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')||!t.permissions?.includes(P.ORGANIZATION_CONTRACTS_VIEW)||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!t.permissions.includes(P.OPERACAO_EVENTS_VIEW))throw new ForbiddenException('Consulta contratual exige permissões de contratos, relatórios e eventos no backoffice.');
   await this.licenses.requireEntitlement(t.organizationId,'free_market_management');await this.licenses.requireEntitlement(t.organizationId,'report_generation');
  }
  private async rows(query:any):Promise<any[]>{const r=await query.limit(201);if(r.error||!Array.isArray(r.data))throw new InternalServerErrorException('Fontes contratuais indisponíveis.');if(r.data.length>200)throw new BadRequestException('Fontes extensas; não foi usada uma seleção parcial.');return r.data;}
@@ -65,7 +65,24 @@ export class ContractContextService {
  }
  async capture(scope:ExposureScope,future:{month:string;predictedKwh:string}[],at:string,t:TenantContext){
   if(!t.permissions.includes(P.OPERACAO_EVENTS_VIEW))return {...calculateContractExposure(scope,future,[],at,true),sources:[] as ContractTerm[]};
-  const c=await this.context(scope,t),terms:ContractTerm[]=[];let unavailable=c.hiddenContext;
+  return this.captureResolved(scope,future,at,await this.context(scope,t));
+ }
+ async capturePublishedPlanning(scope:ExposureScope,future:{month:string;predictedKwh:string}[],at:string,t:TenantContext){
+  if(t.organizationId!==scope.organizationId||!t.userId||!t.roleId||t.role!=='consulta'||t.accessMode||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW))throw new ForbiddenException('Planejamento exige cliente vinculado.');
+  await this.licenses.requireEntitlement(t.organizationId,'report_generation');await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
+  const gate=await this.db.getClient().rpc('energy_forecast_client_published',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId});
+  if(gate.error){if(gate.error.code==='42501')throw new ForbiddenException('Vínculo de planejamento revogado.');throw new InternalServerErrorException('Fontes de cobertura indisponíveis.');}
+  if(gate.data?.customerId!==scope.customerId||!Array.isArray(gate.data.rows)||!gate.data.rows.some((r:any)=>r.organization_id===scope.organizationId&&r.customer_id===scope.customerId&&r.consumer_unit_id===scope.unitId&&r.publishedAt&&r.validatedAt))throw new ForbiddenException('Previsão publicada vinculada necessária.');
+  const db=this.db.getClient();
+  const [contracts,rules,events]=await Promise.all([
+   this.rows(db.from('energy_contracts').select('*').eq('organization_id',scope.organizationId).eq('customer_id',scope.customerId).eq('consumer_unit_id',scope.unitId).eq('contract_type','ENERGY_PURCHASE')),
+   this.rows(db.from('supplier_billing_rules').select('*').eq('organization_id',scope.organizationId).eq('customer_id',scope.customerId).eq('consumer_unit_id',scope.unitId)),
+   this.rows(db.from('operation_records').select('*').eq('organization_id',scope.organizationId).eq('customer_id',scope.customerId).eq('consumer_unit_id',scope.unitId).eq('kind','events').neq('status','ARCHIVED'))
+  ]);
+  return this.captureResolved(scope,future,at,{contracts,rules,events,hiddenContext:false});
+ }
+ private async captureResolved(scope:ExposureScope,future:{month:string;predictedKwh:string}[],at:string,c:{contracts:any[];rules:any[];events:any[];hiddenContext:boolean}){
+  const terms:ContractTerm[]=[];let unavailable=c.hiddenContext;
   
   for(const e of c.events){let data:any;try{data=JSON.parse(e.table_text??'{}');}catch{if(String(e.table_text).includes(CONTRACT_CONTEXT_FORMAT))unavailable=true;continue;}
    if(data.format!==CONTRACT_CONTEXT_FORMAT)continue;
