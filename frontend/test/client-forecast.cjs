@@ -18,9 +18,12 @@ const fixture={id:'test',unitName:'Test unit',version:2,publishedAt:'2026-09-01T
  assert.equal(calls[0][0],'/api/v1/portal/energy-forecasts');assert.equal(calls[0][1].cache,'no-store');
  await act(async()=>resolve({rows:[fixture]}));
  assert.ok(document.body.textContent.includes('Previsão validada e publicada'));assert.ok(document.body.textContent.includes('Média dos mesmos meses'));assert.ok(document.body.textContent.includes('ajuste climático não aplicado'));assert.ok(document.querySelector('svg rect'));
+ await act(async()=>document.querySelector('button').click());await act(async()=>resolve({rows:[fixture],currentPlanning:[{forecastId:'test',state:'AVAILABLE',calculatedAt:'2026-10-23T13:00:00Z',sourceFingerprint:'a'.repeat(64),sourceMonths:['2026-08'],notice:'Estimativa atualizada',forecast:{...fixture,future:[{...fixture.future[0],predictedKwh:'1300'}],futureKwh:'1300',estimatedYearKwh:'2300'}}]}));
+ const planning=document.querySelector('[aria-label="Planejamento atual com novas publicações"]');assert.ok(planning.textContent.includes('1.300'));assert.ok(planning.textContent.includes('Previsão para conferência'));assert.ok(!document.querySelector('details').open);assert.ok(document.body.textContent.includes('Previsão histórica publicada'));
+ const prior=calls.length;await act(async()=>window.dispatchEvent(new Event('portal-updated')));assert.ok(calls.length>prior);await act(async()=>resolve({rows:[fixture]}));assert.equal(document.querySelector('[aria-label="Planejamento atual com novas publicações"]'),null);
  await act(async()=>document.querySelector('button').click());assert.ok(!document.body.textContent.includes('1.200'));assert.ok(document.body.textContent.includes('Consultando'));
  await act(async()=>reject(Error('Vínculo indisponível')));assert.ok(document.querySelector('[role=alert]').textContent.includes('Vínculo'));assert.equal(document.querySelector('svg'),null);
  await act(async()=>document.querySelector('button').click());await act(async()=>resolve({rows:[]}));assert.ok(document.body.textContent.includes('Nenhuma previsão publicada'));assert.equal(document.querySelector('svg'),null);
  await act(async()=>root.unmount());assert.ok(calls.at(-1)[1].signal.aborted);
- console.log('13 client forecast checks passed');
+ console.log('20 client forecast checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
