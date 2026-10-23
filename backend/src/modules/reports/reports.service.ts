@@ -10,6 +10,7 @@ import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {validateWriteDto} from '../../common/validation/validate-write-dto';
 import {CreateReportDto,CurrentReportDto} from './report.dto';
 import {projectReport,REPORT_FORMAT,reportHash} from './report.projection';
+import {withPublishedReportConsumption} from './report-consumption';
 @Injectable()
 export class ReportsService {
  constructor(private db:SupabaseService,private licenses:LicensesService,private financial:FinancialSettlementsService,@Optional() private forecast?:EnergyForecastService,@Optional() private investments?:InvestmentsService){}
@@ -50,7 +51,11 @@ export class ReportsService {
    const last=new Date(Date.UTC(Number(d.to.slice(0,4)),Number(d.to.slice(5)),0)).toISOString().slice(0,10);
    const e=await this.client().from('operation_records').select('id,revision,title,priority,effective_date').eq('organization_id',t.organizationId).eq('kind','events').eq('status','PUBLISHED').eq('customer_id',d.customerId).eq('consumer_unit_id',d.unitId).gte('effective_date',d.from+'-01').lte('effective_date',last).order('effective_date',{ascending:false}).limit(201);this.fail(e.error);if(e.data?.length>200)throw new BadRequestException('Há muitos eventos. Reduza o período.');events=e.data??[];
   }
-  const base=projectReport(financial,header,d.kind,events,new Date().toISOString());
+  let base=projectReport(financial,header,d.kind,events,new Date().toISOString());
+  if(process.env.EVA_APPROVED_PUBLICATIONS_ENABLED==='true'){
+   const r=await this.client().rpc('read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:false,p_from:d.from,p_to:d.to,p_customer:d.customerId});
+   this.fail(r.error);base=withPublishedReportConsumption(base,r.data);
+  }
   const body={...base,annualProjection:d.kind==='OPERATIONAL'&&this.forecast?.enabled?await this.forecast.publishedForReport(d.customerId,d.unitId,d.to,t):null};
   if(d.kind==='EXECUTIVE'&&this.investments){
    const investment=await this.investments.validated(t,d.customerId,d.unitId);
