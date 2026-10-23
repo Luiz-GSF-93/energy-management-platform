@@ -50,14 +50,14 @@ export function energyPriceDashboard(org:string,year:number,data:any,portal:bool
   monthAcr=weighted('acrNet');scoreAcl=weighted('aclNet');acl=data.workspaceV2?weighted('aclObserved'):scoreAcl;taxBasis=scoreAcl!==null?'NET':'UNKNOWN';
   priceNotice='Preço ACL observado do fornecedor; base fiscal indicada na publicação. TE ACR da biblioteca e ACL sem tributos somente quando explicitamente segregados. Parcela sem base fiscal não gera score. Não compare bases tributárias diferentes entre meses.';
  }
- const codes=baselines.map(b=>b.baseline.submarket??(data.workspaceV2?(data.submarkets??[]).find((v:any)=>v.unitId===b.unitId&&v.month===month)?.submarket:null));const pldWeights=modern.length&&data.workspaceV2?units.map(u=>modern.find((r:any)=>r.unitId===u.id)?.prices?.kwh):selected.map((p:any)=>p?.kwh);const pldVolume=pldWeights.length===units.length&&pldWeights.every((v:any)=>typeof v==='string'&&decimal(v)>0n)?pldWeights.reduce((n:bigint,v:any)=>n+decimal(v),0n):0n;let pld:string|null=null,pldReference:string|null=null;
+ const marketReferences=baselines.map(b=>publishedUnitSubmarket(b.unitId,month,b.baseline.submarket,data.workspaceV2?data.submarkets??[]:[]));const codes=marketReferences.map(r=>r.code);if(marketReferences.some(r=>r.basis==='UNIT_REGISTERED_REFERENCE'))priceNotice+=' Submercado identificado pela referência cadastrada da mesma unidade; não depende da cobertura de um contrato regular neste mês.';const pldWeights=modern.length&&data.workspaceV2?units.map(u=>modern.find((r:any)=>r.unitId===u.id)?.prices?.kwh):selected.map((p:any)=>p?.kwh);const pldVolume=pldWeights.length===units.length&&pldWeights.every((v:any)=>typeof v==='string'&&decimal(v)>0n)?pldWeights.reduce((n:bigint,v:any)=>n+decimal(v),0n):0n;let pld:string|null=null,pldReference:string|null=null;
  if(units.length>0&&codes[0]&&codes.every(c=>c===codes[0])){const record=data.pld.find((p:any)=>p.month===month&&p.submarket===codes[0]);if(record){pldReference=record.value;pld=feeMoney((decimal(record.value)*100n+500000000n)/1000000000n);}}
  else if(pldVolume>0n&&codes.every(c=>['SE_CO','S','NE','N'].includes(c))){const records=codes.map(c=>data.pld.find((p:any)=>p.month===month&&p.submarket===c));if(records.every(Boolean)){pldReference=quantity(records.reduce((n:bigint,p:any,j:number)=>n+decimal(p.value)*decimal(pldWeights[j]),0n)/pldVolume);pld=feeMoney((records.reduce((n:bigint,p:any,j:number)=>n+decimal(p.value)*decimal(pldWeights[j]),0n)*100n+pldVolume*500000000n)/(pldVolume*1000000000n));}}
  const a=monthAcr===null?null:feeCents(monthAcr),b=scoreAcl===null?null:feeCents(scoreAcl),diff=a!==null&&b!==null?a-b:null;
  const score=a&&diff!==null?(diff<0n?'-':'')+feeMoney(((diff<0n?-diff:diff)*10000n+a/2n)/a):null;
  const deltaPld=data.workspaceV2&&acl!==null&&pld!==null&&feeCents(pld)>0n?(()=>{const delta=feeCents(acl)-feeCents(pld),base=feeCents(pld);return (delta<0n?'-':'')+feeMoney(((delta<0n?-delta:delta)*10000n+base/2n)/base);})():null;
  const spreads=pldSpreadScenarios(pldReference),comparisons=observedPriceComparisons(acl,taxBasis==='NET'?scoreAcl:null,monthAcr,pld,spreads,modern.length?'NET':'GROSS');
- return {month,comparisons,acr:monthAcr,acl,aclNet:scoreAcl,pld,aclVsPldPercent:deltaPld,observedKwh:modern.length?quantity(modern.reduce((n:bigint,r:any)=>n+decimal(r.prices.kwh??'0'),0n)):quantity(volume),...spreads,scorePercent:score,taxBasis,priceNotice,coveredUnits:modern.length?modern.filter((r:any)=>r.prices.acrNet&&r.prices.aclNet).length:selected.filter(p=>p?.gross!=null).length,totalUnits:units.length};
+ return {month,comparisons,pldSubmarketSources:marketReferences.map((r,i)=>({unitId:units[i].id,...r})),acr:monthAcr,acl,aclNet:scoreAcl,pld,aclVsPldPercent:deltaPld,observedKwh:modern.length?quantity(modern.reduce((n:bigint,r:any)=>n+decimal(r.prices.kwh??'0'),0n)):quantity(volume),...spreads,scorePercent:score,taxBasis,priceNotice,coveredUnits:modern.length?modern.filter((r:any)=>r.prices.acrNet&&r.prices.aclNet).length:selected.filter(p=>p?.gross!=null).length,totalUnits:units.length};
  });
  const completeMonths=new Set(months.filter(m=>m.acl!==null).map(m=>m.month));
  const actual=prices.filter((p:any)=>completeMonths.has(p.month)&&p.gross!==null&&p.kwh),grossAverage=actual.length?specificPrice(actual.reduce((n:bigint,p:any)=>n+feeCents(p.gross),0n),actual.reduce((n:bigint,p:any)=>n+decimal(p.kwh),0n)):null;
@@ -69,3 +69,14 @@ export function energyPriceDashboard(org:string,year:number,data:any,portal:bool
 }
 
 function averageObserved(months:any[],key:string){const available=months.filter(m=>typeof m[key]==='string'&&m.observedKwh&&decimal(m.observedKwh)>0n);if(!available.length)return null;const volume=available.reduce((n:bigint,m:any)=>n+decimal(m.observedKwh),0n);return feeMoney((available.reduce((sum:bigint,m:any)=>sum+feeCents(m[key])*decimal(m.observedKwh),0n)+volume/2n)/volume);}
+
+/** Submarket identifies the unit's price area, not contracted volume or supply coverage. */
+function publishedUnitSubmarket(unitId:string,month:string,baseline:unknown,entries:any[]){
+ const valid=(code:unknown)=>typeof code==='string'&&['SE_CO','S','NE','N'].includes(code);
+ const scoped=entries.filter(r=>r.unitId===unitId&&typeof r.month==='string'&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(r.month)&&r.month.slice(0,4)===month.slice(0,4));
+ const exact=scoped.filter(r=>r.month===month),exactCodes=[...new Set(exact.map(r=>r.submarket))];
+ if(exact.length)return exactCodes.length===1&&valid(exactCodes[0])?{code:exactCodes[0],basis:'MONTH_REGISTERED_REFERENCE',sourceMonths:[month]}:{code:null,basis:'CONFLICTING_REFERENCE',sourceMonths:[]};
+ const codes=[...new Set([...scoped.map(r=>r.submarket),...(valid(baseline)?[baseline]:[])])];
+ if(codes.length!==1||!valid(codes[0]))return {code:null,basis:codes.length?'CONFLICTING_REFERENCE':'SOURCE_PENDING',sourceMonths:[]};
+ return {code:codes[0],basis:scoped.length?'UNIT_REGISTERED_REFERENCE':'PUBLISHED_ANNUAL_REFERENCE',sourceMonths:[...new Set(scoped.map(r=>r.month))].sort()};
+}
