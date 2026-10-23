@@ -1,12 +1,14 @@
 'use client';
-import {useEffect, useRef, useState} from 'react';
+import {useContext,useEffect, useRef, useState} from 'react';
+import {EvaGuidanceContext} from './EvaGuidanceContext';
 import {apiRequest} from '@/app/lib/api/client';
 import {Button} from '@/app/components/ui';
 import {ConversationField, conversationValue} from './form-conversation';
 
 type Props = {context: string; fields: ConversationField[]; disabled: boolean; reviewBeforeSave?:boolean; onApply: (field: ConversationField, value: string, evidence: string, persist: boolean) => Promise<string>};
 export default function FormConversation({context, fields, disabled, onApply,reviewBeforeSave=false}: Props) {
-  const [authorized, setAuthorized] = useState(false), [open, setOpen] = useState(false), [autoSave, setAutoSave] = useState(true);
+  const guided=useContext(EvaGuidanceContext);
+  const [authorized, setAuthorized] = useState(false), [open, setOpen] = useState(guided), [autoSave, setAutoSave] = useState(!guided);
   const [selected, setSelected] = useState(''), [reply, setReply] = useState(''), [evidence, setEvidence] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [messages, setMessages] = useState<string[]>([]), [skipped, setSkipped] = useState<string[]>([]);
   const lock = useRef(false), alive = useRef(true);
