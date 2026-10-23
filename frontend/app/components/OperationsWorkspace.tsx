@@ -7,6 +7,7 @@ import EvidenceThread from './EvidenceThread';
 import DiagnosticRequestForm from './DiagnosticRequestForm';
 import PortalRoutingSettings from './PortalRoutingSettings';
 import CustomerNoticeSettings from './CustomerNoticeSettings';
+import CceeMarketExplorer from './CceeMarketExplorer';
 import {useAuth} from '@/app/providers';
 import {apiRequest} from '@/app/lib/api/client';
 import {operations,notificationOrigins,notificationStates,nextOperationStatuses,statusLabels,priorityLabels,type OperationKind,type OperationRow,type NotificationRow} from '@/app/lib/operations';
@@ -45,7 +46,7 @@ function OperationContent({area,hasPermission,actor,organization}:{area:Operatio
  async function showHistory(row:OperationRow){setBusy(true);setError('');try{setHistory(await apiRequest<History[]>('/api/v1/operations/'+area+'/'+row.id+'/history'));}catch(e){setError(e instanceof Error?e.message:'Falha ao consultar histórico.');}finally{setBusy(false);}}
  async function markRead(key:string){setBusy(true);try{await apiRequest('/api/v1/operations/notifications/read',{method:'POST',body:{key}});setReload(v=>v+1);window.dispatchEvent(new Event('operations-updated'));}catch(e){setError(e instanceof Error?e.message:'Falha ao marcar leitura.');}finally{setBusy(false);}}
  if(!canView)return <p role="alert">Acesso indisponível nesta organização ou perfil.</p>;
- if(area==='pld')return <section className="operation-panel"><h1>PLD</h1><p role="status">Aguardando API CCEE</p><p>A integração permanece suspensa até concluir a validação do certificado e habilitar a Plataforma de Integração. Valores de PLD e sincronização serão disponibilizados após essa etapa.</p></section>;
+ if(area==='pld')return <CceeMarketExplorer organization={organization}/>;
  const label=area==='notifications'?'Notificações':config?.label;
  return <section className="operation-workspace"><header className="operation-heading"><div><p>Operação</p><h1>{label}</h1><p>{area==='notifications'?'Acompanhe solicitações, atividades e eventos da organização.':'Organize a rotina por cliente, unidade, prazo e responsável.'}</p></div><button disabled={loading||busy} onClick={()=>setReload(v=>v+1)}>Atualizar</button>{canManage&&!editor?<button className="ds-button ds-button--primary" onClick={()=>open('new')}>{area==='agenda'?'Nova agenda':'Novo registro'}</button>:null}</header>
  {area==='requests'&&canManage&&hasPermission('8f105b02-4443-49de-b188-847e0284e7ed')&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')?<button disabled={!!editor} onClick={()=>setDiagnosticOpen(v=>!v)}>{diagnosticOpen?'Ocultar revisão OCR':'Criar solicitação de pendência OCR'}</button>:null}
