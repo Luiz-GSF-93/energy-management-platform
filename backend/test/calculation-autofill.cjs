@@ -76,6 +76,9 @@ try{
  await deny(()=>recover(id(60),{...proof,note:proof.note+' changed'}),'23505');
  const audit=(await db.query('SELECT r.actor_id original,e.actor_id reviewer,e.state,e.receipts FROM calculation_preparation_runs r JOIN calculation_preparation_run_events e ON e.run_id=r.id AND e.sequence=2 WHERE r.id=$1',[id(60)])).rows[0];
  ok(audit.original===id(20)&&audit.reviewer===id(24)&&audit.state==='PARTIAL'&&audit.receipts[0].originalActor===id(20)&&audit.receipts[0].currentBasis===proof.currentBasis);
+ await seedOld(63,'1 hour');const concurrentProof={...proof,basis:proof.basis.slice(0,62)+'63'};
+ const reconciled=await Promise.all([recover(id(63),concurrentProof),recover(id(63),concurrentProof)]);ok(reconciled.every(x=>x.state==='PARTIAL'));ok((await db.query('SELECT count(*) n FROM calculation_preparation_run_events WHERE run_id=$1',[id(63)])).rows[0].n===2);
+ await seedOld(64,'1 hour');await action('finish',id(64),{status:'PREPARED',receipts:[]});await deny(()=>recover(id(64),{...proof,basis:proof.basis.slice(0,62)+'64'}),'23505');
  for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'calculation_autofill_reconcile(text,text,text,boolean,text,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
  console.log(JSON.stringify({result:'PASS',checks,privateTables:2,financialRecordsWritten:0,externalCalls:0}));
 }finally{await db.close();}})().catch(e=>{console.error({code:e.code,message:e.message});process.exitCode=1});
