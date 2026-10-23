@@ -60,5 +60,22 @@ try{
  await db.exec(`INSERT INTO documents SELECT '${id(3)}',organization_id,customer_id,consumer_unit_id,document_type,reference_month,file_verified,file_hash FROM documents WHERE id='${id(2)}'`);await deny(()=>action('reserve',id(32),{...input,basis:'d'.repeat(64)}),'40001');
  await db.exec(`DELETE FROM documents WHERE id='${id(3)}'`);
  if(process.env.CALCULATION_AUTOFILL_TEST_PG_PORT){const race=await Promise.all([action('reserve',id(40),{...input,basis:'e'.repeat(64)}),action('reserve',id(41),{...input,basis:'e'.repeat(64)})]);ok(race.filter(r=>r.acquired).length===1);ok(race[0].run.id===race[1].run.id);}
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261211_preparation_reconciliation.sql'),'utf8'));
+ await db.exec(`INSERT INTO roles VALUES('admin','org','organization','admin_org','["8f105b02-4443-49de-b188-847e0284e7ed","60f9690a-145b-4dba-b23f-9f945baca296","92e1b670-ab10-483a-b825-c6e16799496d","beb6ec90-8ba8-40ce-a156-aeef6cc75cce"]');INSERT INTO organization_members VALUES('org','${id(24)}','admin','ACTIVE',null,'internal');`);
+ const proof={basis:'8'.repeat(64),currentBasis:'9'.repeat(64),sourceHash:'a'.repeat(64),note:'Backend replaced; original execution interrupted; sources checked.'};
+ const recover=(run=id(60),body=proof,patch={})=>db.query('SELECT calculation_autofill_reconcile($1,$2,$3,$4,$5,$6,$7,$8) data',[patch.org??'org',patch.actor??id(24),patch.role??'admin',patch.platform??false,patch.unit??id(1),'2026-08',run,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ // Separate statements also work on the real PostgreSQL driver.
+ const seedOld=async(n,age,manual={})=>{await db.query(`INSERT INTO calculation_preparation_runs(id,organization_id,customer_id,consumer_unit_id,month,document_id,source_hash,source_basis,plan,actor_id,created_at) VALUES($1,'org','customer',$2,'2026-08',$3,$4,$5,$6,$7,clock_timestamp()-$8::interval)`,[id(n),id(1),id(2),'a'.repeat(64),proof.basis.slice(0,62)+String(n),JSON.stringify({...plan,manualOverrides:manual}),id(20),age]);await db.query(`INSERT INTO calculation_preparation_run_events(run_id,organization_id,sequence,state,actor_id,receipts) VALUES($1,'org',1,'RUNNING',$2,'[]')`,[id(n),id(20)]);};
+ await seedOld(60,'1 hour');proof.basis=proof.basis.slice(0,62)+'60';
+ for(const patch of [{actor:id(20),role:'operator'},{actor:id(21),role:'viewer'},{org:'other'},{unit:id(11)}])await deny(()=>recover(id(60),proof,patch),'42501');
+ for(const body of [{...proof,note:'short'},{...proof,extra:true},{...proof,currentBasis:null}])await deny(()=>recover(id(60),body),'22023');
+ await deny(()=>recover(id(60),{...proof,sourceHash:'f'.repeat(64)}),'40001');
+ await seedOld(61,'1 minute');await deny(()=>recover(id(61),{...proof,basis:proof.basis.slice(0,62)+'61'}),'40001');
+ await seedOld(62,'1 hour',{fixedFee:'100'});await deny(()=>recover(id(62),{...proof,basis:proof.basis.slice(0,62)+'62'}),'40001');
+ ok((await recover()).state==='PARTIAL');ok((await recover()).state==='PARTIAL');
+ await deny(()=>recover(id(60),{...proof,note:proof.note+' changed'}),'23505');
+ const audit=(await db.query('SELECT r.actor_id original,e.actor_id reviewer,e.state,e.receipts FROM calculation_preparation_runs r JOIN calculation_preparation_run_events e ON e.run_id=r.id AND e.sequence=2 WHERE r.id=$1',[id(60)])).rows[0];
+ ok(audit.original===id(20)&&audit.reviewer===id(24)&&audit.state==='PARTIAL'&&audit.receipts[0].originalActor===id(20)&&audit.receipts[0].currentBasis===proof.currentBasis);
+ for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'calculation_autofill_reconcile(text,text,text,boolean,text,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
  console.log(JSON.stringify({result:'PASS',checks,privateTables:2,financialRecordsWritten:0,externalCalls:0}));
 }finally{await db.close();}})().catch(e=>{console.error({code:e.code,message:e.message});process.exitCode=1});
