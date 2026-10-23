@@ -4,6 +4,7 @@
 .legend{display:flex;flex-wrap:wrap;gap:1rem;padding:0;margin:1rem 0;list-style:none;font-size:.875rem}
 .legend li{display:flex;align-items:center;gap:.4rem}
 .legend li span{width:.7rem;height:.7rem;border-radius:50%}
+.legend label{display:flex;align-items:center;gap:.4rem;cursor:pointer;min-height:2.25rem}.legend input{accent-color:var(--brand-blue);width:1rem;height:1rem}.controls{display:flex;gap:.5rem;flex-wrap:wrap}.controls button{padding:.5rem .75rem;color:var(--color-text);background:var(--color-surface-raised);border:1px solid var(--color-border);border-radius:.4rem;cursor:pointer}.controls button:focus-visible,.legend input:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}.comparisons{width:100%;font-size:.85rem;border-collapse:collapse}.comparisons th,.comparisons td{padding:.5rem;text-align:left;border-bottom:1px solid var(--color-border)}
 .plot svg{display:block;width:100%;height:auto;min-height:180px}
 .months{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:.15rem}
 .months button{padding:.4rem .1rem;font-size:.75rem;border:1px solid var(--color-border);border-radius:.35rem;background:var(--color-surface-raised);color:var(--color-text);cursor:pointer}
