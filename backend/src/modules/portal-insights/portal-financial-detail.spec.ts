@@ -9,3 +9,11 @@ describe('immutable published monthly costs in the donut',()=>{
  it('uses the published monthly source once even if a separate CCEE audit record exists',()=>{const f=fixture();const r=clientPublishedInsight({...f,cceeCosts:[{closingHash:f.sourceHash,state:'PUBLISHED',provider:'CCEE',month:f.month,sourceReference:'audit',label:'CCEE',amount:'5.00',includedInTotal:true,accountingRole:'ADDITIONAL'}]},true);expect(r.composition?.filter(p=>p.key.startsWith('ccee-'))).toHaveLength(1);expect(r.composition?.find(p=>p.key==='ccee-published')?.amount).toBe('5.00');});
  it('nets explicit published credits within the same category and reconciles again',()=>{const f=fixture();f.publishedCostItems.push({...f.publishedCostItems[0],id:'credit',effect:'CREDIT',amount:'1.00'});f.financial.aclAfterFees='154.00';expect(clientPublishedInsight(f,true).composition?.find(p=>p.key==='ccee-published')?.amount).toBe('4.00');});
 });
+
+it('preserves distributor taxes and segregates documented regular ICMS when supplier includes a separate extra purchase',()=>{
+ const f:any=fixture();f.supplier='48.00';f.financial.aclAfterFees='163.00';f.fields=[{key:'supplier:tax',value:{policy:'COMPONENT_TAXES_V3',method:'ICMS_INSIDE',additional:true,base:'32.80',icmsAmount:'7.20',amount:'40.00',rate:'18',source:'Regular invoice published memory'}}];
+ const r=clientPublishedInsight(f,true);
+ expect(r.composition?.find(p=>p.key==='icmsAmount')?.amount).toBe('10.00');expect(r.composition?.find(p=>p.key==='icmsSupplierAmount')?.amount).toBe('7.20');expect(r.composition?.find(p=>p.key==='supplier')?.amount).toBe('40.80');expect(r.supplierIcms.complete).toBe(false);expect(r.prices.aclNet).toBeNull();expect(r.composition?.reduce((n,p)=>n+Math.round(Number(p.amount)*100),0)).toBe(16300);
+});
+
+it('does not hide reconciled distributor tax proof because supplier tax memory is incompatible',()=>{const f:any=fixture();f.fields=[{key:'supplier:tax',value:{policy:'COMPONENT_TAXES_V3',method:'ICMS_INSIDE',additional:true,base:'999.00',icmsAmount:'7.20',amount:'40.00',source:'Invalid supplier proof'}}];const r=clientPublishedInsight(f,true);expect(r.composition?.find(p=>p.key==='icmsAmount')?.amount).toBe('10.00');expect(r.supplierIcms).toBeUndefined();expect(r.composition?.find(p=>p.key==='supplier')?.amount).toBe('40.00');});
