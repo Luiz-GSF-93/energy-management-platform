@@ -55,12 +55,13 @@ export function financialDetail(r:any,original:any){
     usedPublishedCosts=hasPublishedCosts;
     const values=[{key:'distributor',label:'Distribuidora · valor sem ICMS, PIS e COFINS',amount:feeMoney(gross-taxTotal)},...taxes,{key:'supplier',label:'Energia do fornecedor · base fiscal informada no fechamento',amount:r.supplier},{key:'fees',label:'Honorários da gestão',amount:r.financial.fees},...(usedPublishedCosts?[...publishedGroups.values()].map(c=>({key:c.key,label:c.label,amount:feeMoney(c.amount)})):additional.map((c:any,i:number)=>({key:'ccee-'+i,label:'CCEE · '+c.label,amount:c.amount})))];
     const supplierTax=(r.fields??[]).find((f:any)=>f.key==='supplier:tax')?.value;
-    if(supplierTax?.policy==='COMPONENT_TAXES_V3'&&supplierTax.method==='ICMS_INSIDE'&&supplierTax.additional===true){
-      if(money(supplierTax.amount)!==supplier||money(supplierTax.base)+money(supplierTax.icmsAmount)!==supplier||money(supplierTax.base)<0n||money(supplierTax.icmsAmount)<0n||!supplierTax.source?.trim())throw Error();
-      const entry=values.find(p=>p.key==='supplier')!;entry.amount=supplierTax.base;entry.label='Energia do fornecedor · sem ICMS';
+    try{if(supplierTax?.policy==='COMPONENT_TAXES_V3'&&supplierTax.method==='ICMS_INSIDE'&&supplierTax.additional===true){
+      if(money(supplierTax.amount)>supplier||money(supplierTax.base)+money(supplierTax.icmsAmount)!==money(supplierTax.amount)||money(supplierTax.base)<0n||money(supplierTax.icmsAmount)<0n||!supplierTax.source?.trim())throw Error();
+      const entry=values.find(p=>p.key==='supplier')!;entry.amount=feeMoney(supplier-money(supplierTax.icmsAmount));entry.label=money(supplierTax.amount)===supplier?'Energia do fornecedor · sem ICMS demonstrado':'Energia do fornecedor · ICMS regular segregado; adicionais conforme publicação';
       values.push({key:'icmsSupplierAmount',label:'ICMS do fornecedor · por dentro',amount:supplierTax.icmsAmount});
-      result.supplierIcms={base:supplierTax.base,amount:supplierTax.icmsAmount,rate:supplierTax.rate,method:'ICMS_INSIDE',includedInTotal:true};
+      result.supplierIcms={base:supplierTax.base,amount:supplierTax.icmsAmount,rate:supplierTax.rate,method:'ICMS_INSIDE',includedInTotal:true,complete:money(supplierTax.amount)===supplier};
     }
+    }catch{/* Preserve independently reconciled distributor taxes when supplier detail is incomplete. */}
     const shares=values.map(p=>money(p.amount)*10000n/total),largest=values.reduce((best,p,i)=>money(p.amount)>money(values[best].amount)?i:best,0);
     shares[largest]+=10000n-shares.reduce((sum,n)=>sum+n,0n);
     let offset=0n;
