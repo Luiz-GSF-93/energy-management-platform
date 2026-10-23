@@ -26,3 +26,4 @@ describe('contract context integration and organization isolation',()=>{
  it('rejects unknown write fields before persisting an event',async()=>{await expect(service.save({organizationId:'foreign'},t)).rejects.toThrow();expect(save).not.toHaveBeenCalled();});
  it('uses spot billing without minimum or tolerance',async()=>{tables.supplier_billing_rules[0]={...tables.supplier_billing_rules[0],volume_basis:'SPOT',min_percent:null,max_tolerance_percent:null};const r=await capture();expect(r.rows[0].status).toBe('SPOT_PURCHASE');expect(r.rows[0].maximumMwh).toBeNull();});
 });
+
