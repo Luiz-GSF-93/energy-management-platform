@@ -32,7 +32,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/platform-costs/service-catalog.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/energy-forecast/contract-context.service.spec.ts src/modules/platform-costs/service-catalog.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts
         working-directory: backend
       - run: node test/database/ccee-dri.test.mjs
         working-directory: backend
@@ -69,6 +69,8 @@ jobs:
       - run: node test/ccee-data.cjs
         working-directory: frontend
       - run: node test/ccee-market.cjs
+        working-directory: frontend
+      - run: node test/ccee-contract-comparison.cjs
         working-directory: frontend
       - run: node test/license-governance.cjs
         working-directory: frontend

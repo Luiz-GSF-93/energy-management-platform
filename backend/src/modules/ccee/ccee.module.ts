@@ -16,6 +16,10 @@ import {CceeMarketController} from './ccee-market.controller';
 import {CceeMarketService} from './ccee-market.service';
 import {CceeMarketWorker} from './ccee-market.worker';
 import {CceeMarketConnector} from './ccee-market.connector';
+import {CceeContractComparisonService,CceeContractComparisonController} from './ccee-contract-comparison.service';
+import {ContractContextService} from '../energy-forecast/contract-context.service';
+import {ContractIndexMemoryService} from '../contracts/services/contract-index-memory.service';
+import {OperationsService} from '../operations/operations.service';
 import {CceeDataController,CceeCalendarController,CceeDataMetricsController} from './ccee-data.controller';
-@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController,CceeDriController,CceeMarketController],providers:[CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDriConnector,CceeDriService,CceeDataWorker,CceeMarketService,CceeMarketWorker,CceeMarketConnector,SupabaseService],exports:[CceeDataService,CceeDriService,CceeMarketService]})
+@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController,CceeDriController,CceeMarketController,CceeContractComparisonController],providers:[CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDriConnector,CceeDriService,CceeDataWorker,CceeMarketService,CceeMarketWorker,CceeMarketConnector,CceeContractComparisonService,ContractContextService,ContractIndexMemoryService,OperationsService,SupabaseService],exports:[CceeDataService,CceeDriService,CceeMarketService]})
 export class CceeModule {}
