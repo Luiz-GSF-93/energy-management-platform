@@ -17,6 +17,7 @@ export default function ReportWorkspace({kind,financial=false}:{kind:'OPERATIONA
  const {context,hasPermission}=useAuth(),org=context&&context.scope!=='global'?context.currentOrganization.id:'';
  const currentOrg=useRef(org);
  const publicationRevision=usePublicationRefresh();
+ const currentScope=useRef('');
  const [currentReport,setCurrentReport]=useState<any>(null),[currentError,setCurrentError]=useState('');
  const today=new Date(),[from,setFrom]=useState(`${today.getFullYear()}-01`),[to,setTo]=useState(`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`);
  const [sources,setSources]=useState<any>(null),[customer,setCustomer]=useState(''),[unit,setUnit]=useState(''),[rows,setRows]=useState<any[]>([]),[selected,setSelected]=useState<any>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -26,13 +27,13 @@ export default function ReportWorkspace({kind,financial=false}:{kind:'OPERATIONA
  const selectionKey=org+'|'+customer+'|'+unit+'|'+from+'|'+to;const activeSelection=useRef(selectionKey);
  useEffect(()=>{currentOrg.current=org;activeSelection.current=selectionKey;},[org,selectionKey]);
  useEffect(()=>{
-  setCurrentReport(null);setCurrentError('');if(!allowed||!customer||!unit||!from||!to||from>to)return;
+  const scope=selectionKey+'|'+kind;if(currentScope.current!==scope){currentScope.current=scope;setCurrentReport(null);setCurrentError('');}if(!allowed||!customer||!unit||!from||!to||from>to){setCurrentReport(null);return;}
   let live=true;const controller=new AbortController();
   const q=new URLSearchParams({kind,customerId:customer,unitId:unit,from,to});
   apiRequest<any>('/api/v1/reports/current?'+q,{signal:controller.signal,cache:'no-store'}).then(r=>{
    if(r.current!==true||r.body?.header?.organizationId!==org||r.body.header.customerId!==customer||r.body.header.unitId!==unit||r.body.period.from!==from||r.body.period.to!==to)throw Error('O recorte mudou. Consulte novamente.');
-   if(live)setCurrentReport(r.body);
-  }).catch(e=>{if(live)setCurrentError(e.message);});
+   if(live){setCurrentError('');setCurrentReport(r.body);}
+  }).catch(e=>{if(live){setCurrentReport(null);setCurrentError(e.message);}});
   return()=>{live=false;controller.abort();};
  },[org,allowed,selectionKey,kind,publicationRevision]);
  const consult=()=>action(async()=>{const key=selectionKey;setSelected(null);setRows([]);const q=new URLSearchParams({from,to,customerId:customer,unitId:unit,kind});const r=await apiRequest<any[]>('/api/v1/reports?'+q);if(activeSelection.current===key)setRows(r);});
