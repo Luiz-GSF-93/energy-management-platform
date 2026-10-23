@@ -50,8 +50,10 @@ export class SourcePreparationService{
   await this.verifiedSupplierInvoice(c,id,fileHash);
   const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('id',id).maybeSingle();
   if(r.error||!r.data||r.data.file_hash!==fileHash||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month)throw new ServiceUnavailableException('Nota mudou durante a extração local.');
-  const bytes=await this.text(r.data),key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
-  const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(bytes,8000);
+  const key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
+  // Metadata and the verified-bytes check above still run on every request.
+  // Do not download the same hashed PDF again merely to reuse its local text.
+  const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(await this.text(r.data),8000);
   if(!cached||cached.until<=Date.now()){if(this.extracted.size>=8)this.extracted.delete(this.extracted.keys().next().value!);this.extracted.set(key,{until:Date.now()+60000,value:extracted});}
   if(extracted.ocrRequired)return {kind:'UNKNOWN' as const,proposal:null};
   const text=extracted.sections.map(s=>s.text).join('\n');
