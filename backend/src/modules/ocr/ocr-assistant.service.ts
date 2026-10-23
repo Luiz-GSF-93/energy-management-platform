@@ -167,7 +167,12 @@ export class OcrAssistantService {
   const selected=plan.operations.filter(op=>op.canCreate).map(op=>op.key);
   if(!selected.length&&sourcePreparationEnabled())return {mode:'AUTOMATIC_DRAFT' as const,stage:'NO_ELIGIBLE_LEGACY_DRAFTS' as const,receipts:[],current:plan,complete:false,canContinue:true,preparationComplete:false,canPublish:false as const,message:'Eu, EVA, não encontrei novos lançamentos elegíveis nesta etapa. Vou conferir as fontes na preparação; o fechamento ainda não está completo.'};
   if(!selected.length)return {mode:'AUTOMATIC_DRAFT' as const,receipts:[],current:plan,complete:true,canPublish:false as const,message:'Nenhum novo lançamento elegível. Valores e dúvidas permanecem preenchidos para conferência.'};
-  return {...await this.executeDraftPlan(document,t,plan,selected),mode:'AUTOMATIC_DRAFT' as const};
+  const result=await this.executeDraftPlan(document,t,plan,selected);
+  // A preview requiring review made no write for that operation. V3 can
+  // recapture the current sources and prepare a proposal without confirming it.
+  // An uncertain write or failed final read must still stop the workflow.
+  const canContinue=sourcePreparationEnabled()&&result.current!==null&&result.receipts.every(r=>['SAVED_DRAFT','REVIEW_REQUIRED'].includes(r.state));
+  return {...result,complete:result.complete&&result.current!==null,mode:'AUTOMATIC_DRAFT' as const,canContinue,preparationComplete:false as const};
  }
  private async executeDraftPlan(document:string,t:TenantContext,plan:Awaited<ReturnType<OcrAssistantService['inspect']>>,selected:string[]){
   const receipts:{key:string;label:string;state:string;result?:unknown;message?:string}[]=[];
