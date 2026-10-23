@@ -22,5 +22,11 @@
     "sha256": "6c81cf1b219f60e3c613443a20b62a083ea88c865725d37ebc507f7ab4d1e2f7",
     "commit": "e0ea9256c83e1ccd667edc85db3c88705927cdf3",
     "fixture": "documents-6c81cf1b219f60e3c613443a20b62a083ea88c865725d37ebc507f7ab4d1e2f7.txt"
+  },
+  {
+    "path": "backend/src/modules/reports/reports.controller.ts",
+    "sha256": "e395a2807b2a3ec7c23f17fe723610c9aaa9536fff37d183de43b74bad5f59ca",
+    "commit": "a3b938a20d989dea9e67710c64e455ed52a03540",
+    "fixture": "reports-e395a2807b2a3ec7c23f17fe723610c9aaa9536fff37d183de43b74bad5f59ca.txt"
   }
 ]
