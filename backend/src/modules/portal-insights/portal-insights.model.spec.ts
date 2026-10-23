@@ -10,3 +10,8 @@ describe('published client insights, never a private report',()=>{
  it('rejects incomplete quantities and duplicate TE bands as price evidence',()=>{const b=base();b.fields[0].value='999';expect(clientPublishedInsight(b).prices.acrNet).toBeNull();const c=base();c.tariffLines[1].band='PEAK';expect(clientPublishedInsight(c).prices.acrNet).toBeNull();});
  it('projects no OCR, registration, internal note or raw source',()=>{const r=clientPublishedInsight({...base(),raw:'PRIVATE',notes:'PRIVATE',fields:[...base().fields,{key:'address',value:'PRIVATE'}],retained:[]});expect(JSON.stringify(r)).not.toContain('PRIVATE');});
 });
+
+it('reads exact V3 net TE from published components, without using gross tariff amounts as a net reference',()=>{
+ const f:any=base();f.method='COMPONENT_TAXES_V3';f.tariffLines[0].netAmount='16.00';f.tariffLines[1].netAmount='72.00';
+ expect(clientPublishedInsight(f,true).prices.acrNet).toBe('88.00');delete f.tariffLines[1].netAmount;expect(clientPublishedInsight(f,true).prices.acrNet).toBeNull();
+});
