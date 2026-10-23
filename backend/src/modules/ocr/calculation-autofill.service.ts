@@ -1,4 +1,5 @@
 import {cceeCostEstimate,cceeEstimateEnabled} from './ccee-cost-estimate';
+import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {documentedSupplierSettlement,settlementHash} from './documented-supplier-settlement';
 import {SourcePreparationService} from './source-preparation.service';
@@ -93,18 +94,24 @@ export class CalculationAutofillService{
    const r=await db.from('documents').select('id,file_hash,original_filename,reference_month,file_verified').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('document_type','INVOICE_SUPPLIER').gte('reference_month',period.start).lte('reference_month',period.end).limit(101);
    if(r.error||!Array.isArray(r.data)||r.data.length>100)throw new ServiceUnavailableException('Notas da competência indisponíveis.');
    c.documentedSupplierOptions={enabled:true,documents:r.data.filter((d:any)=>d.file_verified&&/^[a-f0-9]{64}$/.test(d.file_hash??'')),cost:c.cost?{id:c.cost.id,revision:c.cost.revision,hash:settlementHash(c.cost.costs),items:c.cost.costs.items}:null};
-   if(cceeEstimateEnabled()&&this.sourcePreparation&&c.documentedSupplierOptions.documents.length===1&&!c.manualOverrides.supplierSettlement){
-    const d=c.documentedSupplierOptions.documents[0];
-    try{c.supplierInvoiceProposal=await this.sourcePreparation.supplierProposal(c,d.id,d.file_hash);}catch{c.supplierInvoiceProposal=null;c.proposalObservations=[...(c.proposalObservations??[]),'Nota do fornecedor: extração local exige revisão; sem nova chamada paga.'];}
+   c.documentedSupplierOptions.proposals=[];c.documentedSupplierOptions.excluded=[];
+   if(this.sourcePreparation){
+    const evidence=await collectSupplierInvoiceEvidence(c.documentedSupplierOptions.documents,d=>this.sourcePreparation!.supplierEvidence(c,d.id,d.file_hash));
+    Object.assign(c.documentedSupplierOptions,{documents:evidence.documents,proposals:evidence.proposals,excluded:evidence.excluded});
+    c.proposalObservations=[...(c.proposalObservations??[]),...evidence.observations];
+    if(!c.manualOverrides.supplierSettlement)c.supplierInvoiceProposal=evidence.selected;
    }
    const v=c.manualOverrides.supplierSettlement;
    if(v){
+    if(!c.documentedSupplierOptions.documents.some((d:any)=>d.id===v.documentId&&d.file_hash===v.fileHash))throw new ConflictException('O documento selecionado não é uma nota disponível nesta competência.');
     if(!this.sourcePreparation)throw new ServiceUnavailableException('Verificação documental indisponível.');
     try{c.documentedSupplierInvoice=await this.sourcePreparation.verifiedSupplierInvoice(c,v.documentId,v.fileHash);}catch{c.documentedSupplierInvoice=null;}
     const prior=c.contractDraft,regular=prior?.memory&&prior?.source&&prior?.supplier?.pricePerMwh?{price:prior.supplier.pricePerMwh,contractedMwh:prior.supplier.contractedMwh,contract:prior.supplier.contract,minimum:prior.supplier.minMwh,maximum:prior.supplier.maxMwh,source:prior.source,memory:prior.memory}:undefined;
     c.contractDraft=documentedSupplierSettlement(c,regular);
    }
   }
+  const invoiceDraft=supplierInvoiceEvidenceDraft(c);if(invoiceDraft)c.contractDraft=invoiceDraft;
+  if(c.manualOverrides.supplierInvoiceAllocation&&!invoiceDraft?.source.allocation)throw new ConflictException('A NF atual e a fonte da confirmação de cobertura integral precisam coincidir.');
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
   const basis=autofillHash({cceeEstimate:c.cceeEstimate??null,supplierInvoiceProposal:c.supplierInvoiceProposal??null,v:documentedSettlementEnabled()?6:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),...(documentedSettlementEnabled()?{documentedInvoice:c.documentedSupplierInvoice??null}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});

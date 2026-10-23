@@ -83,7 +83,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    const documentedTax=documentedSettlementEnabled()&&draft?.format==='documented-supplier-settlement-1'&&draft.state==='COMPLETE'&&supplierTax==='COMPONENTS_CONFIRMED';
    if(!documentedTax&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)&&!e.comparative){ownMissing.push('Fornecedor: o preço de energia está proposto, mas a composição final de tributos/encargos não está demonstrada.');}
    if(e.comparative&&!supplierProof&&!documentedTax&&!['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE'].includes(supplierTax)){estimated=true;add('Fornecedor: preço usado como referência comparativa, com composição fiscal não demonstrada. Não representa isenção ou tributos incluídos confirmados.');}
-   let extraAcl=0n,extraAcr=0n;
+   let extraAcl=0n,extraAcr=0n,supplierExtras=0n;
    const costs=field(p,'costs:monthly')?.value,rawCosts=p.fields?.find((f:any)=>f.key==='costs:monthly'),proof=e.comparative?.invoiceProof;
    const invoiceOnly=proof!==undefined&&['SAME_INVOICE_AMOUNTS_V2','COMPONENT_TAXES_V3'].includes(e.comparative?.method??'')&&e.comparative!.amount!==null&&!e.comparative!.missing.length&&proof.documentId===c?.document?.id&&/^[a-f0-9]{64}$/.test(proof.sourceHash)&&proof.sourceHash===c?.document?.file_hash&&money(proof.amount)===invoice&&c.cost==null&&(!rawCosts||rawCosts.state==='PENDING'&&rawCosts.value===null&&!rawCosts.source);
    if(invoiceOnly){
@@ -96,12 +96,14 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    else for(const item of costs.items){
     if(draft?.state==='COMPLETE'&&draft.consumedCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item)))continue;
     if((item.scenario==='ACL'||e.comparative)&&item.source?.includes(c.document.id))continue;
-    if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
+    const confirmedInvoiceExtra=draft?.format==='supplier-invoice-evidence-1'&&draft.state==='COMPLETE'&&item.category==='SUPPLIER_EXTRA_ENERGY'&&draft.confirmedExtraCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item));
+    if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)&&!confirmedInvoiceExtra){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
     const confirmedFinal=documentedTax&&(draft.confirmedFinalCostSources??[]).some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item));
     if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!confirmedFinal&&!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte ou tratamento final demonstrado.');continue;}
-    const amount=money(item.amount);if(amount<0n)throw Error();if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
+    const amount=money(item.amount);if(amount<0n)throw Error();if(confirmedInvoiceExtra)supplierExtras+=amount;if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
    }
    if(p?.cceeEstimate?.state==='ESTIMATED'){if((costs?.items??[]).some((i:any)=>i.category==='CCEE'&&i.scenario==='ACL'))ownMissing.push('CCEE: registro atual e estimativa concorrentes; reconferir fontes.');else extraAcl+=money(p.cceeEstimate.total);}
+   if(supplierExtras>0n)row.prepared.supplier={...row.prepared.supplier,regularAmount:fmt(supplier),extraAmount:fmt(supplierExtras),amount:fmt(supplier+supplierExtras),extraSources:draft.confirmedExtraCostSources};
    row.aclBeforeFees=fmt(invoice+supplier+extraAcl);if(acr!==null)row.acr=fmt(acr+extraAcr);
    row.fixedFee=fmt(money(field(p,'fee:fixed')?.value));if(money(row.fixedFee)<0n)throw Error();
    // The report displays the evidence used by this method, without editing legacy parameters.
