@@ -1,3 +1,4 @@
+import {EvaInvoiceAttentionService} from './eva-invoice-attention.service';
 import {OcrModule} from '../ocr/ocr.module';
 import {DiagnosticRequestsService} from './diagnostic-requests.service';
 import {Module} from '@nestjs/common';
@@ -8,5 +9,5 @@ import {OperationsController} from './operations.controller';
 import {DocumentsService} from '../documents/services/documents.service';
 import {ClientEvidenceService} from './client-evidence.service';
 import {ClientEvidenceController,PortalEvidenceController} from './client-evidence.controller';
-@Module({imports:[LicensesModule,OcrModule],providers:[SupabaseService,OperationsService,DiagnosticRequestsService,DocumentsService,ClientEvidenceService],controllers:[OperationsController,ClientEvidenceController,PortalEvidenceController]})
+@Module({imports:[LicensesModule,OcrModule],providers:[SupabaseService,OperationsService,EvaInvoiceAttentionService,DiagnosticRequestsService,DocumentsService,ClientEvidenceService],controllers:[OperationsController,ClientEvidenceController,PortalEvidenceController]})
 export class OperationsModule {}
