@@ -6,6 +6,7 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {validateWriteDto} from '../../common/validation/validate-write-dto';
 import {OperationsService} from './operations.service';
+import {resolutionId} from '../ocr/ocr-resolution-plan';
 export class InvoiceAttentionDto{
  @IsUUID() requestId!:string;
  @IsString() @Matches(/^[a-f0-9]{64}$/) sourceHash!:string;
@@ -40,8 +41,16 @@ export class EvaInvoiceAttentionService{
   if(d.state==='SCHEDULED'){
    if(![P.OPERACAO_CALENDAR_VIEW,P.OPERACAO_CALENDAR_MANAGE].every(p=>t.permissions.includes(p)))throw new ForbiddenException('Agendar exige consulta e gerenciamento da Agenda.');
    if(!d.dueAt||!d.responsibleId||!Number.isFinite(Date.parse(d.dueAt))||Date.parse(d.dueAt)<=Date.now())throw new BadRequestException('Selecione data e horário futuros e responsável autorizado.');
-   const row=await this.operations.save('agenda',null,{requestId:d.requestId,revision:0,title:('EVA · conferir fatura · '+current.unitName+' · '+current.month).slice(0,160),description:'[EVA fatura '+document+' · '+d.sourceHash+']\nRetomar conferência das fontes e perguntas atuais. O lembrete não executa OCR, não aplica ajustes, não aprova e não publica valores.\nAbrir: /backoffice/contracts?ocrDocument='+document+'&area=preparation',priority:'NORMAL',responsibleId:d.responsibleId,startsAt:d.dueAt,dueAt:d.dueAt,reason:d.note,customerId:current.customerId,unitId:current.unitId,documentId:document},t);
+   const marker='[EVA fatura '+document+' · '+d.sourceHash+']',history=await this.operations.list('agenda',t,{customerId:current.customerId});
+   const prior=history.rows.filter((r:any)=>r.document_id===document&&r.description?.startsWith(marker)).sort((a:any,b:any)=>String(b.updated_at).localeCompare(String(a.updated_at))||String(b.id).localeCompare(String(a.id)));
+   const active=prior.filter((r:any)=>!['DONE','CANCELLED'].includes(r.status));
+   if(active.length){if(active.length!==1||active[0].created_by!==t.userId||active[0].responsible_id!==d.responsibleId||Date.parse(active[0].starts_at)!==Date.parse(d.dueAt))throw new ConflictException('Já existe agendamento ativo desta fatura. Confira ou edite o registro na Agenda.');agendaId=active[0].id;}
+   else{
+   // Stable per source and completed cycle: concurrent operators cannot create duplicate reminders.
+   const agendaRequest=resolutionId(['eva-invoice-agenda-1',t.organizationId,document,d.sourceHash,prior[0]?.id??null,prior[0]?.revision??null]);
+   const row=await this.operations.save('agenda',null,{requestId:agendaRequest,revision:0,title:('EVA · conferir fatura · '+current.unitName+' · '+current.month).slice(0,160),description:marker+'\nRetomar conferência das fontes e perguntas atuais. O lembrete não executa OCR, não aplica ajustes, não aprova e não publica valores.\nAbrir: /backoffice/contracts?ocrDocument='+document+'&area=preparation',priority:'NORMAL',responsibleId:d.responsibleId,startsAt:d.dueAt,dueAt:d.dueAt,reason:d.note,customerId:current.customerId,unitId:current.unitId,documentId:document},t);
    agendaId=row.id;
+   }
   }
   return this.rpc('record',document,{requestId:d.requestId,sourceHash:d.sourceHash,state:d.state,note:d.note,agendaId},t);
  }
