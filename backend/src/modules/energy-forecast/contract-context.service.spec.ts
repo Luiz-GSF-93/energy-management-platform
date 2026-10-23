@@ -26,3 +26,14 @@ describe('contract context integration and organization isolation',()=>{
  it('rejects unknown write fields before persisting an event',async()=>{await expect(service.save({organizationId:'foreign'},t)).rejects.toThrow();expect(save).not.toHaveBeenCalled();});
  it('uses spot billing without minimum or tolerance',async()=>{tables.supplier_billing_rules[0]={...tables.supplier_billing_rules[0],volume_basis:'SPOT',min_percent:null,max_tolerance_percent:null};const r=await capture();expect(r.rows[0].status).toBe('SPOT_PURCHASE');expect(r.rows[0].maximumMwh).toBeNull();});
 });
+
+describe('published planning contract scope',()=>{
+ const scope={organizationId:'org',customerId:'customer',unitId:'unit'},t:any={organizationId:'org',userId:'client',roleId:'role',role:'consulta',permissions:[P.DOCUMENTS_REPORTS_VIEW]};
+ it('requires a live published forecast for the same client and unit before private source reads',async()=>{
+  const from=jest.fn(),rpc=jest.fn().mockResolvedValue({data:{customerId:'foreign',rows:[]},error:null}),s=new ContractContextService({getClient:()=>({from,rpc})} as any,{requireEntitlement:jest.fn()} as any,{} as any);
+  await expect(s.capturePublishedPlanning(scope,[],'2026-10-23T00:00:00Z',t)).rejects.toThrow('vinculada');expect(from).not.toHaveBeenCalled();
+ });
+ it.each([{organizationId:'foreign'},{role:'gestor'},{accessMode:'platform_operation'},{permissions:[]}])('rejects incompatible planning caller %j before reading sources',async patch=>{
+  const getClient=jest.fn(),s=new ContractContextService({getClient} as any,{requireEntitlement:jest.fn()} as any,{} as any);await expect(s.capturePublishedPlanning(scope,[],'2026-10-23T00:00:00Z',{...t,...patch})).rejects.toThrow();expect(getClient).not.toHaveBeenCalled();
+ });
+});
