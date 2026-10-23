@@ -23,8 +23,8 @@ export class CceeContractComparisonService {
   await this.allowed(t);await this.market.read(t,{from:'2026-01-01',to:'2026-01-01'});
   const db=this.db.getClient(),[companies,units]=await Promise.all([
    this.rows(db.from('customers').select('id,company_name').eq('organization_id',t.organizationId).is('deleted_at',null).eq('status','ACTIVE').order('company_name')),
-   this.rows(db.from('consumer_units').select('id,customer_id,name,code,free_market,organization_id').eq('organization_id',t.organizationId).eq('status','ACTIVE').order('name'))]);
-  return {organizationId:t.organizationId,companies:companies.map(c=>({id:c.id,name:c.company_name})),units:units.filter(u=>companies.some(c=>c.id===u.customer_id)).map(u=>({id:u.id,customerId:u.customer_id,name:u.name,code:u.code})),maxUnits:20,maxMonths:24};
+   this.rows(db.from('consumer_units').select('id,customer_id,name,consumer_unit_number,free_market,organization_id').eq('organization_id',t.organizationId).eq('status','ACTIVE').order('name'))]);
+  return {organizationId:t.organizationId,companies:companies.map(c=>({id:c.id,name:c.company_name})),units:units.filter(u=>companies.some(c=>c.id===u.customer_id)).map(u=>({id:u.id,customerId:u.customer_id,name:u.name,code:u.consumer_unit_number})),maxUnits:20,maxMonths:24};
  }
  async compare(t:TenantContext,input:unknown){
   await this.allowed(t);const q=comparisonQuery(input),db=this.db.getClient();
