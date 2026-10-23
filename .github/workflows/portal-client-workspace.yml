@@ -7,6 +7,7 @@ on:
       - 'backend/src/modules/energy-prices/**'
       - 'backend/src/modules/reports/**'
       - 'backend/src/database/migrations/20261215*.sql'
+      - 'backend/src/database/migrations/20261216*.sql'
       - 'frontend/app/components/usePublicationRefresh.ts'
       - 'frontend/app/backoffice/reports/ReportWorkspace.tsx'
       - 'backend/src/modules/operations/**'

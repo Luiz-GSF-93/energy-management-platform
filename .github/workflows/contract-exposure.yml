@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'backend/src/modules/energy-forecast/**'
+      - 'frontend/app/components/PublishedForecastDashboard.tsx'
+      - 'frontend/test/client-forecast.cjs'
       - 'backend/src/modules/reports/**'
       - 'backend/src/modules/bot-reports/**'
       - 'backend/src/modules/ocr/bot-energy-question.ts'
@@ -26,6 +28,8 @@ jobs:
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: frontend
+      - run: node test/client-forecast.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
