@@ -3,7 +3,7 @@ import {usePublicationRefresh} from './usePublicationRefresh';
 import ApprovedFinancialCharts,{FinancialChartMonth} from './ApprovedFinancialCharts';
 import PublishedClientInsights from './PublishedClientInsights';
 import Link from 'next/link';
-import {FormEvent,useEffect,useState} from 'react';
+import {FormEvent,useEffect,useId,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card} from '@/app/components/ui';
 
@@ -26,16 +26,19 @@ export function publishedFinancialCsv(data:Data){
 }
 export default function PublishedFinancialDashboard({organizationId,organizationName,audience='backoffice',previewCustomerId,canPreview=false}:{organizationId:string;organizationName:string;audience?:'backoffice'|'client';previewCustomerId?:string;canPreview?:boolean}){
  const publicationRevision=usePublicationRefresh();
+ const scopeRef=useRef('');
+ const publicationsId=useId(),[publicationsOpen,setPublicationsOpen]=useState(false);
  const current=new Date(),initial={from:current.getFullYear()+'-01',to:current.getFullYear()+'-12',customerId:''};
  const [filters,setFilters]=useState<Filters>(initial),[request,setRequest]=useState({...initial,revision:0}),[data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[customers,setCustomers]=useState<{id:string;name:string}[]>([]);
  useEffect(()=>{
   const abort=new AbortController();let cancelled=false;
+  const scope=JSON.stringify([organizationId,audience,previewCustomerId,request]);if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');setLoading(true);setPublicationsOpen(false);}
   const query=new URLSearchParams({from:request.from,to:request.to});if(previewCustomerId)query.set('customerId',previewCustomerId);else if(audience==='backoffice'&&request.customerId)query.set('customerId',request.customerId);
   apiRequest<Data>((previewCustomerId?'/api/v1/portal/preview?':audience==='client'?'/api/v1/portal/financial?':'/api/v1/financial-settlements/published?')+query,{signal:abort.signal,cache:'no-store'}).then(result=>{
    const validCustomer=audience==='client'?result.audience==='client'&&typeof result.customerId==='string'&&result.customerId.length>0&&(!previewCustomerId||result.customerId===previewCustomerId)&&result.period.customerId===result.customerId&&result.rows.every(r=>r.customerId===result.customerId):result.period.customerId===(request.customerId||null);
    if(result.organizationId!==organizationId||result.period.from!==request.from||result.period.to!==request.to||!validCustomer)throw new Error('O escopo da consulta mudou. Atualize o painel.');
-   if(!cancelled){setData(result);if(audience==='backoffice'&&!request.customerId)setCustomers(Array.from(new Map(result.rows.map(r=>[r.customerId,{id:r.customerId,name:r.customerName}])).values()));}
-  }).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Não foi possível consultar as publicações.');}).finally(()=>{if(!cancelled)setLoading(false);});
+   if(!cancelled){setError('');setData(result);if(audience==='backoffice'&&!request.customerId)setCustomers(Array.from(new Map(result.rows.map(r=>[r.customerId,{id:r.customerId,name:r.customerName}])).values()));}
+  }).catch(e=>{if(!cancelled){setData(null);setError(e instanceof Error?e.message:'Não foi possível consultar as publicações.');}}).finally(()=>{if(!cancelled)setLoading(false);});
   return()=>{cancelled=true;abort.abort();};
  },[organizationId,request,audience,previewCustomerId,publicationRevision]);
  const update=(key:keyof Filters,value:string)=>{setFilters(f=>({...f,[key]:value}));setData(null);setError('');};
@@ -57,9 +60,9 @@ export default function PublishedFinancialDashboard({organizationId,organization
     <p>{data.disclosure}</p>
     {data.totals?<>{audience==='client'?<article className="portal-savings-highlight" aria-label="Economia acumulada do período"><div><span>Economia acumulada após honorários</span><strong>{financialDisplay(data.totals.savingsAfterFees)}</strong><small>{data.period.from} a {data.period.to} · somente competências publicadas</small></div><div className="portal-savings-percent"><strong>{financialDisplay(data.totals.savingsPercent,false)}</strong><span>Economia média ponderada</span></div><p>Percentual do período: economia acumulada ÷ custo ACR acumulado. Meses sem publicação não representam zero.</p></article>:null}<div className="published-financial__totals">{(Object.keys(labels) as (keyof Amounts)[]).filter(key=>audience!=='client'||['acr','aclAfterFees','totalFees'].includes(key)).map(key=><Card key={key} title={labels[key]}><strong>{financialDisplay(data.totals![key],key!=='savingsPercent')}</strong></Card>)}</div></>:<Alert>Nenhuma apuração publicada neste período. Não há total financeiro disponível.</Alert>}
     {data.charts?<ApprovedFinancialCharts months={data.charts}/>:null}
-    {audience==='client'&&!previewCustomerId&&data.customerId?<PublishedClientInsights key={JSON.stringify([organizationId,data.customerId,data.period,data.rows.map(r=>r.id)])} organizationId={organizationId} customerId={data.customerId} from={data.period.from} to={data.period.to} publicationIds={data.rows.map(r=>r.id)}/>:null}
+    {audience==='client'&&!previewCustomerId&&data.customerId?<PublishedClientInsights key={JSON.stringify([organizationId,data.customerId,data.period])} organizationId={organizationId} customerId={data.customerId} from={data.period.from} to={data.period.to} publicationIds={data.rows.map(r=>r.id)}/>:null}
     <h4>Comparativo mensal</h4><div className="published-financial__table"><table><thead><tr><th>Competência</th><th>Publicações</th><th>ACR</th><th>ACL com honorários</th><th>Economia após honorários</th></tr></thead><tbody>{data.months.map(m=><tr key={m.month}><td>{m.month}</td><td>{m.publicationCount}</td><td>{m.totals?financialDisplay(m.totals.acr):'Sem publicação'}</td><td>{m.totals?financialDisplay(m.totals.aclAfterFees):'Não disponível'}</td><td>{m.totals?financialDisplay(m.totals.savingsAfterFees):'Não disponível'}</td></tr>)}</tbody></table></div>
-    <h4>Publicações e ressalvas</h4>{data.rows.map(r=><article className="published-financial__publication" key={r.id}><h4>{r.customerName} · {r.month} · v{r.version} publicada</h4>{canPreview&&audience==='backoffice'?<p><Link href={'/backoffice/client-portal?customerId='+encodeURIComponent(r.customerId)}>Conferir visão do cliente</Link></p>:null}<p>Unidades: {r.units.map(u=>u.name||u.id).join(', ')}.</p><p>ACR {financialDisplay(r.amounts.acr)} · ACL com honorários {financialDisplay(r.amounts.aclAfterFees)} · economia {financialDisplay(r.amounts.savingsAfterFees)}.</p><p>Publicada em {new Date(r.publishedAt).toLocaleString('pt-BR')}. {r.publicationNote}</p><div><p><strong>Ressalvas e origem da versão</strong></p><ul>{r.reservations.map((note,i)=><li key={i}>{note}</li>)}</ul><p>Grupo: {r.id}<br/>Hash: <code>{r.payloadHash}</code></p></div></article>)}
+    <h4>Publicações e ressalvas</h4><Button variant="secondary" aria-expanded={publicationsOpen} aria-controls={publicationsId} onClick={()=>setPublicationsOpen(v=>!v)}>{publicationsOpen?"Recolher publicações e ressalvas":"Mostrar publicações e ressalvas"} · {data.rows.length}</Button><div id={publicationsId} className="published-financial__publications" hidden={!publicationsOpen}>{data.rows.map(r=><article className="published-financial__publication" key={r.id}><h4>{r.customerName} · {r.month} · v{r.version} publicada</h4>{canPreview&&audience==='backoffice'?<p><Link href={'/backoffice/client-portal?customerId='+encodeURIComponent(r.customerId)}>Conferir visão do cliente</Link></p>:null}<p>Unidades: {r.units.map(u=>u.name||u.id).join(', ')}.</p><p>ACR {financialDisplay(r.amounts.acr)} · ACL com honorários {financialDisplay(r.amounts.aclAfterFees)} · economia {financialDisplay(r.amounts.savingsAfterFees)}.</p><p>Publicada em {new Date(r.publishedAt).toLocaleString('pt-BR')}. {r.publicationNote}</p><div><p><strong>Ressalvas e origem da versão</strong></p><ul>{r.reservations.map((note,i)=><li key={i}>{note}</li>)}</ul><p>Grupo: {r.id}<br/>Hash: <code>{r.payloadHash}</code></p></div></article>)}</div>
     <p className="published-financial__signature">Powered by Expert Energy</p>
    </div>
   </>:null}

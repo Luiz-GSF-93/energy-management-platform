@@ -1,6 +1,6 @@
 'use client';
 import {usePublicationRefresh} from './usePublicationRefresh';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import EnergyPriceChart,{EnergyPriceMonth} from './EnergyPriceChart';
 import {Alert,Button} from './ui';
@@ -11,15 +11,17 @@ type Data={workspaceV2?:boolean;organizationId:string;audience:string;customerId
 const display=(v:string|null)=>v===null?'Aguardando referência':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'/MWh';
 export default function EnergyPriceDashboard({organizationId,audience='backoffice'}:{organizationId:string;audience?:'backoffice'|'client'}){
  const publicationRevision=usePublicationRefresh();
+ const scopeRef=useRef('');
  const [year,setYear]=useState(new Date().getFullYear()),[customer,setCustomer]=useState(''),[unit,setUnit]=useState(''),[options,setOptions]=useState<Unit[]>([]),[data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[publishing,setPublishing]=useState(false),[checked,setChecked]=useState<string[]>([]);
  useEffect(()=>{
   const abort=new AbortController();let current=true;
-  setData(null);setError('');setLoading(true);setChecked([]);
+  const scope=JSON.stringify([organizationId,audience,year,customer,unit]);
+  if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');setLoading(true);setChecked([]);}
   const query=new URLSearchParams({year:String(year)});if(audience==='backoffice'&&customer)query.set('customerId',customer);if(unit)query.set('unitId',unit);
   apiRequest<Data>('/api/v1/'+(audience==='client'?'portal/':'')+'energy-prices?'+query,{signal:abort.signal,cache:'no-store'}).then(result=>{
    if(result.organizationId!==organizationId||result.audience!==audience||result.year!==year||audience==='backoffice'&&customer!==''&&result.customerId!==customer||audience==='client'&&!result.customerId||unit&&result.units.some(u=>u.id!==unit)||result.customerId&&result.units.some(u=>u.customerId!==result.customerId))throw Error('Escopo do indicador alterado; atualize a consulta.');
-   if(!current)return;if(audience==='backoffice'&&!customer&&result.customerId){setCustomer(result.customerId);setOptions(result.units);return;}setData(result);if(!unit&&(audience==='client'||!customer))setOptions(result.units);
-  }).catch(e=>{if(current)setError(e instanceof Error?e.message:'Indicador indisponível.');}).finally(()=>{if(current)setLoading(false);});
+   if(!current)return;if(audience==='backoffice'&&!customer&&result.customerId){setCustomer(result.customerId);setOptions(result.units);return;}setError('');setData(result);if(!unit&&(audience==='client'||!customer))setOptions(result.units);
+  }).catch(e=>{if(current){setData(null);setError(e instanceof Error?e.message:'Indicador indisponível.');}}).finally(()=>{if(current)setLoading(false);});
   return()=>{current=false;abort.abort();};
  },[organizationId,audience,year,customer,unit,revision,publicationRevision]);
  const marketReference=data?[...data.months].reverse().find(m=>m.pldSpread5!=null&&m.pldSpread15!=null):undefined;
@@ -35,7 +37,7 @@ export default function EnergyPriceDashboard({organizationId,audience='backoffic
    <label>Unidades <select disabled={publishing||audience==='backoffice'&&!customer} value={unit} onChange={e=>select('unit',e.target.value)}><option value="">Consolidar unidades do cliente</option>{options.filter(u=>audience==='client'||u.customerId===customer).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
    <Button variant="secondary" disabled={loading||publishing} onClick={()=>setRevision(v=>v+1)}>Atualizar</Button></div>
   {loading?<p role="status">Conferindo referências e publicações…</p>:null}{error?<Alert variant="error">{error}</Alert>:null}
-  {data?.customerId&&!loading?<><div className={styles.cards}><article><span>{data.workspaceV2?'TE ACR · referência publicada':'Antes da adesão · TE ACR'}</span><strong>{display(data.acrAverage)}</strong><small>{data.workspaceV2?'Média dos meses disponíveis, ponderada pelo consumo.':'Referência anual; confira período e estimativas abaixo.'}</small></article><article><span>Perfil ACL · energia do fornecedor</span><strong>{display(data.aclAverage)}</strong><small>Somente energia do fornecedor; exclui distribuidora, demanda e honorários. Confira a base tributária publicada.</small></article><article><span>PLD mensal · CCEE</span><strong>{display([...data.months].reverse().find(m=>m.pld!==null)?.pld??null)}</strong><small>Referência do mês e submercado. Spreads estimados disponíveis no gráfico.</small></article></div>
+  {data?.customerId&&!loading?<><div className={styles.cards}><article><span>{data.workspaceV2?'TE ACR · referência publicada':'Antes da adesão · TE ACR'}</span><strong>{display(data.acrAverage)}</strong><small>{data.workspaceV2?'Média dos meses disponíveis, ponderada pelo consumo.':'Referência anual; confira período e estimativas abaixo.'}</small></article><article><span>Perfil ACL · valor contratado</span><strong>{display(data.aclAverage)}</strong><small>Preço médio efetivo da energia faturada, incluindo compras avulsas; exclui distribuidora, demanda e honorários. Confira a base tributária publicada.</small></article><article><span>PLD mensal · CCEE</span><strong>{display([...data.months].reverse().find(m=>m.pld!==null)?.pld??null)}</strong><small>Referência do mês e submercado. Spreads estimados disponíveis no gráfico.</small></article></div>
    <div className={styles.layout}><EnergyPriceChart months={data.months} footer={data.footer}/><aside className={styles.strategy}><h3>Preço indicativo de compra</h3>{data.indicative.value!==null?<><strong>{display(data.indicative.value)}</strong><p className={styles.notice}>{data.indicative.notice}</p><p>{data.indicative.reason}</p></>:marketReference?<><strong>{display(marketReference.pldSpread5??null)} a {display(marketReference.pldSpread15??null)}</strong><p className={styles.notice}>Faixa estimada · PLD + 5% a + 15% · {marketReference.month}</p><p>Cenários de mercado já demonstrados no gráfico, sem tributos. Não representam cotação ou oferta. A comparação líquida entre ACR e compras faturadas ainda depende da segregação fiscal das fontes.</p></>:<><strong>{display(null)}</strong><p>{data.indicative.reason}</p></>}<p>Compare propostas com a mesma vigência, volume, perdas e flexibilidade. Confirme a estratégia com seu Consultor.</p></aside></div>
    <p className={styles.disclosure}>{data.disclosure}</p>
    {data.baselines.map(b=><article className={styles.reference} key={b.unitId}><strong>{data.units.find(u=>u.id===b.unitId)?.name}</strong><p>{b.published?'Referência publicada':audience==='backoffice'?'Prévia interna — ainda não publicada':'Referência ainda não publicada'}{b.baseline.from?' · '+b.baseline.from+' a '+b.baseline.to:''}</p><small>{b.baseline.disclosure||b.baseline.reason}</small>

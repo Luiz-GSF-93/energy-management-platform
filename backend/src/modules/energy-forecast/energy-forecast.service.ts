@@ -1,3 +1,4 @@
+import {historicalContractingScenario} from './historical-contracting';
 import {ContractContextService} from './contract-context.service';
 import {publicContractExposure,ContractExposure} from './contract-exposure';
 import {auditAuthorNames} from '../contracts/services/audit-author-names';
@@ -69,7 +70,7 @@ export class EnergyForecastService {
  }
  async approveHistory(id:string,input:unknown,t:TenantContext){await this.access(t,true,true);const d=await validateWriteDto(ValidateHistoryDto,input as ValidateHistoryDto);return this.rpc('energy_forecast_history_approve',{p_org:t.organizationId,p_actor:t.userId,p_history:id,p_request:d.requestId,p_note:d.note});}
  private verify(r:any,t:TenantContext){if(r.organization_id!==t.organizationId||r.body?.organizationId!==t.organizationId||r.body?.customerId!==r.customer_id||r.body?.unitId!==r.consumer_unit_id||r.payload_hash!==reportHash(r.body))throw new InternalServerErrorException('Integridade da previsão indisponível.');return r;}
- private async auditRun(r:any,t:TenantContext){this.verify(r,t);const events=await auditAuthorNames(this.db.getClient(),t.organizationId,(r.events??[]).map((e:any)=>({...e,organization_id:e.organization_id??r.organization_id,customer_id:r.customer_id})));return {...r,events};}
+ private async auditRun(r:any,t:TenantContext){this.verify(r,t);const events=await auditAuthorNames(this.db.getClient(),t.organizationId,(r.events??[]).map((e:any)=>({...e,organization_id:e.organization_id??r.organization_id,customer_id:r.customer_id})));return {...r,events,contractingScenario:historicalContractingScenario({organizationId:t.organizationId,customerId:r.customer_id,unitId:r.consumer_unit_id},r.body.actual,r.body.future,r.body.asOfMonth,new Date().toISOString())};}
  async list(t:TenantContext){await this.access(t);const rows=await this.rpc('energy_forecast_read',{p_org:t.organizationId,p_actor:t.userId,p_run:null});return Promise.all(rows.map((r:any)=>this.auditRun(r,t)));}
  async one(id:string,t:TenantContext){await this.access(t);return this.auditRun(await this.rpc('energy_forecast_read',{p_org:t.organizationId,p_actor:t.userId,p_run:id}),t);}
  async prepare(input:unknown,t:TenantContext){
@@ -111,6 +112,6 @@ export class EnergyForecastService {
   const r=await this.rpc('energy_forecast_published',{p_org:t.organizationId,p_actor:t.userId,p_customer:customer,p_unit:unit,p_cutoff:cutoff});if(!r)return null;this.verify(r,t);const b=r.body,publication=r.events.find((e:any)=>e.action==='PUBLISHED');
   if(r.customer_id!==customer||r.consumer_unit_id!==unit||b.asOfMonth!==cutoff)throw new InternalServerErrorException('Recorte da previsão incompatível com o relatório.');
   if(!publication)throw new InternalServerErrorException('Previsão sem publicação.');
-  return {id:r.id,version:r.version,payloadHash:r.payload_hash,organizationId:t.organizationId,customerId:customer,unitId:unit,asOfMonth:cutoff,publishedAt:publication.created_at,formulaVersion:b.formulaVersion,inputVersion:b.inputVersion,method:b.method,actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh,billedDays:a.billedDays})),future:b.future,observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh,weatherStatus:b.weatherStatus,weatherApplied:b.weatherApplied,qualifications:b.qualifications,climateSummary:climateCycleSummary(b.climateAssessment),contractExposure:publicContractExposure(b.contractExposure)};
+  return {id:r.id,version:r.version,payloadHash:r.payload_hash,organizationId:t.organizationId,customerId:customer,unitId:unit,asOfMonth:cutoff,publishedAt:publication.created_at,formulaVersion:b.formulaVersion,inputVersion:b.inputVersion,method:b.method,actual:b.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh,billedDays:a.billedDays})),future:b.future,observedYearKwh:b.observedYearKwh,futureKwh:b.futureKwh,estimatedYearKwh:b.estimatedYearKwh,weatherStatus:b.weatherStatus,weatherApplied:b.weatherApplied,qualifications:b.qualifications,climateSummary:climateCycleSummary(b.climateAssessment),contractExposure:publicContractExposure(b.contractExposure),contractingScenario:historicalContractingScenario({organizationId:t.organizationId,customerId:customer,unitId:unit},b.actual,b.future,b.asOfMonth,new Date().toISOString())};
  }
 }

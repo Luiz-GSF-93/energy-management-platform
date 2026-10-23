@@ -43,6 +43,7 @@ const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  ok(uploads===1&&text().includes('Fatura recebida'),'single upload gives visible confirmation');
  testFile=new dom.window.File([new Uint8Array(15*1024*1024+1)],'too-large.pdf',{type:'application/pdf'});await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));ok(uploads===1&&text().includes('15 MB'),'oversize file rejected before network or quota');testFile=new dom.window.File(['test'],'test.pdf',{type:'application/pdf'});
+ const monthGrid=document.querySelector('button[aria-label^="Setembro"]');monthGrid.focus();await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Atualizar faturas').click());ok(document.querySelector('button[aria-label^="Setembro"]')===monthGrid,'periodic invoice refresh preserves month grid identity');ok(document.activeElement===monthGrid,'invoice refresh preserves focused month');
  const form=calls.find(([u,o])=>u.endsWith('/uploads'))[1].body;ok(form.get('unitId')==='unit'&&form.get('month')==='2026-09'&&form.get('consent')==='true','scope and consent transmitted, no permissions invented');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Fechar envio').click());
  await act(async()=>document.querySelector('button[aria-label^="Setembro"]').click());

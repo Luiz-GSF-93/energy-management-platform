@@ -2,6 +2,7 @@ import {calculateConsumptionForecast,quantity,decimal,Observation} from './consu
 import {applyClimateForecast} from './climate-forecast';
 import {applyClimateCycle} from './climate-cycle';
 import {reportHash} from '../reports/report.projection';
+import {historicalContractingScenario} from './historical-contracting';
 
 /** Recalculates a read-only planning view. Never mutates a published forecast or closing. */
 export function publicationPlanning(body:any,publications:any[],calculatedAt:string,weatherRequest?:any){
@@ -32,5 +33,6 @@ export function publicationPlanning(body:any,publications:any[],calculatedAt:str
  if(body.weather&&weatherRequest&&asOfMonth===body.asOfMonth){
   try{const assessed=weatherRequest.assessment?applyClimateCycle(input,base,body.weather,weatherRequest):applyClimateForecast(input,base,body.weather);current={...current,...assessed,weatherStatus:assessed.weatherApplied?'CLIMATE_SCENARIO_APPLIED':'HISTORY_COLLECTED_NOT_APPLIED'};}catch{current.qualifications.push('Memória climática incompatível com a atualização; planejamento sem ajuste climático.');}
  }
- return {state:'AVAILABLE' as const,pending:[],sources,sourceFingerprint:reportHash({baseForecastHash:reportHash(body),input,sources,weatherStatus:current.weatherStatus}),current:{...current,calculatedAt,asOfMonth}};
+ const contractingScenario=historicalContractingScenario(scope,current.actual,current.future,asOfMonth,calculatedAt);
+ return {state:'AVAILABLE' as const,pending:[],sources,sourceFingerprint:reportHash({baseForecastHash:reportHash(body),input,sources,weatherStatus:current.weatherStatus,contractingScenarioFormula:contractingScenario.formulaVersion}),current:{...current,contractingScenario,calculatedAt,asOfMonth}};
 }

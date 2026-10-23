@@ -1,6 +1,6 @@
 'use client';
 import {usePublicationRefresh} from './usePublicationRefresh';
-import {useEffect,useId,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import PortalWasteCorrection,{WasteDeclaration} from './PortalWasteCorrection';
 import {Alert,Button} from './ui';
@@ -17,11 +17,12 @@ type Manifest={organizationId:string;audience:string;customerId:string;period:{f
 const monthName=(month:string)=>new Date(Number(month.slice(0,4)),Number(month.slice(5))-1,1).toLocaleDateString('pt-BR',{month:'long'});
 export default function PublishedClientInsights({organizationId,customerId,from,to,publicationIds}:{organizationId:string;customerId:string;from:string;to:string;publicationIds:string[]}){
  const publicationRevision=usePublicationRefresh();
+ const scopeRef=useRef('');
  const initialMonths=Array.from({length:12},(_,i)=>from.slice(0,4)+'-'+String(i+1).padStart(2,'0')).filter(m=>m>=from&&m<=to);
  const [year,setYear]=useState(from.slice(0,4)),[selection,setSelection]=useState<string[]>(initialMonths),[data,setData]=useState<Response|null>(null),[error,setError]=useState(''),[unit,setUnit]=useState(''),[revision,setRevision]=useState(0),[units,setUnits]=useState<{id:string;name:string}[]>([]),[available,setAvailable]=useState<string[]>([]);
  const signature=JSON.stringify(publicationIds),selectedSignature=JSON.stringify([...selection].sort()),periodFrom=year+'-01',periodTo=year+'-12';
  const months=Array.from({length:12},(_,i)=>year+'-'+String(i+1).padStart(2,'0'));
- useEffect(()=>{let live=true;const abort=new AbortController();setData(null);setError('');const selected=JSON.parse(selectedSignature) as string[];
+ useEffect(()=>{let live=true;const abort=new AbortController();const scope=JSON.stringify([organizationId,customerId,periodFrom,periodTo,unit,selectedSignature]);if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');}const selected=JSON.parse(selectedSignature) as string[];
   const query=new URLSearchParams({from:periodFrom,to:periodTo,...(unit?{unitId:unit}:{}),...(selected.length===1?{month:selected[0]}:{months:selected.join(',')})});
   const manifestQuery=new URLSearchParams({from:periodFrom,to:periodTo});
   const load=async()=>{
@@ -32,8 +33,8 @@ export default function PublishedClientInsights({organizationId,customerId,from,
    if(!selected.length)return;
    const r=await apiRequest<Response>('/api/v1/portal/financial-details?'+query,{signal:abort.signal,cache:'no-store'});
    if(r.organizationId!==organizationId||r.customerId!==customerId||r.from!==periodFrom||r.to!==periodTo||!Array.isArray(r.rows)||!Array.isArray(r.corrections)||typeof r.correctionTotal!=='string'||!('consolidated' in r)||r.rows.some(x=>!Array.isArray(x.indicators)||x.customerId!==customerId||!selected.includes(x.month)||!manifest.rows.some(p=>p.id===x.publicationId&&p.month===x.month&&p.units.some(u=>u.id===x.unitId))||unit&&x.unitId!==unit))throw Error('As publicações mudaram. Atualize os resultados antes de conferir a composição.');
-   if(live)setData(r);
-  };load().catch(e=>{if(live)setError(e.message);});return()=>{live=false;abort.abort();};
+   if(live){setError('');setData(r);}
+  };load().catch(e=>{if(live){setData(null);setError(e.message);}});return()=>{live=false;abort.abort();};
  },[organizationId,customerId,periodFrom,periodTo,signature,unit,selectedSignature,revision,publicationRevision]);
  const toggleMonth=(month:string)=>setSelection(current=>current.includes(month)?current.filter(m=>m!==month):[...current,month].sort());
  const declaration=(r:Row,key:string)=>data?.corrections.find(c=>c.publicationId===r.publicationId&&c.unitId===r.unitId&&c.sourceHash===r.sourceHash&&c.key===key);
