@@ -1,4 +1,5 @@
 import {DiagnosticRequestsService,DiagnosticRequestDto} from './diagnostic-requests.service';
+import {EvaInvoiceAttentionService,InvoiceAttentionDto} from './eva-invoice-attention.service';
 import {BadRequestException,Body,Controller,Get,Param,Post,Put,Query} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -6,7 +7,9 @@ import {OperationsService} from './operations.service';
 import {OperationWriteDto,OperationTransitionDto,NotificationReadDto} from './operations.dto';
 @Controller('operations')
 export class OperationsController {
- constructor(private service:OperationsService,private diagnostics:DiagnosticRequestsService){}
+ constructor(private service:OperationsService,private diagnostics:DiagnosticRequestsService,private invoices:EvaInvoiceAttentionService){}
+ @Get('eva-invoices') invoicesList(@Tenant() t:TenantContext){return this.invoices.list(t);}
+ @Post('eva-invoices/:id') invoicesDecision(@Param('id') id:string,@Body() b:InvoiceAttentionDto,@Tenant() t:TenantContext){return this.invoices.record(id,b,t);}
  @Get('responsible') responsible(@Tenant() t:TenantContext){return this.service.responsible(t);}
  @Get('notifications') notifications(@Tenant() t:TenantContext,@Query('sources') sources?:string){if(sources!==undefined&&sources!=='1')throw new BadRequestException('Origem de notificações inválida.');return this.service.notifications(t,sources==='1');}
  @Post('notifications/read') read(@Body() d:NotificationReadDto,@Tenant() t:TenantContext){return this.service.markRead(d,t);}
