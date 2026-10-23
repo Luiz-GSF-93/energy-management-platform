@@ -44,3 +44,26 @@ describe('Verified supplier invoices for the documented monthly allocation',()=>
   const d:any={...document(),reference_month:'2026-04-01'},hash=d.file_hash;d[key]='foreign';const s=setup([d]);s.chain.maybeSingle=jest.fn(async()=>({data:d}));await expect(s.service.verifiedSupplierInvoice(context(),'doc',hash)).rejects.toMatchObject({status:503});expect(s.download).not.toHaveBeenCalled();
  });
 });
+
+describe('Distributor installation changes use the scoped immutable registration history',()=>{
+ const prior=process.env[SOURCE_PREPARATION_FLAG];
+ beforeEach(()=>{process.env[SOURCE_PREPARATION_FLAG]='true';jest.clearAllMocks();});
+ afterAll(()=>{if(prior===undefined)delete process.env[SOURCE_PREPARATION_FLAG];else process.env[SOURCE_PREPARATION_FLAG]=prior;});
+ function identitySetup(){
+  const d={...document(),document_type:'INVOICE_DISTRIBUTOR'},s=setup([d]);
+  s.chain.maybeSingle=jest.fn(async()=>({data:d}));s.chain.order=jest.fn(()=>s.chain);
+  const record=(code:string)=>({id:'unit',organization_id:'org',customer_id:'client',consumer_unit_number:code});
+  s.chain.limit=jest.fn(async()=>({data:[{id:'edit',organization_id:'org',entity_kind:'consumer_units',entity_id:'unit',created_by:'operator',reason:'Confirmed distributor code change',before_record:record('0012345678'),after_record:record('9999999999')}]}));
+  (extractPdfText as jest.Mock).mockResolvedValue({ocrRequired:false,sections:[{page:1,issues:[],text:'EMPRESA EXEMPLO LTDA CNPJ 12.345.678/0001-90\nUC: 0012345678\nRUA EXEMPLO 123 CENTRO\nReferencia ABR/2026'}]});
+  return s;
+ }
+ const r={customerName:'Empresa Exemplo LTDA',taxId:'12.345.678/0001-90',unitNumber:'9999999999',address:'Rua Exemplo 123 Centro',month:'2026-04'};
+ it('rechecks bytes and uses only an audited code belonging to the same customer and unit',async()=>{
+  const s=identitySetup();expect(await s.service.invoiceIdentity('org','client','unit','doc',r)).toMatchObject({state:'MATCH',registrationEditIds:['edit']});
+  expect(s.chain.eq.mock.calls).toEqual(expect.arrayContaining([['organization_id','org'],['entity_kind','consumer_units'],['entity_id','unit']]));
+ });
+ it('fails closed if the audit cannot be read and does not accept request-supplied aliases',async()=>{
+  const s=identitySetup();s.chain.limit.mockResolvedValue({error:{message:'unavailable'}});
+  await expect(s.service.invoiceIdentity('org','client','unit','doc',{...r,auditedUnitNumbers:['0012345678']})).rejects.toMatchObject({status:503});
+ });
+});
