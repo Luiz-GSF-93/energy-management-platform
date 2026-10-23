@@ -20,6 +20,25 @@ function fixture(){
  return {service,tenant,source,diagnosis,query,licenses,queue,review,operations,body};
 }
 describe('OCR assistant safety and partial execution',()=>{
+ it.each([false,true])('rechecks sources after a dependent preview asks for review only with V3: %s',async enabled=>{
+  const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+  try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=String(enabled);const f=fixture();
+   f.operations[1].preview.mockResolvedValueOnce({token:'second-token',state:'READY',canCreate:true,message:'Ready'}).mockResolvedValue({token:'changed',state:'REVIEWS_PENDING',canCreate:false,message:'Needs review'});
+   const result=await f.service.prepareAutomatic('doc',f.tenant);
+   expect(result).toMatchObject({complete:false,canContinue:enabled,preparationComplete:false,canPublish:false});
+   expect(result.receipts.map(r=>r.state)).toEqual(['SAVED_DRAFT','REVIEW_REQUIRED']);
+   expect(f.operations[0].create).toHaveBeenCalledTimes(1);expect(f.operations[1].create).not.toHaveBeenCalled();
+  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+ });
+ it.each(['uncertain-write','failed-final-read'])('never continues automatic preparation after %s',async failure=>{
+  const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+  try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const f=fixture();
+   if(failure==='uncertain-write')f.operations[1].create.mockRejectedValueOnce(Error('Response lost'));
+   else {const original=f.service.inspect.bind(f.service);jest.spyOn(f.service,'inspect').mockImplementationOnce(original).mockRejectedValueOnce(Error('Final read failed'));}
+   expect(await f.service.prepareAutomatic('doc',f.tenant)).toMatchObject({complete:false,canContinue:false,canPublish:false});
+   expect(f.operations[0].create).toHaveBeenCalledTimes(1);expect(f.operations[1].create).toHaveBeenCalledTimes(1);
+  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+ });
  it('does not create any draft when invoice identity fails',async()=>{const f=fixture();f.queue.assertAutomaticIdentity.mockRejectedValueOnce(Error('UC, CNPJ or address mismatch'));await expect(f.service.prepareAutomatic('doc',f.tenant)).rejects.toThrow('mismatch');expect(f.operations[0].create).not.toHaveBeenCalled();});
  it('automatically saves only eligible drafts and never confirms extracted fields or publishes',async()=>{
   const f=fixture();f.operations[1].preview.mockResolvedValue({token:'pending',state:'REVIEWS_PENDING',canCreate:false,message:'Needs review'});
