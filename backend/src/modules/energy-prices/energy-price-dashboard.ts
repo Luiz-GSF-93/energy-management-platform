@@ -1,6 +1,6 @@
 import {feeCents,feeMoney} from '../contracts/services/management-fee';
 import {reviewDigest} from '../contracts/services/review-snapshots.service';
-import {pldSpreadScenarios} from './pld-spread';
+import {observedPriceComparisons,pldSpreadScenarios} from './pld-spread';
 import {baselineFromStudy,decimal,quantity,specificPrice,indicativePrice} from './energy-price-score';
 export function energyPriceDashboard(org:string,year:number,data:any,portal:boolean){
  if(!Array.isArray(data.units)||!Array.isArray(data.studies)||!Array.isArray(data.baselines)||!Array.isArray(data.financial)||!Array.isArray(data.pld)||portal&&data.studies.length)throw Error('Fontes de preço fora do escopo.');
@@ -56,7 +56,8 @@ export function energyPriceDashboard(org:string,year:number,data:any,portal:bool
  const a=monthAcr===null?null:feeCents(monthAcr),b=scoreAcl===null?null:feeCents(scoreAcl),diff=a!==null&&b!==null?a-b:null;
  const score=a&&diff!==null?(diff<0n?'-':'')+feeMoney(((diff<0n?-diff:diff)*10000n+a/2n)/a):null;
  const deltaPld=data.workspaceV2&&acl!==null&&pld!==null&&feeCents(pld)>0n?(()=>{const delta=feeCents(acl)-feeCents(pld),base=feeCents(pld);return (delta<0n?'-':'')+feeMoney(((delta<0n?-delta:delta)*10000n+base/2n)/base);})():null;
- return {month,acr:monthAcr,acl,aclNet:scoreAcl,pld,aclVsPldPercent:deltaPld,observedKwh:modern.length?quantity(modern.reduce((n:bigint,r:any)=>n+decimal(r.prices.kwh??'0'),0n)):quantity(volume),...pldSpreadScenarios(pldReference),scorePercent:score,taxBasis,priceNotice,coveredUnits:modern.length?modern.filter((r:any)=>r.prices.acrNet&&r.prices.aclNet).length:selected.filter(p=>p?.gross!=null).length,totalUnits:units.length};
+ const spreads=pldSpreadScenarios(pldReference),comparisons=observedPriceComparisons(acl,taxBasis==='NET'?scoreAcl:null,monthAcr,pld,spreads,modern.length?'NET':'GROSS');
+ return {month,comparisons,acr:monthAcr,acl,aclNet:scoreAcl,pld,aclVsPldPercent:deltaPld,observedKwh:modern.length?quantity(modern.reduce((n:bigint,r:any)=>n+decimal(r.prices.kwh??'0'),0n)):quantity(volume),...spreads,scorePercent:score,taxBasis,priceNotice,coveredUnits:modern.length?modern.filter((r:any)=>r.prices.acrNet&&r.prices.aclNet).length:selected.filter(p=>p?.gross!=null).length,totalUnits:units.length};
  });
  const completeMonths=new Set(months.filter(m=>m.acl!==null).map(m=>m.month));
  const actual=prices.filter((p:any)=>completeMonths.has(p.month)&&p.gross!==null&&p.kwh),grossAverage=actual.length?specificPrice(actual.reduce((n:bigint,p:any)=>n+feeCents(p.gross),0n),actual.reduce((n:bigint,p:any)=>n+decimal(p.kwh),0n)):null;
