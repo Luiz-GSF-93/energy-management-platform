@@ -67,6 +67,14 @@ export class ContractContextService {
   if(!t.permissions.includes(P.OPERACAO_EVENTS_VIEW))return {...calculateContractExposure(scope,future,[],at,true),sources:[] as ContractTerm[]};
   return this.captureResolved(scope,future,at,await this.context(scope,t));
  }
+ /** Same document/event ACL and interruption checks as planning; one source
+  * capture per unit, not one database query per chart point. Read-only. */
+ async marketSources(scope:ExposureScope,months:string[],t:TenantContext){
+  if(!months.length||months.length>24||new Set(months).size!==months.length)throw new BadRequestException('Selecione até 24 competências.');
+  const context=await this.context(scope,t),rows=[],terms:ContractTerm[]=[];const at=new Date().toISOString();
+  for(let i=0;i<months.length;i+=12){const captured=await this.captureResolved(scope,months.slice(i,i+12).map(month=>({month,predictedKwh:'0'})),at,context);rows.push(...captured.rows);terms.push(...captured.sources);}
+  return {contracts:context.contracts,rules:context.rules,coverage:rows,terms};
+ }
  async capturePublishedPlanning(scope:ExposureScope,future:{month:string;predictedKwh:string}[],at:string,t:TenantContext){
   if(t.organizationId!==scope.organizationId||!t.userId||!t.roleId||t.role!=='consulta'||t.accessMode||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW))throw new ForbiddenException('Planejamento exige cliente vinculado.');
   await this.licenses.requireEntitlement(t.organizationId,'report_generation');await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
