@@ -32,3 +32,14 @@ describe('Audited installation code changes',()=>{
   expect(invoiceIdentityText(text.replace('ABR/2026','MAI/2026'),r).state).toBe('MISMATCH');
  });
 });
+
+describe('CPFL NF3e formatted installation strip',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ const flag=require('./source-preparation-v3').SOURCE_PREPARATION_FLAG;
+ const old=process.env[flag];
+ beforeEach(()=>{process.env[flag]='true';});afterAll(()=>{if(old===undefined)delete process.env[flag];else process.env[flag]=old;});
+ const t='COMPANHIA PAULISTA DE FORCA E LUZ\nEMPRESA EXEMPLO LTDA\nRUA EXEMPLO 123 CENTRO\nCNPJ: 12.345.678/0001-90\n9.999.999.999-99\nABR/2026 10/05/2026 R$300,00';
+ const r={...registration,auditedUnitNumbers:['999999999999']};
+ it('recognizes the exact CNPJ, formatted UC and reference sequence',()=>expect(invoiceIdentityText(t,r).state).toBe('MATCH'));
+ it.each([['9.999.999.999-99','9.999.999.999-98'],['ABR/2026','MAI/2026'],['12.345.678/0001-90','22.345.678/0001-90']])('preserves explicit mismatch checks %s',(a,b)=>expect(invoiceIdentityText(t.replace(a,b),r).state).not.toBe('MATCH'));
+});

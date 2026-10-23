@@ -55,13 +55,14 @@ export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceCompar
   }
   const flag=tariffFlag(c,p,layout,base);
   for(const line of [...adjusted,...flag]){const [n,d]=rational(line),gross=componentGross(n,d,rates,line.component!=='TUSD_DEMAND_UNUSED');r.lines.push({...line,...gross,taxTreatment:'GROSS',netRate:line.value});}
-  const excluded=new Set(['TE','TUSD_ENERGY','DEMAND_BILLED','DEMAND_UNUSED','ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT','TARIFF_SUBSIDY','SUBSIDY_CREDIT','CDE_WATER_SCARCITY','CDE_COVID','TARIFF_FLAG']);
+  const excluded=new Set(['TE','TUSD_ENERGY','DEMAND_BILLED','DEMAND_UNUSED','ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT','TARIFF_SUBSIDY','SUBSIDY_CREDIT','CDE_WATER_SCARCITY','CDE_COVID','TARIFF_FLAG','REFUND']);
   for(const row of rows){if(excluded.has(row.component))continue;const amount=row.fields.amount.decimal!;cents(amount);r.retained.push({kind:row.component==='REACTIVE_ENERGY'?'REACTIVE':'INVOICE_CHARGE',label:row.component==='DEMAND_EXCESS'?'Ultrapassagem de demanda · '+row.fields.description.text:row.fields.description.text,amount,source:row.source,quantity:row.fields.quantity?.decimal??null,note:'Valor final conciliado da fatura; mantido uma vez, sem novos tributos.'});}
   const keys=['icmsAmount','pisAmount','cofinsAmount'];
   r.acrTaxes=keys.map(code=>({code,scenario:'ACR',amount:fixed(r.lines.reduce((n,line)=>n+cents(line.taxes[code]),0n)),printedRate:base.taxes!.find(t=>t.code===code).printedRate,method:'RECALCULATED_COMPONENT_INSIDE',summarySource:'Memória fiscal ACR V3',cells:r.lines.map(line=>({source:line.source,amount:line.taxes[code],component:line.component})),note:'Imposto já incluído nos valores brutos das linhas; não somar novamente.'}));
   r.supplierIcms=supplierInside(p,rates.icms,base.taxes!.find(t=>t.code==='icmsAmount').printedRate.source);
   r.amount=fixed(r.lines.reduce((n,line)=>n+cents(line.amount),0n)+r.retained.reduce((n,row)=>n+cents(row.amount),0n));
   if(cents(r.amount)<0n)throw Error('ACR total negativo.');
+  r.observations.push('Devoluções da fatura ACL permanecem no total original do ACL e não reduzem automaticamente o ACR. Ajustes ACR exigem fonte e cenário documentados.');
   r.observations.push('Bandeira incluída somente no ACR com fonte e vigência. Descontos de energia ACL, subvenções e encargos específicos do ACL não são transferidos ao ACR. Reativos e ultrapassagem faturados são desperdícios já contidos no fechamento.');
  }catch(e){r.amount=null;r.missing.push(e instanceof Error?e.message:'Composição fiscal por componente indisponível.');}
  return r;
