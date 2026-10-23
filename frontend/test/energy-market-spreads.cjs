@@ -8,19 +8,23 @@ for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.tra
 require.extensions['.css']=m=>{m.exports={};};
 const Chart=require('../app/components/EnergyPriceChart.tsx').default;
 const root=createRoot(document.getElementById('root'));
-const month={month:'2026-01',acr:'600.00',acl:'300.00',pld:'180.12',pldSpread5:'189.13',pldSpread10:'198.14',pldSpread15:'207.14',scorePercent:'50.00'};
+const month={month:'2026-01',acr:'600.00',acl:'300.00',pld:'180.12',pldSpread5:'189.13',pldSpread10:'198.14',pldSpread15:'207.14',scorePercent:'50.00',comparisons:[{key:'acr',label:'Perfil ACR',percent:'-50.00',basis:'NOMINAL_UNCONFIRMED'}]};
 (async()=>{try{
  await act(async()=>root.render(React.createElement(Chart,{months:[month],footer:'Publicações conferidas.'})));
  assert.equal(document.querySelectorAll('path').length,6);
  assert.equal(document.querySelectorAll('path[stroke-dasharray]').length,3);
  assert.ok(document.body.textContent.includes('R$/MWh'));
- await act(async()=>document.querySelector('button').dispatchEvent(new MouseEvent('click',{bubbles:true})));
+ await act(async()=>document.querySelector('[aria-label="Valores de 2026-01"]').dispatchEvent(new MouseEvent('click',{bubbles:true})));
  for(const label of ['Perfil ACR','Perfil ACL','PLD + 5%','PLD + 10%','PLD + 15%','189,13','198,14','207,14'])assert.ok(document.body.textContent.includes(label),label);
+ assert.ok(document.body.textContent.includes('-50,00'));assert.ok(document.body.textContent.includes('nominal'));
+ const chart=document.querySelector('svg'),box=document.querySelector('input[type=checkbox]');box.focus();await act(async()=>box.click());assert.equal(document.querySelectorAll('path').length,5);assert.equal(document.activeElement,box);
+ await act(async()=>root.render(React.createElement(Chart,{months:[{...month,acl:'310.00'}],footer:'Atualizada.'})));assert.equal(document.querySelector('svg'),chart);assert.equal(document.querySelector('input[type=checkbox]'),box);assert.equal(document.activeElement,box);assert.equal(box.checked,false);assert.ok(document.querySelector('[aria-label="Valores de 2026-01"]').getAttribute('aria-pressed')==='true');
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Ocultar todas').click());assert.equal(document.querySelectorAll('path').length,0);await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Mostrar todas').click());assert.equal(document.querySelectorAll('path').length,6);
  const oldApi={month:'2026-02',acr:null,acl:null,pld:null,scorePercent:null};
  await act(async()=>root.render(React.createElement(Chart,{months:[oldApi],footer:'Dados ausentes.'})));
  for(const el of document.querySelectorAll('path,circle'))assert.ok(!/NaN|Infinity/.test(el.outerHTML));
  assert.equal(document.querySelectorAll('circle').length,0);
- assert.ok(document.body.textContent.includes('Não disponível'));
+ await act(async()=>document.querySelector('[aria-label="Valores de 2026-02"]').click());assert.ok(document.body.textContent.includes('Não disponível'));
  await act(async()=>root.unmount());
  console.log('Energy market: 16 display, missing-data and legacy-API checks passed');
 }catch(e){console.error(e);process.exitCode=1;}})();
