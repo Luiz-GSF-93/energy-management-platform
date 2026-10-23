@@ -118,6 +118,16 @@ export class CalculationAutofillService{
  private manual(value:unknown){try{const parsed=commercialProposal(value);if(parsed.supplierSettlement&&!documentedSettlementEnabled())throw Error('Conciliação documentada ainda desligada.');return parsed;}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Valores comerciais inválidos.');}}
  async preview(body:any,t:TenantContext){await this.allowed(t,true);if(!this.enabled())throw new ServiceUnavailableException('Preenchimento automático desligado.');if(!body||Object.keys(body).sort().join(',')!=='consumerUnitId,manual,month')throw new BadRequestException('Proposta inválida.');const q={consumerUnitId:body.consumerUnitId,month:body.month};this.query(q);return this.output(await this.context(q,t,this.manual(body.manual)),t);}
  async history(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return this.rpc('history',this.query(scope),t,null,{page:Number(page)});}
+ async reconcile(body:any,t:TenantContext){
+  await this.allowed(t,true);
+  if(!this.enabled()||t.role!=='admin_org'&&t.accessMode!=='platform_operation')throw new ForbiddenException('Reconciliação restrita ao administrador autorizado.');
+  if(!body||Object.keys(body).sort().join(',')!=='acknowledge,basis,consumerUnitId,month,note,runId,sourceHash,token'||body.acknowledge!==true||!uuid(body.runId)||typeof body.note!=='string'||body.note.trim().length<30||body.note.length>1000||['basis','sourceHash','token'].some(k=>typeof body[k]!=='string'||!/^[a-f0-9]{64}$/.test(body[k])))throw new BadRequestException('Confira a execução, as fontes e a justificativa da interrupção.');
+  const q={consumerUnitId:body.consumerUnitId,month:body.month},scope=this.query(q);
+  // Read-only source inspection. No OCR, draft write or financial decision occurs here.
+  const current=await this.context(q,t);
+  if(!current.available||current.token!==body.token||current.sourceHash!==body.sourceHash)throw new ConflictException('As fontes mudaram; atualize antes de reconciliar.');
+  return this.fail(await this.db.getClient().rpc('calculation_autofill_reconcile',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_unit:scope.unit,p_month:scope.month,p_run:body.runId,p_body:{basis:body.basis,currentBasis:current.basis,sourceHash:body.sourceHash,note:body.note.trim()}}));
+ }
  async prepare(body:any,t:TenantContext){
   await this.allowed(t,true);if(!this.enabled())throw new ServiceUnavailableException('Preenchimento automático desligado.');
   if(!body||!['consumerUnitId,month,requestId,token','consumerUnitId,manual,month,requestId,token'].includes(Object.keys(body).sort().join(','))||!uuid(body.requestId)||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))throw new BadRequestException('Preparação inválida.');

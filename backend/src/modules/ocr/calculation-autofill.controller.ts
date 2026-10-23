@@ -10,5 +10,6 @@ export class CalculationAutofillController{
  @Get() @RequirePermission([P.ORGANIZATION_CONTRACTS_VIEW]) inspect(@Query() q:Record<string,unknown>,@Tenant() t:TenantContext){return this.service.inspect(q,t);}
  @Get('history') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW]) history(@Query() q:Record<string,unknown>,@Tenant() t:TenantContext){return this.service.history(q,t);}
  @Post('preview') @RequirePermission([P.ENERGIA_OCR_PROCESS]) preview(@Body() b:unknown,@Tenant() t:TenantContext){return this.service.preview(b,t);}
+ @Post('reconcile') @RequirePermission([P.ENERGIA_OCR_PROCESS]) reconcile(@Body() b:unknown,@Tenant() t:TenantContext){return this.service.reconcile(b,t);}
  @Post() @RequirePermission([P.ENERGIA_OCR_PROCESS]) prepare(@Body() b:unknown,@Tenant() t:TenantContext){return this.service.prepare(b,t);}
 }
