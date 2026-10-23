@@ -8,6 +8,9 @@ on:
       - 'backend/package*.json'
       - 'frontend/app/backoffice/ccee-data/**'
       - 'frontend/app/components/Ccee*'
+      - 'frontend/app/components/OperationsWorkspace.tsx'
+      - 'backend/src/modules/ocr/eva-market*'
+      - 'backend/src/modules/ocr/ocr.module.ts'
       - 'frontend/app/backoffice/platform-costs/CceeMetrics.tsx'
       - 'frontend/test/ccee*'
       - 'frontend/app/lib/api/plans.ts'
@@ -35,6 +38,17 @@ jobs:
         working-directory: backend
       - run: node test/database/ccee-data-license.test.mjs
         working-directory: backend
+      - run: node test/database/ccee-market.test.mjs
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ocr/eva-market.controller.spec.ts
+        working-directory: backend
+      - name: Disposable PostgreSQL hourly schedule lab
+        working-directory: backend
+        run: |
+          docker run -d --name ccee-dri-lab-market-ci --network none -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+          trap 'docker rm -f ccee-dri-lab-market-ci' EXIT
+          for i in $(seq 1 30); do docker exec ccee-dri-lab-market-ci pg_isready -U postgres && break; sleep 1; done
+          CCEE_MARKET_TEST_CONTAINER=ccee-dri-lab-market-ci node test/database/ccee-market.test.mjs
       - name: Disposable PostgreSQL DRI concurrency lab
         working-directory: backend
         run: |
@@ -53,6 +67,8 @@ jobs:
       - run: node test/ccee-dri.cjs
         working-directory: frontend
       - run: node test/ccee-data.cjs
+        working-directory: frontend
+      - run: node test/ccee-market.cjs
         working-directory: frontend
       - run: node test/license-governance.cjs
         working-directory: frontend
