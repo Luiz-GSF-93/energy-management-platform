@@ -1,4 +1,4 @@
-import {supplierInvoiceProposal} from './supplier-invoice-proposal';
+import {supplierDocumentKind,supplierInvoiceProposal} from './supplier-invoice-proposal';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
@@ -44,14 +44,18 @@ export class SourcePreparationService{
   return {...Object.fromEntries(['id','organization_id','customer_id','consumer_unit_id','document_type','file_hash','reference_month','file_verified','original_filename'].map(k=>[k,r.data[k]])),bytesVerified:true};
  }
  async supplierProposal(c:any,id:string,fileHash:string){
+  return (await this.supplierEvidence(c,id,fileHash)).proposal;
+ }
+ async supplierEvidence(c:any,id:string,fileHash:string){
   await this.verifiedSupplierInvoice(c,id,fileHash);
   const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('id',id).maybeSingle();
   if(r.error||!r.data||r.data.file_hash!==fileHash||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month)throw new ServiceUnavailableException('Nota mudou durante a extração local.');
   const bytes=await this.text(r.data),key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
   const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(bytes,8000);
   if(!cached||cached.until<=Date.now()){if(this.extracted.size>=8)this.extracted.delete(this.extracted.keys().next().value!);this.extracted.set(key,{until:Date.now()+60000,value:extracted});}
-  if(extracted.ocrRequired)return null;
-  return supplierInvoiceProposal(extracted.sections.map(s=>s.text).join('\n'),c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash});
+  if(extracted.ocrRequired)return {kind:'UNKNOWN' as const,proposal:null};
+  const text=extracted.sections.map(s=>s.text).join('\n');
+  return {kind:supplierDocumentKind(text),proposal:supplierInvoiceProposal(text,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash})};
  }
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;
