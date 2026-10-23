@@ -17,8 +17,14 @@ const render=(key,organization='org')=>act(async()=>root.render(React.createElem
  ok(document.querySelector('svg[aria-label="TE contratada de múltiplas empresas versus cenários PLD"]'));ok(document.body.textContent.includes('Contrato u3'));ok(document.body.textContent.includes('-40,00%'),'negative percentage is displayed');
  const dates=Array.from(document.querySelectorAll('input[type=month]')).map(i=>i.value);await click('Atualizar comparação');ok(JSON.stringify(dates)===JSON.stringify(Array.from(document.querySelectorAll('input[type=month]')).map(i=>i.value)),'refresh preserves period');ok(document.querySelectorAll('fieldset input:checked').length>=5,'refresh preserves selection');
  await check('PLD +5%');ok(document.body.textContent.includes('PLD +5% · Sudeste/Centro-Oeste'),'additional scenario can be plotted');
- await click('EVA · analisar cada empresa');ok(document.body.textContent.includes('Análise exclusiva A'));ok(document.body.textContent.includes('Análise exclusiva B'));ok(calls.at(-1)[1].body.sourceFingerprint==='hash','analysis is bound to displayed sources');
+ await click('EVA · analisar cada empresa');ok(document.body.textContent.includes('Análise exclusiva A'));ok(document.body.textContent.includes('Análise exclusiva B'));ok(calls.filter(([p])=>p.endsWith('/analyze')).at(-1)[1].body.sourceFingerprint==='hash','analysis is bound to displayed sources');
  await click('Atualizar comparação');ok(document.body.textContent.includes('Análise exclusiva A'),'unchanged refresh retains analysis');
+ const normalApi=api;let finishAnalysis;api=async(u,o)=>{if(u.endsWith('/analyze')){calls.push([u,o]);return new Promise(r=>finishAnalysis=r);}return normalApi(u,o);};
+ await click('EVA · analisar cada empresa');const compareBefore=calls.filter(([p])=>p.endsWith('/compare')).length;
+ Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});
+ await act(async()=>window.dispatchEvent(new Event('portal-updated')));ok(calls.filter(([p])=>p.endsWith('/compare')).length===compareBefore,'background refresh does not cancel an in-flight analysis');
+ await act(async()=>finishAnalysis(await normalApi('/api/v1/ccee-market/contracts/analyze',{})));ok(document.body.textContent.includes('Análise exclusiva A'),'analysis completes across a publication notification');ok(calls.filter(([p])=>p.endsWith('/compare')).length===compareBefore+1,'sources are refreshed after the analysis');ok(document.querySelector('[aria-label="Cenários do último preço disponível · Unidade A1"]'),'EVA shows the selected company scenarios');api=normalApi;
+
  const oldApi=api;api=async(u,o)=>u.endsWith('/options')?oldApi(u,o):({...data,sourceFingerprint:'changed'});await click('Atualizar comparação');ok(!document.body.textContent.includes('Análise exclusiva A'),'changed sources invalidate old analysis');
  api=async()=>({organizationId:'foreign',companies:[{id:'x',name:'FOREIGN_SECRET'}],units:[]});await render('foreign');ok(!document.body.textContent.includes('FOREIGN_SECRET'),'foreign scope not rendered');
  await act(async()=>root.unmount());console.log(checks+' multi-company comparison UI checks passed');
