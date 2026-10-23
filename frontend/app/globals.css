@@ -1077,3 +1077,5 @@ a {
     .auth-brand__logo { max-width:17rem; }
   }
 }
+
+@media print{.published-financial__publications[hidden]{display:block!important}.published-financial__report button[aria-controls]{display:none!important}}
