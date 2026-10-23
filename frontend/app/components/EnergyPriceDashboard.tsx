@@ -1,4 +1,5 @@
 'use client';
+import {usePublicationRefresh} from './usePublicationRefresh';
 import {useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import EnergyPriceChart,{EnergyPriceMonth} from './EnergyPriceChart';
@@ -9,6 +10,7 @@ type Baseline={unitId:string;published:boolean;baseline:{state:string;reason?:st
 type Data={workspaceV2?:boolean;organizationId:string;audience:string;customerId:string|null;year:number;units:Unit[];baselines:Baseline[];months:EnergyPriceMonth[];acrAverage:string|null;aclAverage:string|null;indicative:{value:string|null;notice:string;reason:string;basis?:string};canPublish:boolean;disclosure:string;footer:string};
 const display=(v:string|null)=>v===null?'Aguardando referência':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'/MWh';
 export default function EnergyPriceDashboard({organizationId,audience='backoffice'}:{organizationId:string;audience?:'backoffice'|'client'}){
+ const publicationRevision=usePublicationRefresh();
  const [year,setYear]=useState(new Date().getFullYear()),[customer,setCustomer]=useState(''),[unit,setUnit]=useState(''),[options,setOptions]=useState<Unit[]>([]),[data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[publishing,setPublishing]=useState(false),[checked,setChecked]=useState<string[]>([]);
  useEffect(()=>{
   const abort=new AbortController();let current=true;
@@ -19,7 +21,7 @@ export default function EnergyPriceDashboard({organizationId,audience='backoffic
    if(!current)return;if(audience==='backoffice'&&!customer&&result.customerId){setCustomer(result.customerId);setOptions(result.units);return;}setData(result);if(!unit&&(audience==='client'||!customer))setOptions(result.units);
   }).catch(e=>{if(current)setError(e instanceof Error?e.message:'Indicador indisponível.');}).finally(()=>{if(current)setLoading(false);});
   return()=>{current=false;abort.abort();};
- },[organizationId,audience,year,customer,unit,revision]);
+ },[organizationId,audience,year,customer,unit,revision,publicationRevision]);
  const customers=Array.from(new Map(options.map(u=>[u.customerId,{id:u.customerId,name:u.customerName}])).values());
  const select=(key:'year'|'customer'|'unit',value:string)=>{setData(null);setError('');setLoading(true);if(key==='year')setYear(Number(value));if(key==='customer'){setCustomer(value);setUnit('');}if(key==='unit')setUnit(value);};
  const publish=async(b:Baseline)=>{
