@@ -14,6 +14,7 @@ export function consolidatePublishedComposition(rows:{composition:Part[]|null}[]
   })}));
   if(rows.some(r=>!r.composition))return null;
  }
+ rows=rows.map(row=>({composition:row.composition!.map(p=>p.key==='supplier'?{...p,label:'Energia do fornecedor · valores publicados após segregação demonstrada'}:p)}));
  const grouped=new Map<string,{label:string;amount:bigint}>();
  for(const row of rows)for(const part of row.composition!){if(!/^(0|[1-9]\d{0,11})\.\d{2}$/.test(part.amount))return null;const before=grouped.get(part.key);if(before&&before.label!==part.label)return null;grouped.set(part.key,{label:part.label,amount:(before?.amount??0n)+feeCents(part.amount)});}
  const entries=[...grouped],total=entries.reduce((n,[,v])=>n+v.amount,0n);if(total<=0n)return null;let offset=0n;
