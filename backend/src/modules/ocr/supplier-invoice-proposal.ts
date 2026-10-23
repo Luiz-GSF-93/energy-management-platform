@@ -18,7 +18,10 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  if(recipientIds.length!==1||digits(recipientIds[0][0])!==digits(taxId))return null;
  const product=t.split(/DADOS DO PRODUTO\s*\/\s*SERVI.O/);
  if(product.length!==2)return null;
- const section=product[1].split('DADOS ADICIONAIS')[0],months=['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+ // The native PDF stream may serialize the product table before its heading.
+ // Accept only the explicit table header and stop at the tax summary.
+ const nativeRows=t.split(/CD\.\s*PROD\.\s+DESCRICAO PRODUTO\s*\/\s*SERVICO/);
+ const section=product[1].includes('MWH')?product[1].split('DADOS ADICIONAIS')[0]:nativeRows.length===2?nativeRows[1].split('CALCULO DO IMPOSTO')[0]:'',months=['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
  const periods=Array.from(section.matchAll(/FORNECIDA\s+NO\s+M.S\s+DE\s+([A-Z]+)\/(20\d{2})/g));
  const references=Array.from(t.matchAll(/FATURAMENTO\s+REF\s+(0?[1-9]|1[0-2])\/(20\d{2})/g));
  const supplyPeriods=Array.from(t.matchAll(/PERIODO DE SUPRIMENTO\s*\/\s*FORNECIMENTO:\s*(0?[1-9]|1[0-2])\/(20\d{2})/g));
@@ -51,7 +54,11 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  else if(!destinationIcms||!installment||parse(installment[1])!==amount){
   const totals=t.match(/VALOR TOTAL DA NF\s*\n([^\n]+)/),cells=totals?.[1].match(new RegExp(decimal,'g'))??[];
   const billing=t.match(/FATURA\s*\/\s*DUPLICATA[^\n]*\n\s*\d+\s+\d{2}\.\d{2}\.\d{4}\s+([\d.,]+)/);
-  if(supplyPeriods.length!==1||cells.length!==6||cells.slice(0,5).some(v=>Number(parse(v))!==0)||parse(cells[5])!==amount||!billing||parse(billing[1])!==amount)return null;
+  const summary=t.split('CALCULO DO IMPOSTO');
+  const labeled=(label:string)=>{const matches=[...(summary[1]??'').matchAll(new RegExp('(?:^|\\n)[ \t]*'+label+'\\s*\\n\\s*'+decimal+'(?=\\s|$)','g'))];return matches.length===1?parse(matches[0][1]):null;};
+  const nativeTotal=summary.length===2&&labeled('VALOR TOTAL DA NF')===amount&&labeled('VALOR TOTAL PRODUTOS')===amount&&['VALOR DO FRETE','VALOR DO SEGURO','DESCONTO','OUTRAS DESPESAS','VALOR DO IPI'].every(label=>labeled(label)==='0.00');
+  const horizontalTotal=cells.length===6&&!cells.slice(0,5).some(v=>Number(parse(v))!==0)&&parse(cells[5])===amount;
+  if(supplyPeriods.length!==1||!horizontalTotal&&!nativeTotal||!billing||parse(billing[1])!==amount)return null;
  }
  return {format:'supplier-invoice-proposal-1',month,quantityMwh,pricePerMwh,amount,...source,nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment:destinationIcms?'NET_DESTINATION_ICMS':'UNCONFIRMED',taxEvidence:destinationIcms?{kind:'DESTINATION_ICMS',source:'Informações complementares da NF: recolhimento do ICMS atribuído ao destinatário; zeros impressos não representam isenção.'}:null,observations:['Valores faturados da NF propostos para conferência; não comprovam pagamento ou cobertura integral por si só. Volume comprado preservado separadamente do consumo medido.']};
 }

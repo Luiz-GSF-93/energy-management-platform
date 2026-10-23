@@ -31,7 +31,7 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
   // text retains the explicit customer CNPJ immediately followed by installation
   // and month. Read this narrow sequence, never an arbitrary nearby account code.
   if(all.includes('CPFLPAULISTA')||all.includes('COMPANHIAPAULISTADEFORCAELUZ')){
-   const blocks=[...t.matchAll(/\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\s*\/\s*\d{4}-?\d{2})\s+(\d{5,20})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/\s*(20\d{2})\b/g)]
+   const blocks=[...t.matchAll(/\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\s*\/\s*\d{4}-?\d{2})\s+([0-9][0-9.-]{4,25})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/\s*(20\d{2})\b/g)]
     .filter(m=>compact(m[1])===tax&&name.length>=8&&compact(t.slice(Math.max(0,m.index!-350),m.index)).includes(name));
    if(blocks.length){checks.taxId='MATCH';checks.unit=uc&&blocks.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';checks.period=r.month&&blocks.every(m=>m[4]+'-'+String(monthNames.indexOf(m[3])+1).padStart(2,'0')===r.month)?'MATCH':'MISMATCH';}
   }
