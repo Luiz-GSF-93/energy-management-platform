@@ -4,6 +4,11 @@ on:
     paths:
       - 'backend/src/modules/portal-workspace/**'
       - 'backend/src/modules/portal-insights/**'
+      - 'backend/src/modules/energy-prices/**'
+      - 'backend/src/modules/reports/**'
+      - 'backend/src/database/migrations/20261215*.sql'
+      - 'frontend/app/components/usePublicationRefresh.ts'
+      - 'frontend/app/backoffice/reports/ReportWorkspace.tsx'
       - 'backend/src/modules/operations/**'
       - 'backend/src/database/migrations/2026112*.sql'
       - 'backend/src/database/migrations/20261130*.sql'
@@ -49,7 +54,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-queue.service.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/reports src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-queue.service.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
         working-directory: backend
       - run: node test/portal-client-workspace.cjs
         working-directory: backend

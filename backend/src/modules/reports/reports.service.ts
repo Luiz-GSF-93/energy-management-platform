@@ -8,7 +8,7 @@ import {FinancialSettlementsService} from '../contracts/services/financial-settl
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {validateWriteDto} from '../../common/validation/validate-write-dto';
-import {CreateReportDto} from './report.dto';
+import {CreateReportDto,CurrentReportDto} from './report.dto';
 import {projectReport,REPORT_FORMAT,reportHash} from './report.projection';
 @Injectable()
 export class ReportsService {
@@ -33,6 +33,17 @@ export class ReportsService {
   const prior=await this.client().from('published_report_snapshots').select('*').eq('organization_id',t.organizationId).eq('request_id',d.requestId).maybeSingle();this.fail(prior.error);
   if(prior.data){if(prior.data.created_by!==t.userId||Object.entries(d).some(([k,v])=>prior.data.request[k]!==v))throw new ConflictException('Requisição já utilizada com outro recorte.');await this.header(d.customerId,d.unitId,t);return this.verified(prior.data);}
   const header=await this.header(d.customerId,d.unitId,t);
+  const body=await this.currentBody(d,t,header);
+  const hash=reportHash(body),r=await this.client().rpc('capture_published_report',{p_org:t.organizationId,p_actor:t.userId,p_request:d,p_body:body,p_hash:hash});this.fail(r.error);return this.verified(r.data);
+ }
+ async current(input:unknown,t:TenantContext){
+  await this.access(t);
+  const d=await validateWriteDto(CurrentReportDto,input as CurrentReportDto);
+  const span=(Number(d.to.slice(0,4))-Number(d.from.slice(0,4)))*12+Number(d.to.slice(5))-Number(d.from.slice(5))+1;
+  if(span<1||span>12)throw new BadRequestException('Selecione um período de até 12 meses.');
+  return {current:true,body:await this.currentBody(d,t,await this.header(d.customerId,d.unitId,t))};
+ }
+ private async currentBody(d:CurrentReportDto,t:TenantContext,header:any){
   const financial=await this.financial.reports({from:d.from,to:d.to,customerId:d.customerId,unitId:d.unitId},t);
   let events:any[]=[];
   if(t.permissions.includes(P.OPERACAO_EVENTS_VIEW)){
@@ -54,7 +65,7 @@ export class ReportsService {
    }
   }
   if(!t.permissions.includes(P.OPERACAO_EVENTS_VIEW))body.unavailable.push('Eventos: consulta não autorizada para este perfil.');
-  const hash=reportHash(body),r=await this.client().rpc('capture_published_report',{p_org:t.organizationId,p_actor:t.userId,p_request:d,p_body:body,p_hash:hash});this.fail(r.error);return this.verified(r.data);
+  return body;
  }
  private verified(row:any){if(!row?.body||row.body.formatVersion!==REPORT_FORMAT||row.body.header?.organizationId!==row.organization_id||row.body.header.customerId!==row.customer_id||row.body.header.unitId!==row.consumer_unit_id||row.payload_hash!==reportHash(row.body))throw new InternalServerErrorException('Integridade do relatório indisponível.');return row;}
  async selection(t:TenantContext){

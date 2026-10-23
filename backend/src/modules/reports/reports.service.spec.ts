@@ -17,6 +17,7 @@ describe('report access boundary',()=>{
   const primary={totals:{acr:'100.00',aclAfterFees:'90.00',savingsAfterFees:'10.00'},publicationCount:1,publications:[{id:sourceId,customerId,month:'2026-08',version:1,payloadHash:hash,publishedAt:'2026-09-01T12:00:00Z',units:[{id:unitId}]}],invoices:[{unitId,groupId:sourceId,payloadHash:hash,findings:[]}],period:{from:'2026-08',to:'2026-08'},months:[],unavailable:[],coverage:{},disclosure:'Publicado'};
   const financial:any={reports:jest.fn().mockResolvedValue({primary})};service=new ReportsService({getClient:()=>client} as any,licenses,financial);
   const result=await service.create({kind:'OPERATIONAL',customerId,unitId,from:'2026-08',to:'2026-08',requestId:'00000000-0000-4000-8000-000000000013'},t);
+  const capture=jest.spyOn(client,'rpc');const current=await service.current({kind:'OPERATIONAL',customerId,unitId,from:'2026-08',to:'2026-08'},{...t,permissions:[P.DOCUMENTS_REPORTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW]});expect(current.current).toBe(true);expect(current.body.header.unitCode).toBe('40045612');expect(capture.mock.calls.some(([name])=>name==='capture_published_report')).toBe(false);
   expect(result.body.header.unitCode).toBe('40045612');expect(result.body.header.contactEmail).toBe('test@example.invalid');expect(financial.reports).toHaveBeenCalledWith({from:'2026-08',to:'2026-08',customerId,unitId},t);
  });
 });

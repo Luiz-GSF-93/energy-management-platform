@@ -1,4 +1,5 @@
 'use client';
+import {usePublicationRefresh} from './usePublicationRefresh';
 import ApprovedFinancialCharts,{FinancialChartMonth} from './ApprovedFinancialCharts';
 import PublishedClientInsights from './PublishedClientInsights';
 import Link from 'next/link';
@@ -24,7 +25,8 @@ export function publishedFinancialCsv(data:Data){
  return '\uFEFF'+[header.map(cell).join(';'),...data.rows.map(r=>[cell(r.customerName),cell(r.month),String(r.version),numeric(r.amounts.acr),numeric(r.amounts.aclBeforeFees),numeric(r.amounts.totalFees),numeric(r.amounts.aclAfterFees),numeric(r.amounts.savingsAfterFees),cell(r.reservations.join(' | ')),cell(r.id),cell(r.payloadHash),cell(r.publishedAt)].join(';'))].join('\r\n');
 }
 export default function PublishedFinancialDashboard({organizationId,organizationName,audience='backoffice',previewCustomerId,canPreview=false}:{organizationId:string;organizationName:string;audience?:'backoffice'|'client';previewCustomerId?:string;canPreview?:boolean}){
- const current=new Date(),initial={from:current.getFullYear()+'-01',to:current.getFullYear()+'-'+String(current.getMonth()+1).padStart(2,'0'),customerId:''};
+ const publicationRevision=usePublicationRefresh();
+ const current=new Date(),initial={from:current.getFullYear()+'-01',to:current.getFullYear()+'-12',customerId:''};
  const [filters,setFilters]=useState<Filters>(initial),[request,setRequest]=useState({...initial,revision:0}),[data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[customers,setCustomers]=useState<{id:string;name:string}[]>([]);
  useEffect(()=>{
   const abort=new AbortController();let cancelled=false;
@@ -35,7 +37,7 @@ export default function PublishedFinancialDashboard({organizationId,organization
    if(!cancelled){setData(result);if(audience==='backoffice'&&!request.customerId)setCustomers(Array.from(new Map(result.rows.map(r=>[r.customerId,{id:r.customerId,name:r.customerName}])).values()));}
   }).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Não foi possível consultar as publicações.');}).finally(()=>{if(!cancelled)setLoading(false);});
   return()=>{cancelled=true;abort.abort();};
- },[organizationId,request,audience,previewCustomerId]);
+ },[organizationId,request,audience,previewCustomerId,publicationRevision]);
  const update=(key:keyof Filters,value:string)=>{setFilters(f=>({...f,[key]:value}));setData(null);setError('');};
  const consult=(e:FormEvent)=>{e.preventDefault();setData(null);setError('');setLoading(true);setRequest({...filters,revision:request.revision+1});};
  const download=()=>{if(!data?.rows.length)return;const url=URL.createObjectURL(new Blob([publishedFinancialCsv(data)],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`EnergyOS-publicacoes-${data.period.from}-${data.period.to}.csv`;link.hidden=true;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};

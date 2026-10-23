@@ -1,4 +1,5 @@
 'use client';
+import {notifyPublicationUpdated} from '../../components/usePublicationRefresh';
 import EvaGuidedReview from './EvaGuidedReview';
 import CceeCostReview from './CceeCostReview';
 import DocumentedSupplierSettlement from './DocumentedSupplierSettlement';
@@ -81,11 +82,11 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
   }catch(e){if(live.current)setError(e instanceof Error?e.message:'Reconciliação não confirmada.');}
   finally{working.current=false;if(live.current)setBusy(false);}
  }
- async function decide(){if(working.current||!row||!h?.canManage||!ack||note.trim().length<20||!choice)return;working.current=true;setBusy(true);setError('');try{const r=await request<{row:Row}>('/api/v1/eva-assisted-closing/decision',{method:'POST',body:{consumerUnitId:unitId,month,id:row.id,hash:row.payload_hash,decision:choice,note:note.trim(),acknowledge:true,...(choice==='APPROVE'&&h?.approvalPublishes?{disclose:true}:{})}});if(!live.current)return;if(!valid(r.row))throw Error('Decisão fora da seleção.');setChoice('');setAck(false);setNote('');await load();}catch(e){if(live.current)setError(e instanceof Error?e.message:'Consulte o histórico.');}finally{working.current=false;if(live.current)setBusy(false)}}
+ async function decide(){if(working.current||!row||!h?.canManage||!ack||note.trim().length<20||!choice)return;working.current=true;setBusy(true);setError('');try{const r=await request<{row:Row}>('/api/v1/eva-assisted-closing/decision',{method:'POST',body:{consumerUnitId:unitId,month,id:row.id,hash:row.payload_hash,decision:choice,note:note.trim(),acknowledge:true,...(choice==='APPROVE'&&h?.approvalPublishes?{disclose:true}:{})}});if(!live.current)return;if(!valid(r.row))throw Error('Decisão fora da seleção.');setChoice('');setAck(false);setNote('');await load();notifyPublicationUpdated();}catch(e){if(live.current)setError(e instanceof Error?e.message:'Consulte o histórico.');}finally{working.current=false;if(live.current)setBusy(false)}}
  async function publishApproved(){
   if(working.current||!row||!h?.canManage||!ack||note.trim().length<20||!publicationAction)return;
   working.current=true;setBusy(true);setError('');
-  try{await request('/api/v1/eva-assisted-closing/publication',{method:'POST',body:{consumerUnitId:unitId,month,id:row.id,hash:row.payload_hash,action:publicationAction,note:note.trim(),acknowledge:true}});if(!live.current)return;setPublicationAction('');setAck(false);setNote('');await load();}
+  try{await request('/api/v1/eva-assisted-closing/publication',{method:'POST',body:{consumerUnitId:unitId,month,id:row.id,hash:row.payload_hash,action:publicationAction,note:note.trim(),acknowledge:true}});if(!live.current)return;setPublicationAction('');setAck(false);setNote('');await load();notifyPublicationUpdated();}
   catch(e){if(live.current)setError((e instanceof Error?e.message:'Resultado não confirmado.')+' Confira o histórico antes de repetir.');}
   finally{working.current=false;if(live.current)setBusy(false);}
  }

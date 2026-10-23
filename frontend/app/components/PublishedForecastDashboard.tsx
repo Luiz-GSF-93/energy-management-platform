@@ -1,18 +1,20 @@
 'use client';
+import {usePublicationRefresh} from './usePublicationRefresh';
 import {useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card} from '@/app/components/ui';
 import AnnualForecastPresentation,{type AnnualForecast} from '@/app/backoffice/reports/AnnualForecastPresentation';
 type Published=AnnualForecast&{id:string;unitName:string;publishedAt:string;version:number};
 export default function PublishedForecastDashboard(){
+ const publicationRevision=usePublicationRefresh();
  const [rows,setRows]=useState<Published[]|null>(null),[error,setError]=useState(''),[revision,setRevision]=useState(0),[selected,setSelected]=useState('');
  useEffect(()=>{
   const abort=new AbortController();let cancelled=false;
   apiRequest<{rows:Published[]}>('/api/v1/portal/energy-forecasts',{cache:'no-store',signal:abort.signal}).then(data=>{
-   if(cancelled)return;setRows(data.rows);setSelected(data.rows[0]?.id??'');
+   if(cancelled)return;setRows(data.rows);setError('');setSelected(old=>data.rows.some(r=>r.id===old)?old:data.rows[0]?.id??'');
   }).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Não foi possível consultar a previsão.');});
   return()=>{cancelled=true;abort.abort();};
- },[revision]);
+ },[revision,publicationRevision]);
  const forecast=rows?.find(r=>r.id===selected);
  return <Card><h2>Planejamento de consumo</h2><p>Previsões validadas e publicadas pela equipe de gestão para as suas unidades.</p>
  <Button variant="secondary" disabled={rows===null&&!error} onClick={()=>{setRows(null);setError('');setSelected('');setRevision(n=>n+1);}}>Atualizar previsões</Button>

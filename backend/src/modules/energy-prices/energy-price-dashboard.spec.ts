@@ -33,3 +33,8 @@ describe('scoped price dashboard',()=>{
  it('uses explicit supplier-only tax amounts for net contracts',()=>{const s:any=source();s.units=s.units.slice(0,1);s.baselines=s.baselines.slice(0,1);s.financial=s.financial.slice(0,1);const p=s.financial[0].payload,prep=p.preparations.u1;prep.contractSupplierCost.taxTreatment='NET';prep.operationalTaxBases={lines:[{scenario:'ACL',monetarySource:'SUPPLIER_ENERGY',parameterId:'base'}]};prep.taxMemory={pending:[],lines:[{id:'tax',scenario:'ACL',amount:'43.90',references:[{id:'base'}]}]};prep.operationalComposition.scenarios[0].entries=[{id:'tax',group:'TAX',amount:'43.90'}];s.financial[0].hash=reviewDigest(p);let d=energyPriceDashboard('o1',2026,s,true);expect(d.aclAverage).toBe('243.90');expect(d.indicative.value).toBe('200.00');prep.taxMemory.lines[0].references.push({id:'distributor'});s.financial[0].hash=reviewDigest(p);expect(energyPriceDashboard('o1',2026,s,true).aclAverage).toBeNull();});
  it('never exposes an unpublished baseline to the Portal',()=>{const s=source();s.baselines=[];const d=energyPriceDashboard('o1',2026,s,true);expect(d.acrAverage).toBeNull();expect(d.indicative.value).toBeNull();});
 });
+
+it('updates the indicative price from comparable modern published references without requiring an old annual study',()=>{
+ const s:any=source();s.workspaceV2=true;s.baselines=[];s.financial=[];s.evaDetails=units.map(u=>({unitId:u.id,customerId:'c1',month:'2026-01',prices:{kwh:'1000',acrNet:'400.00',aclNet:'200.00',aclObserved:'243.90'}}));
+ expect(energyPriceDashboard('o1',2026,s,true).indicative.value).toBe('200.00');s.evaDetails[0].prices.aclNet=null;expect(energyPriceDashboard('o1',2026,s,true).indicative.value).toBeNull();
+});
