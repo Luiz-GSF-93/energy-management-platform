@@ -16,6 +16,7 @@ import {structuredSpotMonth} from './monthly-supplier-mode';
 export class SourcePreparationService{
  constructor(private readonly db:SupabaseService){}
  private readonly verifiedBytes=new Map<string,number>();
+ private readonly identityReads=new Map<string,Promise<Awaited<ReturnType<typeof invoiceIdentityPreflight>>>>();
  private readonly identities=new Map<string,{until:number;value:Awaited<ReturnType<typeof invoiceIdentityPreflight>>}>();
  private readonly extracted=new Map<string,{until:number;value:Awaited<ReturnType<typeof extractPdfText>>}>();
  private async text(d:any){
@@ -36,12 +37,21 @@ export class SourcePreparationService{
   registration=Object.fromEntries(['customerName','taxId','unitNumber','address','month'].map(k=>[k,registration[k]]));
   const key=createHash('sha256').update(JSON.stringify([org,customer,unit,document,r.data.file_hash,registration])).digest('hex'),cached=this.identities.get(key);
   if(cached&&cached.until>Date.now())return structuredClone(cached.value);
-  const proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,'application/pdf',registration,r.data.file_hash,{org,customer,unit},8000);
-  if(proof.state==='MATCH'){
-   const native=await extractPdfText(bytes,8000);
-   (proof as any).nativeInvoiceCredits=nativeInvoiceCredits(native,r.data.id,r.data.file_hash);
-   if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
-  return proof;
+  // Concurrent source captures share a bounded extraction, never an approval.
+  // Every caller still checks the scoped metadata and downloaded bytes above.
+  const active=this.identityReads.get(key);if(active)return structuredClone(await active);
+  if(this.identityReads.size>=16)throw new ServiceUnavailableException('Conferência local ocupada. As fontes foram preservadas.');
+  const pending=(async()=>{
+   let native:Promise<Awaited<ReturnType<typeof extractPdfText>>>|undefined;
+   const read=()=>native??=extractPdfText(bytes,20000);
+   const proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,'application/pdf',registration,r.data.file_hash,{org,customer,unit},20000,read);
+   if(proof.state==='MATCH'){
+    (proof as any).nativeInvoiceCredits=nativeInvoiceCredits(await read(),r.data.id,r.data.file_hash);
+    if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
+   return proof;
+  })();
+  this.identityReads.set(key,pending);
+  try{return structuredClone(await pending);}finally{if(this.identityReads.get(key)===pending)this.identityReads.delete(key);}
  }
  async verifiedSupplierInvoice(c:any,id:string,fileHash:string){
   const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('document_type','INVOICE_SUPPLIER').eq('id',id).maybeSingle();
