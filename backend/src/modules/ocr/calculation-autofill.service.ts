@@ -92,7 +92,7 @@ export class CalculationAutofillService{
    c.contractDraft=contractClosingDraft(c,c.indexMemories);
   }
   if(documentedSettlementEnabled()){
-   const r=await db.from('documents').select('id,file_hash,original_filename,reference_month,file_verified').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('document_type','INVOICE_SUPPLIER').gte('reference_month',period.start).lte('reference_month',period.end).limit(101);
+   const r=await db.from('documents').select('id,file_hash,original_filename,reference_month,file_verified').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('document_type','INVOICE_SUPPLIER').gte('reference_month',period.start).lte('reference_month',period.end).order('id',{ascending:true}).limit(101);
    if(r.error||!Array.isArray(r.data)||r.data.length>100)throw new ServiceUnavailableException('Notas da competência indisponíveis.');
    c.documentedSupplierOptions={enabled:true,documents:r.data.filter((d:any)=>d.file_verified&&/^[a-f0-9]{64}$/.test(d.file_hash??'')),cost:c.cost?{id:c.cost.id,revision:c.cost.revision,hash:settlementHash(c.cost.costs),items:c.cost.costs.items}:null};
    c.documentedSupplierOptions.proposals=[];c.documentedSupplierOptions.excluded=[];
@@ -147,27 +147,28 @@ export class CalculationAutofillService{
   if(!c.available||c.token!==body.token)throw new ConflictException('Atualize as fontes antes de preparar.');
   const reserved=await this.rpc('reserve',scope,t,body.requestId,{basis:c.basis,documentId:c.documentId,sourceHash:c.sourceHash,plan:c.plan});
   if(!reserved.acquired)return {run:reserved.run,replayed:true,current:this.output(c,t),canPublish:false};
-  let receipts:any[]=[],status=c.plan.pending||!c.c.ready?'PARTIAL':'PREPARED';
+  let preflight:any={stage:'SOURCE_READ',originalBasis:c.basis,originalToken:c.token};
+  let receipts:any[]=[],writesStarted=false,status=c.plan.pending||!c.c.ready?'PARTIAL':'PREPARED';
   try{
    // Reserve is persisted BEFORE any legacy write; unknown results can only be reconciled by GET.
-   const fresh=await this.context(q,t,manual);if(!fresh.available||fresh.token!==c.token)throw new ConflictException('Sources changed');
+   const fresh=await this.context(q,t,manual);preflight={...preflight,stage:'SOURCE_COMPARE',currentBasis:fresh.available?fresh.basis:null,currentToken:fresh.available?fresh.token:null};if(!fresh.available||fresh.token!==c.token)throw new ConflictException('Sources changed');
    if((c.c.ready||c.c.proposalReady)&&(c.c.resolution.canPrepare||c.c.proposalReady)){
     // Populate the first monthly draft with the proposed measured demand too. Never edit an existing draft.
     if(!c.c.input){
      const measurements={...c.c.measurements};const demand=c.plan.fields.find(f=>f.key==='demandSingle');
      if(demand?.state==='FILLED'&&typeof demand.value==='string')measurements.demandSingle=demand.value;
-     const saved=await this.inputs.create({consumerUnitId:scope.unit,month:scope.month,measurements,billedDemand:c.c.billed,sourceReference:'EVA · '+c.documentId+' · '+c.sourceHash,notes:'Preenchimento automático proposto; sem confirmação humana ou validação financeira.',correctionReason:'Proposta inicial a partir da evidência da competência.'},t);
+     writesStarted=true;const saved=await this.inputs.create({consumerUnitId:scope.unit,month:scope.month,measurements,billedDemand:c.c.billed,sourceReference:'EVA · '+c.documentId+' · '+c.sourceHash,notes:'Preenchimento automático proposto; sem confirmação humana ou validação financeira.',correctionReason:'Proposta inicial a partir da evidência da competência.'},t);
      receipts.push({label:'Dados mensais preenchidos em rascunho',state:'SAVED_DRAFT',id:saved.id});
     }
-    const current=await this.context(q,t,manual);if(!current.available||current.basis!==c.basis)throw new ConflictException('Sources changed');
-    const r=await (current.c.ready?this.resolution.prepare(c.documentId,t,{token:current.c.token}):this.resolution.prepareProposals(c.documentId,t,{token:current.c.token}));receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
+    const current=await this.context(q,t,manual);preflight={...preflight,stage:'BEFORE_DRAFTS',currentBasis:current.available?current.basis:null,currentToken:current.available?current.token:null};if(!current.available||current.basis!==c.basis)throw new ConflictException('Sources changed');
+    writesStarted=true;const r=await (current.c.ready?this.resolution.prepare(c.documentId,t,{token:current.c.token}):this.resolution.prepareProposals(c.documentId,t,{token:current.c.token}));receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
    }
    if(this.parameters&&c.c.libraryRecord&&(c.c.ready||c.c.proposalReady)){
     const lib=c.c.libraryRecord;
     for(const item of lib.profile.items){
      const existing=c.c.captured.parameters.filter((p:any)=>p.scenario==='ACR'&&p.kind==='TARIFF'&&p.component_code===item.component&&p.time_band===item.band&&p.status!=='RETIRED'&&String(p.start_date).slice(0,10)<=scope.month+'-31'&&String(p.end_date).slice(0,10)>=scope.month+'-01');
      if(existing.length)continue;
-     const saved=await this.parameters.createPrepared(resolutionId(['autofill-acr-v2',t.organizationId,c.documentId,c.sourceHash,lib.id,item.component,item.band]),{consumerUnitId:scope.unit,kind:'TARIFF',componentCode:item.component,label:item.label,scenario:'ACR',timeBand:item.band,measure:item.measure,amount:item.value,treatment:'NET',embeddedTaxCodes:[],includedTaxes:'',baseRule:'',direction:'DEBIT',source:'Biblioteca '+lib.id+' v'+lib.version+' · '+lib.profile.source,notes:'Proposta EVA a conferir: tarifa-base da biblioteca; incidência e bases tributárias exigem conferência específica. Não é aprovação.',startDate:c.c.period.start,endDate:c.c.period.end},t.organizationId,t.userId);receipts.push({label:'ACR · '+item.label+' em rascunho para conferência',state:'SAVED_DRAFT',id:saved.id});
+     writesStarted=true;const saved=await this.parameters.createPrepared(resolutionId(['autofill-acr-v2',t.organizationId,c.documentId,c.sourceHash,lib.id,item.component,item.band]),{consumerUnitId:scope.unit,kind:'TARIFF',componentCode:item.component,label:item.label,scenario:'ACR',timeBand:item.band,measure:item.measure,amount:item.value,treatment:'NET',embeddedTaxCodes:[],includedTaxes:'',baseRule:'',direction:'DEBIT',source:'Biblioteca '+lib.id+' v'+lib.version+' · '+lib.profile.source,notes:'Proposta EVA a conferir: tarifa-base da biblioteca; incidência e bases tributárias exigem conferência específica. Não é aprovação.',startDate:c.c.period.start,endDate:c.c.period.end},t.organizationId,t.userId);receipts.push({label:'ACR · '+item.label+' em rascunho para conferência',state:'SAVED_DRAFT',id:saved.id});
     }
    }
    const after=await this.context(q,t,manual);
@@ -175,7 +176,12 @@ export class CalculationAutofillService{
    else status=(after.c.ready||after.c.proposalReady)&&after.plan.readyForValidation&&!receipts.some((r:any)=>r.state==='VERIFY_REQUIRED')?'PREPARED':'PARTIAL';
    const run=await this.rpc('finish',scope,t,reserved.run.id,{status,receipts});
    return {run,current:this.output(after,t),canPublish:false};
-  }catch{
+  }catch(e){
+   if(!writesStarted){
+    const receipt={label:'Interrupção antes da primeira gravação; fontes devem ser reconferidas',state:'VERIFY_REQUIRED',kind:'PREFLIGHT_INTERRUPTED',reason:e instanceof ConflictException?'SOURCE_CHANGED':'READ_NOT_CONFIRMED',evidence:preflight};
+    try{await this.rpc('finish',scope,t,reserved.run.id,{status:'PARTIAL',receipts:[...receipts,receipt]});}catch{throw new ServiceUnavailableException('Não foi possível confirmar o registro da interrupção; consulte o histórico.');}
+    throw new ConflictException('Preparação interrompida antes de gravar dados. Atualize as fontes; a interrupção ficou registrada no histórico.');
+   }
    // Never repeat a side effect here. A failed finish leaves the durable RUNNING reservation visible.
    try{await this.rpc('finish',scope,t,reserved.run.id,{status:'UNKNOWN',receipts:[...receipts,{label:'Etapa não confirmada; consultar histórico',state:'VERIFY_REQUIRED'}]});}catch{/* durable reservation retained */}
    throw new ServiceUnavailableException('Preparação não confirmada. Consulte o histórico; não será repetida automaticamente.');
