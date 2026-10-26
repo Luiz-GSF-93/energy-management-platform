@@ -7,7 +7,7 @@ export async function invoiceIdentityWithHistory(db:any,bytes:Buffer,mime:string
  const clean=Object.fromEntries(['customerName','taxId','unitNumber','address','month'].map(k=>[k,registration[k as keyof InvoiceRegistration]])) as InvoiceRegistration;
  let proof=await invoiceIdentityPreflight(bytes,mime,clean,fileHash,timeoutMs);
  if(sourcePreparationEnabled()&&proof.state==='MISMATCH'&&'unit' in proof.checks&&proof.checks.unit==='MISMATCH'){
-  const history=await db.from('registration_edits').select('*').eq('organization_id',scope.org).eq('entity_kind','consumer_units').eq('entity_id',scope.unit).order('created_at',{ascending:false}).limit(100);
+  const history=await db.from('registration_edits').select('*').eq('organization_id',scope.org).eq('entity_kind','consumer_units').eq('entity_id',scope.unit).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100);
   if(history.error||!Array.isArray(history.data))throw new ServiceUnavailableException('Não foi possível conferir o histórico auditado da unidade.');
   const lineage=auditedUnitCodeHistory(history.data,scope.org,scope.customer,scope.unit,clean.unitNumber??'');
   if(lineage.editIds.length){

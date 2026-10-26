@@ -37,19 +37,24 @@ export class OcrQueueService {
  }
  private async resumeSnapshot(document:string,t:TenantContext){
   await this.identityResumeAccess(t);
-  const captured=await this.resumeRpc(document,t,'inspect');
-  if(!captured?.eligible)return {eligible:false as const,reason:captured?.reason??'Leitura sem elegibilidade para retomada.'};
+  let captured=await this.resumeRpc(document,t,'inspect');
+  if(!captured?.eligible&&!captured?.canRecheck)return {eligible:false as const,reason:captured?.reason??'Leitura sem elegibilidade para retomada.'};
   if(!this.sourcePreparation)throw new ServiceUnavailableException('Conferência local da fonte indisponível.');
   const proof=await this.sourcePreparation.invoiceIdentity(t.organizationId,captured.customerId,captured.unitId,document,captured.registration);
   const checks:Record<string,unknown>=proof?.checks??{};
   if(!proof||proof.state!=='MATCH'||proof.fileHash!==captured.job.fileHash||!['unit','taxId','address','period'].every(k=>checks[k]==='MATCH'))return {eligible:false as const,reason:'Eu, EVA, ainda não consegui conferir integralmente a identidade no original. Nenhuma retomada foi iniciada.'};
+  if(captured.canRecheck){
+   const checked=await this.resumeRpc(document,t,'inspect',{p_proof:proof});
+   if(!checked?.eligible||JSON.stringify(checked.job)!==JSON.stringify(captured.job)||JSON.stringify(checked.registration)!==JSON.stringify(captured.registration)||checked.customerId!==captured.customerId||checked.unitId!==captured.unitId)return {eligible:false as const,reason:'As fontes mudaram ou a correspondência auditada exige revisão. Atualize antes de retomar.'};
+   captured=checked;
+  }
   const token=createHash('sha256').update(JSON.stringify({document,org:t.organizationId,actor:t.userId,role:t.roleId,job:captured.job,proof})).digest('hex');
   return {eligible:true as const,token,proof,jobId:captured.job.id};
  }
  async identityResumePreview(document:string,t:TenantContext){
   if(!identityResumeEnabled())return {enabled:false,eligible:false};
   const snapshot=await this.resumeSnapshot(document,t);
-  return {enabled:true,eligible:snapshot.eligible,...(snapshot.eligible?{token:snapshot.token,jobId:snapshot.jobId,checks:snapshot.proof.checks,message:'Identidade atual conferida. A retomada mantém este documento e o histórico; a primeira leitura usa as cotas vigentes.'}:{message:snapshot.reason})};
+  return {enabled:true,eligible:snapshot.eligible,...(snapshot.eligible?{token:snapshot.token,jobId:snapshot.jobId,checks:snapshot.proof.checks,message:'Identidade atual e histórico conferidos. Ao confirmar, a mesma fatura voltará à fila para a primeira leitura OCR, conforme as cotas vigentes.'}:{message:snapshot.reason})};
  }
  async identityResume(document:string,t:TenantContext,b:any){
   await this.identityResumeAccess(t);
@@ -96,7 +101,7 @@ export class OcrQueueService {
   const doc=d.data;
   if(!doc||doc.organization_id!==org||doc.id!==document||doc.document_type!=='INVOICE_DISTRIBUTOR'||doc.file_verified!==true)throw new NotFoundException('Fatura verificada não encontrada nesta organização.');
   const [u,c,j]=await Promise.all([
-   db.from('consumer_units').select('id,organization_id,customer_id,status').eq('organization_id',org).eq('customer_id',doc.customer_id).eq('id',doc.consumer_unit_id).is('deleted_at',null).maybeSingle(),
+   db.from('consumer_units').select('id,organization_id,customer_id,status').eq('organization_id',org).eq('customer_id',doc.customer_id).eq('id',doc.consumer_unit_id).maybeSingle(),
    db.from('customers').select('id,organization_id,status').eq('organization_id',org).eq('id',doc.customer_id).is('deleted_at',null).maybeSingle(),
    db.from('document_ocr_jobs').select('id,state').eq('organization_id',org).eq('document_id',document).maybeSingle(),
   ]);
