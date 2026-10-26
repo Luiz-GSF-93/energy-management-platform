@@ -1,3 +1,4 @@
+import {nativeInvoiceCredits} from './native-invoice-credits';
 import {supplierDocumentKind,supplierInvoiceProposal} from './supplier-invoice-proposal';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {Injectable,ServiceUnavailableException} from '@nestjs/common';
@@ -41,7 +42,10 @@ export class SourcePreparationService{
    const lineage=auditedUnitCodeHistory(history.data??[],org,customer,unit,registration.unitNumber);
    if(lineage.editIds.length){proof=await invoiceIdentityPreflight(bytes,'application/pdf',{...registration,auditedUnitNumbers:lineage.codes},r.data.file_hash,8000);(proof as any).registrationEditIds=lineage.editIds;}
   }
-  if(proof.state==='MATCH'){if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
+  if(proof.state==='MATCH'){
+   const native=await extractPdfText(bytes,8000);
+   (proof as any).nativeInvoiceCredits=nativeInvoiceCredits(native,r.data.id,r.data.file_hash);
+   if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
   return proof;
  }
  async verifiedSupplierInvoice(c:any,id:string,fileHash:string){
@@ -69,7 +73,7 @@ export class SourcePreparationService{
  }
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;
-  const invoiceIdentity=c.originalIdentity?{state:c.originalIdentity.state,checks:c.originalIdentity.checks,fileHash:c.originalIdentity.fileHash,sourcePages:c.originalIdentity.sourcePages??[]}:null;
+  const invoiceIdentity=c.originalIdentity?{state:c.originalIdentity.state,checks:c.originalIdentity.checks,fileHash:c.originalIdentity.fileHash,sourcePages:c.originalIdentity.sourcePages??[],nativeCorrections:c.layout?.nativeCorrections??[]}:null;
   if(structuredSpotMonth(c)||documentedSettlementEnabled()&&c.manualOverrides?.supplierSettlement?.mode==='SPOT')return {version:3,invoiceIdentity,state:'REVIEW',documents:[],observations:['Compra avulsa estruturada nesta competência. A fonte mensal do fornecedor deve ser conciliada; preço, reajuste e flexibilidade do anexo regular não são aplicados.'],automaticFinancialApproval:false};
   const org=c.unit.organization_id,customer=c.unit.customer_id,unit=c.unit.id;
   const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===org&&r.customer_id===customer&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=c.period.start&&String(r.end_date??'9999-12-31').slice(0,10)>=c.period.end);

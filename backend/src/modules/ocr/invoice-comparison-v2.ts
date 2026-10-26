@@ -34,7 +34,7 @@ function printedRate(layout:any,key:string){
 /** User-requested comparison, not a fiscal reassessment. Never modifies the source invoice. */
 export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparison{
  const selection=selectAutofillLibrary(libraries,c.unit,c.month,{taxTreatment:'NET'});let lib=selection.record;
- const layout=globalModelLayout(c.source?.raw??{});let period:TariffPeriod|null=null,periodError='';
+ const layout:ReturnType<typeof globalModelLayout>=c.layout??globalModelLayout(c.source?.raw??{});let period:TariffPeriod|null=null,periodError='';
  if(documentedSettlementEnabled())try{period=documentedTariffPeriod(libraries,c.unit,c.month,layout);if(period)lib=period.segments[0].record;}catch(e){periodError=e instanceof Error?e.message:'Ciclo tarifário sem prova.';}
  const result:InvoiceComparison={method:'SAME_INVOICE_AMOUNTS_V2',amount:null,lines:[],retained:[],taxes:[],observations:['Estimativa comparativa: tarifas ACR da biblioteca; quantidades, impostos em reais, reativos e despesas da fatura preservados. Alíquotas exibidas como leitura, sem reaplicação sobre nova base.'],missing:[],library:lib?{id:lib.id,version:lib.version,source:lib.profile.source,taxTreatment:lib.profile.taxTreatment}:null};
  const fail=(message:string)=>{result.missing.push(message);return result;};
