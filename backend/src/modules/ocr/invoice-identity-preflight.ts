@@ -1,5 +1,6 @@
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractPdfText} from './eva-pdf-text.extractor';
+import type {ExtractionResult} from './eva-extraction.model';
 export type InvoiceRegistration={customerName:string|null;taxId:string|null;unitNumber:string|null;address:string|null;month:string|null;auditedUnitNumbers?:string[]};
 const compact=(v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''):'';
 const norm=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
@@ -41,10 +42,10 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
 }
 /** Local bounded text extraction only. Images/scans need one initial OCR to identify;
  * that initial OCR is never permission to import, draft, approve or publish. */
-export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registration:InvoiceRegistration,fileHash:string,timeoutMs?:number){
+export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registration:InvoiceRegistration,fileHash:string,timeoutMs?:number,read?:()=>Promise<ExtractionResult>){
  const base={version:'invoice-identity-preflight-v1',fileHash,registration};
  if(mime!=='application/pdf')return {...base,state:'OCR_REQUIRED',checks:{source:'IMAGE_REQUIRES_INITIAL_OCR'}};
- try{const extracted=await (timeoutMs===undefined?extractPdfText(bytes):extractPdfText(bytes,timeoutMs));
+ try{const extracted=await (read?read():timeoutMs===undefined?extractPdfText(bytes):extractPdfText(bytes,timeoutMs));
   if(sourcePreparationEnabled()){
    const pages=new Set(extracted.sections.filter(s=>s.issues.some(i=>['LAYOUT_REVIEW','EMPTY_PAGE'].includes(i))).map(s=>s.page));
    const safe=extracted.sections.filter(s=>!pages.has(s.page));
