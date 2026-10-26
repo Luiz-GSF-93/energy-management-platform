@@ -5,6 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { AuditService } from '../../../common/services/audit.service';
 import { SupabaseService } from '../../../services/supabase.service';
@@ -504,18 +505,19 @@ export class LicensesService {
     organizationId: string,
     today = new Date().toISOString().slice(0, 10),
   ): Promise<LicenseRecord | null> {
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('licenses')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('active', true);
-
-    if (error) {
-      throw new InternalServerErrorException(
-        'Unable to resolve effective license',
-      );
+    // Retry only this idempotent read and only known transient database/transport faults.
+    // Never reuse a stale license or replay a financial/document write.
+    const transient=(e:any)=>['PGRST000','PGRST001','PGRST002','PGRST003','08000','08003','08006','53300','57P01','57P03','57014'].includes(e?.code)||
+      (!e?.code&&/fetch failed|network(?:error| request failed)|timeout|timed out|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(String(e?.message??'')));
+    const read=()=>this.supabaseService.getClient().from('licenses').select('*').eq('organization_id',organizationId).eq('active',true);
+    let result:any;
+    try{result=await read();}catch(error){result={data:null,error};}
+    if(result?.error&&transient(result.error)){
+      await new Promise(resolve=>setTimeout(resolve,150));
+      try{result=await read();}catch(error){result={data:null,error};}
     }
+    if(result?.error||!Array.isArray(result?.data))throw new ServiceUnavailableException('Não foi possível consultar a licença ativa. Atualize o histórico e tente novamente; nenhum acesso foi liberado sem validação.');
+    const data=result.data;
 
     const candidates = ((data ?? []) as LicenseRecord[]).filter((license) => {
       if (license.organization_id !== organizationId) return false;

@@ -6,7 +6,8 @@ import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {extractPdfText} from './eva-pdf-text.extractor';
 import {contractAnnexEvidence,sourcePreparationEnabled,sameContractDecimal,contractPartyMatches} from './source-preparation-v3';
-import {invoiceIdentityPreflight,auditedUnitCodeHistory} from './invoice-identity-preflight';
+import {invoiceIdentityPreflight} from './invoice-identity-preflight';
+import {invoiceIdentityWithHistory} from './invoice-identity-with-history';
 import {structuredSpotMonth} from './monthly-supplier-mode';
 
 /** Read-only local extraction. Caller has already checked backoffice permissions,
@@ -35,13 +36,7 @@ export class SourcePreparationService{
   registration=Object.fromEntries(['customerName','taxId','unitNumber','address','month'].map(k=>[k,registration[k]]));
   const key=createHash('sha256').update(JSON.stringify([org,customer,unit,document,r.data.file_hash,registration])).digest('hex'),cached=this.identities.get(key);
   if(cached&&cached.until>Date.now())return structuredClone(cached.value);
-  let proof=await invoiceIdentityPreflight(bytes,'application/pdf',registration,r.data.file_hash,8000);
-  if(proof.state==='MISMATCH'&&'unit' in proof.checks&&proof.checks.unit==='MISMATCH'){
-   const history=await this.db.getClient().from('registration_edits').select('*').eq('organization_id',org).eq('entity_kind','consumer_units').eq('entity_id',unit).order('created_at',{ascending:false}).limit(100);
-   if(history.error)throw new ServiceUnavailableException('Não foi possível conferir o histórico auditado da unidade.');
-   const lineage=auditedUnitCodeHistory(history.data??[],org,customer,unit,registration.unitNumber);
-   if(lineage.editIds.length){proof=await invoiceIdentityPreflight(bytes,'application/pdf',{...registration,auditedUnitNumbers:lineage.codes},r.data.file_hash,8000);(proof as any).registrationEditIds=lineage.editIds;}
-  }
+  const proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,'application/pdf',registration,r.data.file_hash,{org,customer,unit},8000);
   if(proof.state==='MATCH'){
    const native=await extractPdfText(bytes,8000);
    (proof as any).nativeInvoiceCredits=nativeInvoiceCredits(native,r.data.id,r.data.file_hash);

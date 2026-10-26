@@ -1,4 +1,4 @@
-import { InternalServerErrorException } from '@nestjs/common';
+import { InternalServerErrorException, ServiceUnavailableException } from '@nestjs/common';
 import { LicensesService, LicenseRecord } from './licenses.service';
 
 const TODAY = '2026-09-21';
@@ -112,6 +112,22 @@ describe('LicensesService.resolveEffectiveLicense', () => {
 
     await expect(
       service.resolveEffectiveLicense('org-1', TODAY),
-    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
+});
+
+function retries(results:any[]){
+ const calls:any[]=[];let index=0;
+ const client={from:(table:string)=>{const scope:any={table};calls.push(scope);const q:any={select:()=>q,eq:(key:string,value:any)=>{scope[key]=value;return q;},then:(resolve:any,reject:any)=>{const r=results[Math.min(index++,results.length-1)];return r instanceof Error?Promise.reject(r).then(resolve,reject):Promise.resolve(r).then(resolve,reject);}};return q;}};
+ return {calls,service:new LicensesService({getClient:()=>client} as any,{} as any)};
+}
+describe('Bounded license read recovery',()=>{
+ it.each([{code:'PGRST003'},{code:'08006'},{message:'TypeError: fetch failed'},new Error('fetch failed')])('rechecks the same tenant once after a transient fault %j',async error=>{
+  const s=retries([error instanceof Error?error:{data:null,error}, {data:[license()],error:null}]);
+  expect(await s.service.resolveEffectiveLicense('org-1',TODAY)).toEqual(license());expect(s.calls).toEqual([{table:'licenses',organization_id:'org-1',active:true},{table:'licenses',organization_id:'org-1',active:true}]);
+ });
+ it('fails closed after two transient errors',async()=>{const s=retries([{data:null,error:{code:'PGRST003'}}]);await expect(s.service.resolveEffectiveLicense('org-1',TODAY)).rejects.toBeInstanceOf(ServiceUnavailableException);expect(s.calls).toHaveLength(2);});
+ it.each(['42501','42703','PGRST301'])('does not retry permanent error %s',async code=>{const s=retries([{data:null,error:{code}}]);await expect(s.service.resolveEffectiveLicense('org-1',TODAY)).rejects.toBeInstanceOf(ServiceUnavailableException);expect(s.calls).toHaveLength(1);});
+ it('does not replace a missing license or grant a capability after recovery',async()=>{const s=retries([{data:null,error:{code:'08006'}},{data:[],error:null}]);expect(await s.service.resolveEffectiveLicense('org-1',TODAY)).toBeNull();const denied=retries([{data:[license({document_management:false,start_date:'2020-01-01'})],error:null}]);await expect(denied.service.requireEntitlement('org-1','document_management')).rejects.toThrow('License does not grant');expect(denied.calls).toHaveLength(1);});
+ it('still rejects ambiguous licenses after recovery',async()=>{const s=retries([{data:null,error:{code:'08006'}},{data:[license(),license({id:'second'})],error:null}]);await expect(s.service.resolveEffectiveLicense('org-1',TODAY)).rejects.toBeInstanceOf(InternalServerErrorException);});
 });

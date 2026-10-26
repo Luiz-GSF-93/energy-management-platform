@@ -5,6 +5,8 @@ import {OcrCalculationContextService} from './ocr-calculation-context.service';
 @Controller('documents')
 export class OcrCalculationContextController {
  constructor(private service:OcrCalculationContextService){}
+ @Get(':id/ocr/navigation-context') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
+ navigation(@Param('id') id:string,@Req() req:any){return this.service.navigation(id,req.tenantContext);}
  @Get(':id/ocr/calculation-context') @RequirePermission([P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW])
  inspect(@Param('id') id:string,@Req() req:any){return this.service.inspect(id,req.tenantContext);}
 }

@@ -37,6 +37,8 @@ export default function OcrDocumentStatus({id,canProcess,autoAssist=false,openRe
   {status&&<div style={{border:'1px solid '+statusColor,borderRadius:8,padding:10,margin:'8px 0'}}>
    <strong style={{color:statusColor}}>Status da leitura: {status.job?(labels[status.job.state]??'Situação indisponível'):status.enabled?'Disponível para leitura':'Processamento desativado'}</strong>
    {status.intake&&<p style={{margin:'6px 0',color:statusColor}}><strong>{status.intake.decision==='REJECT_AUTOMATION'?'Atenção: integração automática bloqueada':'Validação pendente: conferência necessária'}</strong></p>}
+   {status.job?.errorCode==='IDENTITY_MISMATCH'&&<p>A leitura parou na conferência do código da instalação, antes de enviar ao OCR. Confira a identidade para retomar o mesmo documento; o histórico auditado de troca do código será considerado.</p>}
+   {status.job?.errorCode==='LICENSE_UNAVAILABLE'&&<p>Não foi possível conferir a licença no momento da leitura. Consulte a licença e o histórico antes de tentar novamente.</p>}
    {checkedAt&&<small>Última consulta bem-sucedida: {checkedAt}</small>}
   </div>}
   {status&&!status.enabled&&status.job&&<p>Novas leituras estão desativadas; o resultado permanece disponível.</p>}

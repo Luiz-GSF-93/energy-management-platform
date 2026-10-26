@@ -2,6 +2,13 @@ name: Source-backed automatic preparation
 on:
   pull_request:
     paths:
+      - "backend/src/modules/ocr/invoice-identity-with-history*"
+      - "backend/src/modules/ocr/ocr-navigation-context*"
+      - "backend/src/modules/ocr/ocr-calculation-context*"
+      - "backend/src/modules/ocr/ocr.worker*"
+      - "backend/src/modules/licenses/services/licenses.service*"
+      - "frontend/app/backoffice/contracts/page.tsx"
+      - "frontend/test/ocr-invoice-tracking.cjs"
       - 'backend/src/modules/contracts/services/contract-index-memory*'
       - 'backend/src/modules/contracts/controllers/contract-index-memory*'
       - 'backend/src/modules/contracts/contracts.module.ts'
@@ -124,6 +131,8 @@ jobs:
         working-directory: backend
       - run: node test/documented-settlements.cjs
         working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/ocr-navigation-context.spec.ts src/modules/ocr/invoice-identity-with-history.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/licenses/services/licenses.service.spec.ts src/modules/ocr/ocr-calculation-context.service.spec.ts
+        working-directory: backend
       - run: npm run build
         working-directory: backend
       - run: node test/eva-approved-publications.cjs
@@ -185,4 +194,7 @@ jobs:
       - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/ccee-cost-review.cjs && node test/supplier-invoice-evidence.cjs && node test/eva-guided-review.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
         working-directory: frontend
       - run: npm run build
+        working-directory: frontend
+
+      - run: node test/ocr-invoice-tracking.cjs
         working-directory: frontend
