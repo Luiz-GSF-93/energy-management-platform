@@ -51,9 +51,9 @@ export class SourcePreparationService{
     if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura original preservada.');
     const evidence=stored.data;
     if(typeof evidence?.text==='string'&&evidence.text.length<=2097152){
-     const lineage=evidence.lineage,reg=lineage?.editIds?.length?{...registration,auditedUnitNumbers:lineage.codes}:registration;
+     const lineage=evidence.lineage,audited=Array.isArray(lineage?.codes)&&(lineage?.editIds?.length||lineage?.aliasIds?.length),reg=audited?{...registration,auditedUnitNumbers:lineage.codes}:registration;
      const checks=invoiceIdentityText(evidence.text,reg);
-     if(checks.state==='MATCH')proof={version:'invoice-identity-preflight-v1',fileHash:r.data.file_hash,registration:reg,...checks,sourcePages:evidence.pages,...(lineage?.editIds?.length?{registrationEditIds:lineage.editIds}:{})} as any;
+     if(checks.state==='MATCH')proof={version:'invoice-identity-preflight-v1',fileHash:r.data.file_hash,registration:reg,...checks,sourcePages:evidence.pages,...(lineage?.editIds?.length?{registrationEditIds:lineage.editIds}:{}),...(lineage?.aliasIds?.length?{registrationAliasIds:lineage.aliasIds}:{})} as any;
     }
    }
    if(proof.state==='MATCH'){

@@ -105,6 +105,8 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     if(approved){await transition('published',{closingId:approved.id,note:'Fechamento aprovado. Históricos preservados.'});return;}
     const signature=await this.signature(i,job);
     if(i.signature===signature){await transition('wait',{note:i.note});return;}
+    // A failed read-only identity check has no uncertain financial writes.
+    await this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id);
     await transition('begin_prepare');preparing=true;
     const drafts=await this.assistant.prepareAutomatic(i.document_id,t);
     if(drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED'))throw Error('UNCONFIRMED_DRAFT_WRITE');
