@@ -14,7 +14,10 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  // Some DANFEs serialize recipient cells before the recipient heading.
  const recipientSection=recipient.length===2?recipient[1].split(/FATURA\s*\/\s*DUPLICATAS?/)[0]:reverse.length===2?reverse[1].split(/CALCULO DO IMPOSTO/)[0]:null;
  if(!recipientSection)return null;
- const recipientIds=Array.from(recipientSection.matchAll(/\b(?:\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{14})\b/g));
+ // Prefer the explicitly formatted CNPJ cell. Native PDF streams may join a
+ // phone/time/IE into 14 bare digits; those are not a second formatted CNPJ.
+ const formattedIds=Array.from(recipientSection.matchAll(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g));
+ const recipientIds=formattedIds.length?formattedIds:Array.from(recipientSection.matchAll(/\b\d{14}\b/g));
  if(recipientIds.length!==1||digits(recipientIds[0][0])!==digits(taxId))return null;
  const product=t.split(/DADOS DO PRODUTO\s*\/\s*SERVI.O/);
  if(product.length!==2)return null;
@@ -30,14 +33,14 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  const decimal='([0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{2,6}|[0-9]+,[0-9]{2,6})';
  const lines=Array.from(section.matchAll(new RegExp('\\bMWH\\s+'+decimal+'\\s+'+decimal+'\\s+'+decimal,'g')));
  let values:string[]|undefined=lines.length===1&&lines[0][3]!=='0,00'?[lines[0][1],lines[0][2],lines[0][3]]:undefined;
- let destinationIcms=false;
+ const fiscalText=t.replace(/\s+/g,' ').replace(/\b(?:NAO|SEM)\s+ICMS A SER LANCADO E RECOLHIDO[^.]*?(?=\.|$)/g,'');
+ const destinationIcms=/RESPONSABILIDADE\s+PELO\s+RECOLHIMENTO\s+DO\s+ICMS\s+FICA\s+ATRIBUIDA\s+AO\s+DESTIN(?:AT)?ARIO/.test(fiscalText)||/\bICMS A SER LANCADO E RECOLHIDO PELO DESTINATARIO DA ENERGIA NOS TERMOS DO DISPOSTO NO ARTIGO 425[- ]D DO RICMS[- ]SP\/(?:2000|2022)\b/.test(fiscalText);
  if(!values&&supplierDocumentKind(t)==='INVOICE'){
   const rows=Array.from(section.matchAll(/\bMWH\s+([^\n]+)/g));
   if(rows.length!==1)return null;
   const cells=rows[0][1].match(new RegExp(decimal,'g'))??[];
   // Quantity, total, five zero tax cells, unit price: require the complete
   // known layout and its destination-ICMS clause, never infer exemption from 0.
-  destinationIcms=/RESPONSABILIDADE\s+PELO\s+RECOLHIMENTO\s+DO\s+ICMS\s+FICA\s+ATRIBUIDA\s+AO\s+DESTIN(?:AT)?ARIO/.test(t.replace(/\s+/g,' '));
   if(cells.length!==8||cells.slice(2,7).some(v=>v!=='0,00')||!destinationIcms)return null;
   values=[cells[0],cells[7],cells[1]];
  }

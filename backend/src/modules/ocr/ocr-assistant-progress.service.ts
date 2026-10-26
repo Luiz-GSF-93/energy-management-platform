@@ -1,3 +1,5 @@
+import {sourcePreparationEnabled} from './source-preparation-v3';
+import {EvaAssistedClosingService} from './eva-assisted-closing.service';
 import {OcrMachineDraftService} from './ocr-machine-draft.service';
 import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
 import {randomUUID} from 'node:crypto';
@@ -7,14 +9,14 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {OcrAssistantService} from './ocr-assistant.service';
 import {ocrReviewDigest} from './ocr-review.service';
 
-const stages = ['source','fields','history','configuration','proposals','autofill','interpretation','ready'];
+const stages = ['source','fields','history','configuration','proposals','autofill','closing','interpretation','ready'];
 type Job = {id:string; key:string; expires:number; startedAt:string; state:'RUNNING'|'READY'|'FAILED'; completed:string[]; plan?:unknown; message?:string; elapsedMs?:number};
 @Injectable()
 export class OcrAssistantProgressService {
  // Transient progress only. Machine drafts are durable, idempotent and never approvals.
  // Restart/expiry requires a new inspection, never resubmission of a financial write.
  private readonly jobs = new Map<string,Job>();
- constructor(private assistant:OcrAssistantService,@Optional() private ai?:BackofficeAiService,@Optional() private drafts?:OcrMachineDraftService) {}
+ constructor(private assistant:OcrAssistantService,@Optional() private ai?:BackofficeAiService,@Optional() private drafts?:OcrMachineDraftService,@Optional() private closing?:EvaAssistedClosingService) {}
  private key(document:string,t:TenantContext){return ocrReviewDigest({document,org:t.organizationId,actor:t.userId,role:t.role,permissions:[...t.permissions].sort(),access:t.accessMode});}
  private cleanup(){for(const [id,job] of this.jobs)if(job.expires<Date.now())this.jobs.delete(id);}
  private present(job:Job){return {id:job.id,state:job.state,startedAt:job.startedAt,completed:job.completed,stages,elapsedMs:job.elapsedMs??Date.now()-Date.parse(job.startedAt),message:job.message,plan:job.state!=='FAILED'?job.plan:undefined};}
@@ -24,7 +26,7 @@ export class OcrAssistantProgressService {
   if(this.jobs.size>=64)throw new ServiceUnavailableException('Assistente ocupado. Tente a conferência novamente; nenhum lançamento foi iniciado.');
   const job:Job={id:randomUUID(),key,expires:Date.now()+180000,startedAt:new Date().toISOString(),state:'RUNNING',completed:[]};this.jobs.set(job.id,job);
   void this.assistant.inspect(document,t,stage=>{if(stage!=='ready'&&stages.includes(stage)&&!job.completed.includes(stage))job.completed.push(stage);})
-   .then(async plan=>{let automaticFill:unknown;let automaticPreparation:unknown;
+   .then(async plan=>{let automaticFill:unknown;let automaticPreparation:unknown;let financialPreparation:any;
     if(this.drafts&&ocrDraftRole(t)&&ocrDraftPermission(t)){
      // Save source-backed fields before waiting for a network inference. A later
      // interpretation may annotate them, but cannot replace confirmed values.
@@ -36,7 +38,19 @@ export class OcrAssistantProgressService {
     }
     job.completed.push('autofill');
     job.plan={...plan,automaticFill,automaticPreparation};
-    const aiReview=this.ai?await this.ai.interpret(t,'Interprete os campos extraídos e explique os preenchimentos e confirmações restantes desta fatura.',assistantAiEvidence(plan),document):undefined;
+    const prepared:any=automaticPreparation;
+    const canComplete=prepared&&Array.isArray(prepared.receipts)&&!prepared.receipts.some((r:any)=>r.state==='VERIFY_REQUIRED')&&(prepared.complete===true||sourcePreparationEnabled()&&prepared.canContinue===true);
+    if(this.closing&&ocrDraftRole(t)&&ocrDraftPermission(t)&&canComplete){
+     try{
+      const result=await this.closing.prepareInvoice(document,(plan as any).sourceHash,{consumerUnitId:plan.unitId,month:plan.month},t),row=result.row,report=row.report,unit=report.units.find((u:any)=>u.id===plan.unitId);
+      const fields=unit?.fields??[],filled=fields.filter((f:any)=>f.state==='FILLED'&&f.value!==null&&f.value!==undefined&&f.value!==''&&f.source?.trim()).length;
+      const complete=report.preparation?.percent===100||report.approvalEligible===true;
+      financialPreparation={state:complete?'FILLED_REVIEW_REQUIRED':'PARTIAL',closingId:row.id,version:row.version,unitId:plan.unitId,month:plan.month,percent:complete?100:fields.length?Math.min(99,Math.floor(filled*100/fields.length)):0,filled,total:fields.length,reviewQuestions:report.pendingActions??[],totals:report.proposalFinancial??report.financial,message:complete?'Preenchimento concluído pela EVA. Confira somente os ajustes do resumo antes da aprovação.':'A EVA preencheu as fontes disponíveis. As informações ainda necessárias estão reunidas no resumo.',financialApproval:false,canPublish:false};
+     }catch{financialPreparation={state:'REVIEW_REQUIRED',message:'Os preenchimentos foram preservados. Confira o resumo e o histórico da preparação antes de continuar.',financialApproval:false,canPublish:false};}
+    }
+    job.completed.push('closing');job.plan={...plan,automaticFill,automaticPreparation,financialPreparation};
+    let aiReview:any;
+    try{aiReview=this.ai?await this.ai.interpret(t,'Interprete os campos extraídos e explique os preenchimentos e confirmações restantes desta fatura.',assistantAiEvidence(financialPreparation?.percent===100?{...plan,counts:{blockers:0,reviews:financialPreparation.reviewQuestions.length},configurations:[],findings:financialPreparation.reviewQuestions.map((q:any)=>({...q,section:q.section??'Fechamento',severity:'REVIEW'}))}:plan),document):undefined;}catch{aiReview={state:'UNAVAILABLE',message:'Os dados preenchidos foram preservados. A interpretação explicativa está indisponível; confira o resumo da preparação.'};}
     if(this.drafts&&ocrDraftRole(t)&&ocrDraftPermission(t)&&aiReview?.state==='READY'){
      try{automaticFill=await this.drafts.fill(t,plan,aiReview);}catch{
       // The initial draft already committed. Report annotation failure without
@@ -44,7 +58,7 @@ export class OcrAssistantProgressService {
       if((automaticFill as any)?.state==='FILLED_DRAFT')automaticFill={...(automaticFill as object),message:'Campos preenchidos e salvos. As observações da IA não foram salvas; confira as dúvidas exibidas antes de validar.'};
      }
     }
-    job.plan={...plan,aiReview,automaticFill,automaticPreparation};job.completed.push('interpretation','ready');job.state='READY';job.message=aiReview?.state==='READY'?'EVA: interpretação concluída; confira os preenchimentos e as dúvidas. A aprovação financeira permanece com o gestor.':aiReview?.message;job.elapsedMs=Date.now()-Date.parse(job.startedAt);})
+    job.plan={...plan,aiReview,automaticFill,automaticPreparation,financialPreparation};job.completed.push('interpretation','ready');job.state='READY';job.message=aiReview?.state==='READY'?'EVA: interpretação concluída; confira os preenchimentos e as dúvidas. A aprovação financeira permanece com o gestor.':aiReview?.message;job.elapsedMs=Date.now()-Date.parse(job.startedAt);})
    .catch(()=>{job.state='FAILED';job.message='A conferência não foi concluída. Atualize para consultar novamente. Confira os rascunhos salvos antes de repetir.';job.elapsedMs=Date.now()-Date.parse(job.startedAt);});
   return this.present(job);
  }

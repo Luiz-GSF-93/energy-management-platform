@@ -84,9 +84,11 @@ function tariffFlag(c:any,p:any,layout:any,base:InvoiceComparison){
  else {
   if(matches.length!==1||!Number.isInteger(cycleDays)||matches[0].days!==cycleDays)throw Error('Bandeira ACR: conferir cor, dias e tarifa vigente; CDE não substitui bandeira.');
   // A dated public evidence set, not an indefinitely extended regulatory constant.
-  if(c.month<'2024-04'||c.month>'2026-05')throw Error('Bandeira ACR: cadastre a tarifa vigente e sua fonte para esta competência.');
+  const juneSource='https://www.gov.br/aneel/pt-br/assuntos/tarifas/bandeiras-tarifarias';
+  const juneConfirmed=c.month==='2026-06'&&matches[0].color==='AMARELA';
+  if((c.month<'2024-04'||c.month>'2026-05')&&!juneConfirmed)throw Error('Bandeira ACR: cadastre a tarifa vigente e sua fonte para esta competência.');
   rate=({VERDE:'0.000000',AMARELA:'0.018850','VERMELHA 1':'0.044630','VERMELHA 2':'0.078770'} as any)[matches[0].color.replace('PATAMAR ','')];if(!rate)throw Error('Patamar da bandeira não identificado.');
-  source='CCEE boletim público nº97 maio/2026, tabela2 / REH3306/2024 · '+matches[0].source+' · '+matches[0].days+' dias';
+  source=(juneConfirmed?'ANEEL, bandeira amarela junho/2026: R$1,885 por 100kWh · '+juneSource:'CCEE boletim público nº97 maio/2026, tabela2 / REH3306/2024')+' · '+matches[0].source+' · '+matches[0].days+' dias';
  }
  const record=registered[0],measure=record?.measure??'BRL_KWH';dec(rate!);
  return base.lines.filter(line=>line.component==='TE').map(line=>({component:'TARIFF_FLAG',label:'Adicional de bandeira tarifária',band:line.band,measure,value:rate!,quantity:line.quantity,quantitySource:line.quantitySource,source}));

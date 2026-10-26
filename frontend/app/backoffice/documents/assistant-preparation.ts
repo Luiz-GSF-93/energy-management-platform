@@ -1,6 +1,6 @@
 import {apiRequest} from '@/app/lib/api/client';
 export type AssistantActivity={id:string;state:'RUNNING'|'READY'|'FAILED';completed:string[];stages:string[];elapsedMs:number;message?:string};
-export const activityLabels:Record<string,string>={source:'Origem e leitura OCR',fields:'Conferência dos campos',history:'Comparação com histórico',configuration:'Cadastros e vigências',proposals:'Preenchimentos e lançamentos',autofill:'Preenchimento dos rascunhos',interpretation:'Disponibilidade e interpretação IA',ready:'Pronto para validação do operador'};
+export const activityLabels:Record<string,string>={source:'Origem e leitura OCR',fields:'Conferência dos campos',history:'Comparação com histórico',configuration:'Cadastros e vigências',proposals:'Preenchimentos e lançamentos',autofill:'Preenchimento dos rascunhos',closing:'Preenchimento do fechamento',interpretation:'Disponibilidade e interpretação IA',ready:'Pronto para validação do operador'};
 export async function prepareAssistant<T>(id:string,notify:(job:AssistantActivity)=>void,signal:AbortSignal,onPartial?:(plan:T)=>void):Promise<T>{
  const path='/api/v1/documents/'+encodeURIComponent(id)+'/ocr/assistant/prepare';
  let job=await apiRequest<AssistantActivity&{plan?:T}>(path,{method:'POST',signal});

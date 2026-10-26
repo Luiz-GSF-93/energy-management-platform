@@ -38,6 +38,18 @@ export class EvaAssistedClosingService{
   if(!u)throw new ForbiddenException('Unidade fora do escopo.');
   return Object.fromEntries(['id','distributor','tariff_group','tariff_subgroup','tariff_modality','consumption_class','voltage','state','free_market'].map(k=>[k,u[k]??null]));
  }
+ /** Shared completion for the portal and Documents. Same sources reuse the same closing ID. */
+ async prepareInvoice(documentId:string,sourceHash:string,q:{consumerUnitId:string;month:string},t:TenantContext){
+  if(!this.enabled()||!ocrDraftRole(t)||!ocrDraftPermission(t)||!t.permissions?.includes(P.ENERGIA_OCR_PROCESS))throw new ForbiddenException('Preparação automática exige acesso interno aos rascunhos da organização.');
+  this.scope(q);
+  if(!uuid(documentId)||!/^[a-f0-9]{64}$/.test(sourceHash))throw new BadRequestException('Fonte da fatura inválida.');
+  const current:any=await this.autofill.inspect(q,t);
+  if(!current.available||!current.canPrepare||current.documentId!==documentId||current.sourceHash!==sourceHash||current.unitId!==q.consumerUnitId||current.month!==q.month||!/^[a-f0-9]{64}$/.test(current.basis??''))throw new ConflictException('Atualize a fonte desta unidade e competência antes de preencher.');
+  const result=await this.prepare({...q,requestId:resolutionId(['eva-invoice-completion-1',t.organizationId,documentId,sourceHash,current.basis])},t);
+  const row=result.row,unit=row?.report?.units?.find((u:any)=>u.id===q.consumerUnitId);
+  if(row?.organization_id!==t.organizationId||row.month!==q.month||!unit||unit.documentId!==documentId||unit.sourceHash!==sourceHash)throw new ConflictException('O fechamento retornou fora da fonte selecionada.');
+  return result;
+ }
  async prepare(b:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento assistido desligado.');
   if(!b||Object.keys(b).sort().join(',')!=='consumerUnitId,month,requestId'||!uuid(b.requestId))throw new BadRequestException('Preparação inválida.');
