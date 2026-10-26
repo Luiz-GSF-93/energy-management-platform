@@ -38,6 +38,8 @@ function DocumentsContent() {
   const currentOrg = useRef(organizationId);
 
   const linkedDocument=useRef('');
+  const ocrPanel=useRef<HTMLElement|null>(null);
+  useEffect(()=>{if(ocrId){ocrPanel.current?.focus({preventScroll:true});ocrPanel.current?.scrollIntoView({block:'start'});}},[ocrId]);
   useEffect(()=>{
     if(loading)return;
     const ids=new URLSearchParams(window.location.search).getAll('ocrDocument');
@@ -140,7 +142,7 @@ function DocumentsContent() {
       </form></DocumentDialog>}
       {Object.values(['cb949e2a-e01d-4cf0-8c69-6ca74fe4d627','1479c0b7-9608-4e95-bd83-7e6899255a78','489e6387-d5fc-4cb0-81f9-d7a76269dca5']).some(hasPermission)?<DocumentEvidenceWorkspace hasPermission={hasPermission} documents={documents} canUpload={canUpload}/>:null}
       {canAssist&&inbox.length>0&&<details className="operation-panel"><summary>Fila EVA ({inbox.length})</summary><AssistantInbox items={inbox.flatMap(item=>{const d=documents.find(d=>d.id===item.id&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR');return d?[{id:d.id,name:d.original_filename,month:d.reference_month.slice(0,7),update:updates[d.id]}]:[];})} onOpen={id=>{setOcrId(id);setOpened(old=>({id,request:(old?.request??0)+1}));}} onRemove={remove}/></details>}
-      {documents.filter(d=>d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR').map(d=><section key={organizationId+':'+d.id} hidden={ocrId!==d.id} className="operation-panel" aria-label={'OCR · '+d.original_filename}><header><h2>{d.original_filename} · OCR e EVA</h2><button onClick={()=>setOcrId('')}>Recolher conferência</button></header><OcrDocumentStatus id={d.id} autoAssist={canAssist&&activated.includes(d.id)} openRequest={opened?.id===d.id?opened.request:0} onAssistantUpdate={updateAssistant} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')}/></section>)}
+      {documents.filter(d=>d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR').map(d=><section ref={ocrId===d.id?ocrPanel:undefined} tabIndex={-1} key={organizationId+':'+d.id} hidden={ocrId!==d.id} className="operation-panel" aria-label={'OCR · '+d.original_filename}><header><h2>{d.original_filename} · OCR e EVA</h2><button onClick={()=>setOcrId('')}>Recolher conferência</button></header><OcrDocumentStatus id={d.id} autoAssist={canAssist&&activated.includes(d.id)} openRequest={opened?.id===d.id?opened.request:0} onAssistantUpdate={updateAssistant} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')}/></section>)}
     </>}
   </section>;
 }
