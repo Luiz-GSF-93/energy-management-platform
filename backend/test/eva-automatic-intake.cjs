@@ -33,6 +33,7 @@ await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261223_ev
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261224_eva_intake_status.sql','utf8'));
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261225_eva_intake_unit_aliases.sql','utf8'));
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261226_eva_archived_intake_tracking.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261227_eva_intake_alias_evidence.sql','utf8'));
 const call=(action,receipt,body={},actor=id(70),role='external',org='org')=>db.query('SELECT eva_intake_action($1,$2,$3,false,$4,$5,$6) data',[org,actor,role,action,receipt,JSON.stringify(body)]).then(r=>r.rows[0].data);
 const metadata=(n=1)=>({requestId:id(100+n),hash:String(n).repeat(64),filename:'invoice.pdf',mime:'application/pdf',size:100,consent:true,hints:{}});
 const transition=(job,action,body={})=>db.query('SELECT transition_eva_automatic_intake($1,$2,$3,$4) data',[job.id,job.token,action,JSON.stringify(body)]).then(r=>r.rows[0].data);
@@ -106,7 +107,7 @@ await db.exec(`UPDATE roles SET permissions=permissions||'["0f2e539d-03f9-4168-b
 await deny(()=>alias(id(70),'external'));await deny(()=>alias(id(71),'manager','1'.repeat(64)));await deny(()=>alias(id(71),'manager','4'.repeat(64),'9999999'));
 const registered=(await alias()).rows[0].id;ok((await alias()).rows[0].id===registered);
 const lineage=async(o='org',c='client',u=id(1))=>(await db.query('SELECT ocr_identity_unit_lineage($1,$2,$3,$4) data',[o,c,u,'1234567'])).rows[0].data;
-ok((await lineage()).codes.includes('17510090'));ok(!(await lineage('other')).codes.includes('17510090'));ok(!(await lineage('org','foreign')).codes.includes('17510090'));ok((await lineage()).editIds.length===0);
+ok((await lineage()).codes.includes('17510090'));ok(!(await lineage('other')).codes.includes('17510090'));ok(!(await lineage('org','foreign')).codes.includes('17510090'));ok((await lineage()).editIds.length===0);ok((await lineage()).aliasIds[0]===registered);ok((await lineage('other')).aliasIds.length===0);
 await deny(()=>db.exec('UPDATE eva_intake_unit_aliases_audit SET reason=reason'));await deny(()=>db.exec('DELETE FROM eva_intake_unit_aliases_audit'));
 for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_table_privilege($1,'eva_intake_unit_aliases_audit','SELECT') p",[role])).rows[0].p);
 let item=(await call('list',null,{},id(71),'manager')).rows.find(r=>r.id===id(40));ok(item.status.percent===45&&item.status.canRetry&&item.status.selection.unitId===id(1));

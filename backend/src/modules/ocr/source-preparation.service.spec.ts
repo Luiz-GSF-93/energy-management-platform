@@ -11,7 +11,7 @@ function setup(docs:any[]=[document()]){
  const download=jest.fn(async()=>({data:new Blob([new Uint8Array(bytes)])})),from=jest.fn(()=>chain),storageFrom=jest.fn(()=>({download}));
  const db:any={getClient:()=>({from,storage:{from:storageFrom}})};
  (extractPdfText as jest.Mock).mockResolvedValue({sections:[],pageCount:1,ocrRequired:false});
- return {service:new SourcePreparationService(db),chain,from,download,storageFrom};
+ return {service:new SourcePreparationService(db),chain,from,download,storageFrom,db};
 }
 describe('Private original sources without paid extraction',()=>{
  const prior=process.env[SOURCE_PREPARATION_FLAG];
@@ -68,4 +68,14 @@ describe('Distributor installation changes use the scoped immutable registration
   const s=identitySetup();s.chain.limit.mockResolvedValue({error:{message:'unavailable'}});
   await expect(s.service.invoiceIdentity('org','client','unit','doc',{...r,auditedUnitNumbers:['0012345678']})).rejects.toMatchObject({status:503});
  });
+});
+
+describe('Post-archive identity reuses explicit immutable intake aliases',()=>{
+ const prior=process.env[SOURCE_PREPARATION_FLAG],priorIntake=process.env.EVA_AUTOMATIC_INTAKE_ENABLED;
+ beforeEach(()=>{process.env[SOURCE_PREPARATION_FLAG]='true';process.env.EVA_AUTOMATIC_INTAKE_ENABLED='true';jest.clearAllMocks();});
+ afterAll(()=>{if(prior===undefined)delete process.env[SOURCE_PREPARATION_FLAG];else process.env[SOURCE_PREPARATION_FLAG]=prior;if(priorIntake===undefined)delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;else process.env.EVA_AUTOMATIC_INTAKE_ENABLED=priorIntake;});
+ const r={customerName:'Empresa Exemplo LTDA',taxId:'12.345.678/0001-90',unitNumber:'9999999999',address:'Rua Exemplo 123 Centro',month:'2026-04'},text='EMPRESA EXEMPLO LTDA CNPJ 12.345.678/0001-90\nUC: 0012345678\nRUA EXEMPLO 123 CENTRO\nReferencia ABR/2026';
+ function fixture(aliasIds:string[]){const d={...document(),document_type:'INVOICE_DISTRIBUTOR'},s=setup([d]);s.chain.maybeSingle=jest.fn(async()=>({data:d}));s.chain.order=jest.fn(()=>s.chain);s.chain.limit=jest.fn(async()=>({data:[]}));(extractPdfText as jest.Mock).mockResolvedValue({ocrRequired:false,sections:[{page:1,issues:[],text}]});const client=s.db.getClient(),rpc=jest.fn(async()=>({data:{text,pages:[1],lineage:{codes:['9999999999','0012345678'],editIds:[],aliasIds}}}));s.db.getClient=()=>({...client,rpc});return {...s,rpc};}
+ it('accepts source-bound alias evidence separately from configuration-edit evidence',async()=>{const s=fixture(['00000000-0000-4000-8000-000000000001']),proof:any=await s.service.invoiceIdentity('org','client','unit','doc',r);expect(proof).toMatchObject({state:'MATCH',registrationAliasIds:['00000000-0000-4000-8000-000000000001']});expect(proof.registrationEditIds).toBeUndefined();expect(s.rpc).toHaveBeenCalledWith('eva_intake_identity_text',expect.objectContaining({p_org:'org',p_customer:'client',p_unit:'unit',p_document:'doc',p_hash:document().file_hash}));});
+ it('does not accept codes without immutable evidence IDs or request-supplied aliases',async()=>{const s=fixture([]);expect((await s.service.invoiceIdentity('org','client','unit','doc',{...r,auditedUnitNumbers:['0012345678']}))?.state).toBe('MISMATCH');});
 });
