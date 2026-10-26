@@ -15,6 +15,14 @@ export function supplierSettlementInput(v:any):SupplierSettlement{
  else if(['regularIcmsRate','regularIcmsMode','regularTaxSource','pisCofinsIncluded'].some(k=>v[k]!==undefined))throw Error('Compra integral avulsa não utiliza os tributos ou o reajuste do contrato regular.');
  return {...v,reason:v.reason.trim()};
 }
+/** Keep evidenced contractual volumes when an actual regular invoice replaces
+ * the projected price. A missing index memory must not block an invoiced price. */
+export function regularSupplierReference(prior:any,regularInvoice?:RegularInvoice){
+ const s=prior?.supplier,volume=(v:any)=>typeof v==='string'&&/^(0|[1-9]\d{0,11})(\.\d{1,12})?$/.test(v);
+ if(!prior?.source||!s||!volume(s.contractedMwh)||!volume(s.minMwh)||!volume(s.maxMwh)||scale(s.minMwh,12)>scale(s.maxMwh,12))return undefined;
+ if(!regularInvoice&&(!prior.memory||!s.pricePerMwh||s.pricePerMwh!==prior.memory.pricePerMwh))return undefined;
+ return {price:s.pricePerMwh,contractedMwh:s.contractedMwh,contract:s.contract,minimum:s.minMwh,maximum:s.maxMwh,source:prior.source,memory:prior.memory??null};
+}
 /** Audited operator allocation over verified document + current cost revision.
  * Does not change measured kWh, contracts, OCR confidence or financial approval. */
 export function documentedSupplierSettlement(c:any,regular?:{price:string;contractedMwh:string;contract?:any;minimum:string;maximum:string;source:any;memory:any}){

@@ -1,3 +1,4 @@
+import {regularSupplierReference} from './documented-supplier-settlement';
 import {cceeCostEstimate,cceeEstimateEnabled} from './ccee-cost-estimate';
 import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
 import {documentedSettlementEnabled} from './documented-tariff-period';
@@ -106,7 +107,7 @@ export class CalculationAutofillService{
     if(!c.documentedSupplierOptions.documents.some((d:any)=>d.id===v.documentId&&d.file_hash===v.fileHash))throw new ConflictException('O documento selecionado não é uma nota disponível nesta competência.');
     if(!this.sourcePreparation)throw new ServiceUnavailableException('Verificação documental indisponível.');
     try{c.documentedSupplierInvoice=await this.sourcePreparation.verifiedSupplierInvoice(c,v.documentId,v.fileHash);}catch{c.documentedSupplierInvoice=null;}
-    const prior=c.contractDraft,regular=prior?.memory&&prior?.source&&prior?.supplier?.pricePerMwh?{price:prior.supplier.pricePerMwh,contractedMwh:prior.supplier.contractedMwh,contract:prior.supplier.contract,minimum:prior.supplier.minMwh,maximum:prior.supplier.maxMwh,source:prior.source,memory:prior.memory}:undefined;
+    const regular=regularSupplierReference(c.contractDraft,v.regularInvoice);
     c.contractDraft=documentedSupplierSettlement(c,regular);
    }
   }
