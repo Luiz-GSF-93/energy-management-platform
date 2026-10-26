@@ -43,8 +43,8 @@ export function globalModelLayout(raw:any){
  return {...layout,operations,...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(operations,layout.blocks??[])}:{})};
 }
 /** V2 aggregates five equally weighted sections. Coverage is never hidden by a high average. */
-export function globalModelConfidence(raw:any,threshold=0.9,profile?:any){
- const layout=globalModelLayout(raw),sections=labels.map((label,index)=>({key:index,label,fields:[] as any[]}));let count=0,truncated=false;
+export function globalModelConfidence(raw:any,threshold=0.9,profile?:any,verifiedLayout?:ReturnType<typeof globalModelLayout>){
+ const layout=verifiedLayout??globalModelLayout(raw),sections=labels.map((label,index)=>({key:index,label,fields:[] as any[]}));let count=0,truncated=false;
  const add=(section:number,key:string,f:any,source:string,numeric=false)=>{
   if(count++>=200){truncated=true;return;}
   const suffix=key.split('.').pop()!;

@@ -34,7 +34,7 @@ export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceCompar
  const base=invoiceComparisonV2(c,p,expanded),r:InvoiceComparison={...base,method:'COMPONENT_TAXES_V3',amount:null,lines:[],retained:[],taxes:base.taxes,observations:['ACR recalculado por componente: ICMS por dentro na parcela utilizada; demanda não utilizada sem ICMS. PIS/Cofins calculados sobre a base sem ICMS. Valores ACL da fatura preservados.'],missing:[...base.missing]};
  if(base.amount===null||base.missing.length)return r;
  try{
-  const rates=ratesOf(base),layout=globalModelLayout(c.source.raw),rows=layout.operations.filter(row=>['CHARGE','CREDIT'].includes(row.role)),demand=rows.filter(row=>row.role==='CHARGE'&&['DEMAND_BILLED','DEMAND_UNUSED'].includes(row.component));
+  const rates=ratesOf(base),layout:ReturnType<typeof globalModelLayout>=c.layout??globalModelLayout(c.source.raw),rows=layout.operations.filter(row=>['CHARGE','CREDIT'].includes(row.role)),demand=rows.filter(row=>row.role==='CHARGE'&&['DEMAND_BILLED','DEMAND_UNUSED'].includes(row.component));
   const adjusted:any[]=[];
   for(const line of base.lines){
    if(!['TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED'].includes(line.component)){adjusted.push({...line});continue;}
