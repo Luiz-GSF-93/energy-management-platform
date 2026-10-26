@@ -10,12 +10,12 @@ INSERT INTO consumer_units VALUES('${id(1)}','org','client','1234567','Rua Exemp
 CREATE TABLE roles(id text PRIMARY KEY,organization_id text,scope text,name text,permissions jsonb);
 INSERT INTO roles VALUES('manager','org','organization','gestor','["8f105b02-4443-49de-b188-847e0284e7ed","8f3ff5eb-157a-468a-91af-6f89d92e23a7","92e1b670-ab10-483a-b825-c6e16799496d","60f9690a-145b-4dba-b23f-9f945baca296","beb6ec90-8ba8-40ce-a156-aeef6cc75cce"]'),('external','org','organization','consulta','[]');
 CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text,affiliation_type text,exclusive_customer_id text);
-INSERT INTO organization_members VALUES('org','manager','manager','ACTIVE','internal',NULL),('org','client-user','external','ACTIVE','external','client');
+INSERT INTO organization_members VALUES('org','${id(71)}','manager','ACTIVE','internal',NULL),('org','${id(70)}','external','ACTIVE','external','client');
 CREATE TABLE licenses(id text PRIMARY KEY,organization_id text,active boolean,status text,start_date date,end_date date,document_management boolean,documents_unlimited boolean,documents_limit int,plan_id text);
 INSERT INTO licenses VALUES('license','org',true,'active','2020-01-01','2099-01-01',true,false,10,'plan');
 CREATE TABLE portal_service_routing(id uuid,organization_id text,kind text,owner_user_id text,revision int,body jsonb);
-INSERT INTO portal_service_routing VALUES('${id(90)}','org','ROUTING','organization',1,'{"enabled":true,"automationEnabled":true,"automationActor":"manager"}');
-CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,document_type text,reference_month date,original_filename text,mime_type text,file_hash text,file_size_bytes int,file_path text,storage_bucket text,file_verified boolean,file_verified_at timestamptz,uploaded_by_auth_user_id text,license_check_passed boolean,processing_status text,ocr_status text,description text);
+INSERT INTO portal_service_routing VALUES('${id(90)}','org','ROUTING','organization',1,'{"enabled":true,"automationEnabled":true,"automationActor":"${id(71)}"}');
+CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,document_type text,reference_month date,original_filename text,mime_type text,file_hash text,file_size_bytes int,file_path text,storage_bucket text,file_verified boolean,file_verified_at timestamptz,uploaded_by_auth_user_id uuid,license_check_passed boolean,processing_status text,ocr_status text,description text);
 CREATE TABLE document_ocr_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id text,document_id text,file_hash text,requested_by text,state text,operation_url text,UNIQUE(organization_id,document_id));
 CREATE TABLE document_ocr_results(job_id uuid PRIMARY KEY,organization_id text,document_id text,file_hash text,raw_result jsonb,evidence jsonb);
 CREATE TABLE eva_assisted_closing_versions(id uuid PRIMARY KEY,organization_id text,customer_id text,month text,report jsonb);
@@ -30,7 +30,9 @@ CREATE TRIGGER quota_check BEFORE INSERT ON documents FOR EACH ROW EXECUTE FUNCT
 `);
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261222_eva_automatic_intake.sql','utf8'));
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261223_eva_intake_pending_queue.sql','utf8'));
-const call=(action,receipt,body={},actor='client-user',role='external',org='org')=>db.query('SELECT eva_intake_action($1,$2,$3,false,$4,$5,$6) data',[org,actor,role,action,receipt,JSON.stringify(body)]).then(r=>r.rows[0].data);
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261224_eva_intake_status.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261225_eva_intake_unit_aliases.sql','utf8'));
+const call=(action,receipt,body={},actor=id(70),role='external',org='org')=>db.query('SELECT eva_intake_action($1,$2,$3,false,$4,$5,$6) data',[org,actor,role,action,receipt,JSON.stringify(body)]).then(r=>r.rows[0].data);
 const metadata=(n=1)=>({requestId:id(100+n),hash:String(n).repeat(64),filename:'invoice.pdf',mime:'application/pdf',size:100,consent:true,hints:{}});
 const transition=(job,action,body={})=>db.query('SELECT transition_eva_automatic_intake($1,$2,$3,$4) data',[job.id,job.token,action,JSON.stringify(body)]).then(r=>r.rows[0].data);
 const claim=()=>db.query("SELECT claim_eva_automatic_intake(ARRAY['org']) data").then(r=>r.rows[0].data);
@@ -41,7 +43,7 @@ await deny(()=>call('reserve',id(12),{...metadata(2),requestId:metadata().reques
 await deny(()=>call('stored',id(10),{hash:'2'.repeat(64)}));
 await call('stored',id(10),{hash:'1'.repeat(64)});const job=await claim();ok(job.id===id(10));ok(await claim()===null);
 const ctx=(await db.query('SELECT eva_intake_work_context($1,$2) data',[job.id,job.token])).rows[0].data;
-ok(ctx.customers.length===1&&ctx.customers[0].id==='client');ok(ctx.units.length===1);ok(ctx.delegate.userId==='manager');
+ok(ctx.customers.length===1&&ctx.customers[0].id==='client');ok(ctx.units.length===1);ok(ctx.delegate.userId===id(71));
 await deny(()=>transition({...job,token:id(99)},'recognized',{}));
 const proof={version:'automatic-intake-context-1',state:'MATCH',customerId:'client',unitId:id(1),month:'2026-07',documentType:'INVOICE_DISTRIBUTOR',fileHash:'1'.repeat(64),checks:{taxId:'MATCH',unit:'MATCH',period:'MATCH',address:'MATCH'}};
 await deny(()=>transition(job,'recognized',{proof:{...proof,customerId:'foreign'}}));
@@ -55,7 +57,7 @@ await db.exec('UPDATE licenses SET documents_limit=10');
 ok((await call('list',null)).rows[0].month==='2026-07');
 await db.exec("UPDATE eva_automatic_intakes SET next_attempt_at=clock_timestamp() WHERE id='"+id(10)+"'");const next=await claim();
 await deny(()=>transition(next,'begin_prepare'));
-await db.exec(`INSERT INTO document_ocr_jobs(organization_id,document_id,file_hash,requested_by,state) VALUES('org','${id(10)}','${'1'.repeat(64)}','manager','SUCCEEDED')`);
+await db.exec(`INSERT INTO document_ocr_jobs(organization_id,document_id,file_hash,requested_by,state) VALUES('org','${id(10)}','${'1'.repeat(64)}','${id(71)}','SUCCEEDED')`);
 await transition(next,'begin_prepare');
 await transition(next,'begin_interpret');await deny(()=>transition(next,'begin_interpret'));
 await db.exec(`INSERT INTO eva_assisted_closing_versions VALUES('${id(50)}','org','client','2026-07','{"preparation":{"percent":100},"units":[{"id":"${id(1)}","documentId":"${id(10)}","sourceHash":"${'1'.repeat(64)}"}]}')`);
@@ -85,8 +87,30 @@ const transport=(await db.query('SELECT * FROM document_ocr_jobs WHERE document_
 ok((await db.query('SELECT count(*) n FROM document_ocr_jobs WHERE document_id=$1',[id(30)])).rows[0].n===1);
 ok((await db.query('SELECT eva_intake_identity_text($1,$2,$3,$4,$5) data',['org','client',id(1),id(30),'3'.repeat(64)])).rows[0].data.text===raw.content);
 ok((await db.query('SELECT eva_intake_identity_text($1,$2,$3,$4,$5) data',['other','client',id(1),id(30),'3'.repeat(64)])).rows[0].data===null);
-ok((await call('reserve',id(31),metadata(3),'manager','manager')).replayed);
+ok((await call('reserve',id(31),metadata(3),id(71),'manager')).replayed);
 ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===3);
-await db.exec('UPDATE licenses SET documents_limit=3');await deny(()=>call('reserve',id(40),metadata(4)));
+
+// Real UUID schema catches the production archive defect, and completed work remains auditable.
+ok((await call('list',null)).rows.find(r=>r.id===id(10)).status.percent===100);
+ok((await call('list',null,{queueOnly:'true'})).completed.some(r=>r.id===id(10)));
+await deny(()=>call('retry',id(20),{},id(71),'manager')); // UNKNOWN cannot be replayed.
+await db.exec('UPDATE licenses SET documents_limit=10');
+await call('reserve',id(40),metadata(4));await call('stored',id(40),{hash:'4'.repeat(64)});await db.query("UPDATE eva_automatic_intakes SET raw_result=$2,state='REVIEW_REQUIRED' WHERE id=$1",[id(40),JSON.stringify({content:'Instalacao 17510090 CNPJ 12345678000190 Rua Exemplo 123 Janeiro 2026',pages:[{pageNumber:1}]})]);
+const reviewBody={customerId:'client',unitId:id(1),month:'2026-01',reason:'Original invoice and current registration checked'};
+await call('resolve',id(40),reviewBody,id(71),'manager');await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE id=$1",[id(40)]);
+const beforeUsage=(await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents;
+const alias=(actor=id(71),role='manager',hash='4'.repeat(64),code='17510090')=>db.query('SELECT register_eva_intake_unit_alias($1,$2,$3,$4,$5,$6,$7) id',['org',actor,role,id(40),code,hash,'Manager confirms historical installation from original source']);
+await deny(()=>alias()); // Additional unit-update permission is mandatory.
+await db.exec(`UPDATE roles SET permissions=permissions||'["0f2e539d-03f9-4168-bc8c-55ac3a371628"]'::jsonb WHERE id='manager'`);
+await deny(()=>alias(id(70),'external'));await deny(()=>alias(id(71),'manager','1'.repeat(64)));await deny(()=>alias(id(71),'manager','4'.repeat(64),'9999999'));
+const registered=(await alias()).rows[0].id;ok((await alias()).rows[0].id===registered);
+const lineage=async(o='org',c='client',u=id(1))=>(await db.query('SELECT ocr_identity_unit_lineage($1,$2,$3,$4) data',[o,c,u,'1234567'])).rows[0].data;
+ok((await lineage()).codes.includes('17510090'));ok(!(await lineage('other')).codes.includes('17510090'));ok(!(await lineage('org','foreign')).codes.includes('17510090'));ok((await lineage()).editIds.length===0);
+await deny(()=>db.exec('UPDATE eva_intake_unit_aliases_audit SET reason=reason'));await deny(()=>db.exec('DELETE FROM eva_intake_unit_aliases_audit'));
+for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_table_privilege($1,'eva_intake_unit_aliases_audit','SELECT') p",[role])).rows[0].p);
+let item=(await call('list',null,{},id(71),'manager')).rows.find(r=>r.id===id(40));ok(item.status.percent===45&&item.status.canRetry&&item.status.selection.unitId===id(1));
+await call('retry',id(40),{},id(71),'manager');ok((await db.query('SELECT raw_result IS NOT NULL preserved,state FROM eva_automatic_intakes WHERE id=$1',[id(40)])).rows[0].preserved);
+await deny(()=>call('retry',id(40),{},id(71),'manager'));ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===beforeUsage);
+await db.exec('UPDATE licenses SET documents_limit=4');await deny(()=>call('reserve',id(41),metadata(5)));
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

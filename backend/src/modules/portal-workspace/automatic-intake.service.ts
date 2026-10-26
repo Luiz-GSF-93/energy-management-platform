@@ -23,6 +23,10 @@ export class AutomaticIntakeService{
   if(!this.enabled(t.organizationId))return {enabled:false,rows:[]};
   return {enabled:true,...await this.action(t,'list',null,query)};
  }
+ async retry(t:TenantContext,id:string,body:any){
+  if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Retomada inválida.');
+  return this.action(t,'retry',id,{});
+ }
  async resolve(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='customerId,month,reason,unitId')throw new BadRequestException('Confira somente o vínculo solicitado.');
   return this.action(t,'resolve',id,body);
