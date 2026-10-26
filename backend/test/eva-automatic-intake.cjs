@@ -29,6 +29,7 @@ CREATE FUNCTION quota_check() RETURNS trigger LANGUAGE plpgsql SET search_path=p
 CREATE TRIGGER quota_check BEFORE INSERT ON documents FOR EACH ROW EXECUTE FUNCTION quota_check();
 `);
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261222_eva_automatic_intake.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261223_eva_intake_pending_queue.sql','utf8'));
 const call=(action,receipt,body={},actor='client-user',role='external',org='org')=>db.query('SELECT eva_intake_action($1,$2,$3,false,$4,$5,$6) data',[org,actor,role,action,receipt,JSON.stringify(body)]).then(r=>r.rows[0].data);
 const metadata=(n=1)=>({requestId:id(100+n),hash:String(n).repeat(64),filename:'invoice.pdf',mime:'application/pdf',size:100,consent:true,hints:{}});
 const transition=(job,action,body={})=>db.query('SELECT transition_eva_automatic_intake($1,$2,$3,$4) data',[job.id,job.token,action,JSON.stringify(body)]).then(r=>r.rows[0].data);
@@ -62,11 +63,17 @@ await db.exec(`INSERT INTO eva_assisted_closing_events VALUES('${id(50)}','INCOM
 await deny(()=>transition(next,'prepared',{closingId:id(51),complete:true,signature:'a'.repeat(64)}));
 ok((await transition(next,'prepared',{closingId:id(50),complete:true,signature:'a'.repeat(64),sourcesChanged:false})).state==='PROPOSAL_READY');
 ok((await call('list',null)).rows[0].note==='Preenchimento concluído. Em conferência pela equipe.');
+ok((await call('list',null,{queueOnly:'true'})).rows.length===0);
+ok(!!(await call('list',null,{queueOnly:'true'})).revision);
+ok((await db.query('SELECT count(*) n FROM documents')).rows[0].n===1);
+ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===1);
+ok((await db.query('SELECT count(*) n FROM eva_automatic_intake_events')).rows[0].n>0);
 await deny(()=>db.exec('UPDATE eva_automatic_intake_events SET state=state'));
 for(const role of ['anon','authenticated','service_role'])for(const table of ['eva_automatic_intakes','eva_automatic_intake_events'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) p',[role,table,privilege])).rows[0].p);
 await call('reserve',id(20),metadata(2));await call('stored',id(20),{hash:'2'.repeat(64)});const scan=await claim();await transition(scan,'need_ocr');
 await db.exec(`UPDATE eva_automatic_intakes SET next_attempt_at=clock_timestamp() WHERE id='${id(20)}'`);const scan2=await claim();await transition(scan2,'begin_ocr');await transition(scan2,'unknown');
 ok((await call('list',null)).rows.some(r=>r.id===id(20)&&r.state==='UNKNOWN'));
+ok((await call('list',null,{queueOnly:'true'})).rows.some(r=>r.id===id(20)&&r.state==='UNKNOWN'));
 // A scan's paid operation is handed to the normal queue in the same transaction
 // as the final document. Concurrent readers can only GET that existing operation.
 await call('reserve',id(30),metadata(3));await call('stored',id(30),{hash:'3'.repeat(64)});const identify=await claim();await transition(identify,'need_ocr');
