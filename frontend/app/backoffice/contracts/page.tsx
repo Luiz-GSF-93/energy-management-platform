@@ -1,5 +1,6 @@
 'use client';
 import TariffLibrary from './TariffLibrary';
+import CustomerSelector from './CustomerSelector';
 import Investments from './Investments';
 import ContractSourceAssistant from './ContractSourceAssistant';
 import type {OcrAutofill} from './ocr-autofill';
@@ -48,7 +49,7 @@ function Workspace(){const {hasPermission}=useAuth();const [customers,setCustome
  {ocrLoading?<p role="status">Carregando cliente, unidade e competência da fatura…</p>:loading?<p>Carregando organização, licença e clientes...</p>:!error?<>
  <EntryWizard requestStart={change} customers={customers} units={units} filterCustomer={customerId} onDirty={setDirty} onActive={setEntryActive} onRegistered={()=>{setListVersion(v=>v+1);setRevision(v=>v+1);}}/>{!entryActive?<>
  <div className="ds-card" style={{display:'grid',gap:12}}><Input label="Buscar cliente" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome do cliente"/>
- <label>Cliente em operação<select className="ds-input" value={customerId} onChange={e=>change(()=>{setAcceptedFill(undefined);setCorrection(null);setTab('');setCustomer(e.target.value);})}><option value="">Selecione o cliente</option>{customers.filter(c=>c.id===customerId||c.company_name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(c=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></label>
+ <CustomerSelector customers={customers.filter(c=>c.id===customerId||c.company_name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))} value={customerId} onChange={id=>change(()=>{setAcceptedFill(undefined);setCorrection(null);setTab('');setCustomer(id);})}/>
  <strong>{customerId?customers.find(c=>c.id===customerId)?.company_name:'Escolha um cliente para continuar'}</strong><p>{customerId?'Os novos cadastros ficam vinculados a este cliente.':'As informações aparecerão somente após selecionar o cliente.'}</p></div>
  {customerId?<><ContractSourceAssistant key={customerId} customerId={customerId} onAccept={(c,fields)=>change(()=>{setAcceptedFill(fields);setCorrection(c);setTab(c.tab!);})}/><ContractReadiness key={customerId} customerId={customerId} units={units} revision={listVersion} onOpen={c=>change(()=>{setCorrection(c);setTab(c.tab!);})}/><nav aria-label="Áreas de contratos" style={{display:'flex',flexWrap:'wrap',gap:8,margin:'16px 0'}}>{tabs.map(([id,label])=><Button key={id} variant={tab===id?'primary':'secondary'} aria-pressed={tab===id} onClick={()=>{change(()=>{setCorrection(null);setTab(id);});}}>{label}</Button>)}</nav>
  {tab?<WorkflowModal title={tabs.find(([id])=>id===tab)?.[1]||'Configuração'} onClose={()=>change(()=>{setTab('');setCorrection(null);setListVersion(v=>v+1);})}>{correction&&tab!=='preparation'?<Alert><p>Correção da conferência · {units.find(u=>u.id===correction.unitId)?.name} · {correction.month}</p><p>{correction.message}</p><p>Revise a vigência e o estado do registro. Rascunhos precisam de validação ou aprovação; abrir esta área não altera nenhum dado.</p><Button variant='secondary' onClick={()=>change(()=>{setListVersion(v=>v+1);setTab('preparation');})}>Voltar e atualizar diagnóstico</Button></Alert>:null}
