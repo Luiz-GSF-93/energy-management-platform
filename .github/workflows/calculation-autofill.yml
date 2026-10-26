@@ -2,6 +2,8 @@ name: Source-backed automatic preparation
 on:
   pull_request:
     paths:
+      - "backend/src/database/migrations/20261220_ocr_audited_installation_identity.sql"
+      - "backend/test/ocr-audited-installation.cjs"
       - "backend/src/modules/ocr/invoice-identity-with-history*"
       - "backend/src/modules/ocr/ocr-navigation-context*"
       - "backend/src/modules/ocr/ocr-calculation-context*"
@@ -131,7 +133,9 @@ jobs:
         working-directory: backend
       - run: node test/documented-settlements.cjs
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/ocr-navigation-context.spec.ts src/modules/ocr/invoice-identity-with-history.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/licenses/services/licenses.service.spec.ts src/modules/ocr/ocr-calculation-context.service.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-navigation-context.spec.ts src/modules/ocr/invoice-identity-with-history.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/licenses/services/licenses.service.spec.ts src/modules/ocr/ocr-calculation-context.service.spec.ts
+        working-directory: backend
+      - run: node test/ocr-audited-installation.cjs
         working-directory: backend
       - run: npm run build
         working-directory: backend

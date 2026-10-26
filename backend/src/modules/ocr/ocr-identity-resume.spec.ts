@@ -26,3 +26,18 @@ describe('audited pre-submission identity resume',()=>{
  it('rejects stale snapshots and missing explicit confirmation',async()=>{const s=setup();const p:any=await s.service.identityResumePreview('doc',t);const b={requestId,token:p.token,reason:'Instalação corrigida por edição auditada.',acknowledge:true};await expect(s.service.identityResume('doc',t,{...b,acknowledge:false})).rejects.toThrow();s.capture.job.updatedAt='changed';await expect(s.service.identityResume('doc',t,b)).rejects.toThrow();expect(s.rpc.mock.calls.every(c=>c[1].p_action==='inspect')).toBe(true);});
  it('does not retry or disclose database errors after an uncertain RPC',async()=>{const s=setup();const p:any=await s.service.identityResumePreview('doc',t);s.rpc.mockImplementation(async(_n,args)=>args.p_action==='inspect'?{data:s.capture,error:null}:{data:null,error:{code:'08006',message:'private database detail'}});await expect(s.service.identityResume('doc',t,{requestId,token:p.token,reason:'Instalação corrigida por edição auditada.',acknowledge:true})).rejects.toThrow('Retomada não confirmada');expect(s.rpc.mock.calls.filter(c=>c[1].p_action==='resume')).toHaveLength(1);expect(s.connector.submit).not.toHaveBeenCalled();});
 });
+
+it('locally rechecks existing audited code lineage before eligibility and never starts a provider call',async()=>{
+ process.env.OCR_IDENTITY_RESUME_ENABLED='true';try{
+ const s=setup();(s.capture as any).canRecheck=true;s.capture.eligible=false;
+ s.rpc.mockImplementation(async(_name,args)=>({data:args.p_action==='inspect'?{...s.capture,eligible:Boolean(args.p_proof)}:{jobId:'job',state:'QUEUED'},error:null}));
+ const p:any=await s.service.identityResumePreview('doc',t);expect(p.eligible).toBe(true);expect(s.rpc.mock.calls.map(c=>c[1].p_action)).toEqual(['inspect','inspect']);expect(s.rpc.mock.calls[1][1].p_proof).toEqual(s.proof);expect(s.connector.submit).not.toHaveBeenCalled();
+ }finally{delete process.env.OCR_IDENTITY_RESUME_ENABLED;}
+});
+it('rejects changed job or rejected lineage during the local recheck',async()=>{
+ process.env.OCR_IDENTITY_RESUME_ENABLED='true';try{
+ const s=setup();(s.capture as any).canRecheck=true;s.capture.eligible=false;
+ s.rpc.mockImplementation(async(_name,args)=>({data:args.p_proof?{...s.capture,eligible:true,job:{...s.capture.job,updatedAt:'changed'}}:s.capture,error:null}));
+ expect((await s.service.identityResumePreview('doc',t)).eligible).toBe(false);expect(s.connector.submit).not.toHaveBeenCalled();
+ }finally{delete process.env.OCR_IDENTITY_RESUME_ENABLED;}
+});
