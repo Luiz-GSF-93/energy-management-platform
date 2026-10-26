@@ -19,7 +19,7 @@ export class AutomaticIntakeService{
   return r.data;
  }
  async list(t:TenantContext,query:any={}){
-  if(Object.keys(query).some(k=>k!=='customerId'))throw new BadRequestException('Consulta inválida.');
+  if(Object.keys(query).some(k=>!['customerId','queueOnly'].includes(k))||query.queueOnly!==undefined&&!['true','false'].includes(query.queueOnly))throw new BadRequestException('Consulta inválida.');
   if(!this.enabled(t.organizationId))return {enabled:false,rows:[]};
   return {enabled:true,...await this.action(t,'list',null,query)};
  }

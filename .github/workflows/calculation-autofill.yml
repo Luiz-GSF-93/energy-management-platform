@@ -5,10 +5,12 @@ on:
       - "backend/src/modules/portal-workspace/automatic-intake*"
       - "backend/src/modules/portal-workspace/portal-workspace.module.ts"
       - "backend/src/database/migrations/20261222_eva_automatic_intake.sql"
+      - "backend/src/database/migrations/20261223_eva_intake_pending_queue.sql"
       - "backend/test/eva-automatic-intake.cjs"
       - "frontend/app/components/AutomaticInvoiceIntake*"
       - "frontend/app/components/PortalInvoices.tsx"
       - "frontend/test/automatic-intake.cjs"
+      - "frontend/test/documents-upload-routing.cjs"
       - "backend/src/database/migrations/20261220_ocr_audited_installation_identity.sql"
       - "backend/src/database/migrations/20261221_eva_closing_history_projection.sql"
       - "backend/test/ocr-audited-installation.cjs"
@@ -214,7 +216,7 @@ jobs:
         working-directory: frontend
       - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/ccee-cost-review.cjs && node test/supplier-invoice-evidence.cjs && node test/eva-guided-review.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
         working-directory: frontend
-      - run: node test/automatic-intake.cjs
+      - run: node test/automatic-intake.cjs && node test/documents-upload-routing.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

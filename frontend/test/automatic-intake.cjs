@@ -8,6 +8,7 @@ Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:as
 const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root')),{act}=React;
 (async()=>{try{
  await act(async()=>root.render(React.createElement(Component,{customers:[{id:'client',company_name:'Synthetic client'}],units:[{id:'unit',customer_id:'client',name:'Synthetic unit',consumer_unit_number:'123'}]})));
+ assert(requests[0][0].includes('queueOnly=true'),'The visible reading queue must request only pending receipts');
  const button=label=>[...document.querySelectorAll('button')].find(b=>b.textContent===label);
  await act(async()=>button('Enviar para a EVA').click());const form=document.querySelector('form');assert(form);assert.deepEqual([...form.querySelectorAll('[name]')].map(v=>v.name).sort(),['consent','file']);assert(document.querySelector('[role="dialog"]').textContent.includes('Não é necessário cadastrar a competência'));
  const count=requests.length;await act(async()=>window.dispatchEvent(new Event('focus')));assert.equal(requests.length,count,'focus cannot submit or restart recognition');
