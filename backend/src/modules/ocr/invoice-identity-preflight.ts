@@ -32,6 +32,15 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
   // text retains the explicit customer CNPJ immediately followed by installation
   // and month. Read this narrow sequence, never an arbitrary nearby account code.
   if(all.includes('CPFLPAULISTA')||all.includes('COMPANHIAPAULISTADEFORCAELUZ')){
+   // OCR serializes this CPFL header band before its data row. Bind the code to
+   // the complete labeled row, customer and consistent readings; never take a
+   // nearby meter, barcode or arbitrary number as the installation.
+   if(checks.unit==='REVIEW'){
+    const rows=[...t.matchAll(/CODIGO\s+DA\s+INSTALACAO\s+LEITURA\s+ATUAL\s+LEITURA\s+ANTERIOR\s+N[º°.]?\s*(?:DE\s+)?DIAS\s+([^\n]{8,180})\n\s*([0-9][0-9.-]{4,25})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{1,2})\b/g)].filter(m=>name.length>=8&&compact(m[1])===name);
+    const date=(value:string)=>{const [day,month,year]=value.split('/').map(Number),ms=Date.UTC(year,month-1,day),d=new Date(ms);return d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day?ms:NaN;};
+    if(rows.length&&rows.every(m=>Number(m[5])>=1&&Number(m[5])<=62&&(date(m[3])-date(m[4]))/86400000===Number(m[5])))checks.unit=rows.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';
+   }
+
    const blocks=[...t.matchAll(/\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\s*\/\s*\d{4}-?\d{2})\s+([0-9][0-9.-]{4,25})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/\s*(20\d{2})\b/g)]
     .filter(m=>compact(m[1])===tax&&name.length>=8&&compact(t.slice(Math.max(0,m.index!-350),m.index)).includes(name));
    if(blocks.length){checks.taxId='MATCH';checks.unit=uc&&blocks.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';checks.period=r.month&&blocks.every(m=>m[4]+'-'+String(monthNames.indexOf(m[3])+1).padStart(2,'0')===r.month)?'MATCH':'MISMATCH';}

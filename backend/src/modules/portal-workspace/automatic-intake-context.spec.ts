@@ -25,3 +25,8 @@ describe('Automatic intake recognition',()=>{
  it('accepts original OCR words only when the identity tokens are sourced with adequate confidence',()=>{const raw={pages:[{words:invoice.split(/\s/).map(content=>({content,confidence:0.99}))}]};expect(automaticOcrIdentityConfidence(raw,run(),customer,unit)).toBe(true);});
  it('can resolve a genuine ambiguity by rechecking the selected match, without overriding a mismatch',()=>{expect(run(invoice,[unit,{...unit,id:'second'}],{unitId:'second'})).toMatchObject({state:'MATCH',unitId:'second'});expect(run(invoice,[unit],{unitId:'nonexistent'}).state).toBe('REVIEW_REQUIRED');});
 });
+
+it('recognizes an audited installation in the OCR header band under production source rules',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';
+ try{const text='COMPANHIA PAULISTA DE FORCA E LUZ\nEmpresa sintética CNPJ 11.222.333/0001-81\nRua Exemplo 123\nReferência JUL/2026\nCódigo da Instalação\nLeitura atual\nLeitura anterior\nNº de dias\nEmpresa sintética\n7654321\n31/07/2026\n30/06/2026\n31';const u={...unit,aliases:['7654321']};const proof=run(text,[u]);expect(proof.state).toBe('MATCH');expect(automaticOcrIdentityConfidence({pages:[{words:text.split(/\s/).map(content=>({content,confidence:0.99}))}]},proof,customer,u)).toBe(true);}finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});

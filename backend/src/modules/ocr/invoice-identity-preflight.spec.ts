@@ -43,3 +43,15 @@ describe('CPFL NF3e formatted installation strip',()=>{
  it('recognizes the exact CNPJ, formatted UC and reference sequence',()=>expect(invoiceIdentityText(t,r).state).toBe('MATCH'));
  it.each([['9.999.999.999-99','9.999.999.999-98'],['ABR/2026','MAI/2026'],['12.345.678/0001-90','22.345.678/0001-90']])('preserves explicit mismatch checks %s',(a,b)=>expect(invoiceIdentityText(t.replace(a,b),r).state).not.toBe('MATCH'));
 });
+
+describe('CPFL installation header serialized by OCR with source preparation enabled',()=>{
+ const old=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ beforeEach(()=>{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';});afterAll(()=>{if(old===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=old;});
+ const row='Código da Instalação\nLeitura atual\nLeitura anterior\nNº de dias\nEMPRESA EXEMPLO LTDA\n76543210\n30/04/2026\n31/03/2026\n30';
+ const bill='COMPANHIA PAULISTA DE FORCA E LUZ\nEMPRESA EXEMPLO LTDA CNPJ 12.345.678/0001-90\nRUA EXEMPLO 123 CENTRO\nReferência ABR/2026\n'+row;
+ const r={...registration,unitNumber:'9999999999',auditedUnitNumbers:['76543210']};
+ it('recognizes the source-labeled historical installation without changing the current code',()=>expect(invoiceIdentityText(bill,r)).toMatchObject({state:'MATCH',checks:{unit:'MATCH',taxId:'MATCH',period:'MATCH',address:'MATCH'}}));
+ it.each([['76543210','76543211'],['12.345.678/0001-90','22.345.678/0001-90'],['ABR/2026','MAI/2026']])('preserves explicit identity mismatch: %s',(a,b)=>expect(invoiceIdentityText(bill.replace(a,b),r).state).not.toBe('MATCH'));
+ it.each([['Leitura anterior','Outra informação'],['EMPRESA EXEMPLO LTDA\n76543210','OUTRA EMPRESA LTDA\n76543210'],['31/03/2026','31/02/2026'],['\n30','\n29']])('rejects an unrelated or inconsistent row: %s',(a,b)=>expect(invoiceIdentityText(bill.replace(a,b),r).state).not.toBe('MATCH'));
+ it('requires the authorized historical correspondence and keeps another explicit UC mismatch',()=>{expect(invoiceIdentityText(bill,{...r,auditedUnitNumbers:[]}).state).toBe('MISMATCH');expect(invoiceIdentityText(bill+'\nUC: 1111111111',r).state).toBe('MISMATCH');});
+});
