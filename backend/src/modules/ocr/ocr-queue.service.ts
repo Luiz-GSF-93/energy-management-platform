@@ -101,7 +101,7 @@ export class OcrQueueService {
   const doc=d.data;
   if(!doc||doc.organization_id!==org||doc.id!==document||doc.document_type!=='INVOICE_DISTRIBUTOR'||doc.file_verified!==true)throw new NotFoundException('Fatura verificada não encontrada nesta organização.');
   const [u,c,j]=await Promise.all([
-   db.from('consumer_units').select('id,organization_id,customer_id,status').eq('organization_id',org).eq('customer_id',doc.customer_id).eq('id',doc.consumer_unit_id).is('deleted_at',null).maybeSingle(),
+   db.from('consumer_units').select('id,organization_id,customer_id,status').eq('organization_id',org).eq('customer_id',doc.customer_id).eq('id',doc.consumer_unit_id).maybeSingle(),
    db.from('customers').select('id,organization_id,status').eq('organization_id',org).eq('id',doc.customer_id).is('deleted_at',null).maybeSingle(),
    db.from('document_ocr_jobs').select('id,state').eq('organization_id',org).eq('document_id',document).maybeSingle(),
   ]);

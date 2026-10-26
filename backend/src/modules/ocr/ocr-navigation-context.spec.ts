@@ -7,7 +7,7 @@ import {PERMISSIONS as P} from '../../common/constants/permissions';
 const id='11111111-1111-4111-8111-111111111111';
 function setup(state:string|null='FAILED'){
  const rows:any={documents:{id,organization_id:'org',customer_id:'customer',consumer_unit_id:'unit',reference_month:'2026-06-01',document_type:'INVOICE_DISTRIBUTOR',file_verified:true},consumer_units:{id:'unit',organization_id:'org',customer_id:'customer',status:'ACTIVE'},customers:{id:'customer',organization_id:'org',status:'ACTIVE'},document_ocr_jobs:state?{id:'job',state}:null};
- const calls:any[]=[];const from=jest.fn((table:string)=>{const filters:any={table};calls.push(filters);const q:any={select:()=>q,eq:(k:string,v:any)=>{filters[k]=v;return q;},is:(k:string,v:any)=>{filters[k]=v;return q;},maybeSingle:async()=>({data:rows[table],error:null})};return q;});
+ const calls:any[]=[];const from=jest.fn((table:string)=>{const filters:any={table};calls.push(filters);const q:any={select:()=>q,eq:(k:string,v:any)=>{filters[k]=v;return q;},is:(k:string,v:any)=>{if(table==='consumer_units')throw Error('consumer_units has no deleted_at column');filters[k]=v;return q;},maybeSingle:async()=>({data:rows[table],error:null})};return q;});
  const licenses={requireEntitlement:jest.fn(async()=>{})},rpc=jest.fn(),connector={isConfigured:jest.fn(),submit:jest.fn()};
  return {rows,calls,licenses,rpc,connector,queue:new OcrQueueService({getClient:()=>({from,rpc})} as any,licenses as any,connector as any)};
 }
