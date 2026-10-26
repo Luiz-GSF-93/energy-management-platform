@@ -32,6 +32,7 @@ await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261222_ev
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261223_eva_intake_pending_queue.sql','utf8'));
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261224_eva_intake_status.sql','utf8'));
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261225_eva_intake_unit_aliases.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261226_eva_archived_intake_tracking.sql','utf8'));
 const call=(action,receipt,body={},actor=id(70),role='external',org='org')=>db.query('SELECT eva_intake_action($1,$2,$3,false,$4,$5,$6) data',[org,actor,role,action,receipt,JSON.stringify(body)]).then(r=>r.rows[0].data);
 const metadata=(n=1)=>({requestId:id(100+n),hash:String(n).repeat(64),filename:'invoice.pdf',mime:'application/pdf',size:100,consent:true,hints:{}});
 const transition=(job,action,body={})=>db.query('SELECT transition_eva_automatic_intake($1,$2,$3,$4) data',[job.id,job.token,action,JSON.stringify(body)]).then(r=>r.rows[0].data);
@@ -112,5 +113,6 @@ let item=(await call('list',null,{},id(71),'manager')).rows.find(r=>r.id===id(40
 await call('retry',id(40),{},id(71),'manager');ok((await db.query('SELECT raw_result IS NOT NULL preserved,state FROM eva_automatic_intakes WHERE id=$1',[id(40)])).rows[0].preserved);
 await deny(()=>call('retry',id(40),{},id(71),'manager'));ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===beforeUsage);
 await db.exec('UPDATE licenses SET documents_limit=4');await deny(()=>call('reserve',id(41),metadata(5)));
+await db.exec(`UPDATE eva_automatic_intakes SET state='AWAITING_SOURCES' WHERE id='${id(10)}'`);ok((await call('list',null,{queueOnly:'true'})).completed.some(r=>r.id===id(10)&&r.percent===80));ok(!(await call('list',null,{queueOnly:'true'})).rows.some(r=>r.id===id(10)));
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
