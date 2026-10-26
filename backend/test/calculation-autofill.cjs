@@ -94,5 +94,59 @@ try{
  await deny(()=>db.exec('DELETE FROM eva_invoice_attention_events'),'23514');
  for(const role of ['anon','authenticated','service_role'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) p',[role,'eva_invoice_attention_events',privilege])).rows[0].p);
  for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_invoice_attention(text,text,text,boolean,text,text,jsonb)','EXECUTE') p",[role])).rows[0].p);
+ // Completion is derived from an active published version, never from month alone.
+ await db.exec(`CREATE TABLE eva_assisted_closing_versions(id uuid,organization_id text,customer_id text,month text,payload_hash text,report jsonb);
+ CREATE TABLE eva_closing_publications(id uuid,organization_id text,customer_id text,closing_id uuid,source_hash text,projection jsonb);
+ CREATE TABLE eva_assisted_closing_events(organization_id text,closing_id uuid,sequence integer,state text);
+ CREATE TABLE eva_closing_publication_events(organization_id text,publication_id uuid,sequence integer,state text);`);
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261218_eva_invoice_attention_publications.sql'),'utf8'));
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261218_eva_invoice_attention_publications.sql'),'utf8')); // Idempotent rollout preserves completion history.
+ ok((await attention()).rows.length===1);
+ const report={units:[{id:id(1),documentId:id(2),sourceHash:'a'.repeat(64)}]};
+ const projection={organizationId:'org',customerId:'customer',month:'2026-08',sourceHash:'c'.repeat(64)};
+ await db.query(`INSERT INTO eva_assisted_closing_versions VALUES($1,'org','customer','2026-08',$2,$3)`,[id(90),'c'.repeat(64),JSON.stringify(report)]);
+ await db.query(`INSERT INTO eva_closing_publications VALUES($1,'org','customer',$2,$3,$4)`,[id(91),id(90),'c'.repeat(64),JSON.stringify(projection)]);
+ await db.query(`INSERT INTO eva_assisted_closing_events VALUES('org',$1,1,'APPROVED');`,[id(90)]);
+ await db.query(`INSERT INTO eva_closing_publication_events VALUES('org',$1,1,'PUBLISHED');`,[id(91)]);
+ ok((await attention()).rows.length===0);
+ await deny(()=>attention('record',id(2),{...decision,requestId:id(82),state:'OPENED'}),'42501');
+ // Preserve the source and previous user decisions; only the pending view changes.
+ ok((await db.query('SELECT count(*) n FROM eva_invoice_attention_events')).rows[0].n===2);
+ ok((await db.query('SELECT count(*) n FROM documents')).rows[0].n===1);
+ for(const changed of [
+  {units:[{...report.units[0],id:id(11)}]},
+  {units:[{...report.units[0],documentId:id(3)}]},
+  {units:[{...report.units[0],sourceHash:'f'.repeat(64)}]},
+  {units:[]},{units:{}},
+ ]){
+  await db.query('UPDATE eva_assisted_closing_versions SET report=$1',[JSON.stringify(changed)]);
+  ok((await attention()).rows.length===1);
+ }
+ await db.query('UPDATE eva_assisted_closing_versions SET report=$1',[JSON.stringify(report)]);
+ for(const changed of [{...projection,organizationId:'other'},{...projection,customerId:'other-customer'},{...projection,month:'2026-09'},{...projection,sourceHash:'f'.repeat(64)}]){
+  await db.query('UPDATE eva_closing_publications SET projection=$1',[JSON.stringify(changed)]);
+  ok((await attention()).rows.length===1);
+ }
+ await db.query('UPDATE eva_closing_publications SET projection=$1',[JSON.stringify(projection)]);
+ for(const mutation of [
+  "UPDATE eva_closing_publications SET organization_id='other'",
+  "UPDATE eva_closing_publications SET customer_id='other-customer'",
+  "UPDATE eva_closing_publications SET source_hash=repeat('f',64)",
+  "UPDATE eva_assisted_closing_versions SET month='2026-09'",
+  "UPDATE eva_assisted_closing_events SET state='READY_FOR_REVIEW'",
+ ]){
+  await db.exec('BEGIN');await db.exec(mutation);ok((await attention()).rows.length===1);await db.exec('ROLLBACK');
+ }
+ await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,2,'WITHDRAWN')",[id(91)]);
+ ok((await attention()).rows.length===1);
+ await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,3,'PUBLISHED')",[id(91)]);
+ ok((await attention()).rows.length===0);
+ // A distinct upload in the same period is still pending, even with identical bytes.
+ await db.query(`INSERT INTO documents SELECT $1,organization_id,customer_id,consumer_unit_id,document_type,reference_month,file_verified,file_hash,'new-upload.pdf',now() FROM documents WHERE id=$2`,[id(3),id(2)]);
+ await db.query(`INSERT INTO portal_document_intakes(document_id,organization_id,file_hash,kind) VALUES($1,'org',$2,'INVOICE')`,[id(3),'a'.repeat(64)]);
+ ok((await attention()).rows.length===1&&(await attention()).rows[0].documentId===id(3));
+ await db.query('UPDATE documents SET file_hash=$1 WHERE id=$2',['b'.repeat(64),id(2)]);
+ await db.query(`INSERT INTO portal_document_intakes(document_id,organization_id,file_hash,kind) VALUES($1,'org',$2,'INVOICE')`,[id(2),'b'.repeat(64)]);
+ ok((await attention()).rows.length===2);
  console.log(JSON.stringify({result:'PASS',checks,privateTables:3,financialRecordsWritten:0,externalCalls:0}));
 }finally{await db.close();}})().catch(e=>{console.error({code:e.code,message:e.message});process.exitCode=1});

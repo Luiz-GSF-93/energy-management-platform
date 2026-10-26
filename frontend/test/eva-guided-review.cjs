@@ -15,8 +15,25 @@ const click=async text=>act(async()=>{const b=[...document.querySelectorAll('but
  await click('Sim, conferir e ajustar agora');assert(document.body.textContent.includes('Existing source-specific editor'));assert.equal(rechecks,0);await click('Conferi as respostas · reavaliar pela EVA');assert.equal(rechecks,1);
  const estimated={...base,pendingActions:[{unitId:'unit',section:'costs',code:'CCEE_ESTIMATE_REVIEW',message:'Review estimated CCEE'}]};await act(async()=>root.render(React.createElement(Guided,{key:'ccee',row:{id:'closing',payload_hash:'hash',report:estimated},unitId:'unit',customerId:'customer',organizationId:'org',month:'2026-02',busy:false,onRecheck:async()=>{},onCcee:u=>ccee.push(u)})));await click('Sim, conferir e ajustar agora');assert.deepEqual(ccee,['unit']);
  assert(invoiceReadiness('RUNNING').includes('andamento'));assert(invoiceReadiness('FAILED').includes('não reenviar'));assert(!invoiceReadiness(null).includes('concluída'));
- calls=[];api=async(p,o)=>{calls.push([p,o]);if(o?.method==='POST')return {...invoice,state:o.body.state,recorded:true};return {organizationId:'org',rows:[invoice],canSchedule:false}};
+ calls=[];let pending=[invoice];api=async(p,o)=>{calls.push([p,o]);if(o?.method==='POST')return {...invoice,state:o.body.state,recorded:true};return {organizationId:'org',rows:pending,canSchedule:false}};
  await act(async()=>root.render(React.createElement(Inbox,{organizationId:'org'})));assert.equal(document.querySelectorAll('dialog[open]').length,0,'Arrival cannot steal focus');await click('EVA · 1 nova(s) fatura(s)');assert([...document.querySelectorAll('button')].find(b=>b.textContent==='Agendar ajustes').disabled);await click('Depois');assert.equal(calls.filter(c=>c[1]?.method==='POST').length,1);assert.equal(calls.find(c=>c[1]?.method==='POST')[1].body.state,'DEFERRED');assert(!calls.some(c=>/ocr.*enqueue|changes\/confirm|\/decision/.test(c[0])));
+ // Publication refresh removes completed invoice cards without stealing focus or writing decisions.
+ pending=[];await act(async()=>window.dispatchEvent(new Event('portal-updated')));
+ assert.equal(document.querySelectorAll('article').length,0,'Published invoices removed from open list');
+ assert(document.body.textContent.includes('Nenhuma fatura pendente de conferência'));
+ assert.equal(calls.filter(c=>c[1]?.method==='POST').length,1,'Publication refresh is read only');
+ await click('Fechar');assert(!document.querySelector('[aria-label="EVA · novas faturas"]'),'No floating invoice alert when everything is complete');
+ pending=[{...invoice,documentId:'new-upload',filename:'new-upload.pdf'}];
+ await act(async()=>root.render(React.createElement(Inbox,{key:'new-invoice',organizationId:'org'})));
+ assert(document.body.textContent.includes('1 nova(s) fatura(s)'),'A new upload becomes visible');
+ // A late response started before publication must never restore an obsolete notice.
+ let releaseOld,reads=0;api=async()=>++reads===1?new Promise(resolve=>{releaseOld=resolve}):{organizationId:'org',rows:[],canSchedule:false};
+ await act(async()=>root.render(React.createElement(Inbox,{key:'late-response',organizationId:'org'})));
+ await act(async()=>window.dispatchEvent(new Event('portal-updated')));
+ await act(async()=>releaseOld({organizationId:'org',rows:[invoice],canSchedule:false}));
+ assert(!document.querySelector('[aria-label="EVA · novas faturas"]'),'Late pre-publication result ignored');
+ api=async()=>{throw Error('API unavailable')};await act(async()=>root.render(React.createElement(Inbox,{key:'unavailable',organizationId:'org'})));
+ assert(document.body.textContent.includes('Avisos de faturas indisponíveis'),'Unavailable source cannot be presented as completed');
  const Schedule=require('../app/components/EvaInvoiceSchedule.tsx').default;calls=[];let recorded=0;
  api=async(p,o)=>{calls.push([p,o]);if(p.endsWith('/responsible'))return [{id:'operator',name:'Synthetic operator'}];return {...invoice,state:'SCHEDULED',agendaId:'agenda',recorded:true}};
  await act(async()=>root.render(React.createElement(Schedule,{invoice,onClose:()=>{},onRecorded:()=>recorded++})));
