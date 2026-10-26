@@ -8,6 +8,7 @@ on:
       - "backend/src/database/migrations/20261223_eva_intake_pending_queue.sql"
       - "backend/src/database/migrations/20261224_eva_intake_status.sql"
       - "backend/src/database/migrations/20261225_eva_intake_unit_aliases.sql"
+      - "backend/src/database/migrations/20261226_eva_archived_intake_tracking.sql"
       - "backend/test/eva-automatic-intake.cjs"
       - "frontend/app/components/AutomaticInvoiceIntake*"
       - "frontend/app/components/PortalInvoices.tsx"
