@@ -83,7 +83,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
        for(const unit of units){const r=await this.rpc('eva_intake_unit_aliases',{p_id:job.id,p_token:job.token,p_unit:unit.id});unit.aliases=r.codes;}
        const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))))matches.push(proof);
       }
-      if(matches.length!==1){await transition('review',{note:'Confirme somente o cliente, a unidade ou a competência não demonstrados de forma única no documento.'});return;}
+      if(matches.length!==1){await transition('review',{note:'A leitura está disponível, mas o vínculo ainda não foi comprovado. Confira código atual/histórico da instalação, CNPJ, endereço e competência. Suas respostas anteriores foram preservadas.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});return;}
       await transition('recognized',{proof:matches[0]});Object.assign(i,{customer_id:matches[0].customerId,unit_id:matches[0].unitId,month:matches[0].month,document_type:matches[0].documentType,state:'LINKING'});
      }
      const path=i.organization_id+'/'+i.unit_id+'/eva-intake-'+i.id+(i.mime==='application/pdf'?'.pdf':i.mime==='image/png'?'.png':'.jpg');
@@ -130,7 +130,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     }
     // Unknown POST/write acknowledgements never become automatic retries.
     const duplicate=['P2091','P2092','23505'].includes((e as any)?.code);
-    try{await transition(unknown?'unknown':'review',{note:unknown?'Resultado não confirmado. Confira o histórico antes de repetir.':duplicate?'Já existe uma fatura desta unidade e competência. Confira a versão existente, sem iniciar outra leitura.':'A fonte ou autorização precisa de conferência. O arquivo original foi preservado.'});}catch{this.log.warn('EVA_INTAKE_ACK_PENDING');}
+    const stage=i?.state==='LINKING'?'ARCHIVING':'SOURCE_CHECK',code=String((e as any)?.code??'').replace(/[^A-Z0-9_]/g,'').slice(0,32);
+    this.log.warn('EVA_INTAKE_FAILURE '+stage+' '+code);
+    try{await transition(unknown?'unknown':'review',{diagnostic:{stage,code:unknown?'UNCONFIRMED_RESULT':duplicate?'EXISTING_DOCUMENT':stage==='ARCHIVING'?'ARCHIVE_FAILED':'SOURCE_REVIEW_REQUIRED'},note:unknown?'Resultado não confirmado. Confira o histórico antes de repetir.':duplicate?'Já existe uma fatura desta unidade e competência. Confira a versão existente, sem iniciar outra leitura.':stage==='ARCHIVING'?'A identificação foi concluída, mas houve falha técnica ao arquivar. O original e suas respostas foram preservados; não reenvie o arquivo.':'A fonte ou autorização precisa de conferência. O arquivo original foi preservado.'});}catch{this.log.warn('EVA_INTAKE_ACK_PENDING');}
    }
   }finally{this.busy=false;}
  }
