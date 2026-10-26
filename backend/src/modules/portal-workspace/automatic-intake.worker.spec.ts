@@ -6,7 +6,7 @@ describe('Automatic intake durable orchestration',()=>{
  function fixture(state='AWAITING_SOURCES'){
   process.env={...before,EVA_AUTOMATIC_INTAKE_ENABLED:'true',EVA_AUTOMATIC_INTAKE_ORGANIZATIONS:'org'};
   const bytes=Buffer.from('%PDF-1.7\nSynthetic original\n%%EOF');
-  const intake:any={id:'receipt',organization_id:'org',state,unit_id:'unit',customer_id:'client',month:'2026-07',document_id:'doc',file_hash:createHash('sha256').update(bytes).digest('hex'),size_bytes:bytes.length,mime:'application/pdf',filename:'invoice.pdf',ai_attempted:false,signature:null,note:'Waiting'};
+  const intake:any={id:'receipt',organization_id:'org',state,unit_id:'unit',customer_id:'client',month:'2026-07',document_id:['RECOGNIZING','OCR_QUEUED','OCR_POLLING','LINKING'].includes(state)?null:'doc',file_hash:createHash('sha256').update(bytes).digest('hex'),size_bytes:bytes.length,mime:'application/pdf',filename:'invoice.pdf',ai_attempted:false,signature:null,note:'Waiting'};
   const rows:any[]=[];const actions:any[]=[];
   const rpc=jest.fn(async(name,b)=>{if(name==='claim_eva_automatic_intake')return {data:{id:'receipt',token:'lease'}};if(name==='eva_intake_work_context')return {data:{intake,delegate:{userId:'actor',roleId:'role',role:'gestor',permissions:[]}}};actions.push([b.p_action,b.p_body]);return {data:{}};});
   const from=(table:string)=>{const builder:any={select:()=>builder,eq:()=>builder,order:()=>builder,limit:async()=>({data:['consumer_units','customers'].includes(table)?[{id:table}]:rows})};return builder;};

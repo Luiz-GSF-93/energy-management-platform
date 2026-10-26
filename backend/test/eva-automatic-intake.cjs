@@ -67,6 +67,19 @@ for(const role of ['anon','authenticated','service_role'])for(const table of ['e
 await call('reserve',id(20),metadata(2));await call('stored',id(20),{hash:'2'.repeat(64)});const scan=await claim();await transition(scan,'need_ocr');
 await db.exec(`UPDATE eva_automatic_intakes SET next_attempt_at=clock_timestamp() WHERE id='${id(20)}'`);const scan2=await claim();await transition(scan2,'begin_ocr');await transition(scan2,'unknown');
 ok((await call('list',null)).rows.some(r=>r.id===id(20)&&r.state==='UNKNOWN'));
-await db.exec('UPDATE licenses SET documents_limit=2');await deny(()=>call('reserve',id(30),metadata(3)));
+// A scan's paid operation is handed to the normal queue in the same transaction
+// as the final document. Concurrent readers can only GET that existing operation.
+await call('reserve',id(30),metadata(3));await call('stored',id(30),{hash:'3'.repeat(64)});const identify=await claim();await transition(identify,'need_ocr');
+await db.exec(`UPDATE eva_automatic_intakes SET next_attempt_at=clock_timestamp() WHERE id='${id(30)}'`);const submit=await claim();await transition(submit,'begin_ocr');
+const operation='https://example.cognitiveservices.azure.com/documentintelligence/documentModels/prebuilt-invoice/analyzeResults/synthetic?api-version=2024-11-30';await transition(submit,'accepted',{operation});
+await db.exec(`UPDATE eva_automatic_intakes SET next_attempt_at=clock_timestamp() WHERE id='${id(30)}'`);const polled=await claim();const raw={content:'Synthetic original OCR',pages:[{pageNumber:1}]};await transition(polled,'raw',{raw});
+await transition(polled,'recognized',{proof:{...proof,month:'2026-08',fileHash:'3'.repeat(64)}});await transition(polled,'linked',{path:'org/'+id(1)+'/eva-intake-'+id(30)+'.pdf'});
+const transport=(await db.query('SELECT * FROM document_ocr_jobs WHERE document_id=$1',[id(30)])).rows[0];ok(transport.state==='POLLING'&&transport.operation_url===operation&&transport.file_hash==='3'.repeat(64));
+ok((await db.query('SELECT count(*) n FROM document_ocr_jobs WHERE document_id=$1',[id(30)])).rows[0].n===1);
+ok((await db.query('SELECT eva_intake_identity_text($1,$2,$3,$4,$5) data',['org','client',id(1),id(30),'3'.repeat(64)])).rows[0].data.text===raw.content);
+ok((await db.query('SELECT eva_intake_identity_text($1,$2,$3,$4,$5) data',['other','client',id(1),id(30),'3'.repeat(64)])).rows[0].data===null);
+ok((await call('reserve',id(31),metadata(3),'manager','manager')).replayed);
+ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===3);
+await db.exec('UPDATE licenses SET documents_limit=3');await deny(()=>call('reserve',id(40),metadata(4)));
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

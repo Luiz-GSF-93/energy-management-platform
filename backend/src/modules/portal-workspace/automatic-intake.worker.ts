@@ -4,9 +4,6 @@ import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {AzureInvoiceConnector,OcrProviderError} from '../ocr/azure-invoice.connector';
 import {extractPdfText} from '../ocr/eva-pdf-text.extractor';
-import {extractInvoiceEvidence} from '../ocr/invoice-evidence';
-import {extractGdEvidence} from '../ocr/gd-evidence';
-import {captureInvoiceAssessment} from '../ocr/invoice-assessment';
 import {OcrQueueService} from '../ocr/ocr-queue.service';
 import {OcrAssistantService} from '../ocr/ocr-assistant.service';
 import {EvaAssistedClosingService} from '../ocr/eva-assisted-closing.service';
@@ -46,6 +43,13 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
    try{
     const ctx=job.context??await this.rpc('eva_intake_work_context',{p_id:job.id,p_token:job.token});i=ctx.intake;
     const t:TenantContext={scope:'organization',organizationId:i.organization_id,email:'',...ctx.delegate};
+    if(i.document_id&&['RECOGNIZING','OCR_QUEUED'].includes(i.state)){
+     if(i.raw_result&&i.state==='OCR_QUEUED'){await transition('use_existing_ocr');i.state='RECOGNIZING';}
+     else if(!i.raw_result){
+      const prior=await this.ocr.status(i.organization_id,i.document_id);
+      if(prior.job){await transition(['FAILED','SUBMISSION_UNKNOWN'].includes(prior.job.state)?'review':'wait',{note:'Consultando a leitura já existente, sem repetir o envio ao provedor.'});return;}
+     }
+    }
     if(['RECOGNIZING','OCR_QUEUED','OCR_POLLING','LINKING'].includes(i.state)){
      const storage=this.db.getClient().storage.from(DOCUMENT_BUCKET),original=await storage.download(intakePath(i.organization_id,i.id,i.mime));
      if(original.error||!original.data||original.data.size!==i.size_bytes)throw Error('ORIGINAL_UNAVAILABLE');
@@ -91,8 +95,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      let status=await this.ocr.status(i.organization_id,i.document_id);
      if(['FAILED','SUBMISSION_UNKNOWN'].includes(status.job?.state??'')){await transition('review',{note:'A leitura requer conferência no histórico; não será repetida automaticamente.'});return;}
      if(status.job?.state!=='SUCCEEDED'){
-      if(i.raw_result){const assessment=await captureInvoiceAssessment(this.db.getClient(),{organization_id:i.organization_id,document_id:i.document_id,file_hash:i.file_hash},i.raw_result);await transition('adopt_ocr',{...extractInvoiceEvidence(i.raw_result),gd:extractGdEvidence(i.raw_result),assessment});}
-      else if(!status.job)await this.ocr.enqueue(i.organization_id,i.document_id,t.userId);
+      if(!status.job)await this.ocr.enqueue(i.organization_id,i.document_id,t.userId);
       status=await this.ocr.status(i.organization_id,i.document_id);
      }
      if(status.job?.state!=='SUCCEEDED'){await transition('wait',{note:'Leitura automática em andamento; sem novo envio.'});return;}

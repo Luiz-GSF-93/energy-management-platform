@@ -13,7 +13,7 @@ CREATE TABLE public.eva_automatic_intakes(
  signature text, closing_id uuid, ai_attempted boolean NOT NULL DEFAULT false,note text NOT NULL DEFAULT 'Arquivo em recebimento.',
  lease_token uuid, lease_until timestamptz, attempts integer NOT NULL DEFAULT 0,
  next_attempt_at timestamptz NOT NULL DEFAULT clock_timestamp(), created_at timestamptz NOT NULL DEFAULT clock_timestamp(),updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
- UNIQUE(organization_id,request_id),UNIQUE(organization_id,actor_id,file_hash),CHECK((lease_token IS NULL)=(lease_until IS NULL)),
+ UNIQUE(organization_id,request_id),UNIQUE(organization_id,file_hash),CHECK((lease_token IS NULL)=(lease_until IS NULL)),
  CHECK(NOT external OR customer_id IS NOT NULL)
 );
 CREATE TABLE public.eva_automatic_intake_events(
@@ -76,9 +76,10 @@ BEGIN
  ELSIF p_action='reserve' THEN
   IF p_id IS NULL OR NOT(p_body ?& ARRAY['requestId','hash','filename','mime','size','consent','hints']) OR p_body-ARRAY['customerId','requestId','hash','filename','mime','size','consent','hints']<>'{}' OR coalesce(p_body->>'hash','') !~ '^[a-f0-9]{64}$' OR coalesce(length(p_body->>'filename'),0) NOT BETWEEN 1 AND 255 OR coalesce(p_body->>'mime','') NOT IN('application/pdf','image/png','image/jpeg') OR coalesce((p_body->>'size')::integer,0) NOT BETWEEN 20 AND 15728640 OR jsonb_typeof(p_body->'consent') IS DISTINCT FROM 'boolean' OR jsonb_typeof(p_body->'hints') IS DISTINCT FROM 'object' OR (p_body->'hints')-ARRAY['unitId','month']<>'{}' THEN RAISE EXCEPTION 'Invalid intake metadata' USING ERRCODE='22023';END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(p_org,315));
-  SELECT * INTO i FROM public.eva_automatic_intakes WHERE organization_id=p_org AND(request_id=(p_body->>'requestId')::uuid OR(actor_id=p_actor AND file_hash=p_body->>'hash')) ORDER BY created_at LIMIT 1;
+  SELECT * INTO i FROM public.eva_automatic_intakes WHERE organization_id=p_org AND(request_id=(p_body->>'requestId')::uuid OR file_hash=p_body->>'hash') ORDER BY created_at LIMIT 1;
   IF FOUND THEN
-   IF i.actor_id<>p_actor OR i.file_hash<>p_body->>'hash' OR i.customer_id IS DISTINCT FROM customer AND customer IS NOT NULL OR i.consent IS DISTINCT FROM(p_body->>'consent')::boolean OR i.hints IS DISTINCT FROM p_body->'hints' THEN RAISE EXCEPTION 'Original request changed' USING ERRCODE='40001';END IF;
+   IF i.file_hash<>p_body->>'hash' OR i.customer_id IS DISTINCT FROM customer AND customer IS NOT NULL OR i.actor_id=p_actor AND i.hints IS DISTINCT FROM p_body->'hints' THEN RAISE EXCEPTION 'Original request changed' USING ERRCODE='40001';END IF;
+   IF NOT i.consent AND p_body->>'consent'='true' THEN UPDATE public.eva_automatic_intakes SET consent=true,next_attempt_at=clock_timestamp() WHERE id=i.id;PERFORM public.eva_intake_event(i.id,'CONSENT_GRANTED','{}',p_actor);END IF;
    RETURN jsonb_build_object('id',i.id,'replayed',true,'stored',i.stored,'state',i.state,'customerId',i.customer_id);
   END IF;
   SELECT * INTO STRICT lic FROM public.licenses WHERE organization_id=p_org AND active AND lower(status)='active' AND start_date<=current_date AND(end_date IS NULL OR end_date>=current_date) AND document_management;
@@ -91,9 +92,9 @@ BEGIN
   PERFORM public.eva_intake_event(i.id,'RECEIVED');
   RETURN jsonb_build_object('id',i.id,'replayed',false,'stored',false,'state',i.state,'customerId',i.customer_id);
  ELSIF p_action='stored' THEN
-  SELECT * INTO i FROM public.eva_automatic_intakes WHERE id=p_id AND organization_id=p_org AND actor_id=p_actor FOR UPDATE;
+  SELECT * INTO i FROM public.eva_automatic_intakes WHERE id=p_id AND organization_id=p_org AND(a->>'external'<>'true' OR customer_id=customer) FOR UPDATE;
   IF NOT FOUND OR i.file_hash IS DISTINCT FROM p_body->>'hash' THEN RAISE EXCEPTION 'Original source unavailable' USING ERRCODE='42501';END IF;
-  IF NOT i.stored THEN UPDATE public.eva_automatic_intakes SET stored=true,state='RECOGNIZING',updated_at=clock_timestamp() WHERE id=i.id;PERFORM public.eva_intake_event(i.id,'STORED');END IF;
+  IF NOT i.stored THEN UPDATE public.eva_automatic_intakes SET stored=true,state='RECOGNIZING',updated_at=clock_timestamp() WHERE id=i.id;PERFORM public.eva_intake_event(i.id,'STORED','{}',p_actor);END IF;
   RETURN jsonb_build_object('id',i.id,'state','RECOGNIZING');
  ELSIF p_action='resolve' AND a->>'external'='false' THEN
   SELECT * INTO i FROM public.eva_automatic_intakes WHERE id=p_id AND organization_id=p_org AND state='REVIEW_REQUIRED' FOR UPDATE;
@@ -152,6 +153,7 @@ BEGIN
    IF recognized->>'version' IS DISTINCT FROM 'automatic-intake-context-1' OR recognized->>'state' IS DISTINCT FROM 'MATCH' OR recognized->>'fileHash' IS DISTINCT FROM i.file_hash OR coalesce(recognized->>'documentType','') NOT IN('INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER') OR coalesce(recognized->>'month','') !~ '^20[0-9]{2}-(0[1-9]|1[0-2])$' OR i.customer_id IS NOT NULL AND i.customer_id IS DISTINCT FROM recognized->>'customerId' OR NOT EXISTS(SELECT 1 FROM public.consumer_units u JOIN public.customers c ON c.organization_id=u.organization_id AND c.id=u.customer_id WHERE u.organization_id=i.organization_id AND u.id=recognized->>'unitId' AND u.customer_id=recognized->>'customerId' AND u.status='ACTIVE' AND c.status='ACTIVE' AND c.deleted_at IS NULL) THEN RAISE EXCEPTION 'Recognized scope mismatch' USING ERRCODE='42501';END IF;
   UPDATE public.eva_automatic_intakes SET customer_id=recognized->>'customerId',unit_id=recognized->>'unitId',month=recognized->>'month',document_type=recognized->>'documentType',proof=recognized WHERE id=i.id;next_state:='LINKING';
  ELSIF p_action='need_ocr' AND i.state='RECOGNIZING' THEN next_state:='OCR_QUEUED';
+ ELSIF p_action='use_existing_ocr' AND i.state='OCR_QUEUED' AND EXISTS(SELECT 1 FROM public.document_ocr_jobs j JOIN public.document_ocr_results r ON r.job_id=j.id AND r.organization_id=j.organization_id AND r.document_id=j.document_id WHERE j.organization_id=i.organization_id AND j.document_id=i.document_id AND j.file_hash=i.file_hash AND r.file_hash=i.file_hash AND j.state='SUCCEEDED') THEN next_state:='RECOGNIZING';
  ELSIF p_action='begin_ocr' AND i.state='OCR_QUEUED' AND i.operation_url IS NULL AND i.raw_result IS NULL THEN next_state:='OCR_SUBMITTING';
  ELSIF p_action='accepted' AND i.state='OCR_SUBMITTING' AND length(p_body->>'operation') BETWEEN 10 AND 2000 THEN UPDATE public.eva_automatic_intakes SET operation_url=p_body->>'operation' WHERE id=i.id;next_state:='OCR_POLLING';
  ELSIF p_action='retry_ocr' AND i.state='OCR_SUBMITTING' AND p_body->>'error'='RATE_LIMITED' AND i.operation_url IS NULL THEN next_state:='OCR_QUEUED';
@@ -171,14 +173,14 @@ BEGIN
    VALUES(i.id::text,i.organization_id,i.customer_id,i.unit_id,i.document_type,(i.month||'-01')::date,i.filename,i.mime,i.file_hash,i.size_bytes,p_body->>'path','energy-documents-private',true,clock_timestamp(),i.actor_id,true,'PENDING','PENDING','Recebimento automático EVA · '||i.id) RETURNING * INTO d;
   END IF;
   UPDATE public.eva_automatic_intakes SET document_id=d.id WHERE id=i.id;
+  IF i.document_type='INVOICE_DISTRIBUTOR' AND i.raw_result IS NOT NULL THEN
+   PERFORM public.assert_invoice_month_ocr(i.organization_id,d.id);
+   IF i.operation_url IS NULL THEN RAISE EXCEPTION 'Original OCR operation missing' USING ERRCODE='40001';END IF;
+   -- Reserve the completed operation in the existing queue atomically with the
+   -- document. The normal worker resumes by GET; there is no second POST gap.
+   INSERT INTO public.document_ocr_jobs(organization_id,document_id,file_hash,requested_by,state,operation_url) VALUES(i.organization_id,d.id,i.file_hash,ctx#>>'{delegate,userId}','POLLING',i.operation_url) ON CONFLICT(organization_id,document_id) DO NOTHING;
+  END IF;
   next_state:=CASE i.document_type WHEN 'INVOICE_DISTRIBUTOR' THEN 'WAITING_OCR' ELSE 'SOURCE_READY' END;
- ELSIF p_action='adopt_ocr' AND i.state='WAITING_OCR' AND i.raw_result IS NOT NULL THEN
-  PERFORM public.assert_invoice_month_ocr(i.organization_id,i.document_id);
-  IF p_body#>>'{assessment,source,documentId}' IS DISTINCT FROM i.document_id OR p_body#>>'{assessment,source,fileHash}' IS DISTINCT FROM i.file_hash OR p_body#>>'{assessment,source,organizationId}' IS DISTINCT FROM i.organization_id OR p_body#>>'{assessment,source,customerId}' IS DISTINCT FROM i.customer_id OR p_body#>>'{assessment,source,unitId}' IS DISTINCT FROM i.unit_id OR p_body#>>'{assessment,source,referenceMonth}' IS DISTINCT FROM i.month THEN RAISE EXCEPTION 'Assessment scope mismatch' USING ERRCODE='42501';END IF;
-  INSERT INTO public.document_ocr_jobs(organization_id,document_id,file_hash,requested_by,state,operation_url) VALUES(i.organization_id,i.document_id,i.file_hash,ctx#>>'{delegate,userId}','SUCCEEDED',i.operation_url) ON CONFLICT(organization_id,document_id) DO NOTHING;
-  SELECT * INTO STRICT job FROM public.document_ocr_jobs WHERE organization_id=i.organization_id AND document_id=i.document_id;
-  IF job.file_hash<>i.file_hash OR job.state<>'SUCCEEDED' THEN RAISE EXCEPTION 'OCR transport conflict' USING ERRCODE='40001';END IF;
-  IF NOT EXISTS(SELECT 1 FROM public.document_ocr_results WHERE job_id=job.id) THEN INSERT INTO public.document_ocr_results(job_id,organization_id,document_id,file_hash,raw_result,evidence) VALUES(job.id,i.organization_id,i.document_id,i.file_hash,i.raw_result,p_body);END IF;
  ELSIF p_action='begin_prepare' AND i.state IN('WAITING_OCR','AWAITING_SOURCES','PROPOSAL_READY') THEN
   IF NOT EXISTS(SELECT 1 FROM public.document_ocr_jobs WHERE organization_id=i.organization_id AND document_id=i.document_id AND state='SUCCEEDED' AND file_hash=i.file_hash) THEN RAISE EXCEPTION 'Completed OCR required' USING ERRCODE='42501';END IF;
   next_state:='PREPARING';
@@ -194,7 +196,7 @@ BEGIN
  ELSIF p_action='review' AND i.state NOT IN('PREPARING','OCR_SUBMITTING') THEN next_state:='REVIEW_REQUIRED';
  ELSIF p_action='published' AND EXISTS(SELECT 1 FROM public.eva_assisted_closing_versions v WHERE v.id=(p_body->>'closingId')::uuid AND v.organization_id=i.organization_id AND v.customer_id=i.customer_id AND v.month=i.month AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.report->'units')u WHERE u->>'id'=i.unit_id AND u->>'documentId'=i.document_id AND u->>'sourceHash'=i.file_hash) AND EXISTS(SELECT 1 FROM public.eva_assisted_closing_events e WHERE e.closing_id=v.id AND e.state='APPROVED')) THEN UPDATE public.eva_automatic_intakes SET closing_id=(p_body->>'closingId')::uuid WHERE id=i.id;next_state:='PUBLISHED';
  ELSE RAISE EXCEPTION 'Invalid intake transition' USING ERRCODE='22023';END IF;
- UPDATE public.eva_automatic_intakes SET state=next_state,note=left(coalesce(p_body->>'note','Fonte preservada. Processamento em andamento.'),500),lease_token=CASE WHEN p_action IN('begin_ocr','raw','recognized','begin_prepare','adopt_ocr','begin_interpret') THEN lease_token ELSE NULL END,lease_until=CASE WHEN p_action IN('begin_ocr','raw','recognized','begin_prepare','adopt_ocr','begin_interpret') THEN lease_until ELSE NULL END,next_attempt_at=CASE WHEN p_action='prepared' AND p_body->>'sourcesChanged'='false' OR p_action='wait' AND i.state IN('AWAITING_SOURCES','PROPOSAL_READY') THEN 'infinity'::timestamptz ELSE clock_timestamp()+make_interval(secs=>CASE WHEN p_action='retry_ocr' THEN greatest(30,least(coalesce((p_body->>'delay')::integer,30),3600)) WHEN p_action='wait' THEN 30 ELSE 5 END) END,updated_at=clock_timestamp() WHERE id=i.id;
+ UPDATE public.eva_automatic_intakes SET state=next_state,note=left(coalesce(p_body->>'note','Fonte preservada. Processamento em andamento.'),500),lease_token=CASE WHEN p_action IN('begin_ocr','raw','recognized','begin_prepare','begin_interpret','use_existing_ocr') THEN lease_token ELSE NULL END,lease_until=CASE WHEN p_action IN('begin_ocr','raw','recognized','begin_prepare','begin_interpret','use_existing_ocr') THEN lease_until ELSE NULL END,next_attempt_at=CASE WHEN p_action='prepared' AND p_body->>'sourcesChanged'='false' OR p_action='wait' AND i.state IN('AWAITING_SOURCES','PROPOSAL_READY') THEN 'infinity'::timestamptz ELSE clock_timestamp()+make_interval(secs=>CASE WHEN p_action='retry_ocr' THEN greatest(30,least(coalesce((p_body->>'delay')::integer,30),3600)) WHEN p_action='wait' THEN 30 ELSE 5 END) END,updated_at=clock_timestamp() WHERE id=i.id;
  PERFORM public.eva_intake_event(i.id,p_action,jsonb_build_object('proof',p_body->'proof','closingId',p_body->>'closingId','signature',p_body->>'signature','note',p_body->>'note'),ctx#>>'{delegate,userId}');
  RETURN jsonb_build_object('id',i.id,'state',next_state);
 END$$;
