@@ -64,6 +64,7 @@ await deny(()=>transition(next,'prepared',{closingId:id(51),complete:true,signat
 ok((await transition(next,'prepared',{closingId:id(50),complete:true,signature:'a'.repeat(64),sourcesChanged:false})).state==='PROPOSAL_READY');
 ok((await call('list',null)).rows[0].note==='Preenchimento concluído. Em conferência pela equipe.');
 ok((await call('list',null,{queueOnly:'true'})).rows.length===0);
+ok(!!(await call('list',null,{queueOnly:'true'})).revision);
 ok((await db.query('SELECT count(*) n FROM documents')).rows[0].n===1);
 ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===1);
 ok((await db.query('SELECT count(*) n FROM eva_automatic_intake_events')).rows[0].n>0);
