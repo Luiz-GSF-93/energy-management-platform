@@ -33,4 +33,6 @@ describe('Common component tax closing V3',()=>{
 });
 
 
-it('uses the documented June yellow flag without extending it to an undocumented future month',()=>{const x=setup();x.c.month='2026-06';const june=x.run();expect(june.missing).toEqual([]);expect(june.lines.find(l=>l.component==='TARIFF_FLAG')?.source).toContain('junho/2026');x.c.month='2026-07';expect(x.run().missing.join(' ')).toContain('tarifa vigente');x.c.month='2026-06';x.layout.blocks[0].rows[0].cells[0].value.text='Vermelha 2 31 Dias';expect(x.run().missing.join(' ')).toContain('tarifa vigente');});
+it('uses the documented June yellow flag without extending it to an undocumented future month',()=>{const x=setup();x.c.month='2026-06';const june=x.run();expect(june.missing).toEqual([]);expect(june.lines.find(l=>l.component==='TARIFF_FLAG')?.source).toContain('junho/2026');x.c.month='2026-08';expect(x.run().missing.join(' ')).toContain('tarifa vigente');x.c.month='2026-06';x.layout.blocks[0].rows[0].cells[0].value.text='Vermelha 2 31 Dias';expect(x.run().missing.join(' ')).toContain('tarifa vigente');});
+
+it('uses the July official yellow-flag reference and still rejects an undocumented color',()=>{const x=setup();x.c.month='2026-07';const r=x.run();expect(r.missing).toEqual([]);expect(r.lines.find(l=>l.component==='TARIFF_FLAG')?.source).toContain('bandeira-tarifaria-em-julho-permanece-amarela');x.layout.blocks[0].rows[0].cells[0].value.text='Vermelha 2 31 Dias';expect(x.run().missing.join(' ')).toContain('tarifa vigente');});

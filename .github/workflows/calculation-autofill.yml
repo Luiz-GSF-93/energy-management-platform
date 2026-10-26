@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "backend/src/database/migrations/20261220_ocr_audited_installation_identity.sql"
+      - "backend/src/database/migrations/20261221_eva_closing_history_projection.sql"
       - "backend/test/ocr-audited-installation.cjs"
       - "backend/src/modules/ocr/invoice-identity-with-history*"
       - "backend/src/modules/ocr/ocr-navigation-context*"
