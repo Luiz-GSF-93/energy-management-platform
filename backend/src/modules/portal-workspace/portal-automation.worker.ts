@@ -1,6 +1,5 @@
 import {sourcePreparationEnabled} from '../ocr/source-preparation-v3';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
-import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {OcrQueueService} from '../ocr/ocr-queue.service';
 import {OcrAssistantService} from '../ocr/ocr-assistant.service';
@@ -29,11 +28,9 @@ export class PortalAutomationWorker implements OnModuleInit,OnModuleDestroy {
    const drafts=await this.assistant.prepareAutomatic(job.documentId,t);
    const uncertain=drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED');
    if(uncertain||!drafts.complete&&!(sourcePreparationEnabled()&&'canContinue' in drafts&&drafts.canContinue===true))throw Error('DRAFT_REQUIRES_REVIEW');
-   const query={consumerUnitId:job.unitId,month:job.month},preview:any=await this.autofill.inspect(query,t);
-   if(!preview.available||preview.documentId!==job.documentId||preview.sourceHash!==job.fileHash||!preview.canPrepare)throw Error('CURRENT_INVOICE_NOT_ELIGIBLE');
-   await this.autofill.prepare({...query,requestId:job.reservation,token:preview.token},t);
-   // The closing service captures the full customer set; it never approves or publishes.
-   const prepared=await this.closing.prepare({...query,requestId:randomUUID()},t);
+   const query={consumerUnitId:job.unitId,month:job.month};
+   // One shared, idempotent completion: Documents and the portal cannot race two draft batches.
+   const prepared=await this.closing.prepareInvoice(job.documentId,job.fileHash,query,t);
    if(prepared.row?.state!=='READY_FOR_REVIEW'){await finish('AUTOMATION_STOPPED','A versão foi preservada com pendências de evidência. A equipe deve conferir o resumo antes da validação.',prepared.row?.id??null);return;}
    await finish('VALIDATING','Preparação versionada disponível para conferência da equipe. Nenhuma aprovação ou publicação automática.',prepared.row?.id??null);
   }catch(e){const reason=e instanceof Error&&/EVA:|identidade|UC, CNPJ/i.test(e.message)?e.message.slice(0,350):'Preparação interrompida. A equipe deve conferir as fontes e o histórico antes de repetir.';await finish('AUTOMATION_STOPPED',reason);}

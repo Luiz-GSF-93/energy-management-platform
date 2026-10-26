@@ -66,3 +66,13 @@ describe('isolated contract-memory capture path',()=>{
 });
 
 it('activates V3 only through its dedicated flag, preserving legacy comparison tests',async()=>{const v3=invoiceComponentTaxV3 as jest.Mock;v3.mockReturnValue({method:'COMPONENT_TAXES_V3',amount:'100.00',missing:[],observations:[],lines:[],retained:[]});const x=setup(true,true,false,true);x.snap.mockResolvedValueOnce({available:true,plan:{fields:[],operational:{state:'PARTIAL',invoice:{amount:'2.00'},supplier:{amount:'1.00'}}},c:{document:{id:'doc'}}} as any);await x.s.prepare(b,t);expect(v3).toHaveBeenCalledTimes(1);expect(x.payloads.find(p=>p.p_action==='reserve').p_body.report.methodology).toBe('COMPONENT_TAXES_V3');});
+
+
+describe('shared invoice completion',()=>{
+ const document='00000000-0000-4000-8000-000000000009',hash='a'.repeat(64),q={consumerUnitId:unit,month:b.month};
+ const snapshot=()=>({available:true,canPrepare:true,documentId:document,sourceHash:hash,unitId:unit,month:b.month,basis:'b'.repeat(64)});
+ function shared(){const inspect=jest.fn(async()=>snapshot()),s=new EvaAssistedClosingService({} as any,{get:()=> 'true'} as any,{inspect} as any),prepare=jest.spyOn(s,'prepare').mockResolvedValue({row:{organization_id:'org',month:b.month,report:{units:[{id:unit,documentId:document,sourceHash:hash}]}}} as any);return {s,inspect,prepare};}
+ it('uses the same source key in Documents and the delegated portal; new sources make a new version',async()=>{const x=shared();await x.s.prepareInvoice(document,hash,q,t);await x.s.prepareInvoice(document,hash,q,{...t,userId:'delegated'});expect(x.prepare.mock.calls[0][0].requestId).toBe(x.prepare.mock.calls[1][0].requestId);x.inspect.mockResolvedValue({...snapshot(),basis:'c'.repeat(64)});await x.s.prepareInvoice(document,hash,q,t);expect(x.prepare.mock.calls[2][0].requestId).not.toBe(x.prepare.mock.calls[0][0].requestId);});
+ it.each(['documentId','sourceHash','unitId','month','basis'])('rejects changed or foreign source %s before writing',async key=>{const x=shared();x.inspect.mockResolvedValue({...snapshot(),[key]:'foreign'});await expect(x.s.prepareInvoice(document,hash,q,t)).rejects.toThrow();expect(x.prepare).not.toHaveBeenCalled();});
+ it('preserves draft access checks and rejects a foreign returned version',async()=>{const x=shared();await expect(x.s.prepareInvoice(document,hash,q,{...t,permissions:[]})).rejects.toThrow();expect(x.inspect).not.toHaveBeenCalled();x.prepare.mockResolvedValue({row:{organization_id:'other',month:b.month,report:{units:[{id:unit,documentId:document,sourceHash:hash}]}}} as any);await expect(x.s.prepareInvoice(document,hash,q,t)).rejects.toThrow('fora da fonte');expect(x.prepare).toHaveBeenCalledTimes(1);});
+});

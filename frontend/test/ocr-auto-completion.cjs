@@ -1,0 +1,9 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{JSDOM}=require('jsdom');
+const Component=require('../app/backoffice/documents/OcrFinancialPreparation.tsx').default;
+function render(preparation){return new JSDOM(renderToStaticMarkup(React.createElement(Component,{preparation,documentId:'doc-source',month:'2026-06'}))).window.document;}
+const complete=render({state:'FILLED_REVIEW_REQUIRED',message:'Valores preenchidos; revisar antes de aprovar.',percent:100,version:2,totals:{acr:'1000.00',aclAfterFees:'750.00',savings:'250.00'},reviewQuestions:[{message:'Conferir cobertura da nota.'},{message:'Conferir cobertura da nota.'},{message:'Revisar estimativa CCEE.'}]});
+assert(complete.body.textContent.includes('Preenchimento concluído · 100%'));assert.equal(complete.querySelectorAll('li').length,2);assert(complete.body.textContent.includes('1.000,00'));assert(complete.querySelector('a').href.includes('doc-source'));assert(complete.body.textContent.includes('aprovação financeira permanece com o gestor'));assert.equal(complete.querySelectorAll('button,input,textarea').length,0);
+const partial=render({state:'PARTIAL',percent:75,message:'Tarifa ainda ausente.'});assert(!partial.body.textContent.includes('100%'));assert(partial.body.textContent.includes('75%'));assert(!partial.body.textContent.includes('NaN'));
+console.log('Automatic closing summary: complete proposal, real reviews, source link and incomplete source passed');

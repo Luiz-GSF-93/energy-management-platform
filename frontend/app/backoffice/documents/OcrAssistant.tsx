@@ -1,4 +1,5 @@
 'use client';
+import OcrFinancialPreparation,{type FinancialPreparation} from './OcrFinancialPreparation';
 import BotEnergyGuidance from '../contracts/BotEnergyGuidance';
 import type {OcrAutofill} from '../contracts/ocr-autofill';
 import OcrCdeReviews from './OcrCdeReviews';
@@ -20,7 +21,8 @@ type Finding={code:string;section:string;severity:string;message:string};
 type FieldTask={kind:string;key:string;label:string;value:string|null;unit:string;description:string;source:string;canConfirm:boolean;confirmed:boolean};
 type Operation={canPropose?:boolean;key:string;label:string;area:OcrDestination;state:string;canCreate:boolean;message:string;values?:unknown;candidates?:unknown};
 type History={inputId:string;month:string;version:number;previous:string|null;current:string|null;state:string;message:string};
-type Plan={automaticPreparation?:{complete:boolean;message:string;receipts:{key:string;label:string;state:string;message?:string}[]};automaticFill?:{state:string;count:number;message:string};aiReview?:{state:string;message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:{id:string;label:string;value:string;source:string}[]};prefilled?:OcrAutofill;canValidate?:boolean;fieldTasks?:FieldTask[];token:string;documentId:string;unitName:string;month:string;checkedAt:string;message:string;canPrepare:boolean;
+
+type Plan={financialPreparation?:FinancialPreparation;automaticPreparation?:{complete:boolean;message:string;receipts:{key:string;label:string;state:string;message?:string}[]};automaticFill?:{state:string;count:number;message:string};aiReview?:{state:string;message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:{id:string;label:string;value:string;source:string}[]};prefilled?:OcrAutofill;canValidate?:boolean;fieldTasks?:FieldTask[];token:string;documentId:string;unitName:string;month:string;checkedAt:string;message:string;canPrepare:boolean;
  counts:{blockers:number;reviews:number};confidence:ReadoutSummary;
  values:{key:string;label:string;value:string|null;unit:string;state:string;sources:string[];review:null|{decision:string;version:number;author:string}}[];
  comparisons:History[];operations:Operation[];findings:Finding[];
@@ -48,7 +50,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
  useEffect(()=>{updates.current=onUpdate;},[onUpdate]);
  useEffect(()=>{
   if(!autoStart&&!plan&&!error&&!busy)return;
-  const summary:InboxUpdate={state:busy?'PREPARING':error||stale?'FAILED':receipts.length?'RECORDED':'READY',message:busy?'EVA conferindo fontes, histórico e vigências…':error||stale?'Conferência interrompida. Abra e atualize antes de validar.':receipts.length?'Confira os recibos e as revisões restantes. Aprovação financeira ainda não realizada.':'Propostas prontas para a validação do operador.',...(plan?{blockers:plan.counts.blockers,reviews:plan.counts.reviews,fields:pendingFields(plan.fieldTasks??[]),proposals:plan.operations.filter(o=>o.canPropose??o.canCreate).length}:{})};
+  const summary:InboxUpdate={state:busy?'PREPARING':error||stale?'FAILED':receipts.length?'RECORDED':'READY',message:busy?'EVA conferindo fontes, histórico e vigências…':error||stale?'Conferência interrompida. Abra e atualize antes de validar.':receipts.length?'Confira os recibos e as revisões restantes. Aprovação financeira ainda não realizada.':'Propostas prontas para a validação do operador.',...(plan?{blockers:plan.financialPreparation?.percent===100?0:plan.counts.blockers,reviews:plan.financialPreparation?.reviewQuestions?.length??plan.counts.reviews,fields:pendingFields(plan.fieldTasks??[]),proposals:plan.operations.filter(o=>o.canPropose??o.canCreate).length}:{})};
   updates.current?.(id,summary);
  },[id,autoStart,plan,error,busy,stale,receipts]);
  const install=useCallback((next:Plan)=>{setPlan(next);setSelected(next.operations.filter(o=>o.canPropose??o.canCreate).map(o=>o.key));setChoices(Object.fromEntries((next.fieldTasks??[]).filter(f=>f.canConfirm&&!f.confirmed&&f.kind!=='demand').map(f=>[f.kind+':'+f.key,'CONFIRMED'])));setCheckedPdf(false);setAck(false);setStale(false);},[]);
@@ -69,12 +71,6 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
   if(!openRequest)return;
   dialog.current?.showModal();void load();
  },[openRequest,load]);
- useEffect(()=>{
-  const refresh=()=>{if(dialog.current?.open&&!writing.current&&!form)void load();};
-  const visible=()=>{if(document.visibilityState==='visible')refresh();};
-  window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',visible);
-  return()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',visible);};
- },[load,form]);
  async function validate(){
   if(!plan||!plan.canValidate||busy||stale||!ack||!checkedPdf||note.trim().length<3||(!selected.length&&!Object.keys(choices).length)||writing.current)return;
   writing.current=true;setWriteBusy(true);const g=++generation.current;setBusy(true);setError('');setNotice('Registrando as validações e preparando os rascunhos permitidos…');setReceipts([]);
@@ -117,12 +113,13 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
    {!plan&&busy&&<BotEnergyHelp documentId={id}/>}
    {form?<OcrAssistantForm key={form} id={id} area={form} onClose={()=>{setForm(null);void load();}}/>:plan&&<>
     <h3>{plan.unitName} · {plan.month}</h3><p>{plan.message}</p><small>Consulta em {new Date(plan.checkedAt).toLocaleString('pt-BR')}{stale?' · Atualização obrigatória antes de lançar':''}</small>
+    {plan.financialPreparation&&<OcrFinancialPreparation preparation={plan.financialPreparation} documentId={id} month={plan.month}/>}
     {plan.automaticFill&&<section aria-label="Preenchimento automático" style={panel}><h3>Preenchimento automático</h3><p>{plan.automaticFill.message}</p><p>{plan.automaticFill.count} campos salvos nesta preparação.</p></section>}
     {plan.automaticPreparation&&<section aria-label="Lançamentos automáticos em rascunho" style={panel}><h3>Lançamentos em rascunho</h3><p>{plan.automaticPreparation.message}</p><ul>{plan.automaticPreparation.receipts.map(r=><li key={r.key}>{r.label}: {r.state==='SAVED_DRAFT'?'Salvo em rascunho':r.message||'Conferência necessária'}</li>)}</ul></section>}
     {plan.aiReview&&<section aria-label="Interpretação da IA" style={panel} aria-live="polite"><h3>EVA · interpretação da fatura</h3><p>{plan.aiReview.message}</p>{plan.aiReview.answer&&<p style={{whiteSpace:'pre-line'}}>{plan.aiReview.answer}</p>}{plan.aiReview.state==='READY'&&<><p>{plan.aiReview.fields?.length??0} campos da interpretação conferidos contra as evidências do backend. Valores financeiros e confiança OCR permanecem nas fontes originais.</p><ul>{plan.aiReview.doubts?.map((d,i)=><li key={i}>{d.question}</li>)}</ul><details><summary>Fontes da interpretação</summary><ul>{plan.aiReview.evidence?.map(e=><li key={e.id}><strong>{e.label}</strong>: {e.value}<p>{e.source}</p></li>)}</ul></details></>}</section>}
     <OcrOverview unit={plan.unitName} month={plan.month} confidence={plan.confidence} prefilled={plan.prefilled} fields={plan.fieldTasks??[]} values={plan.values} disabled={busy||stale} onReview={()=>{setReview(true);queueMicrotask(()=>dialog.current?.querySelector('[data-ocr-review]')?.scrollIntoView?.({block:'start'}));}} onOpen={setForm}/>
     <BotEnergyHelp key={id} documentId={id} onAction={target=>target==='parameter-records'?setForm('parameters'):target==='reconciliation'?setForm('costs'):setResolutionAction(previous=>({target,request:(previous?.request??0)+1}))}/>
-    <OcrResolution onOpenParameters={()=>setForm('parameters')} key={'resolution:'+id} id={id} action={resolutionAction} contextToken={plan.token} enabled={canProcess} onChanged={()=>void load()}/>
+    <details open={!!resolutionAction}><summary>Conferência detalhada dos registros e aprovações</summary><OcrResolution onOpenParameters={()=>setForm('parameters')} key={'resolution:'+id} id={id} action={resolutionAction} contextToken={plan.token} enabled={canProcess} onChanged={()=>void load()}/></details>
     <details open={review} data-ocr-review><summary>Conferir campos, fontes e lançamentos detalhados</summary>
     {!!plan.prefilled?.relatedDocuments?.length&&<section style={panel}><h3>Evidências relacionadas já enviadas</h3><p>O bot reconhece faturas desta unidade e competência e seus arquivos contratuais relacionados. Não é necessário reenviar um arquivo disponível. O nome do arquivo não comprova valores ou aprovação.</p><ul>{plan.prefilled.relatedDocuments.map(d=><li key={d.id}><strong>{d.name}</strong><p>{d.message} · {d.source}</p></li>)}</ul></section>}
     {plan.prefilled&&<section style={panel} aria-label="Preenchimentos automáticos"><h3>Preenchidos pela EVA para sua conferência</h3><p>{plan.prefilled.message}</p><p>Consumos: {Object.keys(plan.prefilled.measurements).length} campos · Alíquotas: {plan.prefilled.taxes.length} · Custos identificados: {plan.prefilled.costs.length}. A gravação auditada ocorre após sua validação; aprovação financeira exclusiva do gestor/administrador.</p><ul>{plan.prefilled.taxes.map(t=><li key={t.code}>{t.code}: {t.rate}% · {t.source}<p>{t.message}</p></li>)}</ul>{plan.prefilled.library?<p>Biblioteca compatível: versão {plan.prefilled.library.version} · {plan.prefilled.library.start} a {plan.prefilled.library.end} · {plan.prefilled.library.items.length} tarifas {plan.prefilled.library.scenario}. Abra “Tarifas e parâmetros” para conferir as bases tributárias já acompanhadas das alíquotas da fatura.</p>:<p>{plan.prefilled.libraryState==='AMBIGUOUS'?'Mais de uma tabela compatível: selecionar a vigência correta.':'Biblioteca sem correspondência única para todo o mês.'}</p>}</section>}
