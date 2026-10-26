@@ -2,6 +2,13 @@ name: Source-backed automatic preparation
 on:
   pull_request:
     paths:
+      - "backend/src/modules/portal-workspace/automatic-intake*"
+      - "backend/src/modules/portal-workspace/portal-workspace.module.ts"
+      - "backend/src/database/migrations/20261222_eva_automatic_intake.sql"
+      - "backend/test/eva-automatic-intake.cjs"
+      - "frontend/app/components/AutomaticInvoiceIntake*"
+      - "frontend/app/components/PortalInvoices.tsx"
+      - "frontend/test/automatic-intake.cjs"
       - "backend/src/database/migrations/20261220_ocr_audited_installation_identity.sql"
       - "backend/src/database/migrations/20261221_eva_closing_history_projection.sql"
       - "backend/test/ocr-audited-installation.cjs"
@@ -137,6 +144,10 @@ jobs:
         working-directory: backend
       - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/contracts/services/eva-approved-publications.spec.ts src/modules/contracts/services/financial-reports.spec.ts src/modules/bot-reports/bot-reports.service.spec.ts src/modules/bot-reports/client-report-sources.spec.ts src/modules/ocr/azure-backoffice-ai.connector.spec.ts src/modules/ocr/backoffice-ai.service.spec.ts src/modules/ocr/eva-global-model.spec.ts src/modules/ocr/cpfl-paulista-layout.spec.ts src/modules/ocr/invoice-comparison-v2.spec.ts src/modules/ocr/invoice-component-tax-v3.spec.ts src/modules/portal-insights/portal-financial-detail.spec.ts src/modules/portal-insights/portal-insights.model.spec.ts src/modules/ocr/eva-tariff-workbench.model.spec.ts src/modules/ocr/eva-tariff-workbench.service.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts src/modules/ocr/eva-closing-context.spec.ts src/modules/ocr/eva-closing-changes.model.spec.ts src/modules/ocr/eva-closing-changes.service.spec.ts src/modules/ocr/eva-assisted-closing.model.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/calculation-operational-proposal.spec.ts src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/calculation-autofill-reconciliation.spec.ts src/modules/operations/eva-invoice-attention.spec.ts src/modules/operations/operations.service.spec.ts src/modules/ocr/bot-energy-agenda.service.spec.ts src/modules/ocr/ccee-cost-estimate.spec.ts src/modules/ocr/supplier-invoice-proposal.spec.ts src/modules/ocr/supplier-invoice-evidence.spec.ts src/modules/ocr/ocr-preparation-diagnostics.spec.ts src/modules/ocr/ccee-preparation.integration.spec.ts src/modules/ocr/contract-closing-draft.spec.ts src/modules/ocr/monthly-supplier-mode.spec.ts src/modules/ocr/documented-tariff-period.spec.ts src/modules/ocr/documented-supplier-settlement.spec.ts src/modules/ocr/historical-cpfl-evidence.spec.ts src/modules/ocr/source-preparation-v3.spec.ts src/modules/ocr/source-preparation.service.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/ocr/ocr-assistant-progress.service.spec.ts src/modules/portal-workspace/portal-workers.spec.ts src/modules/ocr/cpfl-tax-reconciliation.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr-resolution.service.spec.ts src/modules/ocr/ocr-autofill.spec.ts src/modules/ocr/ocr-autofill.service.spec.ts src/modules/contracts/services/contract-supplier-cost.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/fee-adjustment.spec.ts src/modules/contracts/services/preparation.spec.ts src/modules/contracts/services/tariff-library-plan.spec.ts src/modules/contracts/services/tax-memory.spec.ts src/modules/contracts/services/tariff-library.service.spec.ts src/modules/contracts/services/monthly-inputs-ocr-edit.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/documents/controllers/documents.upload-http.spec.ts
         working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts
+        working-directory: backend
+      - run: node test/eva-automatic-intake.cjs
+        working-directory: backend
       - run: node test/documented-settlements.cjs
         working-directory: backend
       - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-navigation-context.spec.ts src/modules/ocr/invoice-identity-with-history.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/licenses/services/licenses.service.spec.ts src/modules/ocr/ocr-calculation-context.service.spec.ts
@@ -202,6 +213,8 @@ jobs:
       - run: npm ci --ignore-scripts
         working-directory: frontend
       - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/ccee-cost-review.cjs && node test/supplier-invoice-evidence.cjs && node test/eva-guided-review.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
+        working-directory: frontend
+      - run: node test/automatic-intake.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

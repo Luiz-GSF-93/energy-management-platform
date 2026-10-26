@@ -1,5 +1,6 @@
 'use client';
 import { FormEvent, useCallback, useEffect, useState, useRef } from 'react';
+import AutomaticInvoiceIntake from '@/app/components/AutomaticInvoiceIntake';
 import DocumentDialog from './DocumentDialog';
 import DocumentCatalog,{documentTags,type CatalogDocument} from './DocumentCatalog';
 import DocumentEvidenceWorkspace from '@/app/components/DocumentEvidenceWorkspace';
@@ -32,6 +33,7 @@ function DocumentsContent() {
   const [attempt,setAttempt] = useState(0);
   const [inbox,setInbox]=useState<InboxEntry[]>([]),[inboxLoaded,setInboxLoaded]=useState(false);
   const [updates,setUpdates]=useState<Record<string,InboxUpdate>>({}),[activated,setActivated]=useState<string[]>([]);
+  const [automaticEnabled,setAutomaticEnabled]=useState(false),[automaticOpen,setAutomaticOpen]=useState(0);
   const [showUpload,setShowUpload]=useState(false),[previousDocument,setPreviousDocument]=useState<Document|null>(null),[ocrId,setOcrId]=useState(''),[uploadTag,setUploadTag]=useState('DRAFT');
   const [opened,setOpened]=useState<{id:string;request:number}|null>(null);
   const scope=inboxScope(context);
@@ -128,7 +130,9 @@ function DocumentsContent() {
     <header className="backoffice-page__header"><h1 className="backoffice-page__title">Documentos</h1><p>Gerencie faturas, contratos, notas e modelos por cliente, unidade, classificação e versão.</p></header>
     {error && <div><p role="alert">{error}</p><button type="button" disabled={busy} onClick={()=>{setError('');setAttempt(n=>n+1);}}>Tentar carregar novamente</button></div>}{notice && <p role="status">{notice}</p>}
     {loading ? <p role="status">Carregando documentos…</p> : <>
-      <DocumentCatalog documents={documents} types={types} canUpload={canUpload} canEdit={hasPermission('613b71d0-67db-4761-9e11-61fdf63ac8d5')} canApprove={!!context&&context.scope!=='global'&&(['gestor','admin_org'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')} onNew={()=>{setDropFile(null);setError('');setPreviousDocument(null);setUploadTag('DRAFT');setCustomer('');setShowUpload(true);}} onVersion={d=>{setDropFile(null);setError('');setPreviousDocument(d as Document);setUploadTag('REVIEWED');setCustomer(d.customer_id);setShowUpload(true);}} onReload={()=>setAttempt(n=>n+1)} onPreview={id=>void preview(id)} onDownload={id=>void download(id)} onOcr={id=>{if(canAssist&&!inbox.some(v=>v.id===id))track(id);setOcrId(id);setOpened(old=>({id,request:(old?.request??0)+1}));}}/>
+      <AutomaticInvoiceIntake customers={customers} units={units} openRequest={automaticOpen} onEnabled={setAutomaticEnabled} canUpload={canUpload} onUpdated={()=>setAttempt(n=>n+1)}/>
+      <DocumentCatalog documents={documents} types={types} canUpload={canUpload} canEdit={hasPermission('613b71d0-67db-4761-9e11-61fdf63ac8d5')} canApprove={!!context&&context.scope!=='global'&&(['gestor','admin_org'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')} onNew={()=>{if(automaticEnabled){setAutomaticOpen(n=>n+1);return;}setDropFile(null);setError('');setPreviousDocument(null);setUploadTag('DRAFT');setCustomer('');setShowUpload(true);}} onVersion={d=>{setDropFile(null);setError('');setPreviousDocument(d as Document);setUploadTag('REVIEWED');setCustomer(d.customer_id);setShowUpload(true);}} onReload={()=>setAttempt(n=>n+1)} onPreview={id=>void preview(id)} onDownload={id=>void download(id)} onOcr={id=>{if(canAssist&&!inbox.some(v=>v.id===id))track(id);setOcrId(id);setOpened(old=>({id,request:(old?.request??0)+1}));}}/>
+      {canUpload&&automaticEnabled?<button onClick={()=>{setPreviousDocument(null);setDropFile(null);setError('');setShowUpload(true);}}>Cadastro detalhado de outros documentos</button>:null}
       {canUpload && showUpload && <DocumentDialog label="Inserir documento" busy={busy} onClose={()=>setShowUpload(false)}><button disabled={busy} onClick={()=>setShowUpload(false)} autoFocus>Fechar cadastro</button><form key={organizationId} onInvalidCapture={e=>{let d=(e.target as HTMLElement).closest('details');while(d){d.open=true;d=d.parentElement?.closest('details')??null;}}} onSubmit={send} style={{display:'grid',gap:16,maxWidth:680,padding:24,border:'1px solid var(--color-border)',borderRadius:12,background:'var(--color-surface)',color:'var(--color-text)'}}>
         <h2>{previousDocument?'Nova versão de '+previousDocument.original_filename:'Inserir novo documento'}</h2>{error?<p role="alert">{error}</p>:null}{previousDocument?<p>O sistema mantém cliente, unidade, tipo e competência da versão original e atribui a próxima versão. O retorno começa como Revisado, sem aprovação financeira.</p>:null}<details open><summary>1. Cliente, unidade e competência</summary>
         <p>Selecione o cliente, a unidade e o mês de referência da fatura. Após o envio, somente a fatura de energia da distribuidora segue para OCR e EVA. A leitura é iniciada automaticamente quando habilitada e permitida. A integração depende das validações do conteúdo e do cadastro.</p>

@@ -1,0 +1,5 @@
+.section{margin:1rem 0;padding:1rem;border:1px solid var(--color-border,#385b78);border-radius:12px;background:var(--color-surface,#0c2741)}
+.section h3{margin-top:0}.section>button{margin:0 .5rem .5rem 0}.section details{margin-top:.75rem}.section summary{cursor:pointer;font-weight:600}
+.receipt{padding:1rem 0;border-top:1px solid var(--color-border,#385b78);overflow-wrap:anywhere}.receipt p{margin:.4rem 0}.receipt a{display:inline-block;margin:.5rem 0}
+.form{display:grid;gap:1rem;max-width:800px}.form label{display:flex;flex-direction:column;gap:.4rem}.form label:has(input[type=checkbox]){flex-direction:row;align-items:flex-start}.form input[type=file],.form select,.form textarea,.form input[type=month]{width:100%;max-width:100%;box-sizing:border-box}.form textarea{min-height:90px}.form button{width:fit-content;max-width:100%}
+@media(max-width:600px){.section{padding:.75rem}.section>button,.form button{width:100%}}
