@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {extractPdfText} from './eva-pdf-text.extractor';
 import {contractAnnexEvidence,sourcePreparationEnabled,sameContractDecimal,contractPartyMatches} from './source-preparation-v3';
-import {invoiceIdentityPreflight} from './invoice-identity-preflight';
+import {invoiceIdentityPreflight,invoiceIdentityText} from './invoice-identity-preflight';
 import {invoiceIdentityWithHistory} from './invoice-identity-with-history';
 import {structuredSpotMonth} from './monthly-supplier-mode';
 
@@ -44,9 +44,20 @@ export class SourcePreparationService{
   const pending=(async()=>{
    let native:Promise<Awaited<ReturnType<typeof extractPdfText>>>|undefined;
    const read=()=>native??=extractPdfText(bytes,20000);
-   const proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,'application/pdf',registration,r.data.file_hash,{org,customer,unit},20000,read);
+   let proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,r.data.mime_type??'application/pdf',registration,r.data.file_hash,{org,customer,unit},20000,read);
+   const nativeMatch=proof.state==='MATCH';
+   if(!nativeMatch&&process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
+    const stored=await this.db.getClient().rpc('eva_intake_identity_text',{p_org:org,p_customer:customer,p_unit:unit,p_document:document,p_hash:r.data.file_hash});
+    if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura original preservada.');
+    const evidence=stored.data;
+    if(typeof evidence?.text==='string'&&evidence.text.length<=2097152){
+     const lineage=evidence.lineage,reg=lineage?.editIds?.length?{...registration,auditedUnitNumbers:lineage.codes}:registration;
+     const checks=invoiceIdentityText(evidence.text,reg);
+     if(checks.state==='MATCH')proof={version:'invoice-identity-preflight-v1',fileHash:r.data.file_hash,registration:reg,...checks,sourcePages:evidence.pages,...(lineage?.editIds?.length?{registrationEditIds:lineage.editIds}:{})} as any;
+    }
+   }
    if(proof.state==='MATCH'){
-    (proof as any).nativeInvoiceCredits=nativeInvoiceCredits(await read(),r.data.id,r.data.file_hash);
+    if(nativeMatch)(proof as any).nativeInvoiceCredits=nativeInvoiceCredits(await read(),r.data.id,r.data.file_hash);
     if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
    return proof;
   })();
@@ -67,6 +78,11 @@ export class SourcePreparationService{
   await this.verifiedSupplierInvoice(c,id,fileHash);
   const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('id',id).maybeSingle();
   if(r.error||!r.data||r.data.file_hash!==fileHash||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month)throw new ServiceUnavailableException('Nota mudou durante a extração local.');
+  if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
+   const stored=await this.db.getClient().rpc('eva_intake_supplier_text',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
+   if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura preservada da nota.');
+   if(typeof stored.data==='string'&&stored.data.length<=2097152)return {kind:supplierDocumentKind(stored.data),proposal:supplierInvoiceProposal(stored.data,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash})};
+  }
   const key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
   // Metadata and the verified-bytes check above still run on every request.
   // Do not download the same hashed PDF again merely to reuse its local text.
