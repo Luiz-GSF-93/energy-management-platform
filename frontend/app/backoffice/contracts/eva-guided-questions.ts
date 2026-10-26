@@ -4,10 +4,10 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
  if(!report||report.approvalEligible||!Array.isArray(report.units))return [];
  const roots=new Map<string,GuidedQuestion>();
  const add=(unit:any,section:string,code:string,message:string)=>{
-  const key=unit.id+':'+(code==='CCEE_ESTIMATE_REVIEW'?code:section),old=roots.get(key);
+  const key=unit.id+':'+(['CCEE_ESTIMATE_REVIEW','CCEE_COVERAGE'].includes(code)?code:section),old=roots.get(key);
   if(old){if(!old.messages.includes(message))old.messages.push(message);return;}
   const pattern=section==='costs'?/^costs:|^supplier:tax/:section==='monthly'?/^consumption|^demand|^reactive/:section==='supply'?/^supplier:/:section==='management'?/^fee:/:/^tariff:|^tax:|^acr:/;
-  roots.set(key,{key,unitId:unit.id,section,code,label:code==='SUPPLIER_INVOICE_TAX'?'Como considerar o ICMS da nota do fornecedor?':code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
+  roots.set(key,{key,unitId:unit.id,section,code,label:code==='CCEE_COVERAGE'?'Quais são os custos CCEE desta competência?':code==='SUPPLIER_INVOICE_TAX'?'Como considerar o ICMS da nota do fornecedor?':code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
  };
  for(const unit of report.units){
   const actions=(report.pendingActions??[]).filter((a:any)=>a.unitId===unit.id&&a.message);

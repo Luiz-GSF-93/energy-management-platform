@@ -14,6 +14,9 @@ on:
       - "frontend/app/components/AutomaticInvoiceIntake*"
       - "frontend/app/components/PortalInvoices.tsx"
       - "frontend/test/automatic-intake.cjs"
+      - "frontend/test/guided-ccee-entry.cjs"
+      - "frontend/app/backoffice/contracts/MonthlyCosts.tsx"
+      - "frontend/app/backoffice/contracts/EvaGuidedReview.tsx"
       - "frontend/test/documents-upload-routing.cjs"
       - "backend/src/database/migrations/20261220_ocr_audited_installation_identity.sql"
       - "backend/src/database/migrations/20261221_eva_closing_history_projection.sql"
@@ -220,7 +223,7 @@ jobs:
         working-directory: frontend
       - run: node test/contract-index-memory.cjs && node test/source-preparation-evidence.cjs && node test/eva-closing-changes.cjs && node test/eva-tariff-dialogue.cjs && node test/eva-assisted-closing.cjs && node test/ccee-cost-review.cjs && node test/supplier-invoice-evidence.cjs && node test/eva-guided-review.cjs && node test/published-financial-dashboard.cjs && node test/client-portal.cjs && node test/financial-analytics.cjs && node test/calculation-autofill.cjs && node test/ocr-resolution-ui.cjs && node test/preparation-navigation.cjs
         working-directory: frontend
-      - run: node test/automatic-intake.cjs && node test/documents-upload-routing.cjs
+      - run: node test/automatic-intake.cjs && node test/documents-upload-routing.cjs && node test/guided-ccee-entry.cjs && node test/monthly-cost-ocr-review.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
