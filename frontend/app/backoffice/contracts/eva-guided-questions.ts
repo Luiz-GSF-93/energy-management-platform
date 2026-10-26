@@ -7,7 +7,7 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
   const key=unit.id+':'+(code==='CCEE_ESTIMATE_REVIEW'?code:section),old=roots.get(key);
   if(old){if(!old.messages.includes(message))old.messages.push(message);return;}
   const pattern=section==='costs'?/^costs:|^supplier:tax/:section==='monthly'?/^consumption|^demand|^reactive/:section==='supply'?/^supplier:/:section==='management'?/^fee:/:/^tariff:|^tax:|^acr:/;
-  roots.set(key,{key,unitId:unit.id,section,code,label:code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
+  roots.set(key,{key,unitId:unit.id,section,code,label:code==='SUPPLIER_INVOICE_TAX'?'Como considerar o ICMS da nota do fornecedor?':code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
  };
  for(const unit of report.units){
   const actions=(report.pendingActions??[]).filter((a:any)=>a.unitId===unit.id&&a.message);

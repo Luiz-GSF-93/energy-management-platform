@@ -24,5 +24,17 @@ const acknowledge=()=>act(async()=>document.querySelector('input[type=checkbox]'
  await act(async()=>{for(const prefix of ['Conferi o volume','Conferi que o lançamento'])[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith(prefix)).querySelector('input').click();});
  assert(!calls.some(([,o])=>o?.method==='POST'));const save=[...document.querySelectorAll('button')].find(b=>b.textContent==='Salvar conciliação documentada e reconferir');assert(!save.disabled,document.body.textContent);await act(async()=>save.click());
  const monthly=calls.find(([,o])=>o?.method==='POST')[1].body.manual;assert.equal(monthly.fixedFee,'1309.98');assert.equal(monthly.supplierInvoiceAllocation,undefined,'Manual fiscal reconciliation replaces the earlier coverage path');assert(monthly.supplierSettlement.reason.includes('relatório mensal'));assert.equal(monthly.supplierSettlement.documentId,nf.documentId);assert(!calls.some(([p])=>/decision|publication|ocr/.test(p)));
+
+ // The fiscal-only question preserves accepted coverage and cannot save by opening it.
+ plan.contractDraft={format:'supplier-invoice-evidence-1',requirements:[{code:'SUPPLIER_INVOICE_TAX'}]};
+ nf.taxEvidence={kind:'ORIGIN_NON_INCIDENCE_REVIEW',source:'Origin statement does not attest destination exemption'};
+ plan.manualOverrides={fixedFee:'10.00',supplierInvoiceAllocation:{documentId:nf.documentId,fileHash:nf.fileHash,coverage:'FULL',reason:'Previously accepted full invoice coverage with separate measurement'}};
+ setup();await act(async()=>root.render(React.createElement(C,{key:'fiscal-only',unitId:'unit',month:'2026-01',taxOnly:true,fiscalPreview:{base:'300.00',rate:'18',icmsAmount:'65.85',amount:'365.85'},onSaved:()=>{}})));
+ assert(document.body.textContent.includes('Falta somente o tratamento fiscal'));assert(!document.querySelector('input[inputmode=decimal]'));assert(!calls.some(([,o])=>o?.method==='POST'));
+ await change('Como considerar o valor da NF?','NET_DESTINATION_ICMS');assert(document.body.textContent.includes('65.85'));await change('Fonte e justificativa desta confirmação','Original supplier NF and destination ICMS confirmed for this month.');
+ const fiscalButton=()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Registrar confirmação fiscal');assert(fiscalButton().disabled);
+ await act(async()=>[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Conferi o tratamento selecionado')).querySelector('input').click());await act(async()=>fiscalButton().click());
+ const fiscalManual=calls.find(([,o])=>o?.method==='POST')[1].body.manual;
+ assert.equal(fiscalManual.fixedFee,'10.00');assert.equal(fiscalManual.supplierInvoiceAllocation.reason,plan.manualOverrides.supplierInvoiceAllocation.reason);assert.equal(fiscalManual.supplierInvoiceAllocation.taxConfirmation.treatment,'NET_DESTINATION_ICMS');assert(document.body.textContent.includes('Confirmação fiscal registrada'));assert(!calls.some(([p])=>/decision|publication|ocr/.test(p)));
  console.log('PASS supplier invoice UI: extracted values, scoped confirmation, documented extra, stale sources and uncertain writes');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
