@@ -37,6 +37,15 @@ function DocumentsContent() {
   const scope=inboxScope(context);
   const currentOrg = useRef(organizationId);
 
+  const linkedDocument=useRef('');
+  useEffect(()=>{
+    if(loading)return;
+    const ids=new URLSearchParams(window.location.search).getAll('ocrDocument');
+    if(ids.length!==1||!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(ids[0])||linkedDocument.current===organizationId+':'+ids[0])return;
+    const doc=documents.find(d=>d.id===ids[0]&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR');
+    if(!doc)return;
+    linkedDocument.current=organizationId+':'+doc.id;setCustomer(doc.customer_id);setOcrId(doc.id);
+  },[loading,documents,organizationId]);
   const canUpload = hasPermission(uploadPermission);
   const canView = hasPermission(viewPermission);
   const canAssist=!!context&&context.scope!=='global'&&(['operacional','gestor','admin_org'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')&&hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')&&canView;

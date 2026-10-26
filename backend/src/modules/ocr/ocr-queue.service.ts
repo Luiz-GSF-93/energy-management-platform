@@ -86,6 +86,26 @@ export class OcrQueueService {
   if(required.length!==4||required.some(f=>f.comparison!=='EQUAL'||!f.candidates.length||f.candidates.some(v=>!v.pages.length||v.issues.includes('UNVERIFIED_SOURCE'))))throw new ConflictException('EVA: UC, CNPJ, endereço ou competência não conferem com a unidade selecionada. Solicite atendimento; nenhum preenchimento automático foi iniciado.');
   return identity;
  }
+ /** Stored ownership is available before extraction; it is never proof of OCR or import. */
+ async navigationContext(org:string,document:string){
+  if(!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Documento inválido.');
+  await this.licenses.requireEntitlement(org,'document_management');
+  const db=this.db.getClient();
+  const d=await db.from('documents').select('id,organization_id,customer_id,consumer_unit_id,reference_month,document_type,file_verified').eq('organization_id',org).eq('id',document).maybeSingle();
+  if(d.error)throw new ServiceUnavailableException('Não foi possível consultar o vínculo da fatura.');
+  const doc=d.data;
+  if(!doc||doc.organization_id!==org||doc.id!==document||doc.document_type!=='INVOICE_DISTRIBUTOR'||doc.file_verified!==true)throw new NotFoundException('Fatura verificada não encontrada nesta organização.');
+  const [u,c,j]=await Promise.all([
+   db.from('consumer_units').select('id,organization_id,customer_id,status').eq('organization_id',org).eq('customer_id',doc.customer_id).eq('id',doc.consumer_unit_id).is('deleted_at',null).maybeSingle(),
+   db.from('customers').select('id,organization_id,status').eq('organization_id',org).eq('id',doc.customer_id).is('deleted_at',null).maybeSingle(),
+   db.from('document_ocr_jobs').select('id,state').eq('organization_id',org).eq('document_id',document).maybeSingle(),
+  ]);
+  if(u.error||c.error||j.error)throw new ServiceUnavailableException('Não foi possível conferir o vínculo e o andamento da fatura.');
+  if(!u.data||!c.data||u.data.id!==doc.consumer_unit_id||u.data.organization_id!==org||u.data.customer_id!==doc.customer_id||c.data.id!==doc.customer_id||c.data.organization_id!==org||u.data.status!=='ACTIVE'||c.data.status!=='ACTIVE')throw new ConflictException('O cliente ou a unidade da fatura requer conferência cadastral.');
+  const month=String(doc.reference_month).slice(0,7);
+  if(!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(month))throw new ConflictException('Competência da fatura inválida.');
+  return {documentId:doc.id,customerId:doc.customer_id,unitId:doc.consumer_unit_id,month,ocrState:j.data?.state??'NOT_STARTED',canImport:false as const};
+ }
  async status(org:string,document:string){
   await this.licenses.requireEntitlement(org,'document_management');
   const {data,error}=await this.db.getClient().from('document_ocr_jobs').select('id,state,created_at,updated_at,error_code').eq('organization_id',org).eq('document_id',document).maybeSingle();

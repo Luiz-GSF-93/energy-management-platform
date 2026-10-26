@@ -7,6 +7,10 @@ import {CalculationPreparationService} from '../contracts/services/preparation.s
 @Injectable()
 export class OcrCalculationContextService {
  constructor(private queue:OcrQueueService,private preparation:CalculationPreparationService){}
+ async navigation(document:string,t:TenantContext){
+  if(!t?.userId||!t.organizationId||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p)))throw new ForbiddenException('A consulta exige acesso aos documentos e contratos da organização.');
+  return this.queue.navigationContext(t.organizationId,document);
+ }
  async inspect(document:string,t:TenantContext){
   if(!t?.userId||!t.organizationId||![P.DOCUMENTS_VIEW,P.ORGANIZATION_CONTRACTS_VIEW].every(p=>t.permissions?.includes(p)))throw new ForbiddenException('A consulta exige acesso aos documentos e contratos da organização.');
   const source=await this.queue.reviewSource(t.organizationId,document),month=String(source.doc.reference_month).slice(0,7);
