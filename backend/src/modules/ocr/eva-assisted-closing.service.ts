@@ -68,7 +68,7 @@ export class EvaAssistedClosingService{
     if(u.status!=='ACTIVE'||(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state)))continue;
     const candidate=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);snapshots.set(u.id,candidate);
     if(!candidate.available||!(candidate.c.ready||candidate.c.proposalReady))continue;
-    const result=await this.autofill.prepare({consumerUnitId:u.id,month:q.month,requestId:resolutionId(['assisted-autofill-1',t.organizationId,b.requestId,u.id,candidate.basis]),token:candidate.token},t);
+    const result=await this.autofill.prepare({consumerUnitId:u.id,month:q.month,requestId:resolutionId(['assisted-autofill-2',t.organizationId,q.month,u.id,candidate.basis]),token:candidate.token},t);
     if(!['PREPARED','PARTIAL'].includes(result.run?.state))throw new ServiceUnavailableException('Preparação dos rascunhos ainda não confirmada. Consulte o histórico antes de repetir.');
     preparedDrafts=true;
    }
@@ -90,6 +90,10 @@ export class EvaAssistedClosingService{
   if(contractClosingDraftEnabled())for(const e of entries){const memory=e.plan?.contractDraft?.memory;if(memory&&!(sources.contractMemories??[]).some((m:any)=>m.id===memory.id&&m.organization_id===t.organizationId&&m.customer_id===primary.customer_id&&m.consumer_unit_id===e.unitId&&autofillHash(m)===memory.hash))throw new ConflictException('A memória contratual mudou durante a captura. Reconfira as fontes antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
+  // A read/recheck without a changed proposal must not create another version.
+  // Financial decisions still perform their existing fresh-source checks.
+  const latest=rights.rows[0];
+  if(latest?.state==='INCOMPLETE'&&latest.payload_hash===hash&&latest.customer_id===primary.customer_id&&latest.month===q.month&&autofillHash(latest.report)===hash)return {row:latest,replayed:true};
   const r=await this.rpc('reserve',q,t,b.requestId,{basis,hash,report,sources});
   if(!r.acquired)return {row:r.row,replayed:true};
   return {row:await this.rpc('finish',q,t,r.row.id,{}),replayed:false};
