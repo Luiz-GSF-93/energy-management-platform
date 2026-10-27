@@ -1,14 +1,19 @@
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import {inflateRawSync} from 'node:zlib';
+import {Worker} from 'node:worker_threads';
+import {ServiceUnavailableException} from '@nestjs/common';
 export const DOCUMENT_BUCKET = 'energy-documents-private';
 export const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 export interface DocumentFile { buffer: Buffer; originalname: string; mimetype: string; size: number; }
 export function inspectDocument(file?: DocumentFile, evidence=false) {
+  return inspectContainer(file,evidence,false);
+}
+function inspectContainer(file:DocumentFile|undefined,evidence:boolean,verifiedPdf:boolean) {
   if (!file || !Buffer.isBuffer(file.buffer) || !file.buffer.length) throw new BadRequestException('Selecione um arquivo');
   const b = file.buffer;
   if (b.length > MAX_DOCUMENT_BYTES) throw new PayloadTooLargeException('O arquivo deve ter no máximo 15 MB');
   let mime: string, extension: string;
-  if (b.subarray(0,5).toString('ascii') === '%PDF-' && b.subarray(Math.max(0,b.length-1024)).includes(Buffer.from('%%EOF'))) { mime='application/pdf'; extension='pdf'; }
+  if (b.subarray(0,5).toString('ascii') === '%PDF-' && (verifiedPdf || b.subarray(Math.max(0,b.length-1024)).includes(Buffer.from('%%EOF')))) { mime='application/pdf'; extension='pdf'; }
   else if (b.length >= 33 && b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) && b.subarray(12,16).toString('ascii') === 'IHDR' && b.subarray(-8,-4).toString('ascii') === 'IEND') { mime='image/png'; extension='png'; }
   else if (b.length >= 4 && b[0]===255 && b[1]===216 && b[2]===255 && b[b.length-2]===255 && b[b.length-1]===217) { mime='image/jpeg'; extension='jpg'; }
   else if(evidence&&/\.csv$/i.test(file.originalname)&&['text/csv','application/vnd.ms-excel','application/octet-stream',''].includes(file.mimetype)){
@@ -41,4 +46,35 @@ export function inspectSpreadsheet(b:Buffer){
   }
   if(p!==e||!names.has('[Content_Types].xml')||!names.has('xl/workbook.xml')||![...names].some(n=>/^xl\/worksheets\/sheet[^/]*\.xml$/.test(n)))throw new Error();
  }catch{throw new BadRequestException('Excel inválido ou não permitido. Envie XLSX sem macros, links externos e até 20 MB descompactados.');}
+}
+
+// Some distributor downloads append a portal footer after a complete PDF. Keep
+// the exact source bytes/hash; only the exceptional container needs parsing.
+let pdfAdmissions=0;
+export async function inspectDocumentUpload(file?:DocumentFile,evidence=false){
+ try{return inspectDocument(file,evidence);}catch(originalError){
+  const b=file?.buffer;
+  if(!(originalError instanceof BadRequestException)||!file||!Buffer.isBuffer(b)||b.length>MAX_DOCUMENT_BYTES||file.mimetype!=='application/pdf'||!/^%PDF-(?:1\.[0-9]|2\.0)(?:\r|\n|\s)/.test(b.subarray(0,12).toString('ascii')))throw originalError;
+  const eof=b.lastIndexOf(Buffer.from('%%EOF'));
+  if(eof<0||b.length-eof>64*1024||b.length-eof<=1024)throw originalError;
+  const end=b.subarray(Math.max(0,eof-128),eof).toString('ascii').match(/startxref\s+(\d+)\s*$/);
+  const offset=end?Number(end[1]):-1;
+  if(!Number.isSafeInteger(offset)||offset<0||offset>=eof)throw originalError;
+  const xref=b.subarray(offset,Math.min(eof,offset+256)).toString('latin1');
+  if(!/^xref\s/.test(xref)&&!/^\d+\s+\d+\s+obj\s*<<[\s\S]*\/Type\s*\/XRef\b/.test(xref))throw originalError;
+  if(pdfAdmissions>=2)throw new ServiceUnavailableException('Validação de PDF ocupada. Aguarde e tente o envio novamente.');
+  pdfAdmissions++;
+  try{
+   await new Promise<void>((resolve,reject)=>{
+    let worker:Worker|undefined,settled=false;
+    const done=(ok:boolean)=>{if(settled)return;settled=true;clearTimeout(timer);if(worker)void worker.terminate();ok?resolve():reject(new BadRequestException('PDF ilegível, incompleto ou protegido. Exporte um PDF válido e tente novamente.'));};
+    const timer=setTimeout(()=>done(false),5000);
+    try{
+     worker=new Worker(`const {parentPort,workerData}=require('node:worker_threads');const {PDFDocument}=require(workerData.module);PDFDocument.load(workerData.bytes,{ignoreEncryption:false,throwOnInvalidObject:true,updateMetadata:false}).then(d=>parentPort.postMessage(!d.isEncrypted&&d.getPageCount()>0&&d.getPageCount()<=1000)).catch(()=>parentPort.postMessage(false));`,{eval:true,workerData:{bytes:Uint8Array.from(b.subarray(0,eof+5)),module:require.resolve('pdf-lib')},resourceLimits:{maxOldGenerationSizeMb:128,maxYoungGenerationSizeMb:32,stackSizeMb:4}});
+     worker.once('message',value=>done(value===true));worker.once('error',()=>done(false));worker.once('exit',()=>done(false));
+    }catch{done(false);}
+   });
+   return inspectContainer(file,evidence,true);
+  }finally{pdfAdmissions--;}
+ }
 }

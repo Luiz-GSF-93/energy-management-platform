@@ -1,7 +1,7 @@
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,NotFoundException,ServiceUnavailableException} from '@nestjs/common';
 import {createHash,randomUUID} from 'crypto';
 import {SupabaseService} from '../../services/supabase.service';
-import {DocumentFile,inspectDocument} from '../documents/services/document-file';
+import {DocumentFile,inspectDocumentUpload} from '../documents/services/document-file';
 export const PREPARE='a7c8f257-580d-4d39-8900-4a5788068201',CONFIRM='a7c8f257-580d-4d39-8900-4a5788068202',CASES='a7c8f257-580d-4d39-8900-4a5788068203',ASSIGNED='a7c8f257-580d-4d39-8900-4a5788068204';
 const bucket='platform-financial-evidence';
 export type WorkflowActor={userId:string;ip?:string;agent?:string};
@@ -27,7 +27,7 @@ export class PlatformWorkflowsService{
  }
  async upload(actor:WorkflowActor,file?:DocumentFile){
   await this.read(actor,'finance'); // Fresh authorization before any object is created.
-  const detected=inspectDocument(file);
+  const detected=await inspectDocumentUpload(file);
   if(detected.mime!=='application/pdf'||detected.name.length>200)throw new BadRequestException('Envie o documento financeiro em PDF, até 10 MB.');
   const bytes=file!.buffer,id=randomUUID(),path=id+'/evidence.pdf',sha256=createHash('sha256').update(bytes).digest('hex');
   const existing=await this.rpc('find_platform_financial_evidence',{p_actor:actor.userId,p_hash:sha256});
