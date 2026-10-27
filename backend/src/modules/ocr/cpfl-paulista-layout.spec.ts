@@ -10,6 +10,9 @@ function fixture(){
  return {raw,field,table,operation};
 }
 describe('CPFL Paulista layout library',()=>{
+ it.each(['Ressarcimento DIC Mensal','Ressarcimento FIC Trimestral','Ressarcimento DMIC','Ressarcimento DICRI Anual'])('preserves printed continuity credit %s as an existing refund',description=>{const {raw,table}=fixture();table([columns,[description,'','','','','3.076,74-','','','','','']]);const row=extractCpflPaulistaLayout(raw).operations[0];expect(row).toMatchObject({component:'REFUND',role:'CREDIT'});expect(row.fields.amount.decimal).toBe('-3076.74');expect(row.fields.amount.issues).not.toContain('UNVERIFIED_SOURCE');expect(row.issues).not.toContain('UNMAPPED_COMPONENT');});
+ it('does not guess a refund from an unknown compensation label',()=>{const {raw,operation}=fixture();operation('Ressarcimento não identificado');expect(extractCpflPaulistaLayout(raw).operations[0].role).toBe('UNKNOWN');});
+
  it.each(['Energia ACL Fora de Ponta','Tusd Enc Cons F Ponta','TUSD Fora Ponta'])('keeps off-peak alias %s off-peak',s=>expect(classifyElectricalLine(s).period).toBe('OFF_PEAK'));
  it('does not assign a combined peak/off-peak label',()=>expect(classifyElectricalLine('TUSD F Ponta e Ponta').period).toBe('UNSPECIFIED'));
  it('does not invent confidence for empty values',()=>{const {raw,field}=fixture();expect(electricalField(raw,field('',.999)).confidence).toBeNull();});

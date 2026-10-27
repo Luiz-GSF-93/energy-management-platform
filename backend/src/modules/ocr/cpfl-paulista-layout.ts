@@ -23,7 +23,7 @@ function classify(description:string,unit:string){
  if(/^(SUBTOTAL|TOTAL DISTRIBUIDORA|TOTAL A PAGAR)$/.test(d))return {...base,component:d.replace(/ /g,'_'),role:'TOTAL' as const};
  if(/^(DESCONTOS INFORMATIVOS|AJUSTE SUBVENCAO)/.test(d))return {...base,component:'INFORMATIVE_ADJUSTMENT',role:'INFORMATION' as const};
  if(d==='DEVOLUCAO')return {...base,component:'ADJUSTMENTS_SUBTOTAL',role:'TOTAL' as const};
- if(/^(DEVOL|DEVOLUCAO)/.test(d)){component='REFUND';role='CREDIT';}
+ if(/^(DEVOL|DEVOLUCAO)/.test(d)||/^RESSARCIMENTO (?:DIC|FIC|DMIC|DICRI)(?: (?:MENSAL|TRIMESTRAL|ANUAL))?$/.test(d)){component='REFUND';role='CREDIT';}
  else if(/^DESC ENERGIA ACL/.test(d)){component='ACL_ENERGY_DISCOUNT';role='CREDIT';}
  else if(/^CREDITO SUBVENCAO/.test(d)){component='SUBSIDY_CREDIT';role='CREDIT';}
  else if(/^SUBVENCAO TARIFARIA/.test(d))component='TARIFF_SUBSIDY';

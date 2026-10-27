@@ -63,7 +63,17 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
   const horizontalTotal=cells.length===6&&!cells.slice(0,5).some(v=>Number(parse(v))!==0)&&parse(cells[5])===amount;
   if(supplyPeriods.length!==1||!horizontalTotal&&!nativeTotal||!billing||parse(billing[1])!==amount)return null;
  }
+
+ // Positive ICMS explicitly printed on the reconciled total is already included.
+ // A zero or absent cell never proves exemption or a final tax treatment.
+ const taxSummary=t.split('CALCULO DO IMPOSTO');
+ const taxCell=(label:string)=>{const matches=[...(taxSummary.length===2?taxSummary[1]:'').matchAll(new RegExp('(?:^|\\n)[ \\t]*'+label+'[ \\t]*\\n[ \\t]*'+decimal+'(?=\\s|$)','g'))];return matches.length===1?parse(matches[0][1]):null;};
+ const printedIcms=taxCell('VALOR DO ICMS'),printedBase=taxCell('BASE (?:DE CALCULO DO ICMS|CALC(?:ULO)? ICMS)');
+ const includedIcms=printedIcms!==null&&printedBase!==null&&scale(printedBase)===scale(amount)&&scale(printedIcms)>0n&&scale(printedIcms)<scale(printedBase);
+ const taxTreatment=includedIcms&&!destinationIcms?'INCLUDED':destinationIcms&&!includedIcms?'NET_DESTINATION_ICMS':'UNCONFIRMED';
+ const taxEvidence=includedIcms?{kind:destinationIcms?'CONFLICTING_ICMS':'INVOICE_ICMS_INCLUDED',source:destinationIcms?'A NF mostra ICMS positivo e também atribui recolhimento ao destinatário; conferir a composição para não duplicar tributos.':'ICMS positivo destacado na NF sobre base igual ao total faturado conciliado; imposto já incluído, sem novo acréscimo.',icmsBase:printedBase,icmsAmount:printedIcms}:null;
+
  // This is a statement printed on the invoice, not proof of exemption at destination.
  const originStatement=/NAO INCIDENCIA DE ICMS CONFORME ART(?:IGO|\.)?\s*(?:TERCEIRO|3[Oº°]?) DA LEI COMPLEMENTAR (?:87\/96|8796)\b/.test(fiscalText)&&/\b2716\.?00\.?00\s+041\s+6252\s+MWH\b/.test(section)&&/\bVALOR DO ICMS\s*\n\s*0,00(?=\s|$)/.test(t);
- return {format:'supplier-invoice-proposal-1',month,quantityMwh,pricePerMwh,amount,...source,nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment:destinationIcms?'NET_DESTINATION_ICMS':'UNCONFIRMED',taxEvidence:destinationIcms?{kind:'DESTINATION_ICMS',source:'Informações complementares da NF: recolhimento do ICMS atribuído ao destinatário; zeros impressos não representam isenção.'}:originStatement?{kind:'ORIGIN_NON_INCIDENCE_REVIEW',source:'A NF declara não incidência de ICMS conforme art. terceiro da LC 87/96. O tratamento tributário final da unidade ainda exige revisão; não foi declarada isenção no destino.'}:null,observations:['Valores faturados da NF propostos para conferência; não comprovam pagamento ou cobertura integral por si só. Volume comprado preservado separadamente do consumo medido.']};
+ return {format:'supplier-invoice-proposal-1',month,quantityMwh,pricePerMwh,amount,...source,nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment,taxEvidence:taxEvidence??(destinationIcms?{kind:'DESTINATION_ICMS',source:'Informações complementares da NF: recolhimento do ICMS atribuído ao destinatário; zeros impressos não representam isenção.'}:originStatement?{kind:'ORIGIN_NON_INCIDENCE_REVIEW',source:'A NF declara não incidência de ICMS conforme art. terceiro da LC 87/96. O tratamento tributário final da unidade ainda exige revisão; não foi declarada isenção no destino.'}:null),observations:['Valores faturados da NF propostos para conferência; não comprovam pagamento ou cobertura integral por si só. Volume comprado preservado separadamente do consumo medido.']};
 }
