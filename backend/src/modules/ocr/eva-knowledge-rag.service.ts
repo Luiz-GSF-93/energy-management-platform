@@ -19,6 +19,9 @@ export class EvaKnowledgeRagService{
   selectKnowledge([],{...period,embeddingModel:'text-embedding-3-small',embeddingVersion:'published-pilot-v1'});
   return this.published.retrieve(t,question,period);
  }
+ private async assertLocal(t:TenantContext){if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!t.permissions.includes(P.INTELLIGENCE_AI_USE)||(!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation')||!await this.licenses.available(t.organizationId))throw new ForbiddenException('Biblioteca da EVA exige licença e permissão vigente.');}
+ async retrieveLocal(t:TenantContext,asOf:string){await this.assertLocal(t);return this.published.retrieveLocal(t,asOf);}
+ async revalidateLocal(t:TenantContext,proofs:CorpusProof[]){await this.assertLocal(t);return this.published.revalidateLocal(t,proofs);}
  retrieveClient(t:TenantContext,question:string,period:Pick<KnowledgeQuery,'periodStart'|'periodEnd'|'market'>,unitId:string):Promise<PublishedRagResult>{return this.legacy.retrieveClient(t,question,period,unitId);}
  revalidate(t:TenantContext,proofs:CorpusProof[]){return this.published.revalidate(t,proofs);}
 }
