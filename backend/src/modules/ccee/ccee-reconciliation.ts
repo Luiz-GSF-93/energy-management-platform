@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {extractCpflPaulistaLayout} from '../ocr/cpfl-paulista-layout';
 import {assessmentMatchesDocument} from '../ocr/invoice-assessment';
-import {quantityMicro} from './ccee-private.connector';
+import {quantityMicro,CCEE_HOURLY_TIME_SEMANTICS} from './ccee-private.connector';
 export const CCEE_RECONCILIATION_VERSION='ccee-invoice-v1';
 const decimal=(n:bigint,scale=6)=>{const sign=n<0n?'-':'';n=n<0n?-n:n;const s=n.toString().padStart(scale+1,'0');return sign+s.slice(0,-scale)+'.'+s.slice(-scale);};
 export type InvoiceConsumption={documentId:string;fileHash:string;ocrJobId:string;layoutVersion:string|null;quantityKwh:string|null;start:string|null;end:string|null;includesLosses:boolean|null;identityChecked:boolean;sources:string[];issues:string[];basisEvidence?:{reference:string;actorId:string;kind:'OPERATOR_VERIFIED_SOURCE'}};
@@ -32,16 +32,18 @@ export function verifiedInvoiceBasis(invoice:InvoiceConsumption,basis:any,actorI
 export function measurementCsv(job:any,binding:any){
  if(job.kind!=='MEASUREMENTS'||job.state!=='SUCCEEDED'||!job.result?.complete||!Array.isArray(job.result.data?.rows)||job.result.data.rows.length>744)throw Error('CCEE_EXPORT_COMPLETE_MEASUREMENTS_REQUIRED');
  const month=job.month.slice(0,7),start=Date.parse(month+'-01T00:00:00-03:00'),hours=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).getUTCDate()*24;
+ const labelled=job.result.data.timeSemantics===CCEE_HOURLY_TIME_SEMANTICS;
  const sourceRows=[...job.result.data.rows].sort((a:any,b:any)=>Date.parse(a.end)-Date.parse(b.end));
- if(sourceRows.length!==hours||sourceRows.some((r:any,i:number)=>Date.parse(r.end)!==start+(i+1)*3600000)||! /^[a-f0-9]{64}$/.test(job.result.record?.evidence?.sourceHash??''))throw Error('CCEE_EXPORT_SOURCE_INVALID');
+ if(sourceRows.length!==hours||sourceRows.some((r:any,i:number)=>Date.parse(r.end)!==start+(i+(labelled?0:1))*3600000)||! /^[a-f0-9]{64}$/.test(job.result.record?.evidence?.sourceHash??''))throw Error('CCEE_EXPORT_SOURCE_INVALID');
  if(sourceRows.reduce((sum:bigint,r:any)=>sum+quantityMicro(r.quantityKwh,'kWh'),0n)!==quantityMicro(job.result.data.totalKwh,'kWh'))throw Error('CCEE_EXPORT_SOURCE_INVALID');
  const cell=(v:unknown)=>{let s=String(v??'');if(/^[\s]*[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
- const rows=[['competencia','ponto','fim_intervalo','consumo_ativo_kWh','qualidade','reativo_fonte','base_perdas','tipo_medida','finalidade','job','hash_fonte']];
+ const rows=[['competencia','ponto',labelled?'hora_referencia':'fim_intervalo','consumo_ativo_kWh','qualidade','reativo_fonte','base_perdas','tipo_medida','finalidade','job','hash_fonte']];
  for(const r of sourceRows){quantityMicro(r.quantityKwh,'kWh');if(r.status!=='HCC'||!Number.isFinite(Date.parse(r.end)))throw Error('CCEE_EXPORT_SOURCE_INVALID');rows.push([job.month.slice(0,7),binding.measurement_point,r.end,r.quantityKwh,r.status,r.reactiveSource??'',binding.measurement_basis,job.measurement_kind,job.result.record?.evidence?.finality??'PROVISIONAL',job.id,job.result.record?.evidence?.sourceHash??'']);}
  return '\uFEFF'+rows.map(r=>r.map(cell).join(';')).join('\r\n')+'\r\n';
 }
 /** Exact decimal arithmetic lives in the backend; the UI and EVA never calculate these deltas. */
 export function reconcileConsumption(job:any,binding:any,invoice:InvoiceConsumption){
+ const labelled=job.result?.data?.timeSemantics===CCEE_HOURLY_TIME_SEMANTICS;
  const issues=[...invoice.issues],r=job.result,month=job.month.slice(0,7),start=month+'-01T00:00:00-03:00',end=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),1)).toISOString().slice(0,10)+'T00:00:00-03:00';
  if(job.kind!=='MEASUREMENTS'||job.measurement_kind!=='FINAL'||job.state!=='SUCCEEDED'||!r?.complete||r?.record?.evidence?.finality!=='FINAL')issues.push('CCEE_FINAL_COVERAGE_REQUIRED');
  if(binding.measurement_basis!=='NO_LOSSES'||invoice.includesLosses!==false)issues.push('LOSS_BASES_NOT_COMPARABLE');
@@ -53,20 +55,20 @@ export function reconcileConsumption(job:any,binding:any,invoice:InvoiceConsumpt
  const daily=new Map<string,bigint>(),dailyHours=new Map<string,number>();
  for(const row of (r?.data?.rows??[])){
   if(!Number.isFinite(Date.parse(row.end))||row.status!=='HCC'){issues.push('CCEE_HOURLY_COVERAGE_REVIEW');continue;}
-  const day=new Date(Date.parse(row.end)-3600000-10800000).toISOString().slice(0,10);
+  const day=new Date(Date.parse(row.end)-(labelled?0:3600000)-10800000).toISOString().slice(0,10);
   try{daily.set(day,(daily.get(day)??0n)+quantityMicro(row.quantityKwh,'kWh'));dailyHours.set(day,(dailyHours.get(day)??0)+1);}catch{issues.push('CCEE_HOURLY_QUANTITY_REVIEW');}
  }
  const hours=(Date.parse(end)-Date.parse(start))/3600000,rows=r?.data?.rows??[];
  const sorted=[...rows].sort((a:any,b:any)=>Date.parse(a.end)-Date.parse(b.end));
- if(sorted.length!==hours||sorted.some((row:any,i:number)=>Date.parse(row.end)!==Date.parse(start)+(i+1)*3600000)||ccee===null||[...daily.values()].reduce((a,b)=>a+b,0n)!==ccee)issues.push('CCEE_HOURLY_COVERAGE_REVIEW');
+ if(sorted.length!==hours||sorted.some((row:any,i:number)=>Date.parse(row.end)!==Date.parse(start)+(i+(labelled?0:1))*3600000)||ccee===null||[...daily.values()].reduce((a,b)=>a+b,0n)!==ccee)issues.push('CCEE_HOURLY_COVERAGE_REVIEW');
  const comparable=issues.length===0&&ccee!==null&&billed!==null;
  const delta=comparable?ccee!-billed!:null;
  const percent=delta===null||billed===0n?null:decimal((delta*100000000n+(delta<0n?-billed!/2n:billed!/2n))/billed!);
- const recommendations=['Conferir período efetivo de leitura, ponto, grandeza, qualidade e tratamento de perdas antes de atribuir causa à diferença.','Preservar a fatura e os registros mensais existentes; eventual ajuste deve gerar novo rascunho para revisão.','Consultar fontes oficiais CCEE, ANEEL e da distribuidora publicadas e aplicáveis; este resultado não comprova uma infração normativa.'];
- if(comparable&&billed===0n)recommendations.unshift('Base da fatura igual a zero: percentual indisponível.');
- const payload={formulaVersion:CCEE_RECONCILIATION_VERSION,organizationId:job.organization_id,customerId:binding.customer_id,unitId:binding.consumer_unit_id,month,jobId:job.id,documentId:invoice.documentId,state:comparable?'COMPARABLE':'REVIEW_REQUIRED',cceeKwh:ccee===null?null:decimal(ccee),invoiceKwh:billed===null?null:decimal(billed),deltaKwh:delta===null?null:decimal(delta),deltaPercent:percent,daily:[...daily].sort(([a],[b])=>a.localeCompare(b)).map(([day,n])=>({day,quantityKwh:decimal(n),hours:dailyHours.get(day)??0,expectedHours:24})),issues:[...new Set(issues)],recommendations,invoice,source:{hash:r?.record?.evidence?.sourceHash??null,authorizationId:binding.id,revision:binding.revision,measurementBasis:binding.measurement_basis,intervalStart:start,intervalEnd:end}};
+ const recommendations=['Conferir perÃ­odo efetivo de leitura, ponto, grandeza, qualidade e tratamento de perdas antes de atribuir causa Ã  diferenÃ§a.','Preservar a fatura e os registros mensais existentes; eventual ajuste deve gerar novo rascunho para revisÃ£o.','Consultar fontes oficiais CCEE, ANEEL e da distribuidora publicadas e aplicÃ¡veis; este resultado nÃ£o comprova uma infraÃ§Ã£o normativa.'];
+ if(comparable&&billed===0n)recommendations.unshift('Base da fatura igual a zero: percentual indisponÃ­vel.');
+ const payload={formulaVersion:labelled?'ccee-invoice-v2-hour-label':CCEE_RECONCILIATION_VERSION,organizationId:job.organization_id,customerId:binding.customer_id,unitId:binding.consumer_unit_id,month,jobId:job.id,documentId:invoice.documentId,state:comparable?'COMPARABLE':'REVIEW_REQUIRED',cceeKwh:ccee===null?null:decimal(ccee),invoiceKwh:billed===null?null:decimal(billed),deltaKwh:delta===null?null:decimal(delta),deltaPercent:percent,daily:[...daily].sort(([a],[b])=>a.localeCompare(b)).map(([day,n])=>({day,quantityKwh:decimal(n),hours:dailyHours.get(day)??0,expectedHours:24})),issues:[...new Set(issues)],recommendations,invoice,source:{hash:r?.record?.evidence?.sourceHash??null,authorizationId:binding.id,revision:binding.revision,measurementBasis:binding.measurement_basis,intervalStart:start,intervalEnd:end}};
  return {...payload,payloadHash:createHash('sha256').update(JSON.stringify(payload)).digest('hex')};
 }
 export function reconciliationSummary(payload:any){
- return 'Conciliação CCEE × fatura · '+payload.month+'. CCEE: '+(payload.cceeKwh??'indisponível')+' kWh; fatura: '+(payload.invoiceKwh??'indisponível')+' kWh. '+(payload.state==='COMPARABLE'?'Diferença CCEE menos fatura: '+payload.deltaKwh+' kWh; percentual sobre a fatura: '+(payload.deltaPercent===null?'indisponível':payload.deltaPercent+'%')+'.':'Bases ainda não comparáveis; não há percentual conclusivo.')+' '+payload.recommendations.join(' ');
+ return 'ConciliaÃ§Ã£o CCEE Ã— fatura Â· '+payload.month+'. CCEE: '+(payload.cceeKwh??'indisponÃ­vel')+' kWh; fatura: '+(payload.invoiceKwh??'indisponÃ­vel')+' kWh. '+(payload.state==='COMPARABLE'?'DiferenÃ§a CCEE menos fatura: '+payload.deltaKwh+' kWh; percentual sobre a fatura: '+(payload.deltaPercent===null?'indisponÃ­vel':payload.deltaPercent+'%')+'.':'Bases ainda nÃ£o comparÃ¡veis; nÃ£o hÃ¡ percentual conclusivo.')+' '+payload.recommendations.join(' ');
 }
