@@ -1,0 +1,36 @@
+name: PLD calendar and advisory
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ccee/**'
+      - 'backend/src/modules/ocr/eva-*rag*'
+      - 'backend/src/modules/ocr/eva-market*'
+      - 'backend/src/database/migrations/*ccee_market_assessment*'
+      - 'backend/test/database/ccee-market-assessment*'
+      - 'frontend/app/components/Ccee*'
+      - 'frontend/test/ccee*'
+      - '.github/workflows/pld-assessment.yml'
+permissions:
+  contents: read
+jobs:
+  assessment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ccee/ccee-monthly-assessment.spec.ts src/modules/ccee/ccee-market.service.spec.ts src/modules/ccee/ccee-market.spec.ts src/modules/ocr/eva-market.controller.spec.ts src/modules/ocr/eva-market-local.spec.ts
+        working-directory: backend
+      - run: node test/database/ccee-market-assessment.test.mjs
+        working-directory: backend
+      - run: node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/ccee-price-chart.cjs && node test/ccee-market.cjs && node test/ccee-market-assessment.cjs
+        working-directory: frontend
+      - run: node node_modules/typescript/bin/tsc --noEmit --incremental false
+        working-directory: frontend

@@ -64,4 +64,28 @@ export class EvaPublishedRagService{
    try{if(audited)await this.rpc(t,'finish',{requestId,eventId:randomUUID(),state,elapsedMs:Math.min(3600000,Math.max(0,Date.now()-started)),inputTokens:tokens,searchRequests:requests,embeddingCostMicroUsd:cost});}finally{this.active--;}
   }
  }
+ /** Bounded local text retrieval. Never invokes embeddings, Search or an LLM. */
+ async retrieveLocal(t:TenantContext,asOf:string):Promise<PublishedRagResult>{
+  const empty=(state:string):PublishedRagResult=>({state,evidence:[],sources:[]});
+  if(t.organizationId!=='org_default'||t.role==='consulta'||this.config.get('EVA_MARKET_LOCAL_CONTEXT_ENABLED')==='false')return empty('NOT_CONFIGURED');
+  const q={periodStart:asOf,periodEnd:asOf,market:'ACL' as const};validateCorpusSources([],q);
+  const composite=this.config.get('EVA_COMPOSITE_RAG_ENABLED')==='true';
+  const response=await this.db.getClient().rpc('eva_market_local_hits',{p_actor:t.userId,p_org:t.organizationId,p_role:t.roleId,p_operation:t.accessMode==='platform_operation',p_asof:asOf,p_composite:composite});
+  if(response.error||response.data?.organizationId!==t.organizationId||response.data?.asOf!==asOf||!Array.isArray(response.data.hits)||response.data.hits.length>6)return empty('SOURCE_UNAVAILABLE');
+  const sources=validateCorpusSources(response.data.sources,q,composite);if(!sources.length)return empty('NO_EVIDENCE');if(corpusVersionConflict(sources,q))return empty('VERSION_CONFLICT');
+  const proofs=sources.map(s=>({publicationId:s.publicationId,eventId:s.publicationEventId,...(s.kind==='COMPOSITE'?{kind:'COMPOSITE' as const}:{})}));
+  const hits=response.data.hits.map((h:any)=>{if(!h||!sources.some(s=>s.releaseId===h.releaseId&&s.revisionId===h.revisionId)||typeof h.chunkId!=='string'||typeof h.contentHash!=='string'||!Number.isFinite(Number(h.score))||Number(h.score)<=0)throw Error('INVALID_LOCAL_HIT');return {releaseId:h.releaseId,revisionId:h.revisionId,chunkId:h.chunkId,contentHash:h.contentHash};});
+  const requestId=randomUUID(),started=Date.now();let state='FAILED';
+  await this.rpc(t,'begin',{requestId,proofs});
+  try{
+   const rows=await this.rpc(t,'hydrate',{proofs,hits});if(!Array.isArray(rows)||rows.length!==hits.length)throw Error('INVALID_LOCAL_EVIDENCE');
+   const evidence=rows.map((r:any,i:number)=>{const h=hits[i],s=sources.find(s=>s.releaseId===h.releaseId)!;
+    if(r.releaseId!==s.releaseId||r.revisionId!==s.revisionId||r.chunkId!==h.chunkId||typeof r.text!=='string'||!r.text.trim()||r.text.length>6000||r.textHash!==h.contentHash||knowledgeTextHash(r.text)!==h.contentHash||typeof r.heading!=='string'||typeof r.context!=='string'||r.page!==null&&(!Number.isInteger(r.page)||r.page<1||s.kind==='COMPOSITE'&&r.page>s.originalPages!))throw Error('INVALID_LOCAL_EVIDENCE');
+    return {id:'market-local-'+s.releaseId+'-'+r.chunkId,label:s.title+' · '+r.heading,value:r.text,source:`${s.authority} · versão ${s.version} · vigência ${s.validFrom} até ${s.validTo??'sem término'} · página ${r.page??'não paginada'} · hash ${s.fileHash}`};});
+   state=evidence.length?'READY':'NO_EVIDENCE';await this.rpc(t,'revalidate',{proofs});
+   return {state,evidence,sources:rows.map((r:any,i:number)=>{const s=sources.find(s=>s.releaseId===hits[i].releaseId)!;return {id:evidence[i].id,title:s.title,section:r.heading,url:s.url,version:s.version,validFrom:s.validFrom,validTo:s.validTo,page:r.page};}),publicationProofs:proofs};
+  }catch(e){state='FAILED';throw e;}finally{await this.rpc(t,'finish',{requestId,eventId:randomUUID(),state,elapsedMs:Math.min(3600000,Math.max(0,Date.now()-started)),inputTokens:0,searchRequests:0,embeddingCostMicroUsd:0});}
+ }
+ async revalidateLocal(t:TenantContext,proofs:CorpusProof[]){if(t.organizationId!=='org_default'||this.config.get('EVA_MARKET_LOCAL_CONTEXT_ENABLED')==='false')throw new ServiceUnavailableException('Biblioteca local indisponível.');const result=await this.rpc(t,'revalidate',{proofs});if(result?.valid!==true)throw new ServiceUnavailableException('Publicação oficial alterada.');}
+
 }
