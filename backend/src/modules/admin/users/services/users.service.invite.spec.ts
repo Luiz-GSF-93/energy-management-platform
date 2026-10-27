@@ -42,6 +42,9 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
 
   function harness(options: {
     profiles?: any[];
+    welcomeOrg?: any;
+    welcomeCustomer?: any;
+    roleName?: string;
     exclusiveCustomerId?: string;
     memberships?: any[];
     authUsers?: any[];
@@ -61,7 +64,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
       data: [
         {
           id: roleId,
-          name: 'Manager',
+          name: options.roleName || 'Manager',
           organization_id: organizationId,
           scope: 'organization',
         },
@@ -147,6 +150,8 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
 
     const queues: Record<string, any[]> = {
       roles: [roleQuery],
+      organizations: [query(options.welcomeOrg || {data:[{id:organizationId,name:'Test organization'}],error:null})],
+      customers: [query(options.welcomeCustomer || {data:[{id:options.exclusiveCustomerId,organization_id:organizationId,company_name:'Portal company'}],error:null})],
       user_profiles: [profileLookup, profileInsert, profileDelete],
       organization_members: [
         membershipLookup,
@@ -464,6 +469,9 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
       {
         data: {
           name: 'Invitee User',
+          energyos_audience: 'backoffice',
+          energyos_organization: 'Test organization',
+          energyos_role: 'Manager',
         },
         redirectTo: expect.stringContaining('/auth/accept-invite'),
       },
@@ -567,8 +575,9 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
   it('checks Portal scope before identity/email creation and persists and audits the exclusive binding',async()=>{
     const customerId='66666666-6666-4666-8666-666666666666';
     const check=jest.spyOn(portalInvite,'checkPortalInvite').mockResolvedValue(undefined);
-    try{const h=harness({profiles:[],authUsers:[],exclusiveCustomerId:customerId});await h.service.invite({...dto,customerId},auditContext);
+    try{const h=harness({profiles:[],authUsers:[],exclusiveCustomerId:customerId,roleName:'consulta'});await h.service.invite({...dto,customerId},auditContext);
     expect(check.mock.invocationCallOrder[0]).toBeLessThan(h.authAdmin.inviteUserByEmail.mock.invocationCallOrder[0]);
+    expect(h.authAdmin.inviteUserByEmail).toHaveBeenCalledWith('invitee@example.com',expect.objectContaining({data:expect.objectContaining({energyos_audience:'portal',energyos_customer:'Portal company',energyos_organization:'Test organization',energyos_role:'Consulta'})}));
     expect(h.membershipInsert.insert).toHaveBeenCalledWith(expect.objectContaining({exclusive_customer_id:customerId,organization_id:organizationId,status:'active'}));
     expect(h.auditService.logUserInvite).toHaveBeenCalledWith(expect.objectContaining({exclusiveCustomerId:customerId}));}finally{check.mockRestore();}
   });
@@ -579,6 +588,21 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
   it('compensates an unconfirmed exclusive binding and does not emit successful audit',async()=>{
     const check=jest.spyOn(portalInvite,'checkPortalInvite').mockResolvedValue(undefined);
     try{const h=harness();await expect(h.service.invite({...dto,customerId:'66666666-6666-4666-8666-666666666666'},auditContext)).rejects.toThrow('binding');expect(h.membershipDelete.delete).toHaveBeenCalled();expect(h.auditService.logUserInvite).not.toHaveBeenCalled();}finally{check.mockRestore();}
+  });
+
+  it('does not send an Auth invitation with an unverified organization',async()=>{
+    const h=harness({profiles:[],authUsers:[],welcomeOrg:{data:[{id:'other-org',name:'Other'}],error:null}});
+    await expect(h.service.invite(dto as any,auditContext)).rejects.toThrow();
+    expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();
+  });
+  it('does not disclose a different tenant customer in an Auth invitation',async()=>{
+    const check=jest.spyOn(portalInvite,'checkPortalInvite').mockResolvedValue(undefined);
+    try {
+      const customerId='66666666-6666-4666-8666-666666666666';
+      const h=harness({profiles:[],authUsers:[],exclusiveCustomerId:customerId,welcomeCustomer:{data:[{id:customerId,organization_id:'other-org',company_name:'Private company'}],error:null}});
+      await expect(h.service.invite({...dto,customerId},auditContext)).rejects.toThrow();
+      expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();
+    } finally {check.mockRestore();}
   });
 
 });
