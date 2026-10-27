@@ -66,7 +66,7 @@ export async function downloadCalendar(source:string,transport:typeof fetch=fetc
 /** Official annual workbook v9: C=reference month, P=deadline; D may prove a deadline hour. */
 export function officialAnnualCalendar(grid:{name:string;rows:any[][];merges?:{s:{r:number;c:number};e:{r:number;c:number}}[]}[],year:number){
  const names=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
- const items:CalendarItem[]=[],issues:{row:number;sheet:string;reason:string}[]=[];
+ const items:CalendarItem[]=[],issues:{row:number;sheet:string;reason:string}[]=[],groups=new Map<string,{item:CalendarItem;reports:Set<string>}>();
  if(!Number.isInteger(year)||year<2021||year>2099)throw new BadRequestException('Ano inválido.');
  for(const name of names){
   const sheet=grid.find(s=>s.name===name);if(!sheet)throw new BadRequestException('Calendário anual incompleto: '+name);
@@ -83,8 +83,9 @@ export function officialAnnualCalendar(grid:{name:string;rows:any[][];merges?:{s
     const reports=[...new Set(Array.from({length:9},(_,i)=>String(cell(r,i+5)??'').replace(/\s/g,'')).filter(v=>v&&v!=='-'))];
     const applicability=[category,rule,reports.join(', ')].filter(Boolean).join(' · ');
     if(applicability.length>500)throw Error('DETAIL_LIMIT');
-    const code=createHash('sha256').update([name,r+1,activity,month,day,rule,reports.join(',')].join('|')).digest('hex');
-    items.push({code,title:activity.length>160?activity.slice(0,157)+'…':activity,month,dueDate:day,dueAt:hour?day+'T'+hour+'-03:00':null,precision:hour?'HOUR':'DATE',sourceRow:r+1,sourceSheet:name,applicability});
+    const code=createHash('sha256').update([name,activity,category,month,day,rule].join('|')).digest('hex'),prior=groups.get(code);
+    if(prior){for(const report of reports)prior.reports.add(report);const detail=[category,rule,[...prior.reports].join(', ')].filter(Boolean).join(' · ');if(detail.length>500)throw Error('DETAIL_LIMIT');prior.item.applicability=detail;}
+    else{const item:CalendarItem={code,title:activity.length>160?activity.slice(0,157)+'…':activity,month,dueDate:day,dueAt:hour?day+'T'+hour+'-03:00':null,precision:hour?'HOUR':'DATE',sourceRow:r+1,sourceSheet:name,applicability};items.push(item);groups.set(code,{item,reports:new Set(reports)});}
    }catch{issues.push({row:r+1,sheet:name,reason:'Conferir atividade, competência ou prazo na linha oficial; nenhum horário foi presumido.'});}
   }
  }
