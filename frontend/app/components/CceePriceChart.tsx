@@ -37,7 +37,7 @@ export default function CceePriceChart({series,visible,granularity,from,to}:{ser
  useEffect(()=>{const element=plot.current;if(!element)return;const measure=()=>{if(element.clientWidth)setViewport(element.clientWidth);};measure();if(typeof ResizeObserver==='undefined')return;const observer=new ResizeObserver(measure);observer.observe(element);return()=>observer.disconnect();},[timeline.rows.length>0]);
  const values=timeline.rows.filter(r=>visible.includes(r.submarket)&&r.bucket>=first&&r.bucket<=last);
  const tickStep=granularity==='HOUR'?(span<=24?2:6):1;
- const ticks=slots.filter((bucket,i)=>!i||i===slots.length-1||granularity!=='HOUR'||Number(bucketDate(bucket,granularity).toLocaleTimeString('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}))%tickStep===0);
+ const ticks=slots.filter((bucket,i)=>!i||i===slots.length-1||granularity!=='HOUR'||(i>=tickStep&&slots.length-1-i>=tickStep&&Number(bucketDate(bucket,granularity).toLocaleTimeString('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}))%tickStep===0));
  const width=Math.max(viewport,ticks.length*(granularity==='MONTH'?60:58)+118),left=88,right=30,top=25,bottom=250;
  const min=Math.min(0,...values.map(r=>Number(r.value))),max=Math.max(1,...values.map(r=>Number(r.value)));
  const x=(bucket:number)=>left+(last===first?(width-left-right)/2:(bucket-first)/(last-first)*(width-left-right));
