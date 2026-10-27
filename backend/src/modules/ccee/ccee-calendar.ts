@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {BadRequestException} from '@nestjs/common';
 import {calendarSource,cceeObject,cceeText,dateOnly} from './ccee-data.model';
-export type CalendarItem={code:string;title:string;month:string;dueAt:string;sourceRow:number;sourceSheet:string;applicability:string};
+export type CalendarItem={code:string;title:string;month:string|null;dueAt:string|null;dueDate?:string;precision?:'DATE'|'HOUR';sourceRow:number;sourceSheet:string;applicability:string};
 export type CalendarMapping={sheet:string;firstRow:number;titleColumn:number;dateColumn:number;monthColumn:number;applicabilityColumn:number;year:number};
 export function calendarMapping(input:unknown):CalendarMapping{
  const b=cceeObject(input,['sheet','firstRow','titleColumn','dateColumn','monthColumn','applicabilityColumn','year']);cceeText(b.sheet,100,1);
@@ -61,4 +61,34 @@ export async function downloadCalendar(source:string,transport:typeof fetch=fetc
   try{for(;;){const{done,value}=await reader.read();if(done)break;count+=value.length;if(count>5242880){await reader.cancel();throw new Error();}chunks.push(value);}}finally{reader.releaseLock();}
   const bytes=Buffer.concat(chunks);if(bytes.length<8)throw new Error();return bytes;
  }catch{throw new BadRequestException('Documento oficial não obtido integralmente; nenhum prazo foi cadastrado.');}finally{clearTimeout(timer);}
+}
+
+/** Official annual workbook v9: C=reference month, P=deadline; D may prove a deadline hour. */
+export function officialAnnualCalendar(grid:{name:string;rows:any[][];merges?:{s:{r:number;c:number};e:{r:number;c:number}}[]}[],year:number){
+ const names=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+ const items:CalendarItem[]=[],issues:{row:number;sheet:string;reason:string}[]=[],groups=new Map<string,{item:CalendarItem;reports:Set<string>}>();
+ if(!Number.isInteger(year)||year<2021||year>2099)throw new BadRequestException('Ano inválido.');
+ for(const name of names){
+  const sheet=grid.find(s=>s.name===name);if(!sheet)throw new BadRequestException('Calendário anual incompleto: '+name);
+  if(!String(sheet.rows[0]?.[2]??'').toLowerCase().includes('calendário geral de operações e relatórios '+year))throw new BadRequestException('Cabeçalho oficial não reconhecido.');
+  const cell=(r:number,c:number)=>{const range=sheet.merges?.find(m=>r>=m.s.r&&r<=m.e.r&&c>=m.s.c&&c<=m.e.c);return range?sheet.rows[range.s.r]?.[range.s.c]:sheet.rows[r]?.[c];};
+  for(let r=3;r<sheet.rows.length;r++){
+   if(cell(r,15)==null)continue;
+   try{
+    const activity=String(cell(r,1)??'').trim(),category=String(cell(r,0)??'').trim(),day=sourceDate(cell(r,15)),month=String(cell(r,2)??'').trim()==='-'?null:sourceDate(cell(r,2)).slice(0,7),rule=String(cell(r,3)??'').trim();
+    if(activity.length<3||!category||Number(day.slice(0,4))!==year)throw Error('ROW');
+    const hours=[...rule.matchAll(/(?:até\s+(?:as|às)\s+)([0-2]?\d)h([0-5]\d)?/gi)];
+    const hour=hours.length===1&&Number(hours[0][1])<24?hours[0][1].padStart(2,'0')+':'+(hours[0][2]??'00')+':00':null;
+    if(/até\s+(?:as|às)/i.test(rule)&&!hour)throw Error('HOUR_AMBIGUOUS');
+    const reports=[...new Set(Array.from({length:9},(_,i)=>String(cell(r,i+5)??'').replace(/\s/g,'')).filter(v=>v&&v!=='-'))];
+    const applicability=[category,rule,reports.join(', ')].filter(Boolean).join(' · ');
+    if(applicability.length>500)throw Error('DETAIL_LIMIT');
+    const code=createHash('sha256').update([name,activity,category,month,day,rule].join('|')).digest('hex'),prior=groups.get(code);
+    if(prior){for(const report of reports)prior.reports.add(report);const detail=[category,rule,[...prior.reports].join(', ')].filter(Boolean).join(' · ');if(detail.length>500)throw Error('DETAIL_LIMIT');prior.item.applicability=detail;}
+    else{const item:CalendarItem={code,title:activity.length>160?activity.slice(0,157)+'…':activity,month,dueDate:day,dueAt:hour?day+'T'+hour+'-03:00':null,precision:hour?'HOUR':'DATE',sourceRow:r+1,sourceSheet:name,applicability};items.push(item);groups.set(code,{item,reports:new Set(reports)});}
+   }catch{issues.push({row:r+1,sheet:name,reason:'Conferir atividade, competência ou prazo na linha oficial; nenhum horário foi presumido.'});}
+  }
+ }
+ if(items.length>5000||issues.length>1000)throw new BadRequestException('Limite de calendário.');
+ return{items,issues,complete:items.length>0&&issues.length===0,coverage:{sheet:'12 meses oficiais',year,examinedRows:grid.filter(s=>names.includes(s.name)).reduce((n,s)=>n+s.rows.length,0),precision:'Data; hora somente quando explícita na coluna Prazo',adapter:'CCEE_ANNUAL_V9'}};
 }

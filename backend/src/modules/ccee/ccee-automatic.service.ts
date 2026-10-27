@@ -10,6 +10,12 @@ export class CceeAutomaticService implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(CceeAutomaticService.name);
  constructor(private db:SupabaseService,private data:CceeDataService){}
  private enabled(){return process.env.CCEE_AUTOMATIC_READ_ENABLED==='true'&&process.env.CCEE_DATA_WORKSPACE_ENABLED==='true'&&process.env.CCEE_SYNC_WORKER_ENABLED==='true';}
+ async takeover(t:TenantContext,input:unknown){
+  if(t.accessMode==='platform_operation')throw new ForbiddenException('Entre com o usuário permanente da organização para assumir a atualização automática.');
+  await this.data.workspace(t);const b=cceeObject(input,['requestId','reason']);cceeUuid(b.requestId);
+  if(typeof b.reason!=='string'||b.reason.trim().length<10||b.reason.length>500)throw new ForbiddenException('Registre a responsabilidade pela rotina.');
+  return this.data.rpc('ccee_automation_takeover',{p_org:t.organizationId,p_actor:t.userId,p_reason:b.reason,p_request:b.requestId});
+ }
  async action(t:TenantContext,action:string,id:string|null,input:unknown={}){
   const workspace=await this.data.workspace(t);
   if(!workspace.enabled||t.organizationId!=='org_default')throw new ForbiddenException('Atualização automática disponível somente na organização homologada.');
@@ -35,6 +41,7 @@ export class CceeAutomaticService implements OnModuleInit,OnModuleDestroy{
 export class CceeAutomaticController{
  constructor(private service:CceeAutomaticService){}
  @Get() @Header('Cache-Control','private, no-store') read(@Tenant()t:TenantContext){return this.service.action(t,'list',null);}
+ @Post('responsibility') takeover(@Tenant()t:TenantContext,@Body()b:unknown){return this.service.takeover(t,b);}
  @Post('unit') unit(@Tenant()t:TenantContext,@Body()b:any){const{id,...body}=b??{};return this.service.action(t,'configure_unit',id??null,body);}
  @Post('policies') configure(@Tenant()t:TenantContext,@Body()b:any){const{id,...body}=b??{};return this.service.action(t,'configure',id??null,body);}
  @Post('policies/:id') toggle(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.service.action(t,'toggle',id,b);}

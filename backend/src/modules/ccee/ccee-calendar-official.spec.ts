@@ -1,0 +1,13 @@
+import {officialAnnualCalendar} from './ccee-calendar';
+const names=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const grid=()=>names.map((name,i)=>({name,rows:[[null,null,'calendário geral de operações e relatórios 2026 - atualizado em 13/10/2026'],[],[],['Medição','Publicação de medidas',46023,'MS+3du','MED','MED001',null,null,null,null,null,null,null,null,'Operacional',46023]],merges:[]}));
+describe('Calendário anual oficial',()=>{
+ it('preserves a date without manufacturing a midnight deadline',()=>{const r=officialAnnualCalendar(grid(),2026);expect(r.complete).toBe(true);expect(r.items).toHaveLength(12);expect(r.items[0]).toMatchObject({dueDate:'2026-01-01',dueAt:null,precision:'DATE',month:'2026-01'});});
+ it('uses only a source-proved hour in the prazo column',()=>{const g=grid();g[0].rows[3][3]='MS+3du Até as 10h00';expect(officialAnnualCalendar(g,2026).items[0]).toMatchObject({dueAt:'2026-01-01T10:00:00-03:00',precision:'HOUR'});});
+ it('preserves a source start time without turning it into an end deadline',()=>{const g=grid();g[0].rows[3][3]='A partir das 8h00';const r=officialAnnualCalendar(g,2026);expect(r.complete).toBe(true);expect(r.items[0]).toMatchObject({dueAt:null,precision:'DATE'});expect(r.items[0].applicability).toContain('8h00');});
+ it('groups report families from the same activity without duplicating the obligation',()=>{const g=grid();const second=[...g[0].rows[3]];second[5]='MED002';g[0].rows.push(second);const r=officialAnnualCalendar(g,2026);expect(r.items).toHaveLength(12);expect(r.items[0].applicability).toContain('MED001, MED002');});
+ it('requires every official month and the exact year header',()=>{expect(()=>officialAnnualCalendar(grid().slice(1),2026)).toThrow();expect(()=>officialAnnualCalendar(grid(),2027)).toThrow();});
+ it('does not carry a title into unrelated blank rows',()=>{const g=grid();g[0].rows.push([null,null,46023,'MS+3du',null,null,null,null,null,null,null,null,null,null,null,46023]);const r=officialAnnualCalendar(g,2026);expect(r.complete).toBe(false);expect(r.issues[0].row).toBe(5);});
+});
+
+if(process.env.CCEE_OFFICIAL_TEST_FILE)it('validates the original official workbook without network calls',()=>{const {readFileSync}=require('node:fs'),{workbookGrid}=require('./ccee-calendar.worker');const r=officialAnnualCalendar(workbookGrid(readFileSync(process.env.CCEE_OFFICIAL_TEST_FILE)),2026);console.log(JSON.stringify({items:r.items.length,issueCount:r.issues.length,firstIssues:r.issues.slice(0,5),coverage:r.coverage}));expect(r.complete).toBe(true);});
