@@ -38,6 +38,8 @@ jobs:
         working-directory: backend
       - run: node test/database/ccee-data-license.test.mjs
         working-directory: backend
+      - run: node test/database/ccee-automatic.test.mjs
+        working-directory: backend
       - run: node test/database/ccee-market.test.mjs
         working-directory: backend
       - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ocr/eva-market.controller.spec.ts
@@ -65,6 +67,8 @@ jobs:
       - run: npm ci --ignore-scripts
         working-directory: frontend
       - run: node test/ccee-dri.cjs
+        working-directory: frontend
+      - run: node test/ccee-automatic.cjs
         working-directory: frontend
       - run: node test/ccee-data.cjs
         working-directory: frontend

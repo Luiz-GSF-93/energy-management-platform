@@ -68,11 +68,12 @@ export function measurementWindow(start:string,end:string,kind='FINAL'){
  if(expectedHours<1||expectedHours>744)throw new CceeReadingError('INVALID_MEASUREMENT_WINDOW');
  return {first,last,exclusive,expectedHours};
 }
-export function measurementRows(xml:string,point:string,start:string,end:string,diagnostics=false,kind='FINAL'){
+export type CceeUnitBasis={unit:'kWh'|'MWh';sourceReference:string;confirmedBy:string;confirmedAt:string;bindingRevision:number};
+export function measurementRows(xml:string,point:string,start:string,end:string,diagnostics=false,kind='FINAL',unitBasis?:CceeUnitBasis){
  const window=measurementWindow(start,end,kind);
  const parsed=privateEnvelope(xml,1,'listarMedidaResponse'),rows=list(parsed.body?.medidas?.medida);
  if(rows.length>744)throw new CceeReadingError('MEASUREMENT_LIMIT');
- const seen=new Set<number>();let total=0n;const observations:string[]=[];
+ const seen=new Set<number>();let total=0n,knownQuantities=true;const observations:string[]=[];
  const data=rows.map(r=>{
   const stamp=String(r.periodo?.fim??''),at=Date.parse(stamp);
   const fail=(code:string)=>{throw new CceeReadingError(diagnostics?code:'MEASUREMENT_INTERVAL_OR_POINT_MISMATCH');};
@@ -83,14 +84,17 @@ export function measurementRows(xml:string,point:string,start:string,end:string,
   if(at<window.first||(window.exclusive?at>=window.last:at>window.last))fail('MEASUREMENT_INTERVAL_MISMATCH');
   if(seen.has(at))fail('MEASUREMENT_DUPLICATE_TIMESTAMP');
   seen.add(at);let quantityKwh:string|null=null;
-  try{const n=quantityMicro(r.consumoAtivo,r.unidade?.codigo);quantityKwh=decimal(n);total+=n;}catch{observations.push('Quantidade ou unidade nÃ£o demonstrada em '+stamp);}
+  const providerUnit=r.unidade?.codigo??null;
+  const basis=unitBasis&&['kWh','MWh'].includes(unitBasis.unit)&&unitBasis.sourceReference?.length>=10&&unitBasis.confirmedBy&&Number.isFinite(Date.parse(unitBasis.confirmedAt))?unitBasis:null;
+  const unit=providerUnit??basis?.unit??null;
+  try{const n=quantityMicro(r.consumoAtivo,unit);quantityKwh=decimal(n);total+=n;}catch{knownQuantities=false;observations.push('Quantidade ou unidade não demonstrada em '+stamp);}
   if(r.status!=='HCC')observations.push('Qualidade '+String(r.status??'nÃ£o informada')+' em '+stamp);
   // Reactive values are preserved as source values, never added to active energy.
-  return{hourLabel:stamp,end:stamp,quantityKwh,unit:r.unidade?.codigo??null,status:r.status??null,reactiveSource:r.consumoReativo??null,subType:r.subTipo??null};
+  return{hourLabel:stamp,end:stamp,quantityKwh,activeSource:r.consumoAtivo??null,unit,unitEvidence:providerUnit!==null?{kind:'PROVIDER_FIELD'}:basis?{kind:'OPERATOR_CONFIRMED',...basis}:null,status:r.status??null,reactiveSource:r.consumoReativo??null,subType:r.subTipo??null};
  });
  const expected=window.expectedHours;
  if(rows.length!==expected)observations.push('Cobertura horÃ¡ria incompleta.');
- return{...parsed,timeSemantics:CCEE_HOURLY_TIME_SEMANTICS,data,totalKwh:decimal(total),observations,complete:observations.length===0,expectedHours:expected};
+ return{...parsed,timeSemantics:CCEE_HOURLY_TIME_SEMANTICS,data,totalKwh:knownQuantities?decimal(total):null,observations,complete:observations.length===0,expectedHours:expected};
 }
 export function privateSoap(config:CceeConfig,kind:'POINTS'|'MEASUREMENTS',point:string,measurementKind:string,start:string,end:string,meter:string|null,page=1){
  const base=soapRequest(config,'profile',page);let body:string;
@@ -125,28 +129,27 @@ export class CceePrivateConnector{
    });req.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));req.end(payload);}catch{finish(new CceeReadingError('TRANSPORT_ERROR'));}
   });
  }
- async execute(job:CceeReadingJob,revalidate:()=>Promise<void>):Promise<ReadingResult>{
+ async execute(job:CceeReadingJob,revalidate:()=>Promise<void>,reserveRequest?:()=>Promise<void>):Promise<ReadingResult>{
   const began=Date.now();await revalidate();
   if(job.kind==='PLD'){
    if(job.environment!=='PRODUCTION'||job.organization_id!==process.env.CCEE_ORGANIZATION_ID)throw new CceeReadingError('PLD_ORGANIZATION_MISMATCH');
    let requests=0,bytes=0;
-   try{const data=await this.pld.preview({month:job.month.slice(0,7)},{attempt:()=>{requests++;},response:n=>{bytes+=n;}});await revalidate();
+   try{const data=await this.pld.preview({month:job.month.slice(0,7)},{attempt:async()=>{await reserveRequest?.();requests++;},response:n=>{bytes+=n;}});await revalidate();
     return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes:data.sourceHashes,transactions:[],data};
    }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('PLD_READ_NOT_CONFIRMED');error.metrics={requests,bytes,durationMs:Date.now()-began,hashes:[],transactions:[],httpStatus:null};throw error;}
   }
-  const binding=job.binding;if(!binding)throw new CceeReadingError('BINDING_REQUIRED');
+  const binding=job.binding;if(!binding)throw new CceeReadingError('BINDING_REQUIRED');if(binding.unit_basis&&binding.unit_basis.bindingRevision!==binding.revision)throw new CceeReadingError('UNIT_SOURCE_REVISION_CHANGED');
   let config:CceeConfig|undefined;const result:ReadingResult={complete:true,requests:0,bytes:0,durationMs:0,hashes:[],transactions:[],data:{rows:[],observations:[]}};
   const diagnostics=process.env.CCEE_READING_DIAGNOSTICS_ENABLED==='true';let lastHttpStatus:number|null=null;
   try{
    config=cceeConfig(process.env);config={...config,profile:job.kind==='MEASUREMENTS'?binding.principal_profile_code:binding.profile_code};
    const month=job.month.slice(0,7),days=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).getUTCDate();
-   let pages=1,totalPoints:number|null=null,total=0n;
+   let pages=1,totalPoints:number|null=null,total=0n,knownQuantities=true;
    for(let index=1;index<=(job.kind==='POINTS'?pages:days);index++){
     if(Date.now()-began>120000)throw new CceeReadingError('RUN_TIME_LIMIT');await revalidate();
     const day=month+'-'+String(index).padStart(2,'0'),start=day+'T00:00:00-03:00',end=day+'T23:59:59-03:00';
     const payload=Buffer.from(privateSoap(config,job.kind,binding.measurement_point,job.measurement_kind??'FINAL',start,end,binding.meter_code,job.kind==='POINTS'?index:1));
-    result.requests++;
-    let response:{xml:string;bytes:number;httpStatus:number};try{response=await this.fetch(config,job.environment,job.kind==='POINTS'?'/ws/v2/PontoMedicaoBSv2':'/ws/medc/ListarMedidaBSv1',job.kind==='POINTS'?'listarPontoMedicao':'listarMedida',payload);}finally{payload.fill(0);}
+    let response:{xml:string;bytes:number;httpStatus:number};try{await reserveRequest?.();result.requests++;response=await this.fetch(config,job.environment,job.kind==='POINTS'?'/ws/v2/PontoMedicaoBSv2':'/ws/medc/ListarMedidaBSv1',job.kind==='POINTS'?'listarPontoMedicao':'listarMedida',payload);}finally{payload.fill(0);}
     result.bytes+=response.bytes;lastHttpStatus=response.httpStatus;
     // Capture only bounded provenance before row validation; never retain a raw provider body.
     if(diagnostics){result.hashes.push(createHash('sha256').update(response.xml).digest('hex'));}
@@ -169,16 +172,16 @@ export class CceePrivateConnector{
      }
      result.data.rows.push(...rows);if(!diagnostics){result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);}
     }else{
-     const p=measurementRows(response.xml,binding.measurement_point,start,end,diagnostics,job.measurement_kind??'FINAL');result.complete&&=p.complete;result.data.rows.push(...p.data);result.data.observations.push(...p.observations);total+=quantityMicro(p.totalKwh,'kWh');if(!diagnostics){result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);}
+     const p=measurementRows(response.xml,binding.measurement_point,start,end,diagnostics,job.measurement_kind??'FINAL',binding.unit_basis);result.complete&&=p.complete;result.data.rows.push(...p.data);result.data.observations.push(...p.observations);if(p.totalKwh===null)knownQuantities=false;else total+=quantityMicro(p.totalKwh,'kWh');if(!diagnostics){result.hashes.push(p.hash);if(p.transactionId)result.transactions.push(p.transactionId);}
     }
    }
    if(job.kind==='POINTS'&&(result.data.rows.length!==totalPoints||new Set(result.data.rows.map((r:any)=>r.codigo)).size!==totalPoints))throw new CceeReadingError('INCOMPLETE_POINTS');
    if(job.kind==='POINTS'){result.data.rows=result.data.rows.filter((r:any)=>r.codigo===binding.measurement_point);if(result.data.rows.length!==1)throw new CceeReadingError('AUTHORIZED_POINT_NOT_FOUND');}
    if(job.kind==='MEASUREMENTS'&&job.measurement_kind!=='FALTANTES'){
-    result.data.timeSemantics=CCEE_HOURLY_TIME_SEMANTICS;result.data.totalKwh=decimal(total);result.data.expectedHours=days*24;
+    result.data.timeSemantics=CCEE_HOURLY_TIME_SEMANTICS;result.data.totalKwh=knownQuantities?decimal(total):null;result.data.expectedHours=days*24;
     result.complete&&=result.data.rows.length===days*24;
-    const hash=createHash('sha256').update(CCEE_HOURLY_TIME_SEMANTICS+':'+result.hashes.join(':')).digest('hex');
-    result.record={schemaVersion:'ccee-record/1',kind:'CONSUMPTION',binding:{organizationId:job.organization_id,customerId:binding.customer_id,unitId:binding.consumer_unit_id,profileCode:binding.profile_code,measurementPoint:binding.measurement_point,authorizationId:binding.id,authorizationRevision:binding.revision},evidence:{provider:'CCEE',service:'ListarMedidaBSv1',externalId:binding.measurement_point+':'+month,revision:hash,month,retrievedAt:new Date().toISOString(),sourceHash:hash,finality:result.complete&&job.measurement_kind==='FINAL'?'FINAL':'PROVISIONAL'},lines:[{type:'CONSUMPTION',code:'CONSUMPTION_TOTAL',quantityKwh:decimal(total),timeBand:'ALL',includesLosses:binding.measurement_basis==='UNKNOWN'?null:binding.measurement_basis==='WITH_LOSSES'}]};
+    const hash=createHash('sha256').update(CCEE_HOURLY_TIME_SEMANTICS+':'+JSON.stringify(binding.unit_basis??null)+':'+result.hashes.join(':')).digest('hex');
+    if(knownQuantities)result.record={schemaVersion:'ccee-record/1',kind:'CONSUMPTION',binding:{organizationId:job.organization_id,customerId:binding.customer_id,unitId:binding.consumer_unit_id,profileCode:binding.profile_code,measurementPoint:binding.measurement_point,authorizationId:binding.id,authorizationRevision:binding.revision},evidence:{provider:'CCEE',service:'ListarMedidaBSv1',externalId:binding.measurement_point+':'+month,revision:hash,month,retrievedAt:new Date().toISOString(),sourceHash:hash,finality:result.complete&&job.measurement_kind==='FINAL'?'FINAL':'PROVISIONAL'},lines:[{type:'CONSUMPTION',code:'CONSUMPTION_TOTAL',quantityKwh:decimal(total),timeBand:'ALL',includesLosses:binding.measurement_basis==='UNKNOWN'?null:binding.measurement_basis==='WITH_LOSSES'}]};
    }
    await revalidate();result.durationMs=Date.now()-began;return result;
   }catch(e){

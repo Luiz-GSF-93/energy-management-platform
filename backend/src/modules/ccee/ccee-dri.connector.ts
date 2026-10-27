@@ -18,7 +18,7 @@ export class CceeDriConnector{
    });req.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));req.end(payload);}catch{finish(new CceeReadingError('TRANSPORT_ERROR'));}
   });
  }
- async execute(job:any,revalidate:()=>Promise<void>){
+ async execute(job:any,revalidate:()=>Promise<void>,reserveRequest?:()=>Promise<void>){
   driEnabled();if(!isDri(job.kind)||job.environment!=='PRODUCTION'||!job.binding?.dri_agent_code||!job.binding?.dri_tax_id)throw new CceeReadingError('DRI_BINDING_REQUIRED');
   const maxRequests=Number(process.env.CCEE_DRI_MAX_REQUESTS_PER_JOB??'10');
   if(!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>10)throw new CceeReadingError('DRI_REQUEST_LIMIT_INVALID');
@@ -29,7 +29,7 @@ export class CceeDriConnector{
    for(let page=1;page<=pages;page++){
     driEnabled();if(Date.now()-began>95000||requests>=maxRequests)throw new CceeReadingError('RUN_TIME_LIMIT');await revalidate();
     const payload=Buffer.from(driSoap(config,selection,job.binding.dri_agent_code,job.dri_parameters??[],page));let response:{xml:string;bytes:number;httpStatus:number};
-    requests++;try{response=await this.fetch(config,job.kind,payload);}finally{payload.fill(0);}
+    try{await reserveRequest?.();requests++;response=await this.fetch(config,job.kind,payload);}finally{payload.fill(0);}
     bytes+=response.bytes;httpStatus=response.httpStatus;const p=driPage(response.xml,selection,page,job.binding.dri_tax_id);
     hashes.push(p.hash);if(p.transactionId)transactions.push(p.transactionId);
     if(page>1&&(pages!==p.pages||total!==p.total))throw new CceeReadingError('DRI_PAGINATION_CHANGED');pages=p.pages;total=p.total;

@@ -21,3 +21,11 @@ describe('CCEE support 00450944 hour-label semantics',()=>{
   }finally{config.mockRestore();}
  });
 });
+
+describe('Audited source unit',()=>{
+ const basis:any={unit:'kWh',sourceReference:'Operator confirmation with source',confirmedBy:'actor',confirmedAt:'2026-10-27T15:00:00Z',bindingRevision:4};
+ const missing=()=>envelope(hours()).replace(/<o:unidade>[\s\S]*?<\/o:unidade>/g,'');
+ it('keeps original consumption and returns unavailable instead of zero without evidence',()=>{const r=measurementRows(missing(),point,start,end);expect(r.totalKwh).toBeNull();expect(r.complete).toBe(false);expect(r.data[0]).toMatchObject({activeSource:'1',quantityKwh:null,unit:null});});
+ it('uses the reviewed unit only when provider did not supply it',()=>{const r=measurementRows(missing(),point,start,end,false,'FINAL',basis);expect(r.totalKwh).toBe('24.000000');expect(r.data[0].unitEvidence).toMatchObject({kind:'OPERATOR_CONFIRMED',bindingRevision:4,confirmedBy:'actor'});expect(measurementRows(envelope(hours()),point,start,end,false,'FINAL',{...basis,unit:'MWh'}).totalKwh).toBe('24.000000');});
+ it('does not replace an unknown explicit provider unit or accept unproven unit metadata',()=>{expect(measurementRows(envelope(hours()).replace(/>kWh</g,'>UNKNOWN<'),point,start,end,false,'FINAL',basis).totalKwh).toBeNull();expect(measurementRows(missing(),point,start,end,false,'FINAL',{...basis,confirmedBy:''}).totalKwh).toBeNull();});
+});
