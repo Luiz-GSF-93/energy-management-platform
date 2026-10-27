@@ -1,3 +1,4 @@
+import {CceeAutomaticService,CceeAutomaticController} from './ccee-automatic.service';
 import {Module} from '@nestjs/common';
 import {CceeController} from './ccee.controller';
 import {CceeService} from './ccee.service';
@@ -21,5 +22,5 @@ import {ContractContextService} from '../energy-forecast/contract-context.servic
 import {ContractIndexMemoryService} from '../contracts/services/contract-index-memory.service';
 import {OperationsService} from '../operations/operations.service';
 import {CceeDataController,CceeCalendarController,CceeDataMetricsController} from './ccee-data.controller';
-@Module({imports:[LicensesModule],controllers:[CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController,CceeDriController,CceeMarketController,CceeContractComparisonController],providers:[CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDriConnector,CceeDriService,CceeDataWorker,CceeMarketService,CceeMarketWorker,CceeMarketConnector,CceeContractComparisonService,ContractContextService,ContractIndexMemoryService,OperationsService,SupabaseService],exports:[CceeDataService,CceeDriService,CceeMarketService]})
+@Module({imports:[LicensesModule],controllers:[CceeAutomaticController,CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController,CceeDriController,CceeMarketController,CceeContractComparisonController],providers:[CceeAutomaticService,CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDriConnector,CceeDriService,CceeDataWorker,CceeMarketService,CceeMarketWorker,CceeMarketConnector,CceeContractComparisonService,ContractContextService,ContractIndexMemoryService,OperationsService,SupabaseService],exports:[CceeDataService,CceeDriService,CceeMarketService]})
 export class CceeModule {}

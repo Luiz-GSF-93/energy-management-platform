@@ -25,7 +25,16 @@ export class CceeDataWorker implements OnModuleInit,OnModuleDestroy{
     const r=await client.rpc('ccee_assert_reading',{p_id:job.id,p_lease:job.lease_id});if(r.error||!r.data||r.data.organization_id!==job.organization_id||r.data.lease_id!==job.lease_id)throw new CceeReadingError('ACCESS_CHANGED');
    };
    let result:any=null,errorCode:string|null=null,failureMetrics:any=null;
-   try{result=isDri(job.kind)?await this.dri!.execute(job,revalidate):await this.connector.execute(job,revalidate);if(result.record)validateCceeRecord(result.record,result.record.binding);}
+   const automatic=process.env.CCEE_AUTOMATIC_READ_ENABLED==='true'&&job.organization_id==='org_default';
+   const reserve=automatic?async()=>{const r=await client.rpc('ccee_communication_reserve',{p_id:job.id,p_lease:job.lease_id,p_market:false});if(r.error)throw new CceeReadingError(r.error.message?.includes('BUDGET_EXHAUSTED')?'BUDGET_EXHAUSTED':'REQUEST_RESERVATION_UNCONFIRMED');}:undefined;
+   try{
+    if(automatic&&job.kind==='MEASUREMENTS'){
+     const unit=await client.rpc('ccee_auto_policy_action',{p_org:job.organization_id,p_actor:job.actor_id,p_action:'unit_context',p_id:job.authorization_id,p_body:{}});
+     if(unit.error||unit.data?.organizationId!==job.organization_id)throw new CceeReadingError('UNIT_SOURCE_UNCONFIRMED');
+     const basis=unit.data.unitBasis;if(basis&&basis.bindingRevision!==job.binding?.revision)throw new CceeReadingError('ACCESS_CHANGED');
+     if(basis)job.binding={...job.binding,unit_basis:basis};
+    }
+    result=isDri(job.kind)?await this.dri!.execute(job,revalidate,reserve):await this.connector.execute(job,revalidate,reserve);if(result.record)validateCceeRecord(result.record,result.record.binding);}
    catch(e){errorCode=e instanceof CceeReadingError?e.code:'READ_NOT_CONFIRMED';failureMetrics=e instanceof CceeReadingError?e.metrics??null:null;}
    // If rights changed, do not persist returned private data; only record a bounded failure.
    if(!errorCode)try{await revalidate();}catch{errorCode='ACCESS_CHANGED';}

@@ -26,6 +26,6 @@ export function readingCommand(input:unknown){
  if(b.kind!=='MEASUREMENTS'&&b.measurementKind)throw new BadRequestException('Tipo de medida incompatível.');
  return b;
 }
-export type PrivateBinding={id:string;organization_id:string;customer_id:string;consumer_unit_id:string;profile_code:string;measurement_point:string;principal_profile_code:string;revision:number;measurement_basis:'UNKNOWN'|'NO_LOSSES'|'WITH_LOSSES';meter_code:string|null};
+export type PrivateBinding={id:string;organization_id:string;customer_id:string;consumer_unit_id:string;profile_code:string;measurement_point:string;principal_profile_code:string;revision:number;measurement_basis:'UNKNOWN'|'NO_LOSSES'|'WITH_LOSSES';meter_code:string|null;unit_basis?:import('./ccee-private.connector').CceeUnitBasis};
 export type CceeReadingJob={id:string;organization_id:string;actor_id:string;kind:ReadingKind;month:string;measurement_kind?:MeasurementKind;environment:'PRODUCTION'|'PILOT';binding:PrivateBinding|null;lease_id:string};
 export type ReadingResult={complete:boolean;requests:number;bytes:number;durationMs:number;hashes:string[];transactions:string[];data:any;record?:any;};

@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','FormData','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','')};dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open')};
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+let api;const load=Module._load;Module._load=function(name,parent,main){if(name==='@/app/lib/api/client')return{apiRequest:(p,o)=>api(p,o)};if(name==='@/app/components/ui')return load.call(this,require('node:path').resolve(__dirname,'../app/components/ui'),parent,main);if(name==='next/link')return{__esModule:true,default:({href,children})=>React.createElement('a',{href},children)};return load.call(this,name,parent,main)};
+const C=require('../app/backoffice/ccee-data/Workspace.tsx').default,Auto=require('../app/backoffice/ccee-data/AutomaticWorkspace.tsx').default,root=createRoot(document.getElementById('root'));
+let checks=0;const ok=(v)=>{assert.ok(v);checks++;};let tick;const interval=global.setInterval,clear=global.clearInterval;global.setInterval=fn=>{tick=fn;return 1};global.clearInterval=()=>{};
+Object.defineProperty(document,'visibilityState',{value:'visible',configurable:true});
+const binding={id:'b',status:'APPROVED',service_scope:['MEASUREMENTS'],revision:4,measurement_point:'POINT',customer_name:'Synthetic customer',unit_name:'Synthetic unit'};
+const click=async text=>act(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent===text);assert.ok(b,text);b.click();});
+(async()=>{try{
+ const calls=[];const state={organizationId:'org_default',enabled:true,canManage:true,canReview:false,flags:{CCEE_PRIVATE_READ_ENABLED:true,CCEE_SYNC_WORKER_ENABLED:true},bindings:[binding],jobs:[]};api=async(p,o)=>{calls.push([p,o]);return state;};
+ await act(async()=>root.render(React.createElement(C,{organizationId:'org_default'})));
+ const select=document.querySelectorAll('select')[0];await act(async()=>{select.value='POINTS';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ const input=document.querySelector('input[type=month]');input.focus();input.value='2026-09';const before=document.activeElement;
+ await act(async()=>{tick();await Promise.resolve();});ok(document.activeElement===before);ok(input===document.querySelector('input[type=month]'));ok(select.value==='POINTS');ok(document.body.textContent.includes('Última verificação'));ok(calls.every(([,o])=>!o));
+ const statuses={...state,policies:[{id:'p',kind:'MEASUREMENTS',authorization_id:'b',month_mode:'FIXED',month:'2026-09-01',enabled:true,state:'READY',revision:1,last_success_at:'2026-10-27T15:00:00Z',next_run_at:'2026-10-27T16:00:00Z'}],sources:[]};api=async()=>statuses;
+ await act(async()=>root.render(React.createElement(Auto,{organizationId:'org_default',bindings:[binding]})));ok(document.body.textContent.includes('Última atualização concluída'));ok(document.body.textContent.includes('Próxima verificação'));ok(document.body.textContent.includes('200 chamadas/dia'));
+ api=async()=>({...statuses,organizationId:'foreign',policies:[{...statuses.policies[0],kind:'PRIVATE_FOREIGN'}]});await act(async()=>{tick();await Promise.resolve();});ok(!document.body.textContent.includes('PRIVATE_FOREIGN'));ok(document.body.textContent.includes('fora da organização'));
+ await act(async()=>root.unmount());console.log(checks+' automatic CCEE UI checks passed: local status polling preserves focus and form, no SOAP request, dates and tenant boundary');
+}catch(e){console.error(e);process.exitCode=1;}finally{global.setInterval=interval;global.clearInterval=clear;dom.window.close();}})();
