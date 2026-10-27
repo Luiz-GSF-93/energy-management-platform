@@ -10,7 +10,7 @@ const context:any={scope:'organization',organizationId:'org',userId:id,role:'ges
 function xml(rows:string,ns='http://xmlns.energia.org.br/BM/v1'){
  return `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:b="${ns}" xmlns:o="http://xmlns.energia.org.br/BO/v1"><s:Body><b:listarMedidaResponse><b:medidas>${rows}</b:medidas></b:listarMedidaResponse></s:Body></s:Envelope>`;
 }
-function hour(end='2026-09-01T01:00:00-03:00',value='1.25',unit='KWh',status='HCC',point='POINT'){
+function hour(end='2026-09-01T00:00:00-03:00',value='1.25',unit='KWh',status='HCC',point='POINT'){
  return `<b:medida><o:periodo><o:fim>${end}</o:fim></o:periodo><o:pontoMedicao><o:codigo>${point}</o:codigo></o:pontoMedicao><o:consumoAtivo>${value}</o:consumoAtivo><o:consumoReativo>9.0</o:consumoReativo><o:unidade><o:codigo>${unit}</o:codigo></o:unidade><o:status>${status}</o:status></b:medida>`;
 }
 describe('CCEE R1 closed preparation boundaries',()=>{
@@ -62,21 +62,21 @@ describe('CCEE R1 closed preparation boundaries',()=>{
   expect(()=>privateEnvelope(xml(hour().replace('</o:consumoAtivo>','</o:consumoAtivo><o:consumoAtivo>2</o:consumoAtivo>')),1,'listarMedidaResponse')).toThrow();
  });
  it('retains source reactivity separately, sums active units exactly and detects gaps',()=>{
-  const p=measurementRows(xml(hour()),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T01:00:00-03:00');
+  const p=measurementRows(xml(hour()),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T00:59:59-03:00');
   expect(p.complete).toBe(true);expect(p.totalKwh).toBe('1.250000');expect(p.data[0].reactiveSource).toBe('9.0');
   expect(quantityMicro('0.125','MWh')).toBe(125000000n);expect(()=>quantityMicro('1',null)).toThrow();
-  expect(measurementRows(xml(hour()),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T02:00:00-03:00').complete).toBe(false);
+  expect(measurementRows(xml(hour()),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T01:59:59-03:00').complete).toBe(false);
  });
  it('does not accept estimated or unitless hours as complete',()=>{
-  for(const row of [hour(undefined,undefined,'',undefined),hour(undefined,undefined,undefined,'HEC')])expect(measurementRows(xml(row),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T01:00:00-03:00').complete).toBe(false);
+  for(const row of [hour(undefined,undefined,'',undefined),hour(undefined,undefined,undefined,'HEC')])expect(measurementRows(xml(row),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T00:59:59-03:00').complete).toBe(false);
  });
  it('rejects duplicate timestamps and foreign measurement points',()=>{
-  for(const rows of [hour()+hour(),hour(undefined,undefined,undefined,undefined,'OTHER')])expect(()=>measurementRows(xml(rows),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T01:00:00-03:00')).toThrow();
+  for(const rows of [hour()+hour(),hour(undefined,undefined,undefined,undefined,'OTHER')])expect(()=>measurementRows(xml(rows),'POINT','2026-09-01T00:00:00-03:00','2026-09-01T00:59:59-03:00')).toThrow();
  });
  it('builds only documented read operations and escapes credentials',()=>{
   const c:any={profile:'1',username:'1',password:'<secret>',pfx:Buffer.alloc(0)};
-  const p=privateSoap(c,'MEASUREMENTS','POINT','FINAL','2026-09-01T00:00:00-03:00','2026-09-02T00:00:00-03:00',null);
-  expect(p).toContain('&lt;secret&gt;');expect(p).toContain('<bm:tipoMedida>FINAL</bm:tipoMedida>');expect(p).toContain('http://xmlns.energia.org.br/BM/v1');expect(p).not.toContain('listarPerfilParticipanteMercadoRequest');
+  const p=privateSoap(c,'MEASUREMENTS','POINT','FINAL','2026-09-01T00:00:00-03:00','2026-09-01T23:59:59-03:00',null);
+  expect(p).toContain('<bo:inicio>2026-09-01T00:00:00-03:00</bo:inicio>');expect(p).toContain('<bo:fim>2026-09-01T23:59:59-03:00</bo:fim>');expect(p).toContain('&lt;secret&gt;');expect(p).toContain('<bm:tipoMedida>FINAL</bm:tipoMedida>');expect(p).toContain('http://xmlns.energia.org.br/BM/v1');expect(p).not.toContain('listarPerfilParticipanteMercadoRequest');
   expect(()=>privateSoap(c,'MEASUREMENTS','POINT','FALTANTES','','',null)).toThrow();
  });
  it('does not let the private transport become an SSRF or write adapter',async()=>{
