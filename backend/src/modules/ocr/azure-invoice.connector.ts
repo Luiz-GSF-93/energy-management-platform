@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { inspectDocument, DocumentFile } from '../documents/services/document-file';
+import { inspectDocumentUpload, DocumentFile } from '../documents/services/document-file';
 
 export const AZURE_API_VERSION = '2024-11-30';
 const MODEL = 'prebuilt-invoice';
@@ -46,7 +46,7 @@ export class AzureInvoiceConnector {
  }
  async submit(file: DocumentFile, expectedSha256: string): Promise<AzureOperation> {
   const root = endpointOf(this.config);
-  try { inspectDocument(file); } catch { throw new OcrProviderError('INVALID_DOCUMENT'); }
+  try { await inspectDocumentUpload(file); } catch { throw new OcrProviderError('INVALID_DOCUMENT'); }
   if (!/^[a-f0-9]{64}$/.test(expectedSha256) || file.size !== file.buffer.length || createHash('sha256').update(file.buffer).digest('hex') !== expectedSha256) throw new OcrProviderError('INVALID_DOCUMENT');
   const url = new URL('/documentintelligence/documentModels/' + MODEL + ':analyze', root);
   url.searchParams.set('api-version', AZURE_API_VERSION);

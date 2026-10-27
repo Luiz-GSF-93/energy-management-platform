@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import { UploadDocumentDto } from '../dto/upload-document.dto';
-import { DOCUMENT_BUCKET, DocumentFile, inspectDocument } from './document-file';
+import { DOCUMENT_BUCKET, DocumentFile, inspectDocumentUpload } from './document-file';
 import { Injectable, BadRequestException, ConflictException, InternalServerErrorException, NotFoundException, UnauthorizedException, ForbiddenException, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../services/supabase.service';
 import { CreateDocumentDto, UpdateDocumentDto } from '../dto/create-document.dto';
@@ -105,7 +105,7 @@ export class DocumentsService {
   async upload(input: UploadDocumentDto, file: DocumentFile | undefined, organizationId: string, actorUserId?: string) {
     await this.requireDocumentManagement(organizationId);
     const dto = await validateWriteDto(UploadDocumentDto, input);
-    const detected = inspectDocument(file, !['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','TAX_DOCUMENT'].includes(dto.documentType));
+    const detected = await inspectDocumentUpload(file, !['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER','TAX_DOCUMENT'].includes(dto.documentType));
     const bytes = file!.buffer;
     const path = organizationId + '/' + dto.consumerUnitId + '/' + randomUUID() + '.' + detected.extension;
     const row = await this.prepareCreate({ ...dto, fileName: detected.name, fileType: detected.mime,
