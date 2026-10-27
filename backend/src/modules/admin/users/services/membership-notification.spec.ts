@@ -21,4 +21,29 @@ describe('membership notification',()=>{
  it('does not notify inactive membership',async()=>{const service=new UsersService({} as any,{} as any);jest.spyOn(service,'findOne').mockResolvedValue({membershipStatus:'inactive'} as any);await expect(service.notifyExistingMember('user',{organizationId:'a',actorPermissions:[],platformOperation:false})).rejects.toThrow('ativo');expect(global.fetch).not.toHaveBeenCalled();});
  it('enforces assignable-role authorization',async()=>{const service=new UsersService({} as any,{} as any);jest.spyOn(service,'findOne').mockResolvedValue({membershipStatus:'active',role:{id:'r'}} as any);jest.spyOn(service,'assertAssignable').mockRejectedValue(new Error('forbidden'));await expect(service.notifyExistingMember('user',{organizationId:'a',actorPermissions:[],platformOperation:false})).rejects.toThrow('forbidden');expect(global.fetch).not.toHaveBeenCalled();});
  it('contains organization lookup failure without compensating membership',async()=>{const client={from:()=>{throw new Error('database')}};const service=new UsersService({getClient:()=>client} as any,{} as any);expect(await (service as any).notifyMembership('m','a@example.test','a','gestor','internal')).toBe('failed');expect(global.fetch).not.toHaveBeenCalled();});
+ it('welcomes Portal members with company and use instructions while retaining the existing password',async()=>{
+   await sendMembershipNotification({...input,roleName:'consulta',customerName:'Cliente <Privado>'});
+   const body=JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+   expect(body.text).toContain('Portal do cliente');expect(body.text).toContain('Cliente <Privado>');expect(body.text).toContain('envie novos documentos');expect(body.text).toContain('senha atuais');
+   expect(body.html).toContain('Cliente &lt;Privado&gt;');expect(body.html).not.toContain('Cliente <Privado>');expect(body.html).not.toContain('Criar minha senha');
+ });
+ it('welcomes Backoffice members with role and designation guidance',async()=>{
+   await sendMembershipNotification(input);const body=JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+   expect(body.text).toContain('Backoffice');expect(body.text).toContain('designações e permissões');expect(body.html).toContain('Operador');expect(body.html).not.toContain('Empresa:');
+ });
+ it('does not treat an external consultant without an exclusive company as a Portal member',async()=>{
+   await sendMembershipNotification({...input,roleName:'consulta'});const body=JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);expect(body.text).toContain('Ambiente: Backoffice');
+ });
+ it('resolves notification company through the active membership in the same organization',async()=>{
+   const queries:any[]=[];
+   const rows:any={organization_members:[{user_id:'u',organization_id:'org',status:'active',roles:{name:'consulta'},affiliation_type:'external',exclusive_customer_id:'company'}],organizations:[{id:'org',name:'Org'}],customers:[{id:'company',organization_id:'org',company_name:'Scoped company'}]};
+   const client={from:(table:string)=>{const q:any={select:()=>q,eq:(k:string,v:string)=>{queries.push([table,k,v]);return q;},then:(done:any)=>Promise.resolve({data:rows[table],error:null}).then(done)};return q;}};
+   const service=new UsersService({getClient:()=>client} as any,{} as any);
+   expect(await (service as any).notifyMembership('event','p@example.test','org','consulta','external',undefined,'u')).toBe('accepted');
+   expect(queries).toContainEqual(['customers','organization_id','org']);expect(queries).toContainEqual(['organization_members','user_id','u']);
+   expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).text).toContain('Scoped company');
+   rows.customers[0].organization_id='other';(global.fetch as jest.Mock).mockClear();
+   expect(await (service as any).notifyMembership('event','p@example.test','org','consulta','external',undefined,'u')).toBe('failed');expect(global.fetch).not.toHaveBeenCalled();
+ });
+
 });
