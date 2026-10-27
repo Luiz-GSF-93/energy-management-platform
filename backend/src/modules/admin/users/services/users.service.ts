@@ -1,3 +1,4 @@
+import {WelcomeContext,welcomeContent} from './welcome-content';
 import {checkPortalInvite} from './portal-invite';
 import { sendMembershipNotification, MembershipNotificationStatus } from './membership-notification';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
@@ -399,7 +400,7 @@ export class UsersService {
     if (data !== true) throw new InternalServerErrorException('Não foi possível confirmar a alteração do acesso. Atualize a lista.');
     if (status === 'active') {
       // Distinct key for each confirmed reactivation, separate from the original invitation.
-      const notificationStatus = await this.notifyMembership(randomUUID(), member.email, context.organizationId, member.role.name, member.affiliationType || 'internal', 'reactivated');
+      const notificationStatus = await this.notifyMembership(randomUUID(), member.email, context.organizationId, member.role.name, member.affiliationType || 'internal', 'reactivated', targetUserId);
       return {userId: targetUserId, membershipStatus: status, notificationStatus};
     }
     return {userId: targetUserId, membershipStatus: status};
@@ -881,10 +882,16 @@ export class UsersService {
           );
         }
 
+        const welcome=await this.welcomeContext(auditContext.organizationId,role.name,dto.affiliationType,dto.customerId);
+        const welcomeInfo=welcomeContent(welcome);
         const { data: inviteData, error: inviteError } =
           await authClient.auth.admin.inviteUserByEmail(normalizedEmail, {
             data: {
               name: normalizedName,
+              energyos_audience: welcomeInfo.audience,
+              energyos_organization: welcome.organizationName,
+              energyos_role: welcomeInfo.roleLabel,
+              ...(welcome.customerName?{energyos_customer:welcome.customerName}:{}),
             },
             redirectTo: new URL('/auth/accept-invite', process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000').toString(),
           });
@@ -1089,7 +1096,7 @@ export class UsersService {
         membershipId: confirmedMembershipId,
         membershipStatus: 'active',
         provisioningPath,
-        ...(provisioningPath === 'existing_identity' ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType)} : {}),
+        ...(provisioningPath === 'existing_identity' ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType, undefined, targetUserId)} : {}),
       };
     } catch (error) {
       // Compensate owned writes at most once per invite execution.
@@ -1110,12 +1117,30 @@ export class UsersService {
     }
   }
 
-  private async notifyMembership(membershipId: string, email: string, organizationId: string, roleName: string, affiliationType: string, event?: 'reactivated'): Promise<MembershipNotificationStatus> {
+  private async welcomeContext(organizationId:string,roleName:string,affiliationType:string,customerId?:string):Promise<WelcomeContext> {
+    const client=this.supabaseService.getClient();
+    const {data,error}=await client.from('organizations').select('id,name').eq('id',organizationId);
+    if(error || data?.length!==1 || data[0].id!==organizationId || typeof data[0].name!=='string' || !data[0].name.trim()) throw new InternalServerErrorException('Não foi possível conferir a organização do convite.');
+    let customerName:string|undefined;
+    if(customerId){
+      const customer=await client.from('customers').select('id,organization_id,company_name').eq('id',customerId).eq('organization_id',organizationId);
+      if(customer.error || customer.data?.length!==1 || customer.data[0].id!==customerId || customer.data[0].organization_id!==organizationId || typeof customer.data[0].company_name!=='string' || !customer.data[0].company_name.trim()) throw new InternalServerErrorException('Não foi possível conferir a empresa do convite.');
+      customerName=customer.data[0].company_name;
+    }
+    return {organizationName:data[0].name,roleName,affiliationType,customerName};
+  }
+
+  private async notifyMembership(membershipId: string, email: string, organizationId: string, roleName: string, affiliationType: string, event?: 'reactivated', userId?: string): Promise<MembershipNotificationStatus> {
     // Notification is best-effort after the membership audit succeeds. Never roll back access on mail failure.
     try {
-      const {data,error} = await this.supabaseService.getClient().from('organizations').select('id,name').eq('id',organizationId);
-      if(error || data?.length!==1 || data[0].id!==organizationId || typeof data[0].name!=='string') return 'failed';
-      return await sendMembershipNotification({membershipId,email,organizationName:data[0].name,roleName,affiliationType,event});
+      if(!userId) return 'failed';
+      const client=this.supabaseService.getClient();
+      const {data,error}=await client.from('organization_members').select('user_id,organization_id,status,roles(name),affiliation_type,exclusive_customer_id').eq('user_id',userId).eq('organization_id',organizationId).eq('status','active');
+      if(error || data?.length!==1) return 'failed';
+      const member=data[0], currentRole=Array.isArray(member.roles)?member.roles[0]:member.roles;
+      if(member.user_id!==userId || member.organization_id!==organizationId || member.status!=='active' || currentRole?.name!==roleName || (member.affiliation_type || 'internal')!==affiliationType) return 'failed';
+      const context=await this.welcomeContext(organizationId,roleName,affiliationType,member.exclusive_customer_id || undefined);
+      return await sendMembershipNotification({...context,membershipId,email,event});
     } catch {return 'failed';}
   }
 
@@ -1125,7 +1150,7 @@ export class UsersService {
     await this.assertAssignable(member.role.id,context.organizationId,context.actorPermissions,context.platformOperation);
     const {data,error}=await this.supabaseService.getClient().from('organization_members').select('id').eq('user_id',userId).eq('organization_id',context.organizationId).eq('status','active').eq('role_id',member.role.id);
     if(error || data?.length!==1 || typeof data[0].id!=='string') throw new ConflictException('O vínculo mudou. Atualize a lista.');
-    return {notificationStatus:await this.notifyMembership(data[0].id,member.email,context.organizationId,member.role.name,member.affiliationType || 'internal')};
+    return {notificationStatus:await this.notifyMembership(data[0].id,member.email,context.organizationId,member.role.name,member.affiliationType || 'internal',undefined,userId)};
   }
 
   async assertAssignable(roleId:string,organizationId:string,actorPermissions:string[],platformOperation=false) {
