@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
 import {Binding,BindingIdentity} from './BindingEvidence';
+import DriCostPreparation from './DriCostPreparation';
 const base='/api/v1/ccee-data/dri';
 type Job={id:string;kind:string;state:string;created_at:string;error_code?:string;result?:{data:{rows:any[];sourceHash:string;financialState:string}};request_payload?:any};
 type Scoped={organizationId:string;jobs?:Job[];job?:Job};
@@ -32,7 +33,7 @@ export default function DriWorkspace({organizationId,bindings,enabled,canManage}
  {detail.result&&<><p>SHA-256: <span style={{overflowWrap:'anywhere'}}>{detail.result.data.sourceHash}</span></p>
  {detail.kind==='DRI_EVENTS'&&detail.result.data.rows.map(e=><p key={e.code}>{e.name} · {e.month} {canManage&&detail.state==='SUCCEEDED'&&<Button disabled={busy} onClick={()=>void run(()=>enqueue('DRI_REPORTS',{parentJobId:detail.id,eventCode:e.code}))}>Consultar relatórios deste evento</Button>}</p>)}
  {detail.kind==='DRI_REPORTS'&&detail.result.data.rows.map(r=><details key={r.id}><summary>{r.name} · {r.id}</summary><p>{r.description} · Vigência {r.period.start} a {r.period.end??'sem término informado'}</p>{r.frames.map((f:any)=><div key={f.id}><p>{f.name} · {f.description} · Parâmetros: {f.parameters.join(', ')||'nenhum'}</p>{canManage&&<Button disabled={busy||detail.state!=='SUCCEEDED'||!f.parameters.includes('CODIGO_AGENTE')||f.parameters.some((p:string)=>!['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL'].includes(p))} onClick={()=>void run(()=>enqueue('DRI_RESULTS',{parentJobId:detail.id,eventCode:detail.request_payload.eventCode,reportId:r.id,frameId:f.id}))}>Consultar resultado deste quadro</Button>}</div>)}</details>)}
- {detail.kind==='DRI_RESULTS'&&<><Alert>Classificação financeira pendente. Dados no escopo do agente, sem incorporação ao fechamento. Campos vazios não significam zero.</Alert><p>{detail.result.data.rows.length} linhas preservadas. Exibindo até 50 nesta prévia.</p>{detail.result.data.rows.slice(0,50).map((r,i)=><details key={i}><summary>Linha {i+1} · relatório {r.reportId} · quadro {r.frameId}</summary><dl>{r.columns.map((c:string,k:number)=><div key={k}><dt>{c}</dt><dd style={{overflowWrap:'anywhere'}}>{r.cells[k]||'Não informado na fonte'}</dd></div>)}</dl></details>)}</>}
+ {detail.kind==='DRI_RESULTS'&&<><Alert>Classificação financeira pendente para rubricas não homologadas. Dados no escopo do agente, sem incorporação automática ao fechamento. Campos vazios não significam zero.</Alert><p>{detail.result.data.rows.length} linhas preservadas. Exibindo até 50 nesta prévia.</p>{detail.result.data.rows.slice(0,50).map((r,i)=><details key={i}><summary>Linha {i+1} · relatório {r.reportId} · quadro {r.frameId}</summary><dl>{r.columns.map((c:string,k:number)=><div key={k}><dt>{c}</dt><dd style={{overflowWrap:'anywhere'}}>{r.cells[k]||'Não informado na fonte'}</dd></div>)}</dl></details>)}{canManage&&detail.state==='SUCCEEDED'&&detail.request_payload?.reportId==='114'&&detail.request_payload?.frameId==='451'&&<DriCostPreparation key={detail.id} organizationId={organizationId} jobId={detail.id}/>}</>}
  </>}
  </section>}
  </>}

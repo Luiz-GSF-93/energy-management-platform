@@ -19,7 +19,7 @@ try{
  CREATE FUNCTION assert_ccee_data_actor(o text,a text,x text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF o<>'org_default' OR NOT EXISTS(SELECT 1 FROM public.actors WHERE id=a AND active AND(x='view' OR manage)) THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION assert_ccee_data_binding(o text,i uuid,m date,s text) RETURNS jsonb LANGUAGE plpgsql AS $$DECLARE b public.ccee_unit_authorizations;BEGIN SELECT * INTO b FROM public.ccee_unit_authorizations WHERE id=i AND organization_id=o AND active;IF NOT FOUND THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;RETURN to_jsonb(b);END$$;
  CREATE FUNCTION ccee_assert_reading(i uuid,l uuid) RETURNS jsonb LANGUAGE plpgsql AS $$DECLARE j public.ccee_integration_jobs;BEGIN SELECT * INTO j FROM public.ccee_integration_jobs WHERE id=i AND lease_id=l AND lease_until>now();IF NOT FOUND THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;RETURN to_jsonb(j);END$$;
- CREATE FUNCTION ccee_market_assert(i uuid,l uuid) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('organizationId',organization_id) FROM public.ccee_sync_schedules WHERE id=i$$;
+ CREATE FUNCTION ccee_market_assert(p_id uuid,p_lease uuid) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('organizationId',organization_id) FROM public.ccee_sync_schedules WHERE id=p_id$$;
  CREATE FUNCTION ccee_data_action(o text,a text,x text,i uuid,b jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$DECLARE j public.ccee_integration_jobs;BEGIN INSERT INTO public.ccee_integration_jobs(organization_id,actor_id,kind,month,authorization_id,measurement_kind,state,request_payload) VALUES(o,a,b->>'kind',((b->>'month')||'-01')::date,(b->>'authorizationId')::uuid,b->>'measurementKind','QUEUED',b) RETURNING * INTO j;RETURN jsonb_build_object('job',to_jsonb(j));END$$;
  CREATE FUNCTION ccee_dri_action(o text,a text,x text,i uuid,b jsonb) RETURNS jsonb LANGUAGE sql AS $$SELECT public.ccee_data_action(o,a,x,i,b)$$;`);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261229_ccee_automatic_service_policies.sql',import.meta.url),'utf8'));
@@ -59,5 +59,21 @@ try{
  await deny(q('SELECT ccee_communication_reserve($1,$2,false) result',[pld,pldlease]));
  const driJob=randomUUID(),driLease=randomUUID();await db.query(`INSERT INTO ccee_integration_jobs(id,organization_id,kind,lease_id,lease_until,state) VALUES($1,'org_default','DRI_RESULTS',$2,now()+interval '1 hour','RUNNING')`,[driJob,driLease]);
  await db.query(`INSERT INTO ccee_integration_events(organization_id,job_id,event,details) SELECT 'org_default',$1,'COMMUNICATION_REQUEST_RESERVED','{}' FROM generate_series(1,40)`,[driJob]);await deny(q('SELECT ccee_communication_reserve($1,$2,false) result',[driJob,driLease]));
+ await db.exec(`CREATE TABLE roles(id text PRIMARY KEY,organization_id text,scope text,name text,permissions jsonb);
+ CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text);
+ INSERT INTO actors VALUES('permanent',true,true),('temporary-platform',true,true);
+ INSERT INTO roles VALUES('ccee-admin','org_default','organization','admin_org','["f5364101-4486-42c2-a90f-807937ac3011","f5364101-4486-42c2-a90f-807937ac3012"]');
+ INSERT INTO organization_members VALUES('org_default','permanent','ccee-admin','ACTIVE');
+ ALTER TABLE ccee_sync_schedules ADD COLUMN state text,ADD COLUMN updated_at timestamptz,ADD COLUMN lease_id uuid,ADD COLUMN lease_until timestamptz,ADD COLUMN current_day date,ADD COLUMN authorization_id uuid;`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261232_ccee_automation_responsibility.sql',import.meta.url),'utf8'));
+ const takeRequest=randomUUID(),take=(actor='permanent',reason='Own account responsibility confirmed')=>q('SELECT ccee_automation_takeover($1,$2,$3,$4) result',['org_default',actor,reason,takeRequest]);
+ await deny(take('temporary-platform'));await deny(take('viewer'));
+ await db.query("UPDATE ccee_service_sync_policies SET current_job_id=NULL,lease_until=NULL");
+ const captured=await take();ok(captured.actorId==='permanent'&&captured.enabledChanged===false);ok((await take()).actorId==='permanent');await deny(take('permanent','Changed reason rejected'));
+ ok((await q("SELECT count(*)::integer result FROM ccee_service_sync_policies WHERE kind<>'UNIT_BASIS' AND execution_actor_id='permanent'"))===2);
+ const schedule=randomUUID(),scheduleLease=randomUUID();await db.query("INSERT INTO ccee_sync_schedules(id,organization_id,kind,max_requests,daily_limit,created_by,execution_actor_id,state,lease_id,lease_until,current_day) VALUES($1,'org_default','PLD_HOURLY',2,60,'temporary-platform','permanent','RUNNING',$2,now()+interval '1 hour',current_date)",[schedule,scheduleLease]);
+ ok((await q('SELECT ccee_market_assert($1,$2) result',[schedule,scheduleLease])).organizationId==='org_default');
+ await db.query("UPDATE organization_members SET status='REVOKED' WHERE user_id='permanent'");await deny(q('SELECT ccee_market_assert($1,$2) result',[schedule,scheduleLease]));await deny(take());
+ ok(!(await q("SELECT has_function_privilege('authenticated','ccee_automation_takeover(text,text,text,uuid)','EXECUTE') result")));
  console.log(checks+' automatic CCEE database checks passed');
 }catch(e){console.error('check',checks,e.message,e.position,e.internalPosition,e.internalQuery,e.where??'',e.stack);process.exitCode=1;}finally{await db.close();}

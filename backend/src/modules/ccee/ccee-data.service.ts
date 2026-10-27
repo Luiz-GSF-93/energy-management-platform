@@ -8,7 +8,7 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS} from '../../common/constants/permissions';
 import {cceeCalculationDraft} from './ccee-calculation-routing';
 import {CCEE_DATA_FLAGS,CCEE_DATA_PERMISSIONS,cceeDataEnabled,cceeMonth,cceeObject,cceeText,cceeUuid,dateOnly,readingCommand,calendarSource} from './ccee-data.model';
-import {calendarMapping,downloadCalendar,isolatedCalendar,mappedCalendar} from './ccee-calendar';
+import {calendarMapping,downloadCalendar,isolatedCalendar,mappedCalendar,officialAnnualCalendar} from './ccee-calendar';
 @Injectable()
 export class CceeDataService{
  constructor(private db:SupabaseService,private licenses:LicensesService){}
@@ -103,6 +103,17 @@ export class CceeDataService{
   const bytes=await downloadCalendar(sourceUrl),grid=await isolatedCalendar(bytes),parsed=mappedCalendar(grid,mapping),sourceHash=createHash('sha256').update(bytes).digest('hex');
   const normalizedHash=createHash('sha256').update(JSON.stringify({mapping,...parsed})).digest('hex');
   return this.ownerCalendar(actor,'create',null,{requestId:b.requestId,sourceUrl,sourceHash,normalizedHash,year:mapping.year,mapping,coverage:parsed.coverage,issues:parsed.issues,items:parsed.items,reason:b.reason});
+ }
+ async uploadOfficialCalendar(actor:string,input:unknown){
+  cceeDataEnabled('CCEE_OFFICIAL_CALENDAR_ENABLED');await this.ownerCalendar(actor,'list',null,{page:0});
+  const b=cceeObject(input,['requestId','sourceUrl','base64','year','reason']);cceeUuid(b.requestId);cceeText(b.reason,1000);
+  const sourceUrl=calendarSource(b.sourceUrl);
+  if(typeof b.base64!=='string'||b.base64.length>6990520||!b.base64.length||!/^[A-Za-z0-9+/]+={0,2}$/.test(b.base64))throw new BadRequestException('Arquivo XLSX inválido ou maior que 5 MB.');
+  const bytes=Buffer.from(b.base64,'base64');if(bytes.toString('base64')!==b.base64||bytes.length>5242880||bytes.subarray(0,2).toString()!=='PK')throw new BadRequestException('Envie o XLSX original.');
+  try{const parsed=officialAnnualCalendar(await isolatedCalendar(bytes),b.year),mapping={adapter:'CCEE_ANNUAL_V9',year:b.year,origin:'OWNER_UPLOAD'},sourceHash=createHash('sha256').update(bytes).digest('hex');
+   const normalizedHash=createHash('sha256').update(JSON.stringify({mapping,...parsed})).digest('hex');
+   return await this.ownerCalendar(actor,'create',null,{requestId:b.requestId,sourceUrl,sourceHash,normalizedHash,year:b.year,mapping,coverage:parsed.coverage,issues:parsed.issues,items:parsed.items,reason:b.reason});
+  }finally{bytes.fill(0);}
  }
  private reconciliationEnabled(){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');if(process.env.CCEE_RECONCILIATION_ENABLED!=='true')throw new ServiceUnavailableException('Conciliação CCEE × fatura desligada; aguardando homologação.');}
  private async invoiceAccess(t:TenantContext,manage=false){

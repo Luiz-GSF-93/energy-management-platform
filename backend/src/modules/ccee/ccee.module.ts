@@ -1,4 +1,7 @@
 import {CceeAutomaticService,CceeAutomaticController} from './ccee-automatic.service';
+import {CceeContractApiService,CceeContractApiController,CceeContractApiWorker,CceeContractConnector} from './ccee-contract-api.service';
+import {CceeDriCostService,CceeDriCostController} from './ccee-dri-cost.service';
+import {MonthlyCostsService} from '../contracts/services/monthly-costs.service';
 import {Module} from '@nestjs/common';
 import {CceeController} from './ccee.controller';
 import {CceeService} from './ccee.service';
@@ -22,5 +25,5 @@ import {ContractContextService} from '../energy-forecast/contract-context.servic
 import {ContractIndexMemoryService} from '../contracts/services/contract-index-memory.service';
 import {OperationsService} from '../operations/operations.service';
 import {CceeDataController,CceeCalendarController,CceeDataMetricsController} from './ccee-data.controller';
-@Module({imports:[LicensesModule],controllers:[CceeAutomaticController,CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController,CceeDriController,CceeMarketController,CceeContractComparisonController],providers:[CceeAutomaticService,CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDriConnector,CceeDriService,CceeDataWorker,CceeMarketService,CceeMarketWorker,CceeMarketConnector,CceeContractComparisonService,ContractContextService,ContractIndexMemoryService,OperationsService,SupabaseService],exports:[CceeDataService,CceeDriService,CceeMarketService]})
+@Module({imports:[LicensesModule],controllers:[CceeContractApiController,CceeDriCostController,CceeAutomaticController,CceeController,CceeRegistrationController,CceeDataController,CceeCalendarController,CceeDataMetricsController,CceeDriController,CceeMarketController,CceeContractComparisonController],providers:[CceeContractApiService,CceeContractApiWorker,CceeContractConnector,CceeDriCostService,MonthlyCostsService,CceeAutomaticService,CceeService,CceePublicationService,CceeRegistrationService,CceeDataService,CceePrivateConnector,CceeDriConnector,CceeDriService,CceeDataWorker,CceeMarketService,CceeMarketWorker,CceeMarketConnector,CceeContractComparisonService,ContractContextService,ContractIndexMemoryService,OperationsService,SupabaseService],exports:[CceeDataService,CceeDriService,CceeMarketService]})
 export class CceeModule {}

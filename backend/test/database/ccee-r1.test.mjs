@@ -96,6 +96,7 @@ try{
  await db.query(`UPDATE consumer_units SET status='INACTIVE' WHERE id='u1'`);
  await denied(action(author,'enqueue',null,{requestId:randomUUID(),kind:'POINTS',month:'2021-01',authorizationId:narrowApproved.id}));
  await db.query(`UPDATE consumer_units SET status='ACTIVE' WHERE id='u1'`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261231_ccee_calendar_precision.sql',import.meta.url),'utf8'));
  const calendarBody={requestId:randomUUID(),sourceUrl:'https://www.ccee.org.br/documents/synthetic',sourceHash:'b'.repeat(64),normalizedHash:'c'.repeat(64),year:2090,mapping:{},coverage:{},issues:[],items:[{code:'synthetic',title:'Synthetic activity',month:'2090-01',dueAt:'2090-02-01T18:00:00-03:00',sourceRow:2,sourceSheet:'Synthetic',applicability:'Synthetic consumer'}],reason:'Synthetic calendar only'};
  const cv=await calendar(owner,'create',null,calendarBody);ok(cv.state==='DRAFT');await denied(calendar(owner,'approve',cv.id,{requestId:randomUUID(),reason:'Self approval rejected'}));
  await denied(calendar(finance,'list',null,{page:0}));await denied(calendar(support,'list',null,{page:0}));
@@ -110,6 +111,10 @@ try{
  const bad=await calendar(owner,'create',null,{...calendarBody,requestId:randomUUID(),sourceHash:'d'.repeat(64),normalizedHash:'e'.repeat(64),issues:[{row:1,reason:'Missing hour'}]});
  await denied(calendar(owner2,'approve',bad.id,{requestId:randomUUID(),reason:'Must reject coverage gap'}));
  const comparison=await calendar(owner,'list',bad.id,{page:0});ok(comparison.differences.comparedWith===cv.id&&comparison.differences.deadlinesChanged===0);
+ const datesOnly=await calendar(owner,'create',null,{...calendarBody,requestId:randomUUID(),sourceHash:'1'.repeat(64),normalizedHash:'2'.repeat(64),items:[{...calendarBody.items[0],code:'date-only',dueAt:null,dueDate:'2090-02-01',precision:'DATE'}]});
+ ok((await calendar(owner2,'approve',datesOnly.id,{requestId:randomUUID(),reason:'Independent date precision review'})).state==='APPROVED');
+ const dateItem=(await db.query('SELECT * FROM ccee_calendar_items WHERE version_id=$1',[datesOnly.id])).rows[0];ok(dateItem.due_at===null&&dateItem.deadline_precision==='DATE');
+ await denied(query('SELECT ccee_apply_calendar($1,$2,$3,$4,$5,$6,$7) result',['o1',author,datesOnly.id,dateItem.id,narrowApproved.id,author,'Do not invent a midnight deadline']));
  const metrics=await query('SELECT ccee_data_metrics($1,date_trunc(\'month\',now())::date) result',[finance]);ok(metrics.jobs===2&&metrics.actualCostMinor===null&&metrics.providerBillingConnected===false);
  await denied(query('SELECT ccee_data_metrics($1,date_trunc(\'month\',now())::date) result',[support]));
  await db.exec('SET ROLE service_role');for(const t of ['ccee_integration_jobs','ccee_integration_events','ccee_calendar_versions','ccee_calendar_items'])await denied(db.query('SELECT * FROM '+t));

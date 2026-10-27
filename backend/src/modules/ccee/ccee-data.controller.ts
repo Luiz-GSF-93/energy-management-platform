@@ -32,6 +32,7 @@ export class CceeCalendarController{
  constructor(private data:CceeDataService){}
  @Get() @Header('Cache-Control','private, no-store') @RequirePermission([TEAM_MANAGE]) read(@Req()r:RequestWithAuthenticatedUser,@Query('page')page?:string,@Query('versionId')v?:string){return this.data.ownerCalendar(r.authenticatedUser.userId,'list',v?cceeUuid(v):null,{page:page===undefined?0:Number(page)});}
  @Post() @RequirePermission([TEAM_MANAGE]) collect(@Req()r:RequestWithAuthenticatedUser,@Body()b:unknown){return this.data.collectCalendar(r.authenticatedUser.userId,b);}
+ @Post('upload') @RequirePermission([TEAM_MANAGE]) upload(@Req()r:RequestWithAuthenticatedUser,@Body()b:unknown){return this.data.uploadOfficialCalendar(r.authenticatedUser.userId,b);}
  @Post(':id/:decision') @RequirePermission([TEAM_MANAGE]) review(@Req()r:RequestWithAuthenticatedUser,@Param('id')id:string,@Param('decision')decision:string,@Body()body:unknown){
   const b=cceeObject(body,['requestId','reason']);cceeUuid(b.requestId);cceeText(b.reason,1000);
   if(!['approve','reject'].includes(decision))throw new BadRequestException('Decisão inválida.');return this.data.ownerCalendar(r.authenticatedUser.userId,decision,cceeUuid(id),b);

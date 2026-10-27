@@ -46,7 +46,7 @@ export const serviceCatalogue=[
  {key:'DRI_EVENTS',group:'DRI',name:'Eventos contábeis',operation:'listarDivulgacaoEventoContabil',mode:'READ',implemented:true},
  {key:'DRI_REPORTS',group:'DRI',name:'Catálogo de relatórios e quadros',operation:'listarRelatorio',mode:'READ',implemented:true},
  {key:'DRI_RESULTS',group:'DRI',name:'Resultados contábeis por agente',operation:'listarResultadoRelatorio',mode:'READ',implemented:true},
- {key:'CONTRACT_READ',group:'Contratos',name:'Consultas ACL/CCEAR',operation:null,mode:'READ',implemented:false},
+ {key:'CONTRACT_READ',group:'Contratos',name:'Contratos ACL e montantes · homologação por vínculo',operation:'listarContrato / listarMontanteEnergia',mode:'READ',implemented:true},
  {key:'CONTRACT_WRITE',group:'Contratos',name:'Registro e alterações ACL/CCEAR',operation:null,mode:'EXPLICIT_OPERATOR_ACTION',implemented:false},
  {key:'MEASUREMENT_WRITE',group:'Medição',name:'Envio de coletas',operation:'informarColetaMedicao',mode:'EXPLICIT_OPERATOR_ACTION',implemented:false},
  {key:'WEBHOOK',group:'Notificações',name:'Eventos da plataforma',operation:null,mode:'CONFIGURATION_REQUIRED',implemented:false},

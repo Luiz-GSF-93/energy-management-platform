@@ -9,7 +9,7 @@ export function workbookGrid(bytes:Buffer){
   const sheet=book.Sheets[name],range=XLSX.utils.decode_range(sheet['!fullref']??sheet['!ref']??'A1');
   if(range.e.r>9999||range.e.c>99)throw new Error('CALENDAR_CELL_LIMIT');
   const rows=XLSX.utils.sheet_to_json<any[]>(sheet,{header:1,raw:true,defval:null,blankrows:true});
-  return{name,rows};
+  return{name,rows,merges:sheet['!merges']??[]};
  });
  if(Buffer.byteLength(JSON.stringify(result))>2097152)throw new Error('CALENDAR_OUTPUT_LIMIT');return result;
 }
