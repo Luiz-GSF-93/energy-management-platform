@@ -1,0 +1,33 @@
+name: User welcome
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/admin/users/**'
+      - 'frontend/app/backoffice/users/**'
+      - 'frontend/app/backoffice/setup/RegistrationEditor.tsx'
+      - '.github/workflows/user-welcome.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/modules/admin/users/**'
+      - 'frontend/app/backoffice/users/**'
+      - 'frontend/app/backoffice/setup/RegistrationEditor.tsx'
+      - '.github/workflows/user-welcome.yml'
+permissions:
+  contents: read
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --testPathPattern=src/modules/admin/users/
+        working-directory: backend
+      - run: node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+        working-directory: backend
