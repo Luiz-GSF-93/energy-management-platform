@@ -1,5 +1,6 @@
 import {Injectable} from '@nestjs/common';
 import {request} from 'node:https';
+import {createHash} from 'node:crypto';
 import {cceeConfig,CceeConfig,CCEE_HOST} from './ccee-config';
 import {CceeReadingError} from './ccee-private.connector';
 import {DRI_SERVICES,DriKind,driSoap,driPage,driDigest,driEnabled,isDri} from './ccee-dri.model';
@@ -29,19 +30,19 @@ export class CceeDriConnector{
   const began=Date.now(),hashes:string[]=[],transactions:string[]=[],rows:any[]=[];let config:CceeConfig|undefined,requests=0,bytes=0,httpStatus:number|null=null;
   try{
    await revalidate();config={...cceeConfig(process.env),profile:job.binding.profile_code};
-   const selection={...job.request_payload,month:job.month.slice(0,7)};let pages=1,total:number|null=null;const seen=new Set<string>();
+   const selection={...job.request_payload,month:job.month.slice(0,7)};let pages=1,total:number|null=null;const seen=new Map<string,any>();let providerRows=0;
    for(let page=1;page<=pages;page++){
     driEnabled();if(Date.now()-began>95000||requests>=maxRequests)throw new CceeReadingError('RUN_TIME_LIMIT');await revalidate();
     const payload=Buffer.from(driSoap(config,selection,job.binding.dri_agent_code,job.dri_parameters??[],page));let response:{xml:string;bytes:number;httpStatus:number};
     try{await reserveRequest?.();requests++;response=await this.fetch(config,job.kind,payload);}finally{payload.fill(0);}
-    bytes+=response.bytes;httpStatus=response.httpStatus;const p=driPage(response.xml,selection,page,job.binding.dri_tax_id);
-    hashes.push(p.hash);if(p.transactionId)transactions.push(p.transactionId);
+    bytes+=response.bytes;httpStatus=response.httpStatus;hashes.push(createHash('sha256').update(response.xml).digest('hex'));const transaction=driFaultTransaction(response.xml);if(transaction&&!transactions.includes(transaction))transactions.push(transaction);
+    const p=driPage(response.xml,selection,page,job.binding.dri_tax_id);providerRows+=p.providerRows;
     if(page>1&&(pages!==p.pages||total!==p.total))throw new CceeReadingError('DRI_PAGINATION_CHANGED');pages=p.pages;total=p.total;
-    for(const row of p.rows){const key=row.code??row.id??JSON.stringify(row);if(seen.has(key))throw new CceeReadingError('DRI_DUPLICATE_ROW');seen.add(key);rows.push(row);}
+    for(const row of p.rows){const key=row.code??row.id??JSON.stringify(row),previous=seen.get(key);if(previous){if(job.kind!=='DRI_EVENTS')throw new CceeReadingError('DRI_DUPLICATE_ROW');if(previous.sourceIdentity!==row.sourceIdentity)throw new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');previous.providerOccurrences+=row.providerOccurrences;}else{seen.set(key,row);rows.push(row);}}
     if(Buffer.byteLength(JSON.stringify(rows))>1800000)throw new CceeReadingError('DRI_RESULT_LIMIT');
    }
-   if(rows.length!==total)throw new CceeReadingError('DRI_COVERAGE_INCOMPLETE');await revalidate();
-   return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes,transactions,data:{kind:job.kind,month:selection.month,eventCode:selection.eventCode??null,reportId:selection.reportId??null,frameId:selection.frameId??null,participantCode:job.binding.dri_agent_code,participantTaxId:job.binding.dri_tax_id,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED',sourceHash:driDigest(hashes),rows}};
+   if(providerRows!==total)throw new CceeReadingError('DRI_COVERAGE_INCOMPLETE');await revalidate();
+   return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes,transactions,data:{kind:job.kind,month:selection.month,eventCode:selection.eventCode??null,reportId:selection.reportId??null,frameId:selection.frameId??null,participantCode:job.binding.dri_agent_code,participantTaxId:job.binding.dri_tax_id,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED',sourceHash:driDigest(hashes),providerRows,uniqueRows:rows.length,repeatedRows:providerRows-rows.length,rows}};
   }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('DRI_READ_NOT_CONFIRMED');error.metrics={requests,bytes:bytes+error.responseBytes,durationMs:Date.now()-began,hashes,transactions:[...transactions,...(error.transactionId?[error.transactionId]:[])],httpStatus:error.httpStatus??httpStatus};throw error;}
   finally{config?.pfx.fill(0);}
  }

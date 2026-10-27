@@ -1,0 +1,24 @@
+import {createHash} from 'node:crypto';
+import {driPage} from './ccee-dri.model';
+import {CceeDriConnector} from './ccee-dri.connector';
+const month='2026-09',tax='11111111000111',uid='10000000-0000-4000-8000-000000000001';
+const entry=(name='Evento sintético',extra='')=>`<o:divulgacaoEventoContabil><o:eventoContabil><o:codigo>202609001000</o:codigo><o:nome>${name}</o:nome><o:periodoReferencia><o:mesAno>${month}</o:mesAno></o:periodoReferencia></o:eventoContabil>${extra}</o:divulgacaoEventoContabil>`;
+const wrap=(body:string,total=1,page=1,pages=1,op='listarDivulgacaoEventoContabil')=>`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:m="http://xmlns.energia.org.br/MH/v2" xmlns:b="http://xmlns.energia.org.br/BM/v2" xmlns:o="http://xmlns.energia.org.br/BO/v2"><s:Header><m:messageHeader><m:transactionId>${uid.slice(0,-1)+page}</m:transactionId></m:messageHeader><m:paginacao><m:numero>${page}</m:numero><m:totalPaginas>${pages}</m:totalPaginas><m:quantidadeTotalItens>${total}</m:quantidadeTotalItens></m:paginacao></s:Header><s:Body><b:${op}Response>${body}</b:${op}Response></s:Body></s:Envelope>`;
+const events=(entries:string,total=1,page=1,pages=1)=>wrap(`<b:resultadoDivulgacaoEventoContabil>${entries}</b:resultadoDivulgacaoEventoContabil>`,total,page,pages);
+const selection:any={kind:'DRI_EVENTS',month};
+const job={...selection,month:month+'-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:tax},request_payload:selection};
+async function collect(xmls:string[]){
+ const old={...process.env};Object.assign(process.env,{CCEE_DRI_READ_ENABLED:'true',CCEE_DRI_MAX_REQUESTS_PER_JOB:'2'});
+ const config={profile:'222',username:'synthetic',password:'synthetic',pfx:Buffer.from('synthetic certificate'),passphrase:''},spy=jest.spyOn(require('./ccee-config'),'cceeConfig').mockReturnValue(config);
+ const c=new CceeDriConnector();c.fetch=jest.fn();for(const xml of xmls)(c.fetch as jest.Mock).mockResolvedValueOnce({xml,bytes:Buffer.byteLength(xml),httpStatus:200});
+ try{return await c.execute(job,async()=>{});}finally{expect(c.fetch).toHaveBeenCalledTimes(xmls.length);expect(config.pfx.every(x=>x===0)).toBe(true);spy.mockRestore();process.env=old;}
+}
+describe('DRI event source identity and original coverage',()=>{
+ it('groups only identical complete source objects and retains original row counts',()=>{const p=driPage(events(entry()+entry()+entry(),3),selection,1,tax);expect(p.providerRows).toBe(3);expect(p.total).toBe(3);expect(p.rows).toHaveLength(1);expect(p.rows[0]).toMatchObject({code:'202609001000',month,providerOccurrences:3,sourceIdentity:expect.stringMatching(/^[a-f0-9]{64}$/)});});
+ it.each([entry('Nome diferente'),entry('Evento sintético','<o:dataDivulgacao>2026-10-27T17:00:00-03:00</o:dataDivulgacao>')])('rejects a changed field even when the event code is repeated',second=>expect(()=>driPage(events(entry()+second,2),selection,1,tax)).toThrow('DRI_EVENT_IDENTITY_CONFLICT'));
+ it('counts identical occurrences across pages without inventing extra events',async()=>{const r=await collect([events(entry(),2,1,2),events(entry(),2,2,2)]);expect(r.complete).toBe(true);expect(r.requests).toBe(2);expect(r.data).toMatchObject({providerRows:2,uniqueRows:1,repeatedRows:1});expect(r.data.rows[0].providerOccurrences).toBe(2);expect(r.hashes).toHaveLength(2);expect(r.transactions).toHaveLength(2);});
+ it('preserves hashes and transactions when two pages conflict',async()=>{await expect(collect([events(entry(),2,1,2),events(entry('Changed'),2,2,2)])).rejects.toMatchObject({code:'DRI_EVENT_IDENTITY_CONFLICT',metrics:{requests:2,httpStatus:200,hashes:expect.arrayContaining([expect.stringMatching(/^[a-f0-9]{64}$/)]),transactions:expect.arrayContaining([uid])}});});
+ it('preserves evidence even if interpretation fails inside the first page',async()=>{const xml=events(entry()+entry('Changed'),2);await expect(collect([xml])).rejects.toMatchObject({code:'DRI_EVENT_IDENTITY_CONFLICT',metrics:{requests:1,bytes:Buffer.byteLength(xml),hashes:[createHash('sha256').update(xml).digest('hex')],transactions:[uid]}});});
+ it('never deduplicates signed financial rows',()=>{const body=`<b:resultados><o:resultadoRelatorio><o:cabecalho>'CNPJ DO AGENTE','VALOR'</o:cabecalho><o:relatorio><o:id>8</o:id><o:quadros><o:quadro><o:id>31</o:id></o:quadro></o:quadros></o:relatorio><o:valores><o:valor>'${tax}','-1.00'</o:valor><o:valor>'${tax}','-1.00'</o:valor></o:valores></o:resultadoRelatorio></b:resultados>`;expect(()=>driPage(wrap(body,2,1,1,'listarResultadoRelatorio'),{kind:'DRI_RESULTS',month,reportId:'8',frameId:'31'},1,tax)).toThrow('DRI_DUPLICATE_ROW');});
+ it('does not turn a partial provider count into complete coverage',async()=>{await expect(collect([events(entry(),3,1,1)])).rejects.toMatchObject({code:'DRI_COVERAGE_INCOMPLETE',metrics:{requests:1}});});
+});

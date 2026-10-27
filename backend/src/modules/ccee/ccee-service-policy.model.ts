@@ -1,6 +1,11 @@
 import {createHash} from 'node:crypto';
 const canonical=(value:any):string=>JSON.stringify(value&&typeof value==='object'?Array.isArray(value)?value.map(x=>JSON.parse(canonical(x))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])):value);
 export const semanticCursor=(rows:any[])=>createHash('sha256').update(canonical([...rows].sort((a,b)=>canonical(a).localeCompare(canonical(b))))).digest('hex');
+function eventNameInMonth(name:string,sourceMonth:string,targetMonth:string){
+ for(const separator of ['_','-']){const prefix=sourceMonth.replace('-',separator)+' - ';if(name.startsWith(prefix))return targetMonth.replace('-',separator)+' - '+name.slice(prefix.length);}
+ return name;
+}
+function eventNameText(name:unknown){return typeof name==='string'?name.replace(/&#(x[0-9a-f]+|[0-9]+);/gi,(match,code)=>{const n=code[0].toLowerCase()==='x'?parseInt(code.slice(1),16):Number(code);return n>31&&n<=0x10ffff&&!(n>=0xd800&&n<=0xdfff)?String.fromCodePoint(n):match;}).normalize('NFC'):'';}
 export function servicePolicyPlan(c:any,now=new Date()){
  const p=c.policy,month=c.targetMonth,cursor=p.cursor??{},job=c.job,ms=now.getTime();
  const next=new Date(Math.floor(ms/3600000)*3600000+3600000).toISOString();
@@ -13,11 +18,12 @@ export function servicePolicyPlan(c:any,now=new Date()){
   if(job.error_code==='BUDGET_EXHAUSTED')return finish('BUDGET_PAUSED',{nextRunAt:new Date(Date.parse(c.today+'T00:00:00-03:00')+86400000).toISOString(),error:'BUDGET_EXHAUSTED'});
   if(job.state!=='SUCCEEDED'||job.result?.complete!==true)return stop(job.error_code??'SOURCE_COVERAGE_REVIEW');
   const rows=job.result?.data?.rows;if(!Array.isArray(rows))return stop('SOURCE_SCHEMA_REVIEW');
-  const hash=semanticCursor(rows);
+  const hash=semanticCursor(p.kind==='DRI'&&cursor.stage==='EVENTS'?rows.map(({providerOccurrences,...r}:any)=>r):rows);
   if(cursor.stage==='MEASUREMENTS')return finish('READY',{success:true,sourceAt:rows.at(-1)?.hourLabel??null,cursor:{month,sourceHash:hash},lastMonthlyDate:c.today,sourceMonth:month});
   if(cursor.stage==='EVENTS'){
    if(cursor.month===month&&cursor.eventsHash===hash)return finish('READY',{sourceMonth:month});
-   const candidates=rows.filter((r:any)=>r.name===p.source_selector.eventName&&r.month===month);
+   const expectedName=eventNameInMonth(String(p.source_selector.eventName??''),String(p.month??month).slice(0,7),month);
+   const candidates=rows.filter((r:any)=>eventNameText(r.name)===eventNameText(expectedName)&&r.month===month);
    if(!candidates.length)return finish('WAITING_FOR_SOURCE',{cursor:{...cursor,month},sourceMonth:month});
    if(candidates.length!==1)return stop('EVENT_SELECTION_REVIEW');
    return enqueue('DRI_REPORTS',{parentJobId:job.id,eventCode:candidates[0].code},'REPORTS',{...cursor,month,eventCode:candidates[0].code,eventsHash:hash});
