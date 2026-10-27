@@ -22,14 +22,15 @@ export function contractSoap(c:CceeConfig,q:any,page:number){
  const n=new Date(Date.UTC(Number(q.month.slice(0,4)),Number(q.month.slice(5,7)),0)).getUTCDate();
  const period=`<bm:periodoReferencia><bo:inicio>${q.month}-01T00:00:00-03:00</bo:inicio><bo:fim>${q.month}-${n}T23:59:59-03:00</bo:fim></bm:periodoReferencia>`;
  let body:string;
- if(q.operation==='CONTRACTS')body=`<bm:listarContratoRequest>${period}<bm:perfis><bo:perfil><bo:id>${c.profile}</bo:id></bo:perfil></bm:perfis><bm:papel>${q.role}</bm:papel><bm:listarMontantesNaoValidados>false</bm:listarMontantesNaoValidados><bm:ambienteContratacao><bo:nome>LIVRE</bo:nome></bm:ambienteContratacao></bm:listarContratoRequest>`;
+ // ListarContrato manual v2.2, pp.15-16: flag precedes period; omitted environment is LIVRE.
+ if(q.operation==='CONTRACTS')body=`<bm:listarContratoRequest><bm:listarMontantesNaoValidados>false</bm:listarMontantesNaoValidados>${period}<bm:perfis><bo:perfil><bo:id>${c.profile}</bo:id></bo:perfil></bm:perfis><bm:papel>${q.role}</bm:papel></bm:listarContratoRequest>`;
  else{if(!['MONTANTE_MEDIO','MONTANTE_MODULARIZADO'].includes(q.amountKind))throw new CceeReadingError('AMOUNT_KIND_REQUIRED');body=`<bm:listarMontanteEnergiaRequest><bm:contratos><bo:contrato><bo:id>${id(q.contractId)}</bo:id></bo:contrato></bm:contratos>${period}<bm:tipos><bo:tipoMontanteEnergia><bo:nome>${q.amountKind}</bo:nome></bo:tipoMontanteEnergia></bm:tipos><bm:listarMontantesNaoValidados>false</bm:listarMontantesNaoValidados></bm:listarMontanteEnergiaRequest>`;}
  return soapRequest(c,'profile',page).replace('<mh:quantidadeItens>2</mh:quantidadeItens>','<mh:quantidadeItens>100</mh:quantidadeItens>').replace(/<soapenv:Body>[\s\S]*?<\/soapenv:Body>/,`<soapenv:Body>${body}</soapenv:Body>`);
 }
 export function contractPage(xml:string,q:any,profile:string,page:number){
  const p=privateEnvelope(xml,2,CONTRACT_SERVICES[q.operation as 'CONTRACTS'|'AMOUNTS'].action+'Response',['contrato','vigenciaContrato','participanteMercado','perfil','indicador','montanteEnergia']);
  const pg=p.pagination,total=Number(pg?.quantidadeTotalItens),pages=Number(pg?.totalPaginas);
- if(Number(pg?.numero)!==page||!Number.isInteger(total)||total<0||total>500||!Number.isInteger(pages)||pages<1||pages>5)throw new CceeReadingError('CONTRACT_PAGINATION_REVIEW');
+ if(Number(pg?.numero)!==page||!Number.isInteger(total)||total<0||total>500||!Number.isInteger(pages)||pages<0||pages===0&&total!==0||pages>5)throw new CceeReadingError('CONTRACT_PAGINATION_REVIEW');
  const key=q.operation==='CONTRACTS'?'contratos':'montantes';if(!Object.prototype.hasOwnProperty.call(p.body,key))throw new CceeReadingError('CONTRACT_SCHEMA_REVIEW');
  const rows=q.operation==='CONTRACTS'?many(p.body.contratos?.contrato).map(r=>{
   id(r.id);const versions=many(r.vigencias?.vigenciaContrato);

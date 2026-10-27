@@ -52,7 +52,7 @@ export class CceeContractConnector{
     let bytes=0;const chunks:Buffer[]=[];
     res.on('data',(b:Buffer)=>{bytes+=b.length;if(bytes>2097152){req?.destroy();finish(new CceeReadingError('RESPONSE_LIMIT'));}else chunks.push(b);});
     res.on('aborted',()=>finish(new CceeReadingError('TRUNCATED_RESPONSE')));res.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));
-    res.on('end',()=>{const xml=Buffer.concat(chunks).toString('utf8');if(res.statusCode!==200||!/(?:text|application)\/xml/i.test(String(res.headers['content-type']??'')))finish(new CceeReadingError('PROVIDER_REJECTED',res.statusCode??null,driFaultTransaction(xml)));else finish(undefined,xml);});
+    res.on('end',()=>{const xml=Buffer.concat(chunks).toString('utf8');if(res.statusCode!==200||!/(?:text|application)\/xml/i.test(String(res.headers['content-type']??''))){const error=new CceeReadingError('PROVIDER_REJECTED',res.statusCode??null,driFaultTransaction(xml));error.responseBytes=bytes;error.metrics={requests:0,bytes,durationMs:0,hashes:[contractHash(xml)],transactions:error.transactionId?[error.transactionId]:[],httpStatus:error.httpStatus};finish(error);}else finish(undefined,xml);});
    });req.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));req.end(payload);}catch{finish(new CceeReadingError('TRANSPORT_ERROR'));}
   });
  }
@@ -72,7 +72,7 @@ export class CceeContractConnector{
    }
    if(rows.length!==total||new Set(rows.map(r=>JSON.stringify(r))).size!==rows.length)throw new CceeReadingError('CONTRACT_COVERAGE_REVIEW');await assert();
    return{complete:true,rows,requests,hashes,transactions,sourceHash:contractHash(hashes.join(':')),profileCode:config.profile,month:q.month,operation:c.operation,financialState:'SOURCE_ONLY',durationMs:Date.now()-began};
-  }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('CONTRACT_READ_UNCONFIRMED');error.metrics={requests,bytes:0,durationMs:Date.now()-began,hashes,transactions:[...transactions,...(error.transactionId?[error.transactionId]:[])],httpStatus:error.httpStatus};throw error;}
+  }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('CONTRACT_READ_UNCONFIRMED');error.metrics={requests,bytes:error.responseBytes??0,durationMs:Date.now()-began,hashes:[...hashes,...(error.metrics?.hashes??[])],transactions:[...transactions,...(error.transactionId?[error.transactionId]:[])],httpStatus:error.httpStatus};throw error;}
   finally{config?.pfx.fill(0);}
  }
 }
