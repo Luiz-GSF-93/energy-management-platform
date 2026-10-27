@@ -10,6 +10,9 @@ ENERGIA ELETRICA (Incentivada) fornecida no mês de maio/2026
 DADOS ADICIONAIS`;
 const run=(t=text,month='2026-05',tax='11222333000181')=>supplierInvoiceProposal(t,month,tax,source);
 describe('Supplier NF proposal',()=>{
+ it('recognizes positive ICMS included in a reconciled invoice without adding it twice',()=>{const t=text.replace('DADOS DO PRODUTO / SERVIÇO','CALCULO DO IMPOSTO\nBASE DE CALCULO DO ICMS\n300,00\nVALOR DO ICMS\n54,00\nDADOS DO PRODUTO / SERVIÇO');expect(run(t)).toMatchObject({amount:'300.00',taxTreatment:'INCLUDED',taxEvidence:{kind:'INVOICE_ICMS_INCLUDED',icmsAmount:'54.00',icmsBase:'300.00'}});expect(run(t.replace('54,00','0,00'))?.taxTreatment).toBe('UNCONFIRMED');expect(run(t.replace('300,00\nVALOR DO ICMS','299,99\nVALOR DO ICMS'))?.taxTreatment).toBe('UNCONFIRMED');});
+ it('requires review of contradictory destination clause and positive printed ICMS',()=>{const t=text.replace('DADOS DO PRODUTO / SERVIÇO','CALCULO DO IMPOSTO\nBASE DE CALCULO DO ICMS\n300,00\nVALOR DO ICMS\n54,00\nDADOS DO PRODUTO / SERVIÇO')+' A responsabilidade pelo recolhimento do ICMS fica atribuida ao destinatario';expect(run(t)).toMatchObject({taxTreatment:'UNCONFIRMED',taxEvidence:{kind:'CONFLICTING_ICMS'}});});
+
  const electra=`DANFE CNPJ PROTOCOLO DE AUTORIZACAO DE USO
  141260044321870 - 03/02/2026 Empresa sintetica 11.222.333/0001-81
  DESTINATARIO REMETENTE CALCULO DO IMPOSTO
