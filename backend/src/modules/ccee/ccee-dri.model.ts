@@ -40,17 +40,27 @@ export function driCells(line:unknown):string[]{
   if(at===s.length)break;if(s[at++]!==','||at===s.length)throw new CceeReadingError('DRI_CSV_REQUIRES_REVIEW');
  }if(!out.length)throw new CceeReadingError('DRI_CSV_REQUIRES_REVIEW');return out;
 }
+function eventSourceIdentity(value:unknown){
+ const canonical=(v:any,depth=0):any=>{if(depth>24)throw new CceeReadingError('DRI_EVENT_IDENTITY_REVIEW');if(Array.isArray(v))return v.map(x=>canonical(x,depth+1));if(v&&typeof v==='object')return Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k],depth+1)]));return v;};
+ return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+}
 export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
  const p=privateEnvelope(xml,2,DRI_SERVICES[s.kind].action+'Response',['divulgacaoEventoContabil','relatorio','quadro','parametro','resultadoRelatorio','valor']);
  const pg=p.pagination,number=(x:unknown)=>typeof x==='string'&&/^\d{1,6}$/.test(x)?Number(x):-1;
  const pages=number(pg?.totalPaginas),total=number(pg?.quantidadeTotalItens);
  if(number(pg?.numero)!==page||pages<1||pages>10||total<0||total>10000||page>pages)throw new CceeReadingError('DRI_PAGINATION_LIMIT_OR_MISSING');
- let rows:any[]=[];
+ let rows:any[]=[],providerRows=0;
  const container=s.kind==='DRI_EVENTS'?'resultadoDivulgacaoEventoContabil':s.kind==='DRI_REPORTS'?'relatorios':'resultados';
  if(!Object.prototype.hasOwnProperty.call(p.body??{},container))throw new CceeReadingError('DRI_SCHEMA_REQUIRES_REVIEW');
- if(s.kind==='DRI_EVENTS')rows=list(p.body?.resultadoDivulgacaoEventoContabil?.divulgacaoEventoContabil).map(x=>{
-  const e=x.eventoContabil,code=id(e?.codigo);if(e?.periodoReferencia?.mesAno!==s.month)throw new CceeReadingError('DRI_PERIOD_MISMATCH');return{code,name:text(e.nome),month:s.month};
- });
+ if(s.kind==='DRI_EVENTS'){
+  const originals=list(p.body?.resultadoDivulgacaoEventoContabil?.divulgacaoEventoContabil),events=new Map<string,any>();providerRows=originals.length;
+  for(const x of originals){
+   const e=x.eventoContabil,code=id(e?.codigo);if(e?.periodoReferencia?.mesAno!==s.month)throw new CceeReadingError('DRI_PERIOD_MISMATCH');
+   const sourceIdentity=eventSourceIdentity(x),previous=events.get(code);
+   if(previous){if(previous.sourceIdentity!==sourceIdentity)throw new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');previous.providerOccurrences++;}
+   else{const row={code,name:text(e.nome),month:s.month,sourceIdentity,providerOccurrences:1};events.set(code,row);rows.push(row);}
+  }
+ }
  else if(s.kind==='DRI_REPORTS')rows=list(p.body?.relatorios?.relatorio).map(r=>{
   // Official catalogs may provide only inicio for a version with no end date.
   const start=text(r.periodo?.inicio),end=r.periodo?.fim==null?null:text(r.periodo.fim),frames=list(r.quadros?.quadro).map(f=>({id:id(f.id),name:text(f.nome),description:text(f.descricao??''),parameters:list(f.parametros?.parametro).map(x=>text(x.nome,80))}));
@@ -63,8 +73,9 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
   if(taxColumns.length!==1||!/^\d{14}$/.test(taxId))throw new CceeReadingError('DRI_PARTICIPANT_PROOF_REQUIRED');
   for(const value of list(r.valores?.valor)){const cells=driCells(value);if(cells.length!==columns.length||!/^\d{14}$|^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(cells[taxColumns[0].i])||cells[taxColumns[0].i].replace(/\D/g,'')!==taxId)throw new CceeReadingError('DRI_PARTICIPANT_MISMATCH');rows.push({columns,cells,reportId:s.reportId,frameId:s.frameId,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED'});}
  }
- if(rows.length>1000||rows.length>total)throw new CceeReadingError('DRI_ROW_LIMIT');
+ if(s.kind!=='DRI_EVENTS')providerRows=rows.length;
+ if(providerRows>1000||providerRows>total)throw new CceeReadingError('DRI_ROW_LIMIT');
  if(new Set(rows.map(r=>r.code??r.id??JSON.stringify(r))).size!==rows.length)throw new CceeReadingError('DRI_DUPLICATE_ROW');
- return{rows,pages,total,hash:p.hash,transactionId:p.transactionId};
+ return{rows,providerRows,pages,total,hash:p.hash,transactionId:p.transactionId};
 }
 export function driDigest(hashes:string[]){return createHash('sha256').update(hashes.join(':')).digest('hex');}
