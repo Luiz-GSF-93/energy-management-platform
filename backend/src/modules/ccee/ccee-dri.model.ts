@@ -22,9 +22,11 @@ export function driSoap(config:CceeConfig,s:DriSelection,participant:string,para
  const op=DRI_SERVICES[s.kind].action;let body:string;
  if(s.kind==='DRI_EVENTS')body=`<bm:divulgacaoEventoContabil><bo:eventoContabil><bo:periodoReferencia><bo:mesAno>${s.month}</bo:mesAno></bo:periodoReferencia></bo:eventoContabil></bm:divulgacaoEventoContabil>`;
  else{body=`<bm:eventoContabil><bo:codigo>${s.eventCode}</bo:codigo></bm:eventoContabil>`;
-  if(s.kind==='DRI_RESULTS')body+=`<bm:quadro><bo:id>${s.frameId}</bo:id><bo:parametros>${parameters.map(p=>`<bo:parametro><bo:nome>${p}</bo:nome><bo:valor>${xmlEscape(p==='CODIGO_AGENTE'?participant:s.eventCode!)}</bo:valor></bo:parametro>`).join('')}</bo:parametros></bm:quadro><bm:relatorio><bo:id>${s.reportId}</bo:id></bm:relatorio>`;
+  // CCEE ticket 00455384: eventoContabil.codigo supplies CODIGO_EVENTO_CONTABIL implicitly.
+  // Preserve catalog metadata, but serialize only the scoped participant in quadro.parametros.
+  if(s.kind==='DRI_RESULTS')body+=`<bm:quadro><bo:id>${s.frameId}</bo:id><bo:parametros><bo:parametro><bo:nome>CODIGO_AGENTE</bo:nome><bo:valor>${xmlEscape(participant)}</bo:valor></bo:parametro></bo:parametros></bm:quadro><bm:relatorio><bo:id>${s.reportId}</bo:id></bm:relatorio>`;
  }
- return soapRequest(config,'profile',page).replace('<mh:versao>2.1</mh:versao>','').replace('<mh:quantidadeItens>2</mh:quantidadeItens>','<mh:quantidadeItens>1000</mh:quantidadeItens>').replace(/<soapenv:Body>[\s\S]*?<\/soapenv:Body>/,`<soapenv:Body><bm:${op}Request>${body}</bm:${op}Request></soapenv:Body>`);
+ return soapRequest(config,'profile',page).replace('<mh:versao>2.1</mh:versao>','').replace('<mh:quantidadeItens>2</mh:quantidadeItens>','<mh:quantidadeItens>500</mh:quantidadeItens>').replace(/<soapenv:Body>[\s\S]*?<\/soapenv:Body>/,`<soapenv:Body><bm:${op}Request>${body}</bm:${op}Request></soapenv:Body>`);
 }
 const list=(v:any):any[]=>v==null||v===''?[]:Array.isArray(v)?v:[v];
 const text=(v:any,max=2000)=>{if(typeof v!=='string'||v.length>max||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(v))throw new CceeReadingError('DRI_SCHEMA_REQUIRES_REVIEW');return v;};

@@ -1,5 +1,6 @@
 import {driCells,driCommand,driEnabled,driPage,driSoap} from './ccee-dri.model';
-import {CceeDriConnector} from './ccee-dri.connector';
+import {CceeDriConnector,driFaultTransaction} from './ccee-dri.connector';
+import {XMLParser} from 'fast-xml-parser';
 import {CceeDriService} from './ccee-dri.service';
 import {CceeDataWorker} from './ccee-data.worker';
 import {CceeReadingError} from './ccee-private.connector';
@@ -12,7 +13,7 @@ const result=(tax='11111111000111',report='8',value="'11111111000111','-123.31',
 describe('CCEE DRI private read-only adapter',()=>{
  it('uses fixed service actions and the reviewed participant code, never the profile as CODIGO_AGENTE',()=>{
   const s=driSoap(config,{kind:'DRI_RESULTS',month,eventCode:'202609001000',reportId:'8',frameId:'31'},'111',['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL'],1);
-  expect(s).toContain('<mh:codigoPerfilAgente>222</mh:codigoPerfilAgente>');expect(s).toContain('<bo:nome>CODIGO_AGENTE</bo:nome><bo:valor>111</bo:valor>');expect(s).not.toContain('listarPerfilParticipanteMercadoRequest');expect(s).toContain('<mh:quantidadeItens>1000</mh:quantidadeItens>');
+  expect(s).toContain('<mh:codigoPerfilAgente>222</mh:codigoPerfilAgente>');expect(s).toContain('<bo:nome>CODIGO_AGENTE</bo:nome><bo:valor>111</bo:valor>');expect(s).not.toContain('listarPerfilParticipanteMercadoRequest');expect(s).toContain('<mh:quantidadeItens>500</mh:quantidadeItens>');
  });
  it.each([['CODIGO_EVENTO_CONTABIL'],['CODIGO_AGENTE','OUTRO'],['CODIGO_AGENTE','CODIGO_AGENTE']])('rejects unsupported or unscoped parameters %j',(...parameters)=>{expect(()=>driSoap(config,{kind:'DRI_RESULTS',month,eventCode:'1',reportId:'8',frameId:'31'},'111',parameters,1)).toThrow('DRI_PARAMETERS_REQUIRE_REVIEW');});
  it('requires parent selections and rejects arbitrary fields/endpoints',()=>{expect(driCommand({requestId:uuid,authorizationId:uuid,kind:'DRI_EVENTS',month}).kind).toBe('DRI_EVENTS');for(const patch of [{kind:'IMPORT_CONTRACT'},{url:'https://evil.invalid'},{eventCode:'1'},{kind:'DRI_REPORTS'}])expect(()=>driCommand({requestId:uuid,authorizationId:uuid,kind:'DRI_EVENTS',month,...patch})).toThrow();});
@@ -47,5 +48,29 @@ describe('CCEE DRI private read-only adapter',()=>{
  it('caps provider calls before the next page and never returns a partial catalog as complete',async()=>{
   const old={...process.env};Object.assign(process.env,{CCEE_DRI_READ_ENABLED:'true',CCEE_DRI_MAX_REQUESTS_PER_JOB:'1'});const spy=jest.spyOn(require('./ccee-config'),'cceeConfig').mockReturnValue(config);
   try{const c=new CceeDriConnector();c.fetch=jest.fn(async()=>({xml:events().replace('<m:totalPaginas>1</m:totalPaginas>','<m:totalPaginas>2</m:totalPaginas>').replace('<m:quantidadeTotalItens>1</m:quantidadeTotalItens>','<m:quantidadeTotalItens>2</m:quantidadeTotalItens>'),bytes:100,httpStatus:200}));const job={kind:'DRI_EVENTS',month:month+'-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:'11111111000111'},request_payload:selection};await expect(c.execute(job,async()=>{})).rejects.toMatchObject({code:'RUN_TIME_LIMIT',metrics:{requests:1}});expect(c.fetch).toHaveBeenCalledTimes(1);process.env.CCEE_DRI_MAX_REQUESTS_PER_JOB='11';await expect(c.execute(job,async()=>{})).rejects.toMatchObject({code:'DRI_REQUEST_LIMIT_INVALID'});expect(c.fetch).toHaveBeenCalledTimes(1);}finally{spy.mockRestore();process.env=old;}
+ });
+});
+
+describe('CCEE 00455384 duplicate implicit event regression',()=>{
+ it.each(['448','451'])('sends the event once and only CODIGO_AGENTE in frame %s',frameId=>{
+  for(const parameters of [['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL'],['CODIGO_AGENTE'],['CODIGO_EVENTO_CONTABIL','CODIGO_AGENTE']]){
+   const xml=driSoap({...config,profile:'109583'},{kind:'DRI_RESULTS',month:'2026-03',eventCode:'202603001000',reportId:'114',frameId},'112642',parameters,1);
+   const parsed=new XMLParser({removeNSPrefix:true,parseTagValue:false}).parse(xml),request=parsed.Envelope.Body.listarResultadoRelatorioRequest;
+   expect(request.eventoContabil).toEqual({codigo:'202603001000'});
+   expect(request.quadro).toEqual({id:frameId,parametros:{parametro:{nome:'CODIGO_AGENTE',valor:'112642'}}});
+   expect(request.relatorio).toEqual({id:'114'});expect(xml.match(/202603001000/g)).toHaveLength(1);expect(xml).not.toContain('<bo:nome>CODIGO_EVENTO_CONTABIL</bo:nome>');
+   expect(parsed.Envelope.Header.messageHeader.codigoPerfilAgente).toBe('109583');expect(parsed.Envelope.Header.paginacao.quantidadeItens).toBe('500');
+  }
+ });
+ it('extracts only an unambiguous bounded transaction UUID from an error',()=>{
+  const xml='<f:transactionId>'+uuid+'</f:transactionId>';
+  expect(driFaultTransaction(xml)).toBe(uuid);expect(driFaultTransaction(xml+xml)).toBe(uuid);expect(driFaultTransaction('<transactionId>PRIVATE_PASSWORD</transactionId>')).toBeNull();
+  expect(driFaultTransaction(xml+'<transactionId>20000000-0000-4000-8000-000000000002</transactionId>')).toBeNull();expect(driFaultTransaction('HTTP error')).toBeNull();
+ });
+ it('preserves HTTP and transaction provenance without retaining the fault text',async()=>{
+  const old={...process.env};process.env.CCEE_DRI_READ_ENABLED='true';const spy=jest.spyOn(require('./ccee-config'),'cceeConfig').mockReturnValue(config);
+  try{const c=new CceeDriConnector();c.fetch=jest.fn(async()=>{const error=new CceeReadingError('PROVIDER_REJECTED',500,uuid);error.responseBytes=123;throw error;});
+   await expect(c.execute({kind:'DRI_EVENTS',month:month+'-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:'11111111000111'},request_payload:selection},async()=>{})).rejects.toMatchObject({code:'PROVIDER_REJECTED',metrics:{requests:1,bytes:123,httpStatus:500,transactions:[uuid]}});expect(c.fetch).toHaveBeenCalledTimes(1);
+  }finally{spy.mockRestore();process.env=old;}
  });
 });
