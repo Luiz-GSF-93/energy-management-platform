@@ -17,8 +17,11 @@ export async function invoiceIdentityWithHistory(db:any,bytes:Buffer,mime:string
    const lineage=result.data;
    if(result.error||!lineage||!['codes','editIds','aliasIds'].every(k=>Array.isArray(lineage[k])&&lineage[k].length<=200&&lineage[k].every((v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=64)))throw new ServiceUnavailableException('Não foi possível conferir a correspondência histórica da unidade.');
    if(lineage.editIds.length||lineage.aliasIds.length){
-    proof=await invoiceIdentityPreflight(bytes,mime,{...clean,auditedUnitNumbers:lineage.codes},fileHash,timeoutMs,once);
-    return {...proof,...(lineage.editIds.length?{registrationEditIds:lineage.editIds}:{}),...(lineage.aliasIds.length?{registrationAliasIds:lineage.aliasIds}:{})};
+    const audited=await invoiceIdentityPreflight(bytes,mime,{...clean,auditedUnitNumbers:lineage.codes},fileHash,timeoutMs,once);
+    if(audited.state==='MATCH')return {...audited,...(lineage.editIds.length?{registrationEditIds:lineage.editIds}:{}),...(lineage.aliasIds.length?{registrationAliasIds:lineage.aliasIds}:{})};
+    // Persist an unresolved original check under its ordinary registration.
+    // Audited aliases never attest the remaining CNPJ, address or period.
+    return proof;
    }
    return proof;
   }
