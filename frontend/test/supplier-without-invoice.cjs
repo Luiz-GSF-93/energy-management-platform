@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+require('./eva-processing-dom.cjs')();
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
 let calls=[],fail=false,origin='MANUAL';const doc='ddaed3b2-7c81-4b42-8cd0-00182e39ea2d',token='a'.repeat(64);
 const item={id:'item',label:'Contribuição de iluminação pública — CIP',category:'SUPPLIER_INVOICE',scenario:'ACL',effect:'COST',amount:'137.58',taxTreatment:'RESERVED',taxReservationReason:'Demais tributos não confirmados pelo cliente.',source:'Confirmação do portal pelo cliente'};

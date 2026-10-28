@@ -2,6 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require(
 const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
 for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLTextAreaElement','Event','MouseEvent'])global[k]=dom.window[k];
 global.IS_REACT_ACT_ENVIRONMENT=true;
+require('./eva-processing-dom.cjs')();
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
 const {conversationValue,conversationNote}=require('../app/backoffice/contracts/form-conversation.ts');
