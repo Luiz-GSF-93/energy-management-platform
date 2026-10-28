@@ -37,6 +37,7 @@ export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparis
  const layout:ReturnType<typeof globalModelLayout>=c.layout??globalModelLayout(c.source?.raw??{});let period:TariffPeriod|null=null,periodError='';
  if(documentedSettlementEnabled())try{period=documentedTariffPeriod(libraries,c.unit,c.month,layout);if(period)lib=period.segments[0].record;}catch(e){periodError=e instanceof Error?e.message:'Ciclo tarifário sem prova.';}
  const result:InvoiceComparison={method:'SAME_INVOICE_AMOUNTS_V2',amount:null,lines:[],retained:[],taxes:[],observations:['Estimativa comparativa: tarifas ACR da biblioteca; quantidades, impostos em reais, reativos e despesas da fatura preservados. Alíquotas exibidas como leitura, sem reaplicação sobre nova base.'],missing:[],library:lib?{id:lib.id,version:lib.version,source:lib.profile.source,taxTreatment:lib.profile.taxTreatment}:null};
+ if('creditSignProof' in layout&&layout.creditSignProof)result.observations.push('Créditos impressos como magnitudes: sinal interpretado pelos rótulos e pelas conciliações exatas de subtotal e total. Transcrição original e confiança preservadas. Fontes: '+layout.creditSignProof.sources.join('; '));
  const fail=(message:string)=>{result.missing.push(message);return result;};
  if(periodError)return fail(periodError);
  if(period&&period.segments.length>1)result.observations.push('Tarifa proporcional por dias de vigência: REN1000 art173§2. Consumos totais e impostos da fatura preservados, sem inventar medição diária.');
