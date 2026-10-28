@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {PanelLeftClose,PanelLeftOpen,LayoutDashboard,TrendingUp,FileSignature,Files,ChartNoAxesCombined,Bell,Settings,LogOut} from 'lucide-react';
 import EvaSymbol from './EvaSymbol';
+import PortalCustomerBoundary from './PortalCustomerBoundary';
 import usePortalSectionNavigation from './usePortalSectionNavigation';
 import {PortalNotificationBell} from './PortalNotifications';
 import {useAuth} from '@/app/providers';
@@ -25,7 +26,8 @@ export const portalNavigation=[
  {id:'previsao',label:'Previsão de consumo',module:'forecasts',icon:ChartNoAxesCombined},
  {id:'bot-energy',label:'Conversar com EVA',module:'bot',icon:EvaSymbol},
 ] as const;
-export default function PortalWorkspace({settings=false,invoices=false}:{settings?:boolean;invoices?:boolean}={}){
+export default function PortalWorkspace(props:{settings?:boolean;invoices?:boolean}={}){return <PortalCustomerBoundary><PortalWorkspaceContent {...props}/></PortalCustomerBoundary>;}
+function PortalWorkspaceContent({settings=false,invoices=false}:{settings?:boolean;invoices?:boolean}={}){
  const {context,logout}=useAuth(),router=useRouter(),org=context?.scope==='organization'?context.currentOrganization.id:'';
  const check=process.env.NEXT_PUBLIC_CLIENT_PORTAL_LICENSES_ENABLED==='true';
  const [license,setLicense]=useState<PortalEntitlement|null>(null),[branding,setBranding]=useState<{organizationId:string;name:string;logo:string}|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0),[collapsed,setCollapsed]=useState(false),[active,setActive]=useState('');

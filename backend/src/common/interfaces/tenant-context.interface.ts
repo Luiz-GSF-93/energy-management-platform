@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import type {PortalCustomerContext} from '../services/portal-customer-context';
 
 interface BaseAccessContext {
   userId: string;
@@ -36,6 +37,7 @@ export type AccessContext = OrganizationContext | PlatformContext;
  * Platform Admin runtime path is introduced in a later Phase 5.7 checkpoint.
  */
 export interface TenantContext extends BaseAccessContext {
+  portalCustomerScope?: PortalCustomerContext;
   organizationId: string;
   organizationName?: string;
   accessMode?: 'platform_operation';

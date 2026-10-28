@@ -4,16 +4,19 @@ import {
   ExecutionContext,
   CallHandler,
   BadRequestException,
+  Optional,ServiceUnavailableException,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { tap,mergeMap } from 'rxjs/operators';
 import { RequestWithTenant } from '../interfaces/tenant-context.interface';
 import { Reflector } from '@nestjs/core';
 import { RECOVERY_ENDPOINT_KEY } from '../decorators/recovery-endpoint.decorator';
+import {portalRequestScope,assertCurrentPortalScope} from '../services/portal-customer-context';
+import {SupabaseService} from '../../services/supabase.service';
 
 @Injectable()
 export class TenantInterceptor implements NestInterceptor {
-  constructor(private reflector: Reflector) {}
+  constructor(private reflector: Reflector,@Optional() private db?:SupabaseService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest<RequestWithTenant>();
@@ -63,7 +66,13 @@ export class TenantInterceptor implements NestInterceptor {
     // Tenant authority lives in the authenticated context, never in a DTO.
     // Injecting organization_id here made strict DTOs reject legitimate writes.
 
-    return next.handle().pipe(
+    const selected=request.tenantContext?.portalCustomerScope;
+    const handled=selected?new Observable(subscriber=>{
+      const subscription=portalRequestScope.run(selected,()=>next.handle().subscribe(subscriber));
+      return()=>subscription.unsubscribe();
+    }):next.handle();
+    return handled.pipe(
+      mergeMap(async value=>{if(selected){if(!this.db)throw new ServiceUnavailableException('Validação do Portal indisponível.');await assertCurrentPortalScope(this.db.getClient(),selected);}return value;}),
       tap(() => {
         const duration = Date.now() - startTime;
         console.log(

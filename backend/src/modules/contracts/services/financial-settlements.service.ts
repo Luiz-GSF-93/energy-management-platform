@@ -9,6 +9,8 @@ import {validateWriteDto} from '../../../common/validation/validate-write-dto';
 import {PreparationQueryDto} from '../dto/preparation.dto';
 import {PrepareFinancialSettlementDto,FinancialSettlementTransitionDto,PublishedFinancialQueryDto,PortalFinancialQueryDto,FinancialAnalyticsQueryDto} from '../dto/financial-settlements.dto';
 import {publishedFinancialSummary} from './published-financial-summary';
+import {portalPublicationUnits} from './portal-publication-units';
+import {assertCurrentPortalScope} from '../../../common/services/portal-customer-context';
 import {CalculationPreparationService} from './preparation.service';
 import {frozenPreparationClient} from './frozen-preparation-client';
 import {customerFinancialPreview} from './customer-financial-preview';
@@ -98,7 +100,8 @@ export class FinancialSettlementsService {
    if(loaded.first.status!=='PUBLISHED'||loaded.rows.some((r:any)=>r.validation_status!=='VALIDATED'||!r.approved_at||!r.published_at||!r.published_by)||loaded.first.customer_id!==row.customer_id||loaded.first.version_number!==row.version_number||loaded.first.financial_hash!==row.financial_hash||String(loaded.first.month)!==String(row.month))throw new InternalServerErrorException('A publicação mudou durante a consulta. Atualize o painel.');
    publications.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,customerName:loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===row.customer_id)?.company_name??row.customer_id,reservations:loaded.payload.reservations});
   }
-  const selected=includeEva&&this.evaEnabled(portal)?latestPublications([...publications,...await this.evaPublications(d,t,portal)]):publications;
+  const unscoped=includeEva&&this.evaEnabled(portal)?latestPublications([...publications,...await this.evaPublications(d,t,portal)]):publications;
+  const selected=portal&&t.portalCustomerScope?unscoped.map(p=>portalPublicationUnits(p,t.portalCustomerScope!.units.map(u=>u.id))).filter(Boolean):unscoped;
   const summary=publishedFinancialSummary(t.organizationId,d,selected);return {...summary,charts:publicFinancialCharts(summary)};
  }
  private async legacyReports(input:FinancialAnalyticsQueryDto,t:TenantContext){
@@ -148,17 +151,19 @@ export class FinancialSettlementsService {
  private async portalMember(t:TenantContext){
   if(!t.organizationId||!t.userId)throw new UnauthorizedException('Contexto organizacional ausente.');
   if(t.accessMode||t.role!=='consulta')return null;
-  const r=await this.client().from('organization_members').select('organization_id,user_id,role_id,status,affiliation_type,exclusive_customer_id,roles(id,name,scope,organization_id,permissions)').eq('organization_id',t.organizationId).eq('user_id',t.userId).eq('status','active').maybeSingle();this.fail(r.error);
+  const r=await this.client().from('organization_members').select('organization_id,user_id,role_id,status,affiliation_type,exclusive_customer_id,portal_scope_managed,roles(id,name,scope,organization_id,permissions)').eq('organization_id',t.organizationId).eq('user_id',t.userId).eq('status','active').maybeSingle();this.fail(r.error);
   const member=r.data,role=member?.roles;
   if(!member||member.organization_id!==t.organizationId||member.user_id!==t.userId||member.status!=='active'||member.role_id!==t.roleId||role?.id!==t.roleId||role?.organization_id!==t.organizationId||role?.scope!=='organization'||role?.name!=='consulta')throw new ForbiddenException('Vínculo de consulta indisponível. Atualize seu acesso.');
+  if(member.affiliation_type==='external'&&t.portalCustomerScope){const scope=await assertCurrentPortalScope(this.client(),t.portalCustomerScope);return {...member,exclusive_customer_id:scope.customerId};}
   return member.affiliation_type==='external'?member:null;
  }
  async portalAccess(t:TenantContext){
   const member=await this.portalMember(t);
-  return {organizationId:t.organizationId,audience:typeof member?.exclusive_customer_id==='string'&&member.exclusive_customer_id?'client':'backoffice'};
+  return {organizationId:t.organizationId,audience:member?.portal_scope_managed||typeof member?.exclusive_customer_id==='string'&&member.exclusive_customer_id?'client':'backoffice'};
  }
  private async portalCustomer(t:TenantContext){
   const member=await this.portalMember(t);
+  if(member?.portal_scope_managed&&!t.portalCustomerScope)throw new ForbiddenException('O acesso por cliente e unidade está temporariamente indisponível.');
   if(!member||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW)||!Array.isArray(member.roles.permissions)||!member.roles.permissions.includes(P.DOCUMENTS_REPORTS_VIEW)||typeof member.exclusive_customer_id!=='string'||!member.exclusive_customer_id)throw new ForbiddenException('O portal exige consulta externa, permissão de relatórios e vínculo exclusivo com um cliente. Solicite a conferência à equipe de gestão.');
   await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
   const c=await this.client().from('customers').select('id,organization_id,status').eq('id',member.exclusive_customer_id).eq('organization_id',t.organizationId).is('deleted_at',null).maybeSingle();this.fail(c.error);
@@ -170,13 +175,14 @@ export class FinancialSettlementsService {
   const customerId=await this.portalCustomer(t),d=await validateWriteDto(PortalFinancialQueryDto,input);
   const publications=await this.evaPublications({...d,customerId},t,true);
   if(await this.portalCustomer(t)!==customerId)throw new ForbiddenException('O vínculo mudou durante a consulta.');
-  return publications;
+  return t.portalCustomerScope?publications.map((p:any)=>portalPublicationUnits(p,t.portalCustomerScope!.units.map(u=>u.id))).filter(Boolean):publications;
  }
  async portalFinancial(input:PortalFinancialQueryDto,t:TenantContext){
   const customerId=await this.portalCustomer(t),d=await validateWriteDto(PortalFinancialQueryDto,input);
   const result=await this.publishedRead({...d,customerId},t,true);
   if(await this.portalCustomer(t)!==customerId)throw new ForbiddenException('O vínculo mudou durante a consulta. Atualize o portal.');
-  return this.clientProjection(result,customerId);
+  const projected=this.clientProjection(result,customerId);
+  return t.portalCustomerScope?{...projected,coverage:'LATEST_PUBLISHED_AUTHORIZED_UNITS',disclosure:projected.disclosure+' Totais e gráficos consideram somente as unidades autorizadas para este acesso.'}:projected;
  }
  async portalPreview(input:PublishedFinancialQueryDto,t:TenantContext){
   if(!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('A prévia do portal exige gestor ou administrador.');

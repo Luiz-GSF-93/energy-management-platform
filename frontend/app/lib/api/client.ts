@@ -1,5 +1,6 @@
 import { session, endSession } from '@/app/lib/auth/session';
 import {freshToken,sessionAttention} from '@/app/lib/auth/renew';
+import {portalSelection,portalSelectionKey,portalScopedPath} from '@/app/lib/auth/portal-customer';
 
 export class ApiError extends Error {
   constructor(
@@ -68,6 +69,8 @@ export async function apiRequest<T>(
 
   const requestHeaders = new Headers(headers);
   const multipart = typeof FormData !== 'undefined' && body instanceof FormData;
+  const scoped=authenticated&&portalScopedPath(path),selected=scoped?portalSelection():null,selectionKey=scoped?portalSelectionKey():null;
+  if(selected)requestHeaders.set('x-portal-customer',selected.customerId);
 
   if (
     body !== undefined &&
@@ -115,15 +118,20 @@ export async function apiRequest<T>(
     if(authenticated && response.status===403 && message==='MFA_REQUIRED') window.dispatchEvent(new Event('energyos-mfa-required'));
     if(authenticated && response.status===401) sessionAttention('Seu acesso expirou. Renove o acesso para continuar.','expired');
     if(authenticated && message==='Organization session expired or access revoked') endSession();
+    if(scoped&&response.status===403)window.dispatchEvent(new Event('portal-scope-denied'));
     throw new ApiError(
       message,
       response.status,
     );
   }
 
+  if(scoped&&selectionKey!==portalSelectionKey())throw new ApiError('A empresa selecionada mudou. Os dados da consulta anterior foram descartados.',409);
+
   if (response.status === 204) {
     return undefined as T;
   }
 
-  return (responseType === 'blob' ? response.blob() : response.json()) as Promise<T>;
+  const result=await (responseType === 'blob' ? response.blob() : response.json());
+  if(scoped&&selectionKey!==portalSelectionKey())throw new ApiError('A empresa selecionada mudou. Os dados da consulta anterior foram descartados.',409);
+  return result as T;
 }

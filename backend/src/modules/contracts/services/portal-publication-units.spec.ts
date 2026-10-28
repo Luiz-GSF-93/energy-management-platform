@@ -1,0 +1,7 @@
+import {portalPublicationUnits} from './portal-publication-units';
+const unit=(id:string,acr:string)=>({id,name:id,acr,aclBeforeFees:'10.00',totalFees:'2.00',aclAfterFees:'12.00',savingsAfterFees:acr==='100.00'?'88.00':'888.00'});
+describe('Authorized published financial unit projection',()=>{
+ it('sums only authorized approved unit values and preserves the original',()=>{const source={meta:{id:'original',payloadHash:'immutable'},financial:{status:'AVAILABLE',acr:'1000.00',secretAggregate:'900.00',units:[unit('a','100.00'),unit('b','900.00')]},preparations:{foreignUnitEvidence:'private'}};const before=JSON.stringify(source),result=portalPublicationUnits(source,['a']);expect(result.financial).toMatchObject({acr:'100.00',aclBeforeFees:'10.00',aclAfterFees:'12.00',totalFees:'2.00',savingsBeforeFees:'90.00',savingsAfterFees:'88.00'});expect(result.financial.units.map((u:any)=>u.id)).toEqual(['a']);expect(result.financial.secretAggregate).toBeUndefined();expect(result.preparations).toEqual({});expect(JSON.stringify(source)).toBe(before);expect(result.meta).toEqual(source.meta);});
+ it('does not manufacture a zero total when no published unit is authorized',()=>expect(portalPublicationUnits({financial:{units:[unit('b','900.00')]}},['a'])).toBeNull());
+ it('rejects inconsistent approved unit amounts rather than balancing them',()=>expect(()=>portalPublicationUnits({financial:{units:[{...unit('a','100.00'),totalFees:'9.00'}]}},['a'])).toThrow());
+});

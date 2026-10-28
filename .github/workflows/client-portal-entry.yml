@@ -4,6 +4,16 @@ on:
     paths:
       - 'backend/src/modules/auth/**'
       - 'backend/src/common/guards/client-portal*'
+      - 'backend/src/common/guards/tenant.guard*'
+      - 'backend/src/common/services/portal-customer*'
+      - 'backend/src/common/interceptors/tenant.interceptor*'
+      - 'backend/src/database/migrations/2026124*.sql'
+      - 'backend/test/portal-customer-access.cjs'
+      - 'backend/src/modules/portal-workspace/portal-customer-access.ts'
+      - 'frontend/app/backoffice/users/**'
+      - 'frontend/app/components/PortalCustomerBoundary.tsx'
+      - 'frontend/test/portal-customer-access.cjs'
+      - 'frontend/test/portal-identity-ui.cjs'
       - 'backend/src/common/guards/portal-presentation-access.spec.ts'
       - 'backend/src/modules/client-portal-licenses/**'
       - 'backend/src/modules/portal-workspace/portal-presentation*'
@@ -34,13 +44,15 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.controller.platform-context.spec.ts src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts src/common/guards/portal-presentation-access.spec.ts src/modules/client-portal-licenses/portal-license.spec.ts src/modules/portal-workspace/portal-presentation.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.controller.platform-context.spec.ts src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts src/common/guards/portal-presentation-access.spec.ts src/modules/client-portal-licenses/portal-license.spec.ts src/modules/portal-workspace/portal-presentation.spec.ts src/common/services/portal-customer-context.spec.ts src/common/guards/tenant.guard.portal-units.spec.ts src/modules/contracts/services/portal-publication-units.spec.ts src/modules/portal-workspace/automatic-intake.portal-scope.spec.ts
+        working-directory: backend
+      - run: node test/portal-customer-access.cjs
         working-directory: backend
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/portal-login.cjs && node test/client-portal.cjs && node test/session-renewal.cjs && node test/session-temporary.cjs && node test/resolve-context.mjs
+      - run: node test/portal-login.cjs && node test/client-portal.cjs && node test/session-renewal.cjs && node test/session-temporary.cjs && node test/resolve-context.mjs && node test/portal-customer-access.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
