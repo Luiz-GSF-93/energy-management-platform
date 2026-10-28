@@ -74,5 +74,6 @@ const migrations=__dirname+'/../src/database/migrations/';
  await db.exec('SET ROLE authenticated');await assert.rejects(()=>resolve('b'));checks++;await assert.rejects(()=>db.query('select * from portal_scope.documents'));checks++;await db.exec('RESET ROLE');
  await db.exec("CREATE OR REPLACE FUNCTION public.acl_portal(p_org text,p_actor text,p_role text,p_module text DEFAULT NULL) RETURNS jsonb LANGUAGE sql AS $$SELECT '{}'::jsonb$$");
  await assert.rejects(()=>call(second),/source revision/);checks++;
+ await db.exec('DROP FUNCTION public.acl_portal(text,text,text,text)');await assert.rejects(()=>call(second),/source revision/);checks++;
  console.log(checks+' portal customer/unit SQL isolation, projection, audit, revocation and compatibility checks passed');
  }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
