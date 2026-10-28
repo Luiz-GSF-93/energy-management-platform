@@ -78,7 +78,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
        if(!extraction.ocrRequired)pages=[...new Set(extraction.sections.map(s=>s.page))].map(page=>({page,text:extraction.sections.filter(s=>s.page===page).map(s=>s.text).join('\n')}));
       }
       if(!pages.length){await transition('need_ocr',{note:'Identificação por OCR necessária. Uma única leitura será usada também na preparação.'});return;}
-      if(i.external&&portalInvoiceKind(pages.map(p=>p.text).join('\n'))==='WRONG_DOCUMENT'){
+      if(i.external&&portalInvoiceKind(pages.map(p=>p.text).join('\n'))!=='DISTRIBUTOR'){
        await transition('review',{note:'O portal aceita somente fatura de energia da distribuidora. Selecione a fatura correta; este arquivo não será arquivado como fatura nem usado no fechamento.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
       }
       const matches:any[]=[];

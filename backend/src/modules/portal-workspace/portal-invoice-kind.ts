@@ -13,5 +13,7 @@ export const portalInvoiceOnlyMessage='Este envio aceita somente fatura de energ
 export async function assertPortalInvoiceUpload(file:{buffer:Buffer},mime:string){
  if(mime!=='application/pdf')return; // Image identity is checked before final linking, after the authorized reading.
  const result=await extractPdfText(file.buffer,20000);
- if(portalInvoiceKind(result.sections.map(s=>s.text).join('\n'))==='WRONG_DOCUMENT')throw new BadRequestException(portalInvoiceOnlyMessage);
+ const kind=portalInvoiceKind(result.sections.map(s=>s.text).join('\n'));
+ if(kind==='WRONG_DOCUMENT')throw new BadRequestException(portalInvoiceOnlyMessage);
+ if(kind==='NEEDS_READING'&&!result.ocrRequired)throw new BadRequestException('Não identifiquei um modelo de fatura de energia da distribuidora neste PDF. Confira o arquivo ou solicite ajuda à equipe; nenhuma leitura paga foi iniciada.');
 }
