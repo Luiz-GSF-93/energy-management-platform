@@ -57,7 +57,7 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
    if(createHash('sha256').update(file.buffer).digest('hex')!==job.file_hash){await this.change(job,'FAIL',{p_error:'SOURCE_HASH_MISMATCH'});return;}
    const registration=await this.db.getClient().rpc('invoice_identity_registration',{p_org:job.organization_id,p_document:job.document_id});
    if(registration.error||!registration.data){await this.change(job,'FAIL',{p_error:'IDENTITY_REGISTRATION_UNAVAILABLE'});return;}
-   const proof=job.identity_preflight??await invoiceIdentityWithHistory(this.db.getClient(),file.buffer,file.mimetype,registration.data,job.file_hash,{org:job.organization_id,customer:doc.customer_id,unit:doc.consumer_unit_id});
+   const proof=job.identity_preflight??await invoiceIdentityWithHistory(this.db.getClient(),file.buffer,file.mimetype,registration.data,job.file_hash,{org:job.organization_id,customer:doc.customer_id,unit:doc.consumer_unit_id,document:job.document_id});
    const saved=await this.db.getClient().rpc('record_document_identity_preflight',{p_id:job.id,p_token:job.lease_token,p_hash:job.file_hash,p_proof:proof});
    if(saved.error||!['MATCH','OCR_REQUIRED'].includes(proof.state)){await this.change(job,'FAIL',{p_error:proof.state==='MISMATCH'?'IDENTITY_MISMATCH':'IDENTITY_REVIEW_REQUIRED'});return;}
    // Commit the intent BEFORE POST. A crash after this point becomes UNKNOWN, not a second POST.

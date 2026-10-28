@@ -44,7 +44,7 @@ export class SourcePreparationService{
   const pending=(async()=>{
    let native:Promise<Awaited<ReturnType<typeof extractPdfText>>>|undefined;
    const read=()=>native??=extractPdfText(bytes,20000);
-   let proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,r.data.mime_type??'application/pdf',registration,r.data.file_hash,{org,customer,unit},20000,read);
+   let proof=await invoiceIdentityWithHistory(this.db.getClient(),bytes,r.data.mime_type??'application/pdf',registration,r.data.file_hash,{org,customer,unit,document},20000,read);
    const nativeMatch=proof.state==='MATCH';
    if(!nativeMatch&&process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
     const stored=await this.db.getClient().rpc('eva_intake_identity_text',{p_org:org,p_customer:customer,p_unit:unit,p_document:document,p_hash:r.data.file_hash});

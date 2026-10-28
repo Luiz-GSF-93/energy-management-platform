@@ -26,12 +26,17 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
   const rows:any[]=[];
   rows.push(['referenceVersions',await this.rpc('eva_intake_reference_signature',{p_id:job.id,p_token:job.token})]);
   for(const [table,id] of [['consumer_units',i.unit_id],['customers',i.customer_id]]){const r=await this.db.getClient().from(table).select('*').eq('organization_id',i.organization_id).eq('id',id).limit(2);if(r.error||!Array.isArray(r.data)||r.data.length!==1)throw Error('SOURCE_REGISTRATION_UNAVAILABLE');rows.push([table,r.data]);}
-  for(const table of ['documents','energy_contracts','calculation_parameters','calculation_monthly_inputs','calculation_monthly_costs','supplier_billing_rules','supplier_spot_reconciliations','calculation_cost_absences','management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions']){
+  const tables=['documents','energy_contracts','calculation_parameters','calculation_monthly_inputs','calculation_monthly_costs','supplier_billing_rules','supplier_spot_reconciliations','calculation_cost_absences','management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions'];
+  // Independent read-only captures share at most four DB requests. Preserve
+  // deterministic ordering and fail closed before preparation on any error.
+  for(let start=0;start<tables.length;start+=4){
+   const batch=await Promise.all(tables.slice(start,start+4).map(async table=>{
    let q=this.db.getClient().from(table).select('*').eq('organization_id',i.organization_id);
    if(table!=='tariff_library_versions'&&table!=='calculation_parameters')q=q.eq('customer_id',i.customer_id);
    if(!['management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions'].includes(table))q=q.eq('consumer_unit_id',i.unit_id);
    const r=await q.order('id').limit(501);if(r.error||!Array.isArray(r.data)||r.data.length>500)throw Error('SOURCE_SIGNATURE_UNAVAILABLE');
-   rows.push([table,r.data]);
+   return [table,r.data];
+   }));rows.push(...batch);
   }
   return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
  }

@@ -53,7 +53,28 @@ try{
  await db.exec('BEGIN');await db.exec("UPDATE registration_edits SET organization_id='foreign'");await deny(()=>db.query("SELECT transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[fresh.id,lease]));await db.exec('ROLLBACK');
  // Legacy registration-change recovery remains valid.
  const legacy=await make();legacy.old.registration.unitNumber='33333';await db.query('UPDATE document_ocr_jobs SET identity_preflight=$2 WHERE id=$1',[legacy.id,legacy.old]);await db.query("INSERT INTO registration_edits VALUES('legacy-edit','org','consumer_units','unit',$1,$2,clock_timestamp(),$3,'Registration corrected after failure')",[rec('33333'),rec('11111'),actor]);ok((await call(legacy)).eligible);const direct={...legacy.proof,registration:legacy.reg};delete direct.registrationEditIds;ok((await call(legacy,'resume',direct,randomUUID(),reason)).state==='QUEUED');
+ // Model the canonical immutable intake-alias projection independently of
+ // configuration edits, then exercise the real preflight/recovery guards.
+ await db.exec(`CREATE TABLE test_intake_alias_sources(organization_id text,customer_id text,unit_id text,current_code text,previous_code text,id text);
+ ALTER FUNCTION ocr_identity_unit_lineage(text,text,text,text) RENAME TO lineage_configuration_test;
+ CREATE FUNCTION ocr_identity_unit_lineage(p_org text,p_customer text,p_unit text,p_current text) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT base||jsonb_build_object('codes',CASE WHEN EXISTS(SELECT 1 FROM public.test_intake_alias_sources WHERE organization_id=$1 AND customer_id=$2 AND unit_id=$3 AND current_code=$4) THEN jsonb_build_array($4,'22222') ELSE base->'codes' END,'aliasIds',coalesce((SELECT jsonb_agg(id) FROM public.test_intake_alias_sources WHERE organization_id=$1 AND customer_id=$2 AND unit_id=$3 AND current_code=$4),'[]'::jsonb)) FROM public.lineage_configuration_test($1,$2,$3,$4)base $$;
+ REVOKE ALL ON FUNCTION ocr_identity_unit_lineage(text,text,text,text) FROM PUBLIC;`);
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261237_native_identity_intake_aliases.sql'),'utf8'));
+ await db.exec('BEGIN');
+ await db.exec("UPDATE registration_edits SET organization_id='foreign';INSERT INTO test_intake_alias_sources VALUES('org','customer','unit','11111','22222','alias-source');");
+ const alias=await make(),aliasProof={...alias.proof,registrationAliasIds:['alias-source']};delete aliasProof.registrationEditIds;
+ ok(await current(alias,aliasProof),'immutable intake alias is accepted without a configuration edit');
+ const nativeLineage=async(org='org',customer='customer',unit='unit',hash=alias.hash)=>(await db.query('SELECT ocr_identity_native_lineage($1,$2,$3,$4,$5) d',[org,customer,unit,alias.doc,hash])).rows[0].d;
+ ok((await nativeLineage()).aliasIds[0]==='alias-source');for(const args of [['foreign'],['org','foreign'],['org','customer','foreign'],['org','customer','unit','c'.repeat(64)]])ok(await nativeLineage(...args)===null);
+ ok((await call(alias)).canRecheck);ok((await call(alias,'inspect',aliasProof)).eligible);
+ for(const alter of [p=>p.registrationAliasIds=['foreign'],p=>delete p.registrationAliasIds,p=>p.registration.auditedUnitNumbers.push('99999'),p=>p.checks.taxId='REVIEW',p=>p.fileHash='c'.repeat(64)]){const p=structuredClone(aliasProof);alter(p);ok(!await current(alias,p));await db.exec('SAVEPOINT rejected_alias');await deny(()=>call(alias,'resume',p,randomUUID(),reason));await db.exec('ROLLBACK TO SAVEPOINT rejected_alias;RELEASE SAVEPOINT rejected_alias');}
+ await db.exec("UPDATE test_intake_alias_sources SET organization_id='foreign'");ok(!await current(alias,aliasProof));await db.exec("UPDATE test_intake_alias_sources SET organization_id='org'");
+ ok((await call(alias,'resume',aliasProof,randomUUID(),reason)).state==='QUEUED');
+ const aliasLease=randomUUID();await db.query("UPDATE document_ocr_jobs SET lease_token=$2,lease_until=now()+interval '1 minute' WHERE id=$1",[alias.id,aliasLease]);await record(alias,aliasProof,aliasLease);await db.query("SELECT transition_document_ocr($1,$2,'BEGIN_SUBMISSION')",[alias.id,aliasLease]);
+ ok((await db.query('SELECT state FROM document_ocr_jobs WHERE id=$1',[alias.id])).rows[0].state==='SUBMITTING');
+ await db.exec('ROLLBACK');
  await db.exec("UPDATE licenses SET active=false");const noLicense=await make();await deny(()=>call(noLicense));await db.exec("UPDATE licenses SET active=true");
- await db.exec('SET ROLE authenticated');await deny(()=>db.query("SELECT ocr_identity_unit_lineage('org','customer','unit','11111')"));await deny(()=>db.query("SELECT ocr_identity_proof_current('org','doc','{}')"));await db.exec('RESET ROLE');
+ await db.exec('SET ROLE authenticated');await deny(()=>db.query("SELECT ocr_identity_unit_lineage('org','customer','unit','11111')"));await deny(()=>db.query("SELECT ocr_identity_proof_current('org','doc','{}')"));await deny(()=>db.query("SELECT ocr_identity_native_lineage('org','customer','unit','doc','hash')"));await db.exec('RESET ROLE');
  console.log(n+' audited-installation SQL checks passed');
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
