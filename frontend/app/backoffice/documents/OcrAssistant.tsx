@@ -1,5 +1,6 @@
 'use client';
 import OcrFinancialPreparation,{type FinancialPreparation} from './OcrFinancialPreparation';
+import EvaProcessingStatus from '../../components/EvaProcessingStatus';
 import BotEnergyGuidance from '../contracts/BotEnergyGuidance';
 import type {OcrAutofill} from '../contracts/ocr-autofill';
 import OcrCdeReviews from './OcrCdeReviews';
@@ -107,7 +108,7 @@ export default function OcrAssistant({id,canProcess,autoStart=false,autoOpen=tru
    <h2>EVA · conferir fatura</h2><p>Leitura Azure, conferência pelas regras existentes e preparação assistida dos lançamentos.</p>
    <p><a className="ds-button" href={ocrContractLink(id,'preparation')}>EVA · preparar apuração</a></p>
    <button type="button" disabled={busy} onClick={()=>void load()}>Atualizar conferência</button>
-   {activityView}{busy&&<p role="status">{writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}</p>}{error&&<BotEnergyGuidance error={error}/>}
+   {busy&&<EvaProcessingStatus detail={writeBusy?'Registrando validações e rascunhos…':'Conferindo dados, histórico e vigências…'}/>}{activityView}{error&&<BotEnergyGuidance error={error}/>}
    {notice&&<p role="status">{notice}</p>}
    {receipts.length>0&&<section style={panel}><h3>Resultado dos lançamentos</h3><ul>{receipts.map(r=><li key={r.key}><strong>{r.label}: {r.state==='REVIEW_SAVED'?'campo validado pelo operador':r.state==='SAVED_DRAFT'?'rascunho registrado':r.state==='VERIFY_REQUIRED'?'verificar histórico antes de repetir':'revisão necessária'}</strong>{r.message&&<p>{r.message}</p>}<Evidence value={r.result}/></li>)}</ul></section>}
    {!plan&&busy&&<BotEnergyHelp documentId={id}/>}
