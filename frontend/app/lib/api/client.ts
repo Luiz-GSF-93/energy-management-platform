@@ -1,4 +1,4 @@
-import { session } from '@/app/lib/auth/session';
+import { session, endSession } from '@/app/lib/auth/session';
 import {freshToken,sessionAttention} from '@/app/lib/auth/renew';
 
 export class ApiError extends Error {
@@ -113,8 +113,8 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const message=await readErrorMessage(response);
     if(authenticated && response.status===403 && message==='MFA_REQUIRED') window.dispatchEvent(new Event('energyos-mfa-required'));
-    if(authenticated && response.status===401) sessionAttention('Seu acesso precisa ser renovado. O formulário continua aberto.');
-    if(authenticated && message==='Organization session expired or access revoked') sessionAttention('O acesso à organização expirou ou foi revogado. Use Renovar acesso; o formulário continua aberto.');
+    if(authenticated && response.status===401) sessionAttention('Seu acesso expirou. Renove o acesso para continuar.','expired');
+    if(authenticated && message==='Organization session expired or access revoked') endSession();
     throw new ApiError(
       message,
       response.status,

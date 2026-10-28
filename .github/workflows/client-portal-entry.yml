@@ -14,6 +14,10 @@ on:
       - 'frontend/app/providers/AuthProvider.tsx'
       - 'frontend/app/portal/**'
       - 'frontend/app/components/AuthenticatedDestination.tsx'
+      - 'frontend/app/components/SessionNotice.tsx'
+      - 'frontend/app/lib/api/client.ts'
+      - 'frontend/test/session-temporary.cjs'
+      - 'frontend/test/session-renewal.cjs'
       - 'frontend/app/components/Backoffice*'
       - 'frontend/test/portal-login.cjs'
       - '.github/workflows/client-portal-entry.yml'
@@ -36,7 +40,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/portal-login.cjs && node test/client-portal.cjs && node test/session-renewal.cjs && node test/resolve-context.mjs
+      - run: node test/portal-login.cjs && node test/client-portal.cjs && node test/session-renewal.cjs && node test/session-temporary.cjs && node test/resolve-context.mjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
