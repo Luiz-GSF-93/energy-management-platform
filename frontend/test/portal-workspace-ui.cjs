@@ -6,10 +6,11 @@ for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLFormEl
 let testFile=new dom.window.File(['%PDF-1.4 test %%EOF'],'test.pdf',{type:'application/pdf'});const NativeFormData=global.FormData;global.FormData=class extends NativeFormData{constructor(form){super(form);if(form?.querySelector('[name="file"]'))this.set('file',testFile);}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
-let calls=[],uploads=0,revision=0;const css=new Map(),units=[{id:'unit',name:'Unidade modelo'}],receipt={id:'invoice',documentId:'doc',unitId:'unit',unitName:'Unidade modelo',month:'2026-09',kind:'INVOICE',filename:'fatura-exemplo.pdf',createdAt:'2026-10-20T12:00:00Z',status:{code:'RECEIVED',label:'Enviado'},notice:null};
+let calls=[],uploads=0,revision=0,libraryError=null;const css=new Map(),units=[{id:'unit',name:'Unidade modelo'}],receipt={id:'invoice',documentId:'doc',unitId:'unit',unitName:'Unidade modelo',month:'2026-09',kind:'INVOICE',filename:'fatura-exemplo.pdf',createdAt:'2026-10-20T12:00:00Z',status:{code:'RECEIVED',label:'Enviado'},notice:null};
 async function api(url,opt={}){calls.push([url,opt]);if(opt.signal?.aborted)throw Error('Aborted');
  if(url.startsWith('/api/v1/operations/notifications'))return {rows:[{key:'portal:notice',id:'notice',origin:'portal',read:false}]};
  if(url.endsWith('/context')||url.endsWith('/service-context'))return {units};
+ if(url.endsWith('/invoices/library')&&libraryError)throw libraryError;
  if(url.endsWith('/invoices/library'))return {rows:[receipt],year:opt.body.year,conflicts:0};
  if(url.endsWith('/invoices'))return {rows:[receipt]};
  if(url.endsWith('/preferences'))return opt.method==='POST'?{revision:++revision,body:opt.body.body}:{revision,body:{EMAIL:false,SMS:false,WHATSAPP:false}};
@@ -49,6 +50,10 @@ const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,
  await act(async()=>document.querySelector('button[aria-label^="Setembro"]').click());
  ok(text().includes('Enviado'),'actual receipt status displayed in selected month');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Visualizar fatura').click());
+ const contextCount=calls.filter(([u])=>u.endsWith('/context')).length;
+ libraryError=new TypeError('Failed to fetch');await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Atualizar faturas').click());
+ ok(document.querySelector('[aria-label="Visualizador privado"]'),'transient list failure preserves open PDF');ok(text().includes('última lista consultada foi preservada'),'stale availability is explicit');ok(calls.filter(([u])=>u.endsWith('/context')).length===contextCount,'refresh does not repeat identity context');libraryError=null;
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Atualizar faturas').click());
  ok(!document.querySelector('iframe'),'PDF is not loaded inside the blocked sandboxed browser plugin');ok(document.querySelector('[aria-label="Visualizador privado"]'),'original document opens in a private modal');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Voltar às faturas do mês').click());
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Leitura em HTML').click());ok(!document.querySelector('script')&&document.querySelector('pre').textContent.includes('<script>'),'OCR is escaped text, never executable HTML');
@@ -58,6 +63,8 @@ const root=createRoot(document.getElementById('root'));let checks=0;const ok=(v,
  ok(!calls.some(([u])=>u.endsWith('/payment-declaration')),'choosing payment state does not write before explicit confirmation');
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar declaração').click());
  ok(text().includes('Cliente informou: Paga')&&text().includes('Não equivale a comprovante bancário'),'customer declaration is distinct from bank confirmation');
+ libraryError=Object.assign(new Error('Forbidden'),{status:403});await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Atualizar faturas').click());ok(!document.querySelector('[role="dialog"]')&&!text().includes(receipt.filename),'revoked access clears private rows and viewer');ok(!text().includes('0 fatura(s)'),'unavailable is not reported as zero');
+ libraryError=new TypeError('Failed to fetch');await act(async()=>root.render(React.createElement(Invoices,{key:'initial-failure'})));ok(!text().includes('0 fatura(s)')&&text().includes('Lista de faturas indisponível'),'initial network error is unavailable, not an empty annual library');libraryError=null;
  await act(async()=>root.render(React.createElement(Notifications)));
  ok(text().includes('EVA · há notificações para você'),'EVA reports actual unread notifications');ok(text().includes('Prazo:'),'request deadline displayed');
  ok(!document.querySelector('[role="dialog"]'),'thread is not mounted or marked read before opening');
