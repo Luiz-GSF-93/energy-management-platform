@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
+import {portalRequestScope,scopedPortalClient} from '../common/services/portal-customer-context';
 
 @Injectable()
 export class SupabaseService {
@@ -18,7 +19,8 @@ export class SupabaseService {
   }
 
   getClient() {
-    return this.supabase;
+    const scope=portalRequestScope.getStore();
+    return scope?scopedPortalClient(this.supabase,scope):this.supabase;
   }
 
   createAuthClient() {

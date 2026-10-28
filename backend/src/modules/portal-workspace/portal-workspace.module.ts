@@ -1,4 +1,5 @@
 import {AutomaticIntakeService} from './automatic-intake.service';
+import {PortalCustomerAccessController} from './portal-customer-access';
 import {AutomaticIntakeWorker} from './automatic-intake.worker';
 import {PortalPresentationService} from './portal-presentation.service';
 import {PortalNotificationsWorker} from './portal-notifications.worker';
@@ -49,5 +50,5 @@ class PortalRoutingController {
  @Get() @Header('Cache-Control','no-store') read(@Tenant() t:TenantContext){return this.service.action(t,'routing');}
  @Post() save(@Tenant() t:TenantContext,@Body() b:any){return this.service.action(t,'routing',null,b);}
 }
-@Module({imports:[LicensesModule,OcrModule],controllers:[PortalWorkspaceController,PortalRoutingController],providers:[AutomaticIntakeService,AutomaticIntakeWorker,PortalPresentationService,SupabaseService,DocumentsService,PortalWorkspaceService,PortalAutomationWorker,PortalNotificationsWorker,WhatsappTemplatesService],exports:[PortalWorkspaceService]})
+@Module({imports:[LicensesModule,OcrModule],controllers:[PortalWorkspaceController,PortalRoutingController,PortalCustomerAccessController],providers:[AutomaticIntakeService,AutomaticIntakeWorker,PortalPresentationService,SupabaseService,DocumentsService,PortalWorkspaceService,PortalAutomationWorker,PortalNotificationsWorker,WhatsappTemplatesService],exports:[PortalWorkspaceService]})
 export class PortalWorkspaceModule{}

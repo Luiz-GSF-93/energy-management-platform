@@ -32,7 +32,10 @@ export class BotReportsService {
   const r=await this.db.getClient().rpc('bot_energy_client_reports',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_from:period.from,p_to:period.to,p_unit:unit??null});
   if(r.error){if(r.error.code==='42501')throw new ForbiddenException('Vínculo ou permissão atual indisponível.');throw new InternalServerErrorException('Fontes publicadas indisponíveis.');}
   if(!r.data?.customerId||!Array.isArray(r.data.units))throw new InternalServerErrorException('Contexto do cliente indisponível.');
-  return r.data;
+  // FinancialSettlementsService verifies the immutable complete source before
+  // projecting authorized units. Reuse that projection for managed portal
+  // reports; the legacy RPC group rows may be narrowed by the private views.
+  return t.portalCustomerScope?{...r.data,groups:[]}:r.data;
  }
  async clientUnits(from:unknown,to:unknown,t:TenantContext){await this.permission(t,'client');const period=reportPeriod(from,to),data=await this.client(t,period);return {units:data.units.map((u:any)=>({id:u.id,name:u.name})),period};}
  async ask(input:any,t:TenantContext,audience:'client'|'backoffice'){

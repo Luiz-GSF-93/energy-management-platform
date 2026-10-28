@@ -21,7 +21,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
  onModuleInit(){if(intakeOrganizations().length)this.schedule();}
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('EVA_INTAKE_PENDING')).finally(()=>this.schedule()),5000);this.timer.unref?.();}
- private async rpc(name:string,body:any){const r=await this.db.getClient().rpc(name,body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
+ private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
  private async signature(i:any,job:{id:string;token:string}){
   const rows:any[]=[];
   rows.push(['referenceVersions',await this.rpc('eva_intake_reference_signature',{p_id:job.id,p_token:job.token})]);

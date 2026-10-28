@@ -1,12 +1,15 @@
 import { resolvePlatformOperation, PLATFORM_SESSION_HEADER } from '../services/platform-operation';
 import {assertMfa, MFA_HANDSHAKE} from '../auth/mfa-policy';
 import {restrictClientPortalRequest} from './client-portal-access';
+import {validatePortalContext,multiCustomerEnabled} from '../services/portal-customer-context';
 import {
   Injectable,
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
   ForbiddenException,
+  HttpException,
+  ServiceUnavailableException,
   Logger
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -244,6 +247,7 @@ export class TenantGuard implements CanActivate {
           status,
           affiliation_type,
           exclusive_customer_id,
+          portal_scope_managed,
           roles(id, name, permissions, organization_id, scope)
         `)
         .eq('user_id', userId)
@@ -281,7 +285,21 @@ export class TenantGuard implements CanActivate {
 
       this.logger.log(`[ROLE_VALID] role validated`);
 
-      if(restrictClientPortalRequest(membership,role,request.path,request.method)) {
+      let portalCustomerScope;
+      const portalPath=request.path.replace(/^\/api\/v1/,'');
+      const identityOnly=['/auth/context','/auth/profile','/portal/access'].includes(portalPath);
+      const scopedPath=!identityOnly&&(portalPath.startsWith('/portal/')||portalPath.startsWith('/bot-energy/reports/client')||portalPath==='/organization-branding');
+      if(scopedPath&&role.name==='consulta'&&membership.affiliation_type==='external'&&multiCustomerEnabled(activeOrgId)&&(membership.exclusive_customer_id||membership.portal_scope_managed||request.headers['x-portal-customer']!==undefined)){
+        const header=request.headers['x-portal-customer'];
+        if(header!==undefined&&(typeof header!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(header)))throw new ForbiddenException('Contexto do cliente inválido.');
+        const selected=request.path.replace(/^\/api\/v1/,'')==='/portal/customers'?null:header??null;
+        const result=await this.supabaseService.getClient().rpc('portal_customer_scope',{p_org:activeOrgId,p_actor:userId,p_role:role.id,p_customer:selected});
+        if(result.error){if(result.error.code!=='42501')throw new ServiceUnavailableException('Não foi possível reconferir os acessos do Portal. Tente novamente.');throw new ForbiddenException('O vínculo do Portal está indisponível. Confira a empresa e as unidades autorizadas.');}
+        portalCustomerScope=validatePortalContext(result.data,activeOrgId,userId,role.id)??undefined;
+        if(header&&!portalCustomerScope)throw new ForbiddenException('Seleção de cliente ainda não habilitada nesta organização.');
+      }
+      if(!identityOnly&&membership.portal_scope_managed&&role.name==='consulta'&&membership.affiliation_type==='external'&&!portalCustomerScope)throw new ForbiddenException('O acesso por cliente e unidade está temporariamente indisponível.');
+      if(restrictClientPortalRequest(portalCustomerScope?{...membership,exclusive_customer_id:portalCustomerScope.customerId}:membership,role,request.path,request.method)) {
         throw new ForbiddenException('Use o portal do cliente para consultar resultados publicados.');
       }
 
@@ -291,6 +309,7 @@ export class TenantGuard implements CanActivate {
 
       // 11. Montar TenantContext completo (PRESERVADO DO ORIGINAL + NOVO roleId)
       const tenantContext: TenantContext = {
+        ...(portalCustomerScope?{portalCustomerScope}:{}),
         scope: 'organization',
         userId,
         organizationId: activeOrgId,
@@ -308,7 +327,7 @@ export class TenantGuard implements CanActivate {
 
       return true;
     } catch (err) {
-      if (err instanceof UnauthorizedException || err instanceof ForbiddenException) {
+      if (err instanceof HttpException) {
         throw err;
       }
       const error = err as Error;
