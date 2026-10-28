@@ -59,6 +59,8 @@ jobs:
         working-directory: backend
       - run: node test/portal-client-workspace.cjs
         working-directory: backend
+      - run: node test/portal-supplier-recovery.cjs
+        working-directory: backend
       - run: npm install --prefix /tmp/portal-pg-driver --ignore-scripts pg@8.16.3
       - run: node test/portal-client-workspace.cjs
         working-directory: backend

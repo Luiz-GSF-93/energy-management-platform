@@ -6,6 +6,7 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {DocumentsService} from '../documents/services/documents.service';
 import {DocumentFile,DOCUMENT_BUCKET,MAX_DOCUMENT_BYTES,inspectDocumentUpload} from '../documents/services/document-file';
 import {OcrQueueService} from '../ocr/ocr-queue.service';
+import {assertPortalInvoiceUpload} from './portal-invoice-kind';
 
 const uuid=(s:unknown)=>typeof s==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
 const documentTypes:Record<string,string>={INVOICE:'INVOICE_DISTRIBUTOR',FISCAL:'TAX_DOCUMENT',CONTRACT:'CONTRACT_ENERGY',BILLING:'OTHER',ART:'COMPLIANCE_REPORT',TECHNICAL:'COMPLIANCE_REPORT',REPORT:'COMPLIANCE_REPORT',OTHER:'OTHER'};
@@ -66,6 +67,7 @@ export class PortalWorkspaceService {
   this.enabled();
   if(!input||Object.keys(input).some(k=>!['requestId','unitId','month','kind','recordId','consent'].includes(k))||!uuid(input.requestId)||!uuid(input.unitId)||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month??'')||!documentTypes[input.kind]||input.recordId&&!uuid(input.recordId)||!['true','false',true,false].includes(input.consent))throw new BadRequestException('Selecione unidade, competência, tipo e autorização.');
   const detected=await inspectDocumentUpload(file,input.kind!=='INVOICE'),hash=createHash('sha256').update(file.buffer).digest('hex');
+  if(input.kind==='INVOICE')await assertPortalInvoiceUpload(file,detected.mime);
   const consent=input.consent===true||input.consent==='true';
   const receipt=await this.action(t,'reserve_upload',null,{requestId:input.requestId,unitId:input.unitId,month:input.month,kind:input.kind,recordId:input.recordId??null,consent,fileHash:hash,filename:detected.name});
   if(!receipt.acquired){if(receipt.documentId)return {id:receipt.id,replayed:true,status:'RECEIVED'};throw new ConflictException('Envio em conferência. Atualize Minhas faturas antes de repetir.');}
