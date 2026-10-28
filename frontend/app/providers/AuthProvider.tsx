@@ -182,6 +182,12 @@ export function AuthProvider({
     clearAuthentication();
   }, [clearAuthentication]);
 
+  useEffect(()=>{
+    const ended=()=>{clearAuthentication();window.location.replace('/auth/login');};
+    window.addEventListener('session-ended',ended);
+    return()=>window.removeEventListener('session-ended',ended);
+  },[clearAuthentication]);
+
   const switchOrganization = useCallback(
     async (organizationId: string) => {
       if (

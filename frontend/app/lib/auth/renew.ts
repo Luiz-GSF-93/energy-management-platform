@@ -1,6 +1,7 @@
 import {session,tokenClaims} from './session';
 let pending: Promise<string> | null=null;
-export function sessionAttention(message:string) { if(typeof window!=='undefined') window.dispatchEvent(new CustomEvent('session-attention',{detail:message})); }
+export type SessionAttentionKind='connection'|'expired'|'identity';
+export function sessionAttention(message:string,kind:SessionAttentionKind='connection') { if(typeof window!=='undefined') window.dispatchEvent(new CustomEvent('session-attention',{detail:{message,kind}})); }
 export async function freshToken(force=false):Promise<string> {
  const token=session.getAccessToken();
  if(!token) throw new Error('Entre novamente para continuar.');
@@ -15,10 +16,10 @@ export async function freshToken(force=false):Promise<string> {
   const current=session.getAccessToken();
   if(tokenClaims(current).sub!==tokenClaims(token).sub)throw new Error('A conta mudou em outra aba. Entre novamente com a mesma conta.');
   if(current!==token && current && (tokenClaims(current).exp||0)*1000>Date.now()+120000) return current;
-  const refresh=window.localStorage.getItem('refresh_token');
-  if(!refresh){sessionAttention('Sua sessão precisa ser renovada. Entre novamente abaixo; mantenha esta página aberta para preservar o formulário.');if(!force && exp*1000>Date.now()+5000)return token;throw new Error('Entre novamente no aviso acima para habilitar a renovação automática.');}
+ const refresh=session.getRefreshToken();
+ if(!refresh){sessionAttention('Sua sessão precisa ser renovada. Renove o acesso ou entre novamente.','expired');if(!force && exp*1000>Date.now()+5000)return token;throw new Error('Entre novamente no aviso acima para habilitar a renovação automática.');}
   const response=await fetch((process.env.NEXT_PUBLIC_API_URL||'').replace(/\/+$/,'')+'/api/v1/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refresh}),signal:AbortSignal.timeout(15000)});
-  if(!response.ok)throw new Error(response.status===401?'Sessão expirada. Entre novamente no aviso acima.':'Não foi possível renovar a sessão. Verifique sua conexão e tente novamente.');
+  if(!response.ok){if(response.status===401)sessionAttention('Sessão expirada. Renove o acesso para continuar.','expired');throw new Error(response.status===401?'Sessão expirada. Entre novamente no aviso acima.':'Não foi possível renovar a sessão. Verifique sua conexão e tente novamente.');}
   const result=await response.json();
   if(typeof result.access_token!=='string'||typeof result.refresh_token!=='string'||tokenClaims(result.access_token).sub!==tokenClaims(token).sub)throw new Error('Resposta de renovação inválida.');
   if(session.getAccessToken()!==current)throw new Error('A sessão mudou em outra aba. Confira o usuário antes de continuar.');
