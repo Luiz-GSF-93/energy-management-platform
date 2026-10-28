@@ -80,7 +80,11 @@ export class ContractContextService {
   await this.licenses.requireEntitlement(t.organizationId,'report_generation');await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
   const gate=await this.db.getClient().rpc('energy_forecast_client_published',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId});
   if(gate.error){if(gate.error.code==='42501')throw new ForbiddenException('Vínculo de planejamento revogado.');throw new InternalServerErrorException('Fontes de cobertura indisponíveis.');}
-  if(gate.data?.customerId!==scope.customerId||!Array.isArray(gate.data.rows)||!gate.data.rows.some((r:any)=>r.organization_id===scope.organizationId&&r.customer_id===scope.customerId&&r.consumer_unit_id===scope.unitId&&r.publishedAt&&r.validatedAt))throw new ForbiddenException('Previsão publicada vinculada necessária.');
+  if(gate.data?.customerId!==scope.customerId||!Array.isArray(gate.data.rows))throw new ForbiddenException('Consulta vinculada ao cliente necessária.');
+    if(!gate.data.rows.some((r:any)=>r.organization_id===scope.organizationId&&r.customer_id===scope.customerId&&r.consumer_unit_id===scope.unitId&&r.publishedAt&&r.validatedAt)){
+     const sources=await this.db.getClient().rpc('energy_forecast_client_sources',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId});
+     if(sources.error||sources.data?.customerId!==scope.customerId||!sources.data?.units?.some((u:any)=>u.organizationId===scope.organizationId&&u.customerId===scope.customerId&&u.unitId===scope.unitId&&u.publications?.length))throw new ForbiddenException('Fontes publicadas vinculadas necessárias.');
+    }
   const db=this.db.getClient();
   const [contracts,rules,events]=await Promise.all([
    this.rows(db.from('energy_contracts').select('*').eq('organization_id',scope.organizationId).eq('customer_id',scope.customerId).eq('consumer_unit_id',scope.unitId).eq('contract_type','ENERGY_PURCHASE')),
