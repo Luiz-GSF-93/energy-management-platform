@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('fs'),Module=require('module'),ts=require('typescript'),{JSDOM}=require('jsdom');
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});for(const k of ['window','document','navigator','HTMLElement','Event'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+require('./eva-processing-dom.cjs')();
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');let api;class ApiError extends Error{constructor(message,status){super(message);this.status=status;}}
 const load=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:(...args)=>api(...args),ApiError};if(n==='@/app/components/ui')return {Button:({children,...props})=>React.createElement('button',props,children),Alert:({children})=>React.createElement('p',{role:'alert'},children)};return load.call(this,n,p,m);};
 const C=require('../app/backoffice/contracts/DocumentedSupplierSettlement.tsx').default,root=createRoot(document.getElementById('root'));
@@ -51,5 +52,9 @@ const acknowledge=()=>act(async()=>document.querySelector('input[type=checkbox]'
  calls=[];api=(path,options)=>{calls.push([path,options]);return new Promise(()=>{});};
  await act(async()=>root.render(React.createElement(C,{key:'wrong-scope-snapshot',unitId:'other-unit',month:'2026-02',review,onSaved:()=>{}})));
  assert.deepEqual(summaryValues(),[]);assert(!document.querySelector('input[type=checkbox]'));assert(!calls.some(([,o])=>o?.method==='POST'));
- console.log('PASS supplier invoice UI: populated values during slow reads, exact source scope, automatic field selection, scoped confirmation, stale sources and uncertain writes');
+ plan.manualOverrides={};plan.contractDraft={format:'supplier-invoice-evidence-1',requirements:[{code:'SUPPLIER_INVOICE_COVERAGE'}],differences:[]};setup();await render('waiting-confirmation');await acknowledge();
+ const beforeWait=api;let finishPreview;api=(path,options)=>path.endsWith('/preview')?new Promise(resolve=>{finishPreview=resolve}):beforeWait(path,options);
+ await act(async()=>button().click());const indicator=document.querySelector('[aria-label="EVA validando"]');assert(indicator);assert.equal(indicator.style.position,'fixed');assert(indicator.querySelector('img[src="/images/eva/eva-orb.webp"]'));assert(document.querySelector('[data-active="true"]'));assert(indicator.textContent.includes('Validando, aguarde'));
+ await act(async()=>finishPreview(plan));assert.equal(document.querySelector('[aria-label="EVA validando"]'),null);
+ console.log('PASS supplier invoice UI: populated values during slow reads, exact source scope, automatic field selection, scoped confirmation, stale sources and uncertain writes, animated in-flight confirmation status');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

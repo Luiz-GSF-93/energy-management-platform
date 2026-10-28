@@ -1,4 +1,5 @@
 'use client';
+import EvaProcessingStatus from '../../components/EvaProcessingStatus';
 import {notifyPublicationUpdated} from '../../components/usePublicationRefresh';
 import EvaGuidedReview from './EvaGuidedReview';
 import CceeCostReview from './CceeCostReview';
@@ -95,7 +96,7 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
  const publication=h.publications?.find(p=>p.closingId===row?.id);
  const displayFinancial=row?.report?.proposalFinancial??row?.report?.financial;
  const report=row?.report,final=!!row&&['APPROVED','REJECTED','SUPERSEDED'].includes(row.state),ready=row?.state==='READY_FOR_REVIEW'&&report?.approvalEligible;
- return <><section className={styles.layout} data-eva-assisted='true'><div className={styles.report}>
+ return <>{busy||row?.state==='PREPARING'?<EvaProcessingStatus floating detail='A EVA está conferindo as respostas e preparando a apuração. Aguarde a conclusão antes de tentar novamente.'/>:null}<section className={styles.layout} data-eva-assisted='true'><div className={styles.report}>
  <Card title='Fechamento assistido pela EVA'>{h.canPrepare&&!ready&&!(row?.state==='INCOMPLETE'&&h.guidedReviewEnabled)&&(!final||['APPROVED','SUPERSEDED'].includes(row?.state??''))?<DocumentedSupplierSettlement key={unitId+month+(row?.id??'')} unitId={unitId} month={month} disabled={busy} onSaved={()=>void prepare()}/>:null}<p role='status'>{busy?'A EVA está conferindo as fontes…':row?row.state==='APPROVED'&&publication?.state==='PUBLISHED'?'Aprovado e disponibilizado':(row.state==='INCOMPLETE'&&h.guidedReviewEnabled?'Aguardando suas confirmações':labels[row.state]):'A EVA pode preparar o relatório desta competência.'}</p><p>Competência {month} · todas as unidades do cliente · {h.approvalPublishes?'aprovação com disponibilização ao cliente vinculado.':'decisão interna do backoffice.'}</p>
  {error?<Alert variant='error'>{error}</Alert>:null}
  {!row||['REJECTED','APPROVED','SUPERSEDED'].includes(row.state)?<><Button disabled={busy||commercialUncertain.current||!h.canPrepare} onClick={prepare}>{row?(row.state==='REJECTED'?'Preparar nova versão após correções':'Preparar nova versão com fontes atuais'):'Preparar relatório pela EVA'}</Button>{row?.state==='APPROVED'?<p>A versão aprovada e sua publicação serão preservadas. A nova versão exige outra conferência e aprovação antes de atualizar o cliente.</p>:null}</>:null}

@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+require('./eva-processing-dom.cjs')();
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
 let permitted=true,calls=[];
 const preserved=[{id:'supplier',label:'Supplier invoice',category:'SUPPLIER_INVOICE',scenario:'ACL',effect:'COST',amount:'1500.00',source:'Verified supplier source',taxTreatment:'INCLUDED'},{id:'credit',label:'Existing credit',category:'OTHER',scenario:'ACL',effect:'CREDIT',amount:'25.00',source:'Existing evidence',taxTreatment:'NOT_APPLICABLE'}];
