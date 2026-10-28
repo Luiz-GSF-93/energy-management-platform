@@ -22,7 +22,16 @@ export class AutomaticIntakeService{
  async list(t:TenantContext,query:any={}){
   if(Object.keys(query).some(k=>!['customerId','queueOnly'].includes(k))||query.queueOnly!==undefined&&!['true','false'].includes(query.queueOnly))throw new BadRequestException('Consulta inválida.');
   if(!this.enabled(t.organizationId))return {enabled:false,rows:[]};
-  return {enabled:true,...await this.action(t,'list',null,query)};
+  const data=await this.action(t,'list',null,query);
+  const candidates=[...(data.rows??[]),...(data.completed??[])].filter((r:any)=>r.documentId&&r.documentType==='INVOICE_DISTRIBUTOR'&&r.state==='UNKNOWN');
+  const ids=[...new Set<string>(candidates.map((r:any)=>r.id))];if(!ids.length)return {enabled:true,...data};
+  const proof=await this.db.getClient().rpc('eva_intake_published_completions',{p_org:t.organizationId,p_ids:ids});
+  const validId=(v:any)=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
+  if(proof.error||!Array.isArray(proof.data)||proof.data.length>ids.length||new Set(proof.data.map((p:any)=>p?.id)).size!==proof.data.length||proof.data.some((p:any)=>!p||!ids.includes(p.id)||!validId(p.closingId)||!validId(p.publicationId)||typeof p.publishedAt!=='string'||!Number.isFinite(Date.parse(p.publishedAt))))throw new ServiceUnavailableException('Não foi possível confirmar o andamento atual. Os documentos e as decisões anteriores foram preservados.');
+  const completed=new Map(proof.data.map((p:any)=>[p.id,p]));
+  const project=(r:any)=>{const p:any=completed.get(r.id);return p?{...r,processingState:r.state,state:'PUBLISHED',percent:100,updatedAt:p.publishedAt,status:{...r.status,percent:100,prepared:true},note:'Concluído pela versão aprovada e publicada. O processamento anterior permanece no histórico.',completion:{closingId:p.closingId,publicationId:p.publicationId}}:r;};
+  const archived=[...(data.completed??[]).map(project),...(data.rows??[]).filter((r:any)=>completed.has(r.id)).map(project)];
+  return {enabled:true,...data,revision:createHash('sha256').update(JSON.stringify([data.revision??null,proof.data])).digest('hex'),rows:(data.rows??[]).filter((r:any)=>query.queueOnly!=='true'||!completed.has(r.id)).map(project),completed:[...new Map(archived.map((r:any)=>[r.id,r])).values()].sort((a:any,b:any)=>String(b.updatedAt??'').localeCompare(String(a.updatedAt??''))).slice(0,5)};
  }
  async retry(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Retomada inválida.');

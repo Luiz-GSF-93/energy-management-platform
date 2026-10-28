@@ -59,6 +59,8 @@ on:
       - 'backend/src/modules/ocr/invoice-identity-preflight*'
       - 'backend/src/modules/ocr/cpfl-paulista-layout*'
       - 'backend/src/modules/ocr/cpfl-credit-magnitudes*'
+      - 'backend/src/database/migrations/20261239_eva_intake_completion_projection.sql'
+      - 'backend/test/eva-intake-published-completion.cjs'
       - 'backend/src/modules/ocr/ocr-queue.service.ts'
       - 'backend/src/modules/ocr/ocr-assistant.service*'
       - 'backend/src/modules/portal-workspace/portal-automation.worker.ts'
@@ -160,6 +162,7 @@ jobs:
       - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts
         working-directory: backend
       - run: node test/eva-automatic-intake.cjs
+      - run: node test/eva-intake-published-completion.cjs
         working-directory: backend
       - run: node test/documented-settlements.cjs
         working-directory: backend
