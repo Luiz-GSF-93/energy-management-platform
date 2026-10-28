@@ -162,6 +162,7 @@ jobs:
       - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts
         working-directory: backend
       - run: node test/eva-automatic-intake.cjs
+        working-directory: backend
       - run: node test/eva-intake-published-completion.cjs
         working-directory: backend
       - run: node test/documented-settlements.cjs
