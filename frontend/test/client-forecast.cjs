@@ -27,6 +27,10 @@ const fixture={id:'test',unitName:'Test unit',version:2,publishedAt:'2026-09-01T
  await act(async()=>document.querySelector('button').click());assert.ok(!document.body.textContent.includes('1.200'));assert.ok(document.body.textContent.includes('Consultando'));
  await act(async()=>reject(Error('Vínculo indisponível')));assert.ok(document.querySelector('[role=alert]').textContent.includes('Vínculo'));assert.equal(document.querySelector('svg'),null);
  await act(async()=>document.querySelector('button').click());await act(async()=>resolve({rows:[]}));assert.ok(document.body.textContent.includes('Nenhuma previsão publicada'));assert.equal(document.querySelector('svg'),null);
+ const dynamic={...fixture,id:'planning:unit',version:undefined,publishedAt:undefined};
+ await act(async()=>document.querySelector('button').click());await act(async()=>resolve({rows:[],currentPlanning:[{forecastId:'planning:unit',unitName:'Tennis',state:'AVAILABLE',calculatedAt:'2026-10-28T12:00:00Z',notice:'History',sourceOrigins:[{month:'2026-08',kind:'PUBLISHED_INVOICE_HISTORY'}],forecast:dynamic}]}));
+ assert.ok(document.querySelector('[aria-label="Planejamento atual com novas publicações"]'));assert.ok(document.body.textContent.includes('Histórico da fatura publicada'));assert.ok(!document.body.textContent.includes('Previsão histórica publicada'));assert.equal(document.querySelector('select').value,'planning:unit');
+ await act(async()=>window.dispatchEvent(new Event('portal-updated')));await act(async()=>resolve({rows:[],currentPlanning:[{forecastId:'planning:unit',unitName:'Tennis',state:'AVAILABLE',calculatedAt:'2026-10-28T13:00:00Z',notice:'Updated',forecast:dynamic}]}));assert.equal(document.querySelector('select').value,'planning:unit');
  await act(async()=>root.unmount());assert.ok(calls.at(-1)[1].signal.aborted);
- console.log('20 client forecast checks passed');
+ console.log('26 client forecast checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
