@@ -10,6 +10,40 @@ ENERGIA ELETRICA (Incentivada) fornecida no mês de maio/2026
 DADOS ADICIONAIS`;
 const run=(t=text,month='2026-05',tax='11222333000181')=>supplierInvoiceProposal(t,month,tax,source);
 describe('Supplier NF proposal',()=>{
+ const wrapped=`DANFE CNPJ DESTINATARIO/REMETENTE
+ Empresa sintetica 11.222.333/0001-81
+ FATURA
+ 001
+ 12/05/2026
+ 300,00
+ CALCULO DO IMPOSTO
+ BASE DE CALCULO DO ICMS
+ 300,00
+ VALOR DO ICMS
+ 54,00
+ VALOR TOTAL DOS PRODUTOS
+ 300,00
+ VALOR DO FRETE
+ 0,00
+ VALOR DO SEGURO
+ 0,00
+ DESCONTO
+ 0,00
+ OUTRAS DESPESAS ACESSORIAS
+ 0,00
+ VALOR DO IPI
+ 0,00
+ VALOR TOTAL DA NOTA
+ 300,00
+ DADOS ADICIONAIS
+ Mes de referencia 04/2026 - Vencimento: 12/05/2026
+ Favorecido: Empresa fornecedora CNPJ 22.333.444/0001-82
+ DADOS DO PRODUTO / SERVICO
+ COD. PROD DESCRICAO DO PROD./SERV. NCM/SH CST CFOP UN QUANT. V.UNITARIO V.TOTAL BC.ICMS V.ICMS V.IPI
+ 69 ENERGIA ELETRICA 27160000 000 5123 MW 1,5000 200,0000 300,00 300,00 54,00 0,0018.00%
+ h`;
+ it('reconciles a wrapped MWh glyph, explicit supply month, recipient and invoice total with included ICMS',()=>expect(run(wrapped,'2026-04')).toMatchObject({quantityMwh:'1.5000',pricePerMwh:'200.0000',amount:'300.00',taxTreatment:'INCLUDED',taxEvidence:{icmsAmount:'54.00'}}));
+ it.each(['power','header','quantity','invoice total','billing','discount','recipient','month','duplicate month'])('does not relax reconciliation for the wrapped table: %s',kind=>{let t=wrapped;if(kind==='power')t=t.replace('\n h','');if(kind==='header')t=t.replace('CFOP UN QUANT.','CFOP POWER');if(kind==='quantity')t=t.replace('1,5000','1,5001');if(kind==='invoice total')t=t.replace('VALOR TOTAL DA NOTA\n 300,00','VALOR TOTAL DA NOTA\n301,00');if(kind==='billing')t=t.replace('12/05/2026\n 300,00','12/05/2026\n301,00');if(kind==='discount')t=t.replace('DESCONTO\n 0,00','DESCONTO\n1,00');if(kind==='recipient')t=t.replace('11.222.333/0001-81','22.333.444/0001-82');if(kind==='month')t=t.replace('04/2026','03/2026');if(kind==='duplicate month')t+=' Mes de referencia 03/2026';expect(run(t,'2026-04')).toBeNull();});
  it('recognizes positive ICMS included in a reconciled invoice without adding it twice',()=>{const t=text.replace('DADOS DO PRODUTO / SERVIÇO','CALCULO DO IMPOSTO\nBASE DE CALCULO DO ICMS\n300,00\nVALOR DO ICMS\n54,00\nDADOS DO PRODUTO / SERVIÇO');expect(run(t)).toMatchObject({amount:'300.00',taxTreatment:'INCLUDED',taxEvidence:{kind:'INVOICE_ICMS_INCLUDED',icmsAmount:'54.00',icmsBase:'300.00'}});expect(run(t.replace('54,00','0,00'))?.taxTreatment).toBe('UNCONFIRMED');expect(run(t.replace('300,00\nVALOR DO ICMS','299,99\nVALOR DO ICMS'))?.taxTreatment).toBe('UNCONFIRMED');});
  it('requires review of contradictory destination clause and positive printed ICMS',()=>{const t=text.replace('DADOS DO PRODUTO / SERVIÇO','CALCULO DO IMPOSTO\nBASE DE CALCULO DO ICMS\n300,00\nVALOR DO ICMS\n54,00\nDADOS DO PRODUTO / SERVIÇO')+' A responsabilidade pelo recolhimento do ICMS fica atribuida ao destinatario';expect(run(t)).toMatchObject({taxTreatment:'UNCONFIRMED',taxEvidence:{kind:'CONFLICTING_ICMS'}});});
 

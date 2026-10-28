@@ -1,4 +1,4 @@
-import {BadRequestException,ConflictException,ForbiddenException,Injectable,NotFoundException,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,NotFoundException,Optional,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {LicensesService} from '../licenses/services/licenses.service';
 import {SupabaseService} from '../../services/supabase.service';
@@ -7,6 +7,7 @@ import {DocumentsService} from '../documents/services/documents.service';
 import {DocumentFile,DOCUMENT_BUCKET,MAX_DOCUMENT_BYTES,inspectDocumentUpload} from '../documents/services/document-file';
 import {OcrQueueService} from '../ocr/ocr-queue.service';
 import {assertPortalInvoiceUpload} from './portal-invoice-kind';
+import {AutomaticIntakeService} from './automatic-intake.service';
 
 const uuid=(s:unknown)=>typeof s==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
 const documentTypes:Record<string,string>={INVOICE:'INVOICE_DISTRIBUTOR',FISCAL:'TAX_DOCUMENT',CONTRACT:'CONTRACT_ENERGY',BILLING:'OTHER',ART:'COMPLIANCE_REPORT',TECHNICAL:'COMPLIANCE_REPORT',REPORT:'COMPLIANCE_REPORT',OTHER:'OTHER'};
@@ -28,7 +29,7 @@ export function portalIntakeNotice(r:any){
 }
 @Injectable()
 export class PortalWorkspaceService {
- constructor(private db:SupabaseService,private documents:DocumentsService,private ocr:OcrQueueService,private licenses:LicensesService){}
+ constructor(private db:SupabaseService,private documents:DocumentsService,private ocr:OcrQueueService,private licenses:LicensesService,@Optional() private intake?:AutomaticIntakeService){}
  private enabled(){if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED!=='true')throw new ServiceUnavailableException('A ampliação do Portal ainda não foi habilitada.');}
  async action(t:TenantContext,action:string,id:string|null=null,body:unknown={}){
   this.enabled();if(!t.organizationId||!t.userId||!t.roleId||(t.scope as string)==='global'||id&&!uuid(id))throw new ForbiddenException('Contexto do Portal indisponível.');
@@ -66,6 +67,15 @@ export class PortalWorkspaceService {
  async upload(t:TenantContext,input:any,file:DocumentFile){
   this.enabled();
   if(!input||Object.keys(input).some(k=>!['requestId','unitId','month','kind','recordId','consent'].includes(k))||!uuid(input.requestId)||!uuid(input.unitId)||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month??'')||!documentTypes[input.kind]||input.recordId&&!uuid(input.recordId)||!['true','false',true,false].includes(input.consent))throw new BadRequestException('Selecione unidade, competência, tipo e autorização.');
+  // Older portal clients use /uploads. Join the same durable intake before
+  // archiving, instead of creating a second OCR workflow outside its queue.
+  // Conversation attachments retain their existing receipt and message audit.
+  if(input.kind==='INVOICE'&&!input.recordId&&(input.consent===true||input.consent==='true')&&this.intake?.enabled(t.organizationId)){
+   const scope=await this.action(t,'context');
+   if(scope.organizationId!==t.organizationId||!scope.customerId||!scope.units?.some((u:any)=>u.id===input.unitId))throw new ForbiddenException('O vínculo mudou.');
+   const receipt=await this.intake.upload(t,{requestId:input.requestId,customerId:scope.customerId,unitId:input.unitId,month:input.month,consent:input.consent},file);
+   return {...receipt,status:'RECEIVED',processing:'PENDING_AUTOMATION'};
+  }
   const detected=await inspectDocumentUpload(file,input.kind!=='INVOICE'),hash=createHash('sha256').update(file.buffer).digest('hex');
   if(input.kind==='INVOICE')await assertPortalInvoiceUpload(file,detected.mime);
   const consent=input.consent===true||input.consent==='true';
