@@ -2,7 +2,7 @@
 process.env.NEXT_PUBLIC_CLIENT_PORTAL_LICENSES_ENABLED='true';
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid/portal'});
-for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const k of ['window','document','HTMLElement','HTMLInputElement','HTMLTextAreaElement','HTMLSelectElement','Event','MouseEvent','MutationObserver'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;global.cancelAnimationFrame=()=>{};global.requestAnimationFrame=fn=>setTimeout(fn,0);const scrolled=[];dom.window.HTMLElement.prototype.scrollIntoView=function(){scrolled.push(this.id);};
 // jsdom has no viewport observer; browser QA covers avatar visibility separately.
 global.IntersectionObserver=class{observe(){}unobserve(){}disconnect(){}};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
@@ -43,6 +43,8 @@ async function render(key,props={}){await act(async()=>root.render(React.createE
  await render('full');ok(document.querySelector('h1').textContent==='Organização modelo','contracting organization has primary identity');ok(text().includes('EnergyOS'),'product brand preserved');
  for(const a of document.querySelectorAll('nav a[href^="#"]'))ok(document.getElementById(a.getAttribute('href').slice(1)),'every visible menu points to mounted licensed content');
  await act(async()=>{window.location.hash='#minhas-faturas';window.dispatchEvent(new Event('hashchange'));});ok(navigation.includes('/portal/invoices'),'legacy invoice notifications route to the dedicated page after hash navigation');window.history.replaceState({},'', '/portal');
+ await act(async()=>document.querySelector('nav a[href="#precos"]').click());ok(scrolled.includes('precos')&&window.location.hash==='#precos','price menu scrolls without replacing the portal');await act(async()=>document.querySelector('nav a[href="#financeiro"]').click());ok(scrolled.at(-1)==='financeiro','menu returns to an earlier section');
+ await act(async()=>document.querySelector('nav a[aria-label="Configurações"]').click());ok(document.querySelector('#configuracoes')&&text().includes('Minhas configurações'),'settings opens in the portal section');
  ok(!text().includes('Adesão ACL')&&!text().includes('Previsão de consumo'),'unlicensed menus are not advertised');
  const collapse=document.querySelector('button[aria-label="Recolher menu do Portal"]');await act(async()=>collapse.click());ok(document.querySelector('button[aria-expanded="false"]'),'sidebar collapse works with accessible state');await act(async()=>document.querySelector('button[aria-label="Expandir menu do Portal"]').click());
  ok(text().includes('Economia acumulada após honorários')&&text().includes('30,00%'),'cumulative savings uses supplied aggregate percentage');ok(document.querySelector('figure svg[role="img"]'),'published composition donut is rendered');ok(text().includes('Reativo excedente faturado'),'published reactive cost displayed');
@@ -52,5 +54,8 @@ async function render(key,props={}){await act(async()=>root.render(React.createE
  await render('settings',{settings:true});ok(text().includes('Minhas configurações'),'portal settings use same shell');ok(document.querySelector('nav a[href="/portal#financeiro"]'),'settings navigation returns to actual portal section');
  await act(async()=>root.render(React.createElement(Editor)));ok(!document.querySelector('input[type="file"]'),'client cannot edit organization branding');
  if(process.env.PORTAL_VISUAL_FIXTURE){license={...license,modules:['reports','energy_prices','bot']};await render('visual');for(const option of document.querySelectorAll('option')){if(option.selected)option.setAttribute('selected','');else option.removeAttribute('selected');}const css=fs.readFileSync(path.join(__dirname,'../app/globals.css'),'utf8')+'\n'+[...stylesheets.values()].join('\n');fs.writeFileSync(process.env.PORTAL_VISUAL_FIXTURE,'<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Portal — dados sintéticos para QA</title><style>'+css+'</style><body>'+document.body.innerHTML+'</body></html>');}
+ const follow=require('../app/components/usePortalSectionNavigation.ts').followPortalSection;
+ const stop=follow('late-section');const late=document.createElement('section');late.id='late-section';document.body.append(late);await act(async()=>{});ok(scrolled.at(-1)==='late-section','navigation waits for asynchronous target');stop();late.remove();
+ const cancelled=follow('cancelled-section');window.dispatchEvent(new Event('wheel'));const cancelledTarget=document.createElement('section');cancelledTarget.id='cancelled-section';document.body.append(cancelledTarget);await act(async()=>{});ok(!scrolled.includes('cancelled-section'),'user scrolling cancels pending alignment');cancelled();cancelledTarget.remove();
  console.log(checks+' portal identity/navigation/EVA UI checks passed');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
