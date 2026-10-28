@@ -21,4 +21,8 @@ describe('Audited identity at the first read',()=>{
    expect(rpc).toHaveBeenCalledWith('ocr_identity_native_lineage',{p_org:'org',p_customer:'customer',p_unit:'unit',p_document:'doc',p_hash:'a'.repeat(64)});expect(extractPdfText).toHaveBeenCalledTimes(1);
   }finally{if(before===undefined)delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;else process.env.EVA_AUTOMATIC_INTAKE_ENABLED=before;}
  });
+ it.each(['period','address'])('preserves a resumable original diagnostic if an alias cannot prove the remaining %s',async field=>{
+  const prior=process.env.EVA_AUTOMATIC_INTAKE_ENABLED;process.env.EVA_AUTOMATIC_INTAKE_ENABLED='true';
+  try{const s=setup();(s.db as any).rpc=jest.fn(async()=>({data:{codes:['11111','22222'],editIds:[],aliasIds:['alias']}}));(extractPdfText as jest.Mock).mockResolvedValue({sections:[{page:1,text:field==='period'?text.replace('JUN/2026','JUL/2026'):text.replace('RUA EXEMPLO 123 CENTRO','RUA OUTRA 456'),issues:[]}],ocrRequired:false});const proof=await s.read();expect(proof.state).not.toBe('MATCH');expect(proof.registration).toEqual(r);expect(proof).not.toHaveProperty('registrationAliasIds');expect(extractPdfText).toHaveBeenCalledTimes(1);}finally{if(prior===undefined)delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;else process.env.EVA_AUTOMATIC_INTAKE_ENABLED=prior;}
+ });
 });
