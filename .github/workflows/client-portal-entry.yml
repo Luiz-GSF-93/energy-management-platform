@@ -13,6 +13,7 @@ on:
       - 'frontend/app/backoffice/users/**'
       - 'frontend/app/components/PortalCustomerBoundary.tsx'
       - 'frontend/test/portal-customer-access.cjs'
+      - 'frontend/test/portal-identity-ui.cjs'
       - 'backend/src/common/guards/portal-presentation-access.spec.ts'
       - 'backend/src/modules/client-portal-licenses/**'
       - 'backend/src/modules/portal-workspace/portal-presentation*'
