@@ -12,6 +12,7 @@ import {OcrMachineDraftService} from '../ocr/ocr-machine-draft.service';
 import {automaticIntakeContext,automaticOcrIdentityConfidence} from './automatic-intake-context';
 import {intakeOrganizations,intakePath} from './automatic-intake.service';
 import {DOCUMENT_BUCKET} from '../documents/services/document-file';
+import {portalInvoiceKind} from './portal-invoice-kind';
 
 @Injectable()
 export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
@@ -47,7 +48,8 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      if(i.raw_result&&i.state==='OCR_QUEUED'){await transition('use_existing_ocr');i.state='RECOGNIZING';}
      else if(!i.raw_result){
       const prior=await this.ocr.status(i.organization_id,i.document_id);
-      if(prior.job){await transition(['FAILED','SUBMISSION_UNKNOWN'].includes(prior.job.state)?'review':'wait',{note:'Consultando a leitura já existente, sem repetir o envio ao provedor.'});return;}
+      const recoveredSupplier=i.document_type==='INVOICE_SUPPLIER'&&prior.job?.state==='FAILED'&&prior.job.errorCode==='IDENTITY_REVIEW_REQUIRED';
+      if(prior.job&&!recoveredSupplier){await transition(['FAILED','SUBMISSION_UNKNOWN'].includes(prior.job.state)?'review':'wait',{note:'Consultando a leitura já existente, sem repetir o envio ao provedor.'});return;}
      }
     }
     if(['RECOGNIZING','OCR_QUEUED','OCR_POLLING','LINKING'].includes(i.state)){
@@ -76,6 +78,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
        if(!extraction.ocrRequired)pages=[...new Set(extraction.sections.map(s=>s.page))].map(page=>({page,text:extraction.sections.filter(s=>s.page===page).map(s=>s.text).join('\n')}));
       }
       if(!pages.length){await transition('need_ocr',{note:'Identificação por OCR necessária. Uma única leitura será usada também na preparação.'});return;}
+      if(i.external&&portalInvoiceKind(pages.map(p=>p.text).join('\n'))==='WRONG_DOCUMENT'){
+       await transition('review',{note:'O portal aceita somente fatura de energia da distribuidora. Selecione a fatura correta; este arquivo não será arquivado como fatura nem usado no fechamento.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
+      }
       const matches:any[]=[];
       for(const customer of ctx.customers){
        if(!pages.map(p=>p.text).join('').replace(/[^A-Z0-9]/gi,'').includes(String(customer.document??'').replace(/[^A-Z0-9]/gi,'')))continue;
@@ -84,6 +89,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
        const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))))matches.push(proof);
       }
       if(matches.length!==1){await transition('review',{note:'A leitura está disponível, mas o vínculo ainda não foi comprovado. Confira código atual/histórico da instalação, CNPJ, endereço e competência. Suas respostas anteriores foram preservadas.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});return;}
+      if(i.external&&matches[0].documentType!=='INVOICE_DISTRIBUTOR'){
+       await transition('review',{note:'O portal aceita somente fatura da distribuidora. A nota do fornecedor deve ser conferida pela equipe do backoffice.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
+      }
       await transition('recognized',{proof:matches[0]});Object.assign(i,{customer_id:matches[0].customerId,unit_id:matches[0].unitId,month:matches[0].month,document_type:matches[0].documentType,state:'LINKING'});
      }
      const path=i.organization_id+'/'+i.unit_id+'/eva-intake-'+i.id+(i.mime==='application/pdf'?'.pdf':i.mime==='image/png'?'.png':'.jpg');

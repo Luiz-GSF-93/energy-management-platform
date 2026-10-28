@@ -3,6 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {DocumentFile,DOCUMENT_BUCKET,inspectDocumentUpload} from '../documents/services/document-file';
+import {assertPortalInvoiceUpload} from './portal-invoice-kind';
 
 export const intakeOrganizations=()=>process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'?String(process.env.EVA_AUTOMATIC_INTAKE_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean):[];
 export const intakePath=(org:string,id:string,mime:string)=>org+'/eva-intake/'+id+(mime==='application/pdf'?'.pdf':mime==='image/png'?'.png':'.jpg');
@@ -43,6 +44,7 @@ export class AutomaticIntakeService{
  async upload(t:TenantContext,input:any,file:DocumentFile){
   if(!input||Object.keys(input).some(k=>!['requestId','customerId','unitId','month','consent'].includes(k))||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(input.requestId??'')||input.month&&!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month)||!['true','false',true,false].includes(input.consent))throw new BadRequestException('Confira o arquivo e a autorização de leitura.');
   const detected=await inspectDocumentUpload(file,false),hash=createHash('sha256').update(file.buffer).digest('hex');
+  if(t.role==='consulta'&&!t.accessMode)await assertPortalInvoiceUpload(file,detected.mime);
   const hints=Object.fromEntries(['unitId','month'].filter(k=>input[k]).map(k=>[k,input[k]]));
   const receipt=await this.action(t,'reserve',randomUUID(),{...(input.customerId?{customerId:input.customerId}:{}),requestId:input.requestId,hash,filename:detected.name,mime:detected.mime,size:file.buffer.length,consent:input.consent===true||input.consent==='true',hints});
   if(!receipt.stored){
