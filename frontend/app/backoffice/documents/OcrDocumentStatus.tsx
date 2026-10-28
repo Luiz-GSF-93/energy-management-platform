@@ -1,5 +1,6 @@
 'use client';
 import OcrAssistant from './OcrAssistant';
+import EvaProcessingStatus from '../../components/EvaProcessingStatus';
 import OcrIdentityResume from './OcrIdentityResume';
 import OcrElektroAudit,{type ElektroAudit} from './OcrElektroAudit';
 import OcrHomologation from './OcrHomologation';
@@ -33,6 +34,7 @@ export default function OcrDocumentStatus({id,canProcess,autoAssist=false,openRe
  const needsAttention=status?.intake?.decision==='REJECT_AUTOMATION'||['FAILED','SUBMISSION_UNKNOWN'].includes(status?.job?.state??'');
  const statusColor=needsAttention?'#fca5a5':status?.intake?'#fcd34d':'#67e8f9';
  return <div style={{marginTop:8,maxWidth:320}}>
+  {!error&&(polling||busy&&!status)?<EvaProcessingStatus detail={polling?(labels[status?.job?.state??'']??'Conferindo a leitura do documento…'):'Consultando o andamento da leitura…'}/>:null}
   <div role="status" aria-live="polite" aria-atomic="true">{notice&&<p style={{padding:10,border:'1px solid #4ade80',borderRadius:8,color:'#bbf7d0'}}><strong>✓ {notice}</strong></p>}</div>
   {status&&<div style={{border:'1px solid '+statusColor,borderRadius:8,padding:10,margin:'8px 0'}}>
    <strong style={{color:statusColor}}>Status da leitura: {status.job?(labels[status.job.state]??'Situação indisponível'):status.enabled?'Disponível para leitura':'Processamento desativado'}</strong>
