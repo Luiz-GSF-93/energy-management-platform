@@ -1,3 +1,8 @@
+import {cents} from './published-financial-summary';
+import {consolidatePublishedComposition} from '../../portal-insights/portal-composition-summary';
+import {normalizePublishedDetail} from '../../portal-insights/portal-legacy-detail';
+import {clientPublishedInsight} from '../../portal-insights/portal-insights.model';
+import {resolvePortalUnits} from '../../../common/services/portal-selected-units';
 import {evaPublication,latestPublications,publicFinancialCharts} from './eva-approved-publications';
 import {financialAnalytics,compareFinancialAnalytics} from './financial-analytics';
 import {Injectable,BadRequestException,ConflictException,ForbiddenException,InternalServerErrorException,NotFoundException,UnauthorizedException} from '@nestjs/common';
@@ -78,7 +83,7 @@ export class FinancialSettlementsService {
   if(r.data.some((row:any)=>!['PUBLISHED','WITHDRAWN'].includes(row.state)))throw new InternalServerErrorException('Estado de publicação inválido.');
   return r.data.map((row:any)=>evaPublication(row,t.organizationId,d));
  }
- private async publishedRead(d:PublishedFinancialQueryDto,t:TenantContext,portal=false,includeEva=true){
+ private async publishedRead(d:PublishedFinancialQueryDto,t:TenantContext,portal=false,includeEva=true,unitIds:string[]|null=null){
   const ordinal=(m:string)=>Number(m.slice(0,4))*12+Number(m.slice(5,7));
   if(d.from>d.to||ordinal(d.to)-ordinal(d.from)>=12)throw new BadRequestException('Selecione um período de até 12 meses, em ordem crescente.');
   if(d.customerId)await this.customer(d.customerId,t);
@@ -101,7 +106,8 @@ export class FinancialSettlementsService {
    publications.push({meta:this.summary(loaded.first),financial:loaded.payload.financial,customerName:loaded.payload.sources.tables?.customers?.find((c:any)=>c.id===row.customer_id)?.company_name??row.customer_id,reservations:loaded.payload.reservations});
   }
   const unscoped=includeEva&&this.evaEnabled(portal)?latestPublications([...publications,...await this.evaPublications(d,t,portal)]):publications;
-  const selected=portal&&t.portalCustomerScope?unscoped.map(p=>portalPublicationUnits(p,t.portalCustomerScope!.units.map(u=>u.id))).filter(Boolean):unscoped;
+  const visible=portal&&t.portalCustomerScope?unscoped.map(p=>portalPublicationUnits(p,t.portalCustomerScope!.units.map(u=>u.id))).filter(Boolean):unscoped;
+  const selected=unitIds?visible.map(p=>portalPublicationUnits(p,unitIds)).filter(Boolean):visible;
   const summary=publishedFinancialSummary(t.organizationId,d,selected);return {...summary,charts:publicFinancialCharts(summary)};
  }
  private async legacyReports(input:FinancialAnalyticsQueryDto,t:TenantContext){
@@ -138,7 +144,18 @@ export class FinancialSettlementsService {
   const build=async(original:any,from:string,to:string,unitId?:string)=>{
    const period={from,to,...(d.customerId?{customerId:d.customerId}:{})},eva=await this.evaPublications(period,t),legacy=[];
    for(const row of original.publications){const p=await this.load(row.id,t);if(p.first.financial_hash!==row.payloadHash||p.first.status!=='PUBLISHED')throw new ConflictException('A publicação mudou durante a consulta.');legacy.push({meta:this.summary(p.first),financial:p.payload.financial,preparations:p.payload.preparations,customerName:row.customerName,reservations:p.payload.reservations});}
-   return {data:financialAnalytics(t.organizationId,period,latestPublications([...legacy,...eva]),unitId),eva,period};
+   const data=financialAnalytics(t.organizationId,period,latestPublications([...legacy,...eva]),unitId);
+   if(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'&&eva.length){
+    const componentRows:any[]=[];
+    const customers=[...new Set(data.publications.map((p:any)=>p.customerId))];
+    for(let start=0;start<customers.length;start+=4){const batches=await Promise.all(customers.slice(start,start+4).map(async customer=>{const raw=await this.client().rpc('read_portal_financial_components_v2',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:false,p_from:from,p_to:to,p_customer:customer});this.fail(raw.error);if(!Array.isArray(raw.data)||raw.data.some((r:any)=>r.customerId!==customer))throw new InternalServerErrorException('Componentes publicados indisponíveis.');return raw.data;}));componentRows.push(...batches.flat());}
+    const scoped=componentRows.filter((r:any)=>(!unitId||r.unitId===unitId)&&data.publications.some((p:any)=>p.id===r.publicationId&&p.payloadHash===(r.sourceHash??r.legacyHash)&&p.month===r.month&&p.units.some((u:any)=>u.id===r.unitId)));
+    const rows=scoped.map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),true)),composition=consolidatePublishedComposition(rows);
+    const expected=data.unitRows.length;
+    if(new Set(scoped.map((r:any)=>r.unitId+'|'+r.month)).size!==scoped.length)throw new ConflictException('Componentes de unidade duplicados.');
+    if(composition&&scoped.length===expected&&data.totals&&composition.reduce((n,p)=>n+cents(p.amount,true),0n)===cents(data.totals.aclAfterFees))data.composition=composition;
+   }
+   return {data,eva,period};
   };
   const primary=await build(base.primary,d.from,d.to,d.unitId),comparison=base.comparison&&d.compareFrom&&d.compareTo?await build(base.comparison,d.compareFrom,d.compareTo,d.compareUnitId):null;
   const selected=new Set(primary.data.publications.map((p:any)=>p.id));
@@ -179,9 +196,12 @@ export class FinancialSettlementsService {
  }
  async portalFinancial(input:PortalFinancialQueryDto,t:TenantContext){
   const customerId=await this.portalCustomer(t),d=await validateWriteDto(PortalFinancialQueryDto,input);
-  const result=await this.publishedRead({...d,customerId},t,true);
+  const unitIds=await resolvePortalUnits(this.client(),t,d.unitIds);
+  const result=await this.publishedRead({...d,customerId},t,true,true,unitIds);
   if(await this.portalCustomer(t)!==customerId)throw new ForbiddenException('O vínculo mudou durante a consulta. Atualize o portal.');
   const projected=this.clientProjection(result,customerId);
+  const selectionCoverage=unitIds?{expectedUnits:unitIds.length,months:projected.months.map(m=>({month:m.month,coveredUnits:new Set(projected.rows.filter(r=>r.month===m.month).flatMap(r=>r.units.map((u:any)=>u.id))).size,expectedUnits:unitIds.length}))}:null;
+  if(selectionCoverage)return {...projected,selectionCoverage,disclosure:projected.disclosure+' Recorte das unidades selecionadas; somas incluem apenas parcelas publicadas. Confira a cobertura por mês.'};
   return t.portalCustomerScope?{...projected,coverage:'LATEST_PUBLISHED_AUTHORIZED_UNITS',disclosure:projected.disclosure+' Totais e gráficos consideram somente as unidades autorizadas para este acesso.'}:projected;
  }
  async portalPreview(input:PublishedFinancialQueryDto,t:TenantContext){

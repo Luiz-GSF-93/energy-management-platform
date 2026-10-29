@@ -39,7 +39,7 @@ export default function PortalInvoices(){
  async function preview(row:Receipt){previewAbort.current?.abort();setError('');setView(row);setUrl('');setReadout(null);}
  async function readHtml(row:Receipt,offset=0){previewAbort.current?.abort();const abort=new AbortController();previewAbort.current=abort;setView(row);setUrl('READOUT_PENDING');setReadout(null);setError('');try{const r=await apiRequest<{text:string;nextOffset:number|null;previousOffset:number|null;notice:string}>('/api/v1/portal/workspace/invoices/'+row.id+'/readout?offset='+offset,{signal:abort.signal,cache:'no-store'});if(!abort.signal.aborted){setReadout(r);setUrl('');}}catch(e){if(!abort.signal.aborted){setUrl('READOUT_ERROR');setError(e instanceof Error?e.message:'A leitura ainda não está disponível.');}}}
  useEffect(()=>{setOpened(null);setView(null);},[year]);
- const selected=rows.filter(r=>r.kind==='INVOICE'&&(!unit||r.unitId===unit));
+ const selected=rows.filter(r=>r.kind==='INVOICE'&&(!scope?.unitIds||scope.unitIds.includes(r.unitId))&&(!unit||r.unitId===unit));
  const monthRows=selected.filter(r=>r.month===opened),visible=monthRows.slice(listPage*6,(listPage+1)*6);
  function close(){previewAbort.current?.abort();setView(null);setReadout(null);setUrl('');}
  return <section className={styles.panel} id="minhas-faturas"><header className={styles.compactHeader}><div><h2>Minhas faturas</h2><p>Consulte as faturas da unidade, seus vencimentos e o pagamento informado.</p></div>{!automatic?<Button onClick={()=>setUploading(true)}>Enviar nova fatura</Button>:null}</header>

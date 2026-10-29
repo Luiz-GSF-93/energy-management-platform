@@ -1,4 +1,5 @@
 'use client';
+import {usePortalUnitScope} from './PortalUnitScope';
 import {usePublicationRefresh} from './usePublicationRefresh';
 import {useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
@@ -10,20 +11,20 @@ type Baseline={unitId:string;published:boolean;baseline:{state:string;reason?:st
 type Data={workspaceV2?:boolean;organizationId:string;audience:string;customerId:string|null;year:number;units:Unit[];baselines:Baseline[];months:EnergyPriceMonth[];acrAverage:string|null;aclAverage:string|null;indicative:{value:string|null;notice:string;reason:string;basis?:string};canPublish:boolean;disclosure:string;footer:string};
 const display=(v:string|null)=>v===null?'Aguardando referência':'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'/MWh';
 export default function EnergyPriceDashboard({organizationId,audience='backoffice'}:{organizationId:string;audience?:'backoffice'|'client'}){
- const publicationRevision=usePublicationRefresh();
+ const publicationRevision=usePublicationRefresh(),portalScope=usePortalUnitScope(),scopeUnits=audience==='client'?JSON.stringify(portalScope?.unitIds??null):'null';
  const scopeRef=useRef('');
  const [year,setYear]=useState(new Date().getFullYear()),[customer,setCustomer]=useState(''),[unit,setUnit]=useState(''),[options,setOptions]=useState<Unit[]>([]),[data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[publishing,setPublishing]=useState(false),[checked,setChecked]=useState<string[]>([]);
  useEffect(()=>{
   const abort=new AbortController();let current=true;
-  const scope=JSON.stringify([organizationId,audience,year,customer,unit]);
+  const scope=JSON.stringify([organizationId,audience,year,customer,unit,scopeUnits]);
   if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');setLoading(true);setChecked([]);}
-  const query=new URLSearchParams({year:String(year)});if(audience==='backoffice'&&customer)query.set('customerId',customer);if(unit)query.set('unitId',unit);
+  const query=new URLSearchParams({year:String(year)});if(audience==='backoffice'&&customer)query.set('customerId',customer);if(scopeUnits!=='null')query.set('unitIds',JSON.parse(scopeUnits).join(','));else if(unit)query.set('unitId',unit);
   apiRequest<Data>('/api/v1/'+(audience==='client'?'portal/':'')+'energy-prices?'+query,{signal:abort.signal,cache:'no-store'}).then(result=>{
-   if(result.organizationId!==organizationId||result.audience!==audience||result.year!==year||audience==='backoffice'&&customer!==''&&result.customerId!==customer||audience==='client'&&!result.customerId||unit&&result.units.some(u=>u.id!==unit)||result.customerId&&result.units.some(u=>u.customerId!==result.customerId))throw Error('Escopo do indicador alterado; atualize a consulta.');
+   if(result.organizationId!==organizationId||result.audience!==audience||result.year!==year||audience==='backoffice'&&customer!==''&&result.customerId!==customer||audience==='client'&&!result.customerId||unit&&result.units.some(u=>u.id!==unit)||result.customerId&&result.units.some(u=>u.customerId!==result.customerId)||scopeUnits!=='null'&&result.units.some(u=>!JSON.parse(scopeUnits).includes(u.id)))throw Error('Escopo do indicador alterado; atualize a consulta.');
    if(!current)return;if(audience==='backoffice'&&!customer&&result.customerId){setCustomer(result.customerId);setOptions(result.units);return;}setError('');setData(result);if(!unit&&(audience==='client'||!customer))setOptions(result.units);
   }).catch(e=>{if(current){setData(null);setError(e instanceof Error?e.message:'Indicador indisponível.');}}).finally(()=>{if(current)setLoading(false);});
   return()=>{current=false;abort.abort();};
- },[organizationId,audience,year,customer,unit,revision,publicationRevision]);
+ },[organizationId,audience,year,customer,unit,revision,publicationRevision,scopeUnits]);
  const marketReference=data?[...data.months].reverse().find(m=>m.pldSpread5!=null&&m.pldSpread15!=null):undefined;
  const customers=Array.from(new Map(options.map(u=>[u.customerId,{id:u.customerId,name:u.customerName}])).values());
  const select=(key:'year'|'customer'|'unit',value:string)=>{setData(null);setError('');setLoading(true);if(key==='year')setYear(Number(value));if(key==='customer'){setCustomer(value);setUnit('');}if(key==='unit')setUnit(value);};
@@ -34,7 +35,7 @@ export default function EnergyPriceDashboard({organizationId,audience='backoffic
  return <section className={styles.panel} aria-label="Dashboard de preço da energia"><h2>Preço da energia · PLD × TE ACR × TE ACL</h2><p>Compare referências publicadas em R$/MWh. O score só aparece com custos de energia de bases tributárias compatíveis. Os spreads de PLD são cenários estimados.</p><p>Publicações EVA usam TE ACR da biblioteca sem tributos; a compra ACL exige segregação fiscal explícita para o score. Meses sem referência não representam preço zero.</p>
   <div className={styles.filters}><label>Ano <select value={year} disabled={publishing} onChange={e=>select('year',e.target.value)}>{Array.from({length:101},(_,i)=>2000+i).map(y=><option key={y} value={y}>{y}</option>)}</select></label>
    {audience==='backoffice'?<label>Cliente <select value={customer} disabled={publishing} onChange={e=>select('customer',e.target.value)}><option value="">Selecione um cliente</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>:null}
-   <label>Unidades <select disabled={publishing||audience==='backoffice'&&!customer} value={unit} onChange={e=>select('unit',e.target.value)}><option value="">Consolidar unidades do cliente</option>{options.filter(u=>audience==='client'||u.customerId===customer).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
+   <label hidden={audience==='client'&&!!portalScope}>Unidades <select disabled={publishing||audience==='backoffice'&&!customer} value={unit} onChange={e=>select('unit',e.target.value)}><option value="">Consolidar unidades do cliente</option>{options.filter(u=>audience==='client'||u.customerId===customer).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
    <Button variant="secondary" disabled={loading||publishing} onClick={()=>setRevision(v=>v+1)}>Atualizar</Button></div>
   {loading?<p role="status">Conferindo referências e publicações…</p>:null}{error?<Alert variant="error">{error}</Alert>:null}
   {data?.customerId&&!loading?<><div className={styles.cards}><article><span>{data.workspaceV2?'TE ACR · referência publicada':'Antes da adesão · TE ACR'}</span><strong>{display(data.acrAverage)}</strong><small>{data.workspaceV2?'Média dos meses disponíveis, ponderada pelo consumo.':'Referência anual; confira período e estimativas abaixo.'}</small></article><article><span>Perfil ACL · valor contratado</span><strong>{display(data.aclAverage)}</strong><small>Preço médio efetivo da energia faturada, incluindo compras avulsas; exclui distribuidora, demanda e honorários. Confira a base tributária publicada.</small></article><article><span>PLD mensal · CCEE</span><strong>{display([...data.months].reverse().find(m=>m.pld!==null)?.pld??null)}</strong><small>Referência do mês e submercado. Spreads estimados disponíveis no gráfico.</small></article></div>

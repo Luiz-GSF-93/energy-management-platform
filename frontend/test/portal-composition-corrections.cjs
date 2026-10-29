@@ -19,5 +19,12 @@ const Insights=require('../app/components/PublishedClientInsights.tsx').default,
  ok(calls.some(([u])=>u.includes('months=2026-03%2C2026-09')),'nonconsecutive selected months reach the backend together');
  ok(document.querySelectorAll('figure').length===1,'selected published month renders even if absent from the parent period');
  ok(document.body.textContent.includes('sem publicação não entram na soma'),'unpublished selected months are disclosed instead of inferred as zero');
+
+ const {PublishedCostDonut}=require('../app/components/PublishedClientInsights.tsx');
+ await act(async()=>root.render(React.createElement(PublishedCostDonut,{title:'Teste com crédito publicado',parts:[{key:'distributor',label:'Distribuidora',amount:'100.00',percent:'100.00',offset:'0.00'},{key:'ccee-published-credit',label:'CCEE',amount:'-35.96',percent:'0.00',offset:'100.00'}]})));
+ ok(document.body.textContent.includes('Crédito · CCEE')&&document.body.textContent.includes('64,04'),'credit tag shows the deduction and reconciled net');
+ ok(document.querySelectorAll('circle').length===2,'credit creates no arc beyond background and positive expense');
+ ok([...document.querySelectorAll('circle[stroke-dasharray]')].every(c=>!c.getAttribute('stroke-dasharray').startsWith('-')),'no negative arc');
+
  console.log(checks+' portal composition/correction UI checks passed');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

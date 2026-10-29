@@ -23,7 +23,6 @@ export function financialDetail(r:any,original:any){
       const key=c.category==='CCEE'?'ccee-published':c.category==='TAX'?'tax-published':'other-published',label=c.category==='CCEE'?'CCEE · encargos e ajustes publicados':c.category==='TAX'?'Tributos adicionais publicados':'Outros custos publicados';
       const before=publishedGroups.get(key);publishedGroups.set(key,{key,label,amount:(before?.amount??0n)+(c.effect==='CREDIT'?-money(c.amount):money(c.amount))});
     }
-    if([...publishedGroups.values()].some(c=>c.amount<0n))throw Error();
   }catch{publishedCostsValid=false;publishedGroups.clear();}
   const publishedTotal=[...publishedGroups.values()].reduce((n,c)=>n+c.amount,0n);
   const additional=ccee.filter((c:any)=>c.includedInTotal===true&&c.accountingRole==='ADDITIONAL');
@@ -34,7 +33,7 @@ export function financialDetail(r:any,original:any){
   if(publishedItems.length||additional.length)try{
     const gross=money(r.invoice),supplier=money(r.supplier),fees=money(r.financial.fees),total=money(r.financial.aclAfterFees);
     const extra=publishedItems.length?publishedTotal:additionalTotal;
-    if(!publishedCostsValid||gross<0n||supplier<0n||fees<0n||total<=0n||gross+supplier+fees+extra!==total)throw Error();
+    if(!publishedCostsValid||gross<0n||supplier<0n||fees<0n||gross+supplier+fees+extra!==total)throw Error();
     usedPublishedCosts=publishedItems.length>0;
     const extras=usedPublishedCosts?[...publishedGroups.values()].map(c=>({key:c.key,label:c.label,amount:feeMoney(c.amount)})):additional.map((c:any,i:number)=>({key:'ccee-'+i,label:'CCEE · '+c.label,amount:c.amount}));
     result.composition=consolidatePublishedComposition([{composition:[{key:'distributor',label:'Fatura da distribuidora',amount:r.invoice},{key:'supplier',label:'Energia do fornecedor',amount:r.supplier},{key:'fees',label:'Honorários da gestão',amount:r.financial.fees},...extras]}]);
@@ -51,7 +50,7 @@ export function financialDetail(r:any,original:any){
     const taxTotal=taxes.reduce((sum,t)=>sum+money(t.amount),0n),gross=money(r.invoice),supplier=money(r.supplier),fees=money(r.financial.fees),total=money(r.financial.aclAfterFees);
     const hasPublishedCosts=publishedItems.length>0;
     const extra=hasPublishedCosts?publishedTotal:additionalTotal;
-    if(!publishedCostsValid||gross<taxTotal||gross+supplier+fees+extra!==total||total<=0n)throw Error();
+    if(!publishedCostsValid||gross<taxTotal||gross+supplier+fees+extra!==total)throw Error();
     usedPublishedCosts=hasPublishedCosts;
     const values=[{key:'distributor',label:'Distribuidora · valor sem ICMS, PIS e COFINS',amount:feeMoney(gross-taxTotal)},...taxes,{key:'supplier',label:'Energia do fornecedor · base fiscal informada no fechamento',amount:r.supplier},{key:'fees',label:'Honorários da gestão',amount:r.financial.fees},...(usedPublishedCosts?[...publishedGroups.values()].map(c=>({key:c.key,label:c.label,amount:feeMoney(c.amount)})):additional.map((c:any,i:number)=>({key:'ccee-'+i,label:'CCEE · '+c.label,amount:c.amount})))];
     const supplierTax=(r.fields??[]).find((f:any)=>f.key==='supplier:tax')?.value;
@@ -62,17 +61,15 @@ export function financialDetail(r:any,original:any){
       result.supplierIcms={base:supplierTax.base,amount:supplierTax.icmsAmount,rate:supplierTax.rate,method:'ICMS_INSIDE',includedInTotal:true,complete:money(supplierTax.amount)===supplier};
     }
     }catch{/* Preserve independently reconciled distributor taxes when supplier detail is incomplete. */}
-    const shares=values.map(p=>money(p.amount)*10000n/total),largest=values.reduce((best,p,i)=>money(p.amount)>money(values[best].amount)?i:best,0);
-    shares[largest]+=10000n-shares.reduce((sum,n)=>sum+n,0n);
-    let offset=0n;
-    result.composition=values.map((part,i)=>{if(money(part.amount)<0n)throw Error();const share=shares[i];const p={...part,percent:feeMoney(share),offset:feeMoney(offset)};offset+=share;return p;});
+    result.composition=consolidatePublishedComposition([{composition:values}]);
+    if(!result.composition)throw Error();
     result.taxes=taxes;
     result.taxNotice='ICMS, PIS e COFINS da distribuidora foram retirados da parcela bruta antes de serem separados. '+(result.supplierIcms?'ICMS por dentro do fornecedor destacado separadamente, já incluído no fechamento.':'Tributos do fornecedor sem segregação permanecem identificados na parcela correspondente; não foram presumidos.');
     result.compositionNotice='Total publicado preservado. Valores faturados/apurados não comprovam pagamento. '+result.taxNotice;
   } catch {result.compositionNotice=result.compositionNotice+' '+result.taxNotice;}
   // CCEE items must be tied to this exact immutable closing; never add them to an old total.
   result.ccee=ccee.map((c:any)=>({label:c.label,amount:c.amount,month:c.month,paymentStatus:c.paymentStatus==='CONFIRMED'&&/^[a-f0-9]{64}$/.test(c.paymentEvidenceHash??'')?'CONFIRMED':'NOT_DEMONSTRATED',includedInTotal:result.composition?.some((p:any)=>p.key.startsWith('ccee-'))&&additional.includes(c),source:c.sourceReference}));
-  if(usedPublishedCosts&&result.composition)result.ccee=publishedItems.filter((c:any)=>c.category==='CCEE').map((c:any)=>({label:c.label,amount:c.amount,month:r.month,paymentStatus:'NOT_DEMONSTRATED',includedInTotal:true}));
+  if(usedPublishedCosts&&result.composition)result.ccee=publishedItems.filter((c:any)=>c.category==='CCEE').map((c:any)=>({label:c.label,amount:c.effect==='CREDIT'?feeMoney(-money(c.amount)):c.amount,effect:c.effect,month:r.month,paymentStatus:'NOT_DEMONSTRATED',includedInTotal:true}));
   result.credits=(r.retained??[]).filter((c:any)=>{try{return money(c.amount)<0n;}catch{return false;}}).map((c:any)=>({label:c.label,amount:c.amount,notice:'Crédito já considerado no saldo da fatura; não é somado novamente.'}));
   try {
     const fields=new Map((r.fields??[]).map((f:any)=>[f.key,f.value]));

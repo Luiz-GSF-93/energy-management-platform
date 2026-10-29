@@ -15,6 +15,7 @@ export class PublishedFinancialQueryDto {
  @IsOptional() @IsUUID() customerId?:string;
 }
 export class PortalFinancialQueryDto {
+ @IsOptional() @IsString() @MaxLength(21000) unitIds?:string;
  @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) from!:string;
  @Matches(/^(20|21)\d{2}-(0[1-9]|1[0-2])$/) to!:string;
 }

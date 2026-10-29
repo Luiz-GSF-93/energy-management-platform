@@ -1,3 +1,4 @@
+import {resolvePortalUnits} from '../../common/services/portal-selected-units';
 import {normalizePublishedDetail} from '../portal-insights/portal-legacy-detail';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
@@ -14,8 +15,11 @@ export class EnergyPriceService{
  private async scope(t:TenantContext,portal:boolean){if(!t.organizationId||!t.userId||!t.roleId||(t.scope as string)==='global'||portal&&(t.role!=='consulta'||t.accessMode))throw new ForbiddenException('Selecione o contexto autorizado.');await this.licenses.requireEntitlement(t.organizationId,'free_market_management');}
  private fail(e:any){if(!e)return;if(e.code==='42501')throw new ForbiddenException('Acesso ao indicador não autorizado.');if(e.code==='40001')throw new ConflictException('A fonte foi alterada. Atualize o estudo.');throw new InternalServerErrorException('Indicador indisponível; nenhum valor foi presumido.');}
  async read(input:unknown,t:TenantContext,portal=false){await this.scope(t,portal);const d=await validateWriteDto(EnergyPriceQueryDto,input as EnergyPriceQueryDto);if(portal&&d.customerId)throw new BadRequestException('O cliente é resolvido pelo vínculo de acesso.');
+ if(d.unitIds&&(!portal||d.unitId))throw new BadRequestException('Recorte múltiplo exclusivo do Portal, sem filtro unitário simultâneo.');
+ const selection=await resolvePortalUnits(this.db.getClient(),t,d.unitIds);
  const r=await this.db.getClient().rpc(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?'energy_price_read_workspace':'energy_price_read',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_year:Number(d.year),p_customer:d.customerId??null,p_unit:d.unitId??null});this.fail(r.error);
  if(r.data?.customerId){const modern=await this.db.getClient().rpc(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?'read_portal_financial_components_v2':'read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_from:d.year+'-01',p_to:d.year+'-12',p_customer:r.data.customerId});this.fail(modern.error);if(!Array.isArray(modern.data)||modern.data.some((x:any)=>x.customerId!==r.data.customerId||!r.data.units.some((u:any)=>u.id===x.unitId)))throw new ConflictException('Escopo das fontes de preço divergente.');r.data.workspaceV2=process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true';r.data.evaDetails=modern.data.map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'));}
+ if(selection){for(const key of ['units','studies','baselines','financial','evaDetails','submarkets'])if(Array.isArray(r.data?.[key]))r.data[key]=r.data[key].filter((x:any)=>selection.includes(key==='units'?x.id:x.unitId));}
  try{return energyPriceDashboard(t.organizationId,Number(d.year),r.data,portal);}catch{throw new ConflictException('Fontes ou escopo do indicador exigem conferência.');}
  }
  async publish(input:unknown,t:TenantContext){await this.scope(t,false);const d=await validateWriteDto(EnergyPricePublishDto,input as EnergyPricePublishDto);
