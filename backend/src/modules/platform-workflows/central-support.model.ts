@@ -21,7 +21,7 @@ export function supportInput(action:keyof typeof SUPPORT_ACTIONS,input:unknown):
  if(action==='triage'||action==='reply'){integer('replyRevision',1000000);text('reason',5,4000);}
  if(action==='retry_email')text('reason',5,1000);
  if(action==='triage'){
-  if(!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(b.assigneeId??'')||!['LOW','NORMAL','HIGH'].includes(b.priority)||!['OPEN','IN_PROGRESS','WAITING','RESOLVED','CLOSED'].includes(b.status)||!/^\d{4}-\d{2}-\d{2}$/.test(b.deadline??''))throw new BadRequestException('Informe responsável, situação e prazo válidos.');
+  if(typeof b.assigneeId!=='string'||b.assigneeId!==''&&!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(b.assigneeId)||!['LOW','NORMAL','HIGH'].includes(b.priority)||!['OPEN','IN_PROGRESS','WAITING','RESOLVED','CLOSED'].includes(b.status)||!/^\d{4}-\d{2}-\d{2}$/.test(b.deadline??''))throw new BadRequestException('Informe situação, prioridade, prazo e delegação válidos.');
  }
  return b;
 }

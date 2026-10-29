@@ -1,0 +1,17 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://example.test/backoffice/platform/support'});
+for(const k of ['window','document','navigator','HTMLElement','Event','CustomEvent','MouseEvent','FormData'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+const calls=[],row={id:'11111111-1111-4111-8111-111111111111',protocol:'AT-TEST',organizationName:'Synthetic',title:'Synthetic support request',description:'Original requester content',case:null,reply_revision:0,quote_minor:0,communications:[],summary:{allowance:60,includedUsed:1,remaining:59,extraMinor:2500,extrasUsed:0,totalUsed:1,starts:'2026-01-01',ends:'2027-01-01'}};
+const apiRequest=async(url,options)=>{calls.push({url,options});if(url.endsWith('/triage')){row.promised_deadline=options.body.deadline;row.reply_revision++;return {recorded:true};}if(url.includes('/platform-workflows/support'))return {supportMembers:[]};return {rows:[{...row}],total:1};};
+const original=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest};if(n==='@/app/providers')return {useAuth:()=>({hasPermission:p=>p==='a7c8f257-580d-4d39-8900-4a5788068203'})};if(n==='@/app/components/ui')return original.call(this,path.resolve(__dirname,'../app/components/ui/index.ts'),p,m);return original.call(this,n,p,m);};
+const {createRoot}=require('react-dom/client'),{act}=React,Component=require('../app/components/CentralSupportPlatform.tsx').default,root=createRoot(document.getElementById('root'));
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Component)));
+ const form=[...document.querySelectorAll('form')].find(f=>f.textContent.includes('Registrar prazo e resposta'));assert.ok(form);const button=[...form.querySelectorAll('button')].find(b=>b.textContent==='Registrar prazo e resposta');assert.equal(button.disabled,false);
+ const assignee=form.querySelector('select[name="assigneeId"]');assert.equal(assignee.required,false);assert.equal(assignee.value,'');assert.match(assignee.textContent,/Administrador da plataforma/);
+ form.querySelector('input[name="deadline"]').value='2026-12-31';form.querySelector('textarea[name="reason"]').value='Prazo informado pelo administrador, sem delegação.';
+ await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+ const command=calls.find(c=>c.url.endsWith('/triage'));assert.equal(command.options.body.assigneeId,'');assert.equal(command.options.body.deadline,'2026-12-31');assert.equal(command.options.body.status,'OPEN');assert.match(document.body.textContent,/Atualização registrada/);assert.ok(calls.every(c=>!c.url.includes('/users')&&!c.url.includes('/members')));
+ console.log('Platform support UI: administrator can record deadline and public response without a Support assignee or any access grant.');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

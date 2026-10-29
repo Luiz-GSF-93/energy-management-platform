@@ -4,11 +4,11 @@ Organization backoffice header → `/backoffice/support`. Internal admin_org, ge
 
 ## Configuration
 
-Apply `20261240_central_support.sql` before enabling the worker. Six RLS-protected private structures, no direct browser or service-role table grants; narrowly granted RPCs enforce tenant/actor boundaries.
+Apply `20261240_central_support.sql`, `20261241_central_support_audit_names.sql` and `20261242_central_support_admin_triage.sql` in order before enabling the worker. Six RLS-protected private structures, no direct browser or service-role table grants; narrowly granted RPCs enforce tenant/actor boundaries.
 
 Platform plan catalog → expand “Atendimento Central · franquia e tarifa por plano”. Configure included annual tickets and extra ticket amount. Every change has a policy revision and audit entry. Existing annual cycles retain their policy; changes apply to a new cycle. Initial rollout uses the license activation form in platform support and is restricted to `org_default` (Expert Energy).
 
-Human approved configuration on 2026-10-29: Expert Energy plan = **60 tickets per 12 months**, fixed extra = **BRL 25.00**. Apply only after confirming the effective license and its catalog plan. No default values or fees for other plans.
+Configure the annual allowance and extra fee only after confirming the effective license and its catalog plan. Production commercial values are configuration, not hardcoded defaults. Preserve the administrator approval and applied cycle snapshot in the private audit trail.
 
 Server environment:
 
@@ -21,7 +21,7 @@ Server environment:
 1. Requester saves immutable subject/description. Up to 20 pending drafts per requester; no quota consumption.
 2. Organization administrator reviews content, privacy and server-calculated exact cost; authorizes and receives a single-use code. An administrator can authorize their own ticket. For another requester, the code is shared by the administrator with that requester.
 3. Code submission atomically checks fresh administrator status, cycle, quota and price, records consent and consumes exactly one ticket. Concurrent use of the last free slot never silently turns a free authorization into a paid one. Repeated submission returns the same protocol.
-4. Platform support → “Atendimento Central · chamados das organizações”. Manager sets the active support assignee, deadline and public reply. Requests before triage remain separate from existing internal cases. Once triaged, the case is linked to the existing platform support workflow, with organization requester preserved.
+4. Platform support → “Atendimento Central · chamados das organizações”. The platform administrator sets deadline and public reply and may handle the intake directly, without creating or granting access to another user. Delegating to an active Support assignee is optional. If delegated, the existing internal case workflow is linked with organization requester preserved. Existing internal cases retain their mandatory active Support assignment. Deadlines/statuses of directly managed intakes are audited and generate the same notifications and email outbox events.
 5. In-app notifications go to requester and organization administrators. Email goes only to current active internal administrators of the same organization, with protocol, status/deadline, cycle, allowance, used/remaining/extras and accepted cost. Confidential details stay behind authentication.
 
 Only an explicitly public reply is sent back to the organization. Internal support reasons are not copied into public messages. Updates to the existing case’s deadline/status generate notices while preserving internal history.

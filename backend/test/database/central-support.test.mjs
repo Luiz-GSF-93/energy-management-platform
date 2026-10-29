@@ -55,6 +55,7 @@ try{
  await db.exec('CREATE TRIGGER guard_license_governance BEFORE INSERT OR UPDATE ON public.licenses FOR EACH ROW EXECUTE FUNCTION public.guard_license_governance();');
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261240_central_support.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261241_central_support_audit_names.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261242_central_support_admin_triage.sql',import.meta.url),'utf8'));
  await deny(()=>action('list'));await deny(()=>action('list',null,{},outsider));
  await platform('policy',plan,{revision:0,allowance:1,extraMinor:2500,reason:'Approved test policy'});
  await platform('activate',null,{licenseId:'license',enabled:true,reason:'Test rollout'});
@@ -79,6 +80,18 @@ try{
  const id2=randomUUID();await action('draft',id2,draft);await deny(()=>action('authorize',id2,{revision:1,confirmed:true,quoteMinor:0,codeHash:hash}));
  await action('authorize',id2,{revision:1,confirmed:true,quoteMinor:2500,codeHash:hash});await action('submit',id2,{codeHash:hash});
  ok((await q('SELECT amount_minor,state FROM central_support_extras WHERE request_id=$1',[id2]))[0].amount_minor===2500);
+ await q('UPDATE platform_team_members SET active=false WHERE user_id=$1',[support]);
+ await platform('triage',id2,{replyRevision:0,assigneeId:'',priority:'HIGH',deadline:'2026-12-31',status:'OPEN',reason:'Administrador acompanha sem delegacao'});
+ const managed=(await action('list')).rows.find(r=>r.id===id2);ok(managed.deadline==='2026-12-31'&&managed.status==='OPEN');
+ ok((await q('SELECT managing_admin_id,triage_priority FROM central_support_requests WHERE id=$1',[id2]))[0].managing_admin_id===owner);
+ ok((await q('SELECT count(*)::int n FROM platform_support_cases WHERE id=$1',[id2]))[0].n===0);
+ ok((await q('SELECT payload FROM central_support_outbox WHERE request_id=$1 ORDER BY created_at DESC LIMIT 1',[id2]))[0].payload.deadline==='2026-12-31');
+ await platform('triage',id2,{replyRevision:1,assigneeId:'',priority:'HIGH',deadline:'2027-01-02',status:'IN_PROGRESS',reason:'Novo prazo informado pelo administrador'});
+ await deny(()=>platform('triage',id2,{replyRevision:2,assigneeId:'',priority:'HIGH',deadline:'2027-01-02',status:'CLOSED',reason:'Invalid direct closure'}));
+ const deadlineAudit=(await q("SELECT changes FROM audit_logs WHERE resource_id=$1 AND changes->>'action'='triage' ORDER BY (changes->>'replyRevision')::integer DESC LIMIT 1",[id2]))[0].changes;
+ ok(deadlineAudit.deadline==='2027-01-02'&&deadlineAudit.previousDeadline==='2026-12-31');
+ await q('UPDATE platform_team_members SET active=true WHERE user_id=$1',[support]);
+
  inbox=await action('list');ok(inbox.summary.extrasUsed===1&&inbox.summary.totalUsed===2);
  await platform('policy',plan,{revision:1,allowance:99,extraMinor:1000,reason:'Future policy version'});inbox=await action('list');ok(inbox.summary.allowance===1&&inbox.summary.extraMinor===2500);
  const id3=randomUUID();await action('draft',id3,draft);await action('authorize',id3,{revision:1,confirmed:true,quoteMinor:2500,codeHash:hash});
