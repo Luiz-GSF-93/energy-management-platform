@@ -23,6 +23,7 @@ export class CceeAutomaticService implements OnModuleInit,OnModuleDestroy{
   const body=action==='list'?{}:cceeObject(input,['requestId','reason'],['revision','authorizationId','sourceJobId','monthMode','calendarCode','unit','sourceReference','confirmed','enabled']);
   if(action!=='list')cceeUuid((body as any).requestId);if(id)cceeUuid(id);
   const r=await this.data.rpc('ccee_auto_policy_action',{p_org:t.organizationId,p_actor:t.userId,p_action:action,p_id:id,p_body:body});
+  if(action==='list')for(const policy of r.policies??[])if(policy.kind==='DRI')policy.latestDiagnostic=await this.data.rpc('ccee_dri_diagnostic_read',{p_org:t.organizationId,p_actor:t.userId,p_id:policy.authorization_id,p_latest:true});
   return{...r,canManage:workspace.canManage,enabled:this.enabled()};
  }
  onModuleInit(){if(this.enabled())this.schedule();}
