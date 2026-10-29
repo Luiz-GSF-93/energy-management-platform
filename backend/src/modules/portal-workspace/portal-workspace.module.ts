@@ -21,6 +21,7 @@ class PortalWorkspaceController {
  @Get('automatic-intakes') @Header('Cache-Control','no-store') automaticList(@Tenant() t:TenantContext,@Query() q:any){return this.automatic.list(t,q);}
  @Post('automatic-intakes') @UseInterceptors(FileInterceptor('file',{limits:{fileSize:MAX_DOCUMENT_BYTES,files:1,fields:5,fieldSize:256,parts:6}})) automaticUpload(@Tenant() t:TenantContext,@Body() b:any,@UploadedFile() f:DocumentFile){return this.automatic.upload(t,b,f);}
  @Post('automatic-intakes/:id/retry') automaticRetry(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.retry(t,id,b);}
+ @Post('automatic-intakes/:id/dismiss') automaticDismiss(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.dismiss(t,id,b);}
  @Post('automatic-intakes/:id/resolve') automaticResolve(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.resolve(t,id,b);}
  @Get('automatic-intakes/:id/content') @Header('Cache-Control','private, no-store') @Header('X-Content-Type-Options','nosniff') automaticContent(@Tenant() t:TenantContext,@Param('id') id:string){return this.automatic.content(t,id);}
  @Get('presentation/identity') @Header('Cache-Control','no-store') identity(@Tenant() t:TenantContext){return this.presentation.action(t,'identity');}

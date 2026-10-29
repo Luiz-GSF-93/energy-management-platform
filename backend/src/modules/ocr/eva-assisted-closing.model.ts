@@ -50,7 +50,11 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   const p=e.plan,c=e.context,ownMissing:string[]=[],o=p?.operational;
   const draft=contractClosingDraftEnabled()&&p?.contractDraft&&c?.contractDraft&&indexMemoryHash(p.contractDraft)===indexMemoryHash(c.contractDraft)?p.contractDraft:null;
   if(draft)pendingActions.push(...draft.requirements.map((r:any)=>({...r,unitId:e.unitId})));
-  if(contractClosingDraftEnabled()&&e.comparative?.missing.length)pendingActions.push({code:'ACR_COMPARISON',unitId:e.unitId,section:'library',message:[...new Set(e.comparative.missing)].join(' ')});
+  if(contractClosingDraftEnabled()&&e.comparative?.missing.length){
+   const messages=[...new Set(e.comparative.missing)],supplier=messages.filter(m=>m==='Valor do fornecedor ausente.'),library=messages.filter(m=>m!=='Valor do fornecedor ausente.');
+   if(supplier.length)pendingActions.push({code:'SUPPLIER_VALUE',unitId:e.unitId,section:'supply',message:supplier.join(' ')});
+   if(library.length)pendingActions.push({code:'ACR_COMPARISON',unitId:e.unitId,section:'library',message:library.join(' ')});
+  }
   const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{...(p?.sourcePreparation?{sourcePreparation:p.sourcePreparation}:{}),...(draft?{contractDraft:draft}:{}),library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,feePercentage:field(p,'fee:percentage')?.value??null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{ccee:p?.cceeEstimate??null,invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
   if(p?.cceeEstimate?.state==='ESTIMATED'){estimated=true;const message='CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.';ownMissing.push(message);estimateReviews.add(e.name+': '+message);pendingActions.push({code:'CCEE_ESTIMATE_REVIEW',unitId:e.unitId,section:'costs',message});row.sources.cceeEstimate=p.cceeEstimate;}
   if(p?.supplierInvoiceProposal){row.sources.supplierInvoiceProposal=p.supplierInvoiceProposal;add('Fornecedor: NF integral proposta, volume comprado preservado separadamente da medição. Conferir composição tributária.');}

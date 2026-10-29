@@ -11,7 +11,9 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
  };
  for(const unit of report.units){
   const actions=(report.pendingActions??[]).filter((a:any)=>a.unitId===unit.id&&a.message);
-  for(const a of actions)add(unit,a.section==='documents'?'supply':sections[a.section]?a.section:'source',a.code,String(a.message));
+  // Compatibility for saved proposals: a missing supplier amount is one
+  // supplier question, not a request to register the tariff library again.
+  for(const a of actions)add(unit,a.message==='Valor do fornecedor ausente.'?'supply':a.section==='documents'?'supply':sections[a.section]?a.section:'source',a.message==='Valor do fornecedor ausente.'?'SUPPLIER_VALUE':a.code,String(a.message));
   const leftovers=(unit.missing??[]).filter((m:any)=>typeof m==='string'&&!actions.some((a:any)=>a.message===m||m.includes(a.message)));
   for(const m of leftovers){const section=/identidade|CNPJ|instalação|unidade diverg/i.test(m)?'distributor':/medição|medições|consumo|demanda/i.test(m)?'monthly':/fornecedor|nota fiscal|NF /i.test(m)?'supply':/CCEE|custo/i.test(m)?'costs':/tribut|tarifa|ICMS|PIS|COFINS|bandeira/i.test(m)?'parameters':/honorário/i.test(m)?'management':'source';add(unit,section,'SOURCE_REVIEW',m);}
  }

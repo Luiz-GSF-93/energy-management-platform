@@ -11,9 +11,9 @@ export const intakePath=(org:string,id:string,mime:string)=>org+'/eva-intake/'+i
 export class AutomaticIntakeService{
  constructor(private db:SupabaseService){}
  enabled(org:string){return intakeOrganizations().includes(org);}
- private async action(t:TenantContext,action:string,id:string|null,body:any){
+ private async action(t:TenantContext,action:string,id:string|null,body:any,administration=false){
   if(!this.enabled(t.organizationId))throw new ServiceUnavailableException('Recebimento automático ainda não habilitado nesta organização.');
-  const r=await this.db.getClient().rpc('eva_intake_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});
+  const r=await this.db.getClient().rpc(administration?'eva_intake_administration':'eva_intake_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo ou permissão de documentos indisponível.');
   if(r.error?.code==='P3391')throw new ConflictException('A cota de documentos está esgotada. O envio não foi iniciado.');
   if(r.error)throw new ConflictException('Recebimento não confirmado. Confira os envios antes de repetir.');
@@ -25,20 +25,25 @@ export class AutomaticIntakeService{
   const external=t.role==='consulta'&&!t.accessMode;
   const selection=external?{...query,queueOnly:'true'}:query;
   const present=(result:any)=>external?{...result,completed:[]}:result;
+  const administer=async(result:any)=>{if(external)return result;const admin=await this.action(t,'list',null,{},true);return {...result,dismissed:admin.dismissed??[],rows:(result.rows??[]).map((r:any)=>(admin.dismissible??[]).includes(r.id)?{...r,status:{...r.status,canDismiss:true}}:r)};};
   const data=present(await this.action(t,'list',null,selection));
   const candidates=[...(data.rows??[]),...(data.completed??[])].filter((r:any)=>r.documentId&&r.documentType==='INVOICE_DISTRIBUTOR'&&r.state==='UNKNOWN');
-  const ids=[...new Set<string>(candidates.map((r:any)=>r.id))];if(!ids.length)return {enabled:true,...data};
+  const ids=[...new Set<string>(candidates.map((r:any)=>r.id))];if(!ids.length)return administer({enabled:true,...data});
   const proof=await this.db.getClient().rpc('eva_intake_published_completions',{p_org:t.organizationId,p_ids:ids});
   const validId=(v:any)=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
   if(proof.error||!Array.isArray(proof.data)||proof.data.length>ids.length||new Set(proof.data.map((p:any)=>p?.id)).size!==proof.data.length||proof.data.some((p:any)=>!p||!ids.includes(p.id)||!validId(p.closingId)||!validId(p.publicationId)||typeof p.publishedAt!=='string'||!Number.isFinite(Date.parse(p.publishedAt))))throw new ServiceUnavailableException('Não foi possível confirmar o andamento atual. Os documentos e as decisões anteriores foram preservados.');
   const completed=new Map(proof.data.map((p:any)=>[p.id,p]));
   const project=(r:any)=>{const p:any=completed.get(r.id);return p?{...r,processingState:r.state,state:'PUBLISHED',percent:100,updatedAt:p.publishedAt,status:{...r.status,percent:100,prepared:true},note:'Concluído pela versão aprovada e publicada. O processamento anterior permanece no histórico.',completion:{closingId:p.closingId,publicationId:p.publicationId}}:r;};
   const archived=[...(data.completed??[]).map(project),...(data.rows??[]).filter((r:any)=>completed.has(r.id)).map(project)];
-  return present({enabled:true,...data,revision:createHash('sha256').update(JSON.stringify([data.revision??null,proof.data])).digest('hex'),rows:(data.rows??[]).filter((r:any)=>selection.queueOnly!=='true'||!completed.has(r.id)).map(project),completed:[...new Map(archived.map((r:any)=>[r.id,r])).values()].sort((a:any,b:any)=>String(b.updatedAt??'').localeCompare(String(a.updatedAt??''))).slice(0,5)});
+  return administer(present({enabled:true,...data,revision:createHash('sha256').update(JSON.stringify([data.revision??null,proof.data])).digest('hex'),rows:(data.rows??[]).filter((r:any)=>selection.queueOnly!=='true'||!completed.has(r.id)).map(project),completed:[...new Map(archived.map((r:any)=>[r.id,r])).values()].sort((a:any,b:any)=>String(b.updatedAt??'').localeCompare(String(a.updatedAt??''))).slice(0,5)}));
  }
  async retry(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Retomada inválida.');
   return this.action(t,'retry',id,{});
+ }
+ async dismiss(t:TenantContext,id:string,body:any){
+  if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='reason'||typeof body.reason!=='string'||body.reason.trim().length<15||body.reason.length>1000)throw new BadRequestException('Informe o motivo do envio incorreto, com 15 a 1000 caracteres.');
+  return this.action(t,'dismiss',id,{reason:body.reason.trim()},true);
  }
  async resolve(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='customerId,month,reason,unitId')throw new BadRequestException('Confira somente o vínculo solicitado.');
