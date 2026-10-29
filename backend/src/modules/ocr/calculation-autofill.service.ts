@@ -100,7 +100,7 @@ export class CalculationAutofillService{
     const evidence=await collectSupplierInvoiceEvidence(c.documentedSupplierOptions.documents,d=>this.sourcePreparation!.supplierEvidence(c,d.id,d.file_hash));
     Object.assign(c.documentedSupplierOptions,{documents:evidence.documents,proposals:evidence.proposals,excluded:evidence.excluded});
     c.proposalObservations=[...(c.proposalObservations??[]),...evidence.observations];
-    if(!c.manualOverrides.supplierSettlement)c.supplierInvoiceProposal=evidence.selected;
+    if(!c.manualOverrides.supplierSettlement||evidence.selected?.setVersion)c.supplierInvoiceProposal=evidence.selected;
    }
    const v=c.manualOverrides.supplierSettlement;
    if(v){
@@ -112,7 +112,7 @@ export class CalculationAutofillService{
    }
   }
   const invoiceDraft=supplierInvoiceEvidenceDraft(c);if(invoiceDraft)c.contractDraft=invoiceDraft;
-  if(c.manualOverrides.supplierInvoiceAllocation&&!invoiceDraft?.source.allocation){
+  if(c.manualOverrides.supplierInvoiceAllocation&&!invoiceDraft?.source.allocation&&!c.supplierInvoiceProposal?.setVersion){
    const reason=invoiceDraft?.requirements.find((r:any)=>r.code==='SUPPLIER_INVOICE_REVIEW')?.message;
    throw new ConflictException(reason??'Não foi possível identificar uma NF única verificada para a cobertura selecionada. Atualize os documentos da competência.');
   }

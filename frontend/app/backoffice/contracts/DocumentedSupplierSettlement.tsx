@@ -1,4 +1,5 @@
 'use client';
+import SupplierInvoiceSetReview from './SupplierInvoiceSetReview';
 import EvaProcessingStatus from '../../components/EvaProcessingStatus';
 import {useEffect,useRef,useState} from 'react';
 import {apiRequest,ApiError} from '@/app/lib/api/client';
@@ -68,6 +69,7 @@ export default function DocumentedSupplierSettlement({unitId,month,onSaved,disab
  const progress=busy?<EvaProcessingStatus floating detail='Conferindo a confirmação da nota fiscal e suas fontes…'/>:null;
  if(!opts?.enabled||!plan?.canPrepare)return <section>{progress}{reviewInvoice?<InvoiceValues proposal={reviewInvoice}/>:null}<p role='status'>{loading?(reviewInvoice?'Conferindo as fontes atuais da NF; os valores da revisão já estão preenchidos.':'Consultando a NF e as confirmações registradas…'):error||'A fonte atual precisa de reconferência; os valores da revisão foram preservados.'}</p>{!loading?<Button disabled={busy||!!uncertain} onClick={()=>void refresh()}>Atualizar fontes da NF</Button>:null}</section>;
  const invoiceDraft=plan.contractDraft?.format==='supplier-invoice-evidence-1'?plan.contractDraft:null;
+ if(invoiceDraft?.setVersion)return <SupplierInvoiceSetReview key={unitId+'|'+month+'|'+invoiceDraft.source.invoiceSetHash} plan={plan} unitId={unitId} month={month} disabled={disabled} onSaved={onSaved} onPlan={setPlan}/>;
  const proposal=currentProposal;
  if((invoiceDraft||reviewInvoice)&&!proposal)return <section>{progress}{reviewInvoice?<InvoiceValues proposal={reviewInvoice}/>:null}<p role='status'>A NF já consta na revisão. A consulta atual não confirmou uma única fonte; atualize as fontes antes de confirmar. Não é necessário redigitar volume, preço ou total.</p><Button disabled={busy||!!uncertain} onClick={()=>void refresh()}>Atualizar fontes da NF</Button></section>;
  const coveragePending=!invoiceDraft||invoiceDraft.requirements?.some((r:any)=>['SUPPLIER_INVOICE_COVERAGE','EXTRA_ALLOCATION_REVIEW'].includes(r.code));

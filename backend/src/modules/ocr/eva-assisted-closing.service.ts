@@ -1,3 +1,4 @@
+import {supplierInvoiceSetCaptureMatches} from './supplier-invoice-set';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {contractClosingDraftEnabled} from './contract-closing-draft';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
@@ -89,6 +90,7 @@ export class EvaAssistedClosingService{
   }
   if(contractClosingDraftEnabled())for(const e of entries){const memory=e.plan?.contractDraft?.memory;if(memory&&!(sources.contractMemories??[]).some((m:any)=>m.id===memory.id&&m.organization_id===t.organizationId&&m.customer_id===primary.customer_id&&m.consumer_unit_id===e.unitId&&autofillHash(m)===memory.hash))throw new ConflictException('A memória contratual mudou durante a captura. Reconfira as fontes antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
+  if(documentedSettlementEnabled())for(const e of entries){const group=e.context?.contractDraft?.source;if(!group?.invoiceSetHash)continue;if(!supplierInvoiceSetCaptureMatches(group,sources.documentedSupplierDocuments??[],{organizationId:t.organizationId,customerId:primary.customer_id,unitId:e.unitId,month:q.month}))throw new ConflictException('Uma das notas do conjunto mudou durante a captura. Reconfira todas as fontes antes de preparar.');}
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   // A read/recheck without a changed proposal must not create another version.
   // Financial decisions still perform their existing fresh-source checks.

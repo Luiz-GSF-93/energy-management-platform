@@ -67,9 +67,17 @@ export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceCompar
  }catch(e){r.amount=null;r.missing.push(e instanceof Error?e.message:'Composição fiscal por componente indisponível.');}
  return r;
 }
-function supplierInside(p:any,rate:string,source:string){
+export function supplierInside(p:any,rate:string,source:string){
  const treatment=p.fields?.find((f:any)=>f.key==='supplier:tax'&&f.state==='FILLED')?.value;
  const amount=p.operational?.supplier?.amount;if(!amount)throw Error('Valor do fornecedor ausente.');
+ if(treatment==='PER_INVOICE'){
+  const draft=p.contractDraft,components=draft?.supplier?.invoiceComponents;
+  if(draft?.format!=='supplier-invoice-evidence-1'||!draft.source?.invoiceSetHash||!Array.isArray(components)||!components.length||components.reduce((n:bigint,x:any)=>n+cents(x.amount),0n)!==cents(amount))throw Error('Conjunto de notas sem composição fiscal conciliada.');
+  const i=dec(rate);if(i>=R)throw Error('ICMS fornecedor inválido.');
+  const lines=components.map((x:any)=>{const base=cents(x.amount);if(!['INCLUDED','NET_DESTINATION_ICMS'].includes(x.taxTreatment))throw Error('Confirme o tratamento fiscal da nota '+x.documentId+'.');const gross=x.taxTreatment==='INCLUDED'?base:round(base*R,R-i);return {documentId:x.documentId,fileHash:x.fileHash,base:x.amount,amount:fixed(gross),icmsAmount:fixed(gross-base),treatment:x.taxTreatment,source:x.taxConfirmation?.reason??x.taxEvidence?.source};});
+  const gross=lines.reduce((n:bigint,x:any)=>n+cents(x.amount),0n),tax=lines.reduce((n:bigint,x:any)=>n+cents(x.icmsAmount),0n);
+  return {method:'ICMS_INSIDE',base:amount,rate,icmsAmount:fixed(tax),amount:fixed(gross),additional:tax>0n,source,treatment:'PER_INVOICE',invoiceSetHash:draft.source.invoiceSetHash,components:lines,note:'ICMS apurado por nota, com valores já incluídos preservados e acréscimos por dentro somente nas parcelas líquidas. Média nominal não substitui bases fiscais individuais.'};
+ }
  if(['GROSS','INCLUDED','EXEMPT','NOT_APPLICABLE','COMPONENTS_CONFIRMED'].includes(treatment))return {method:'PRESERVED_CONFIRMED_TREATMENT',base:amount,icmsAmount:'0.00',amount,additional:false,source,treatment};
  const base=cents(amount),i=dec(rate);if(i>=R)throw Error('ICMS fornecedor inválido.');const gross=round(base*R,R-i);
  return {method:'ICMS_INSIDE',base:amount,rate,icmsAmount:fixed(gross-base),amount:fixed(gross),additional:true,source,treatment:'NET_WITH_ICMS_INSIDE',note:'Política de fechamento solicitada pelo responsável: ICMS por dentro sobre energia líquida; PIS/Cofins não reaplicados. Não declara pagamento.'};
