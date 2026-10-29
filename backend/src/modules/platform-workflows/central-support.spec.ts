@@ -14,6 +14,10 @@ describe('Central support consent and delivery boundary',()=>{
   expect(()=>supportInput('draft',{title:'Valid title',description:'Valid description',actor:'forged'})).toThrow();
   expect(()=>supportInput('submit',{code:'1234'})).toThrow();
  });
+ it('allows the existing platform administrator to handle an intake without delegating it',()=>{
+  expect(supportInput('triage',{replyRevision:0,assigneeId:'',priority:'NORMAL',deadline:'2026-12-31',status:'OPEN',reason:'Administrador acompanha o chamado'}).assigneeId).toBe('');
+  expect(()=>supportInput('triage',{replyRevision:0,assigneeId:'forged',priority:'NORMAL',deadline:'2026-12-31',status:'OPEN',reason:'Invalid delegation'})).toThrow();
+ });
  it('rejects external and platform operation contexts before database access',async()=>{for(const t of [{...tenant,role:'consulta'},{...tenant,accessMode:'platform_operation'},{}])await expect(service.list(t as any)).rejects.toMatchObject({status:403});expect(rpc).not.toHaveBeenCalled();});
  it('uses authenticated organization and actor and never persists the plaintext code',async()=>{
   const result=await service.action(tenant,'authorize',id,{revision:1,confirmed:true,quoteMinor:0});
