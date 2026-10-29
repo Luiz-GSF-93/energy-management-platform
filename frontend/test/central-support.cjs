@@ -1,0 +1,21 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://example.test/backoffice/support'});
+for(const k of ['window','document','navigator','HTMLElement','Event','CustomEvent','MouseEvent','FormData'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+const id='11111111-1111-4111-8111-111111111111',calls=[];let failSubmit=false;
+const summary={allowance:60,includedUsed:60,remaining:0,extraMinor:2500,extrasUsed:0,totalUsed:60,starts:'2026-01-01',ends:'2027-01-01'};
+const row={id,protocol:'AT-TEST',revision:1,title:'Solicitação de suporte',description:'Synthetic support content',state:'DRAFT',status:'DRAFT',quoteMinor:null,communications:[]};
+const apiRequest=async(url,options)=>{calls.push({url,options});if(url.endsWith('/authorize')){row.state='AUTHORIZED';row.status='AUTHORIZED';row.revision=2;row.quoteMinor=2500;row.expiresAt='2026-12-31T23:00:00Z';return {code:'01234567',expiresAt:row.expiresAt};}if(url.endsWith('/submit')){if(failSubmit)throw Error('Código expirado. Solicite nova liberação.');row.state='SUBMITTED';row.status='TRIAGE';row.summary=summary;row.extra={amount_minor:2500,state:'PENDING_INVOICE'};return {submitted:true};}return {total:1,summary,canAuthorize:true,rows:[{...row}]};};
+const original=Module._load;Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest};if(n==='@/app/components/ui')return original.call(this,path.resolve(__dirname,'../app/components/ui/index.ts'),p,m);return original.call(this,n,p,m);};
+const {createRoot}=require('react-dom/client'),{act}=React,Component=require('../app/components/CentralSupport.tsx').default,root=createRoot(document.getElementById('root'));
+const formByButton=label=>[...document.querySelectorAll('form')].find(f=>f.textContent.includes(label));
+const send=async form=>act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Component)));assert.match(document.body.textContent,/60 tickets incluídos/);assert.match(document.body.textContent,/25,00/);assert.match(document.body.textContent,/Aguardando autorização/);
+ await send(formByButton('Autorizar e gerar'));assert.match(document.body.textContent,/01234567/);assert.match(document.body.textContent,/Código de liberação/);
+ const auth=calls.find(c=>c.url.endsWith('/authorize'));assert.equal(auth.options.body.quoteMinor,2500);assert.equal(auth.options.body.confirmed,true);assert.equal(auth.options.body.revision,1);
+ failSubmit=true;await send(formByButton('Enviar chamado autorizado'));assert.match(document.body.textContent,/Código expirado/);assert.doesNotMatch(document.body.textContent,/Chamado enviado\./);
+ failSubmit=false;await send(formByButton('Enviar chamado autorizado'));assert.match(document.body.textContent,/Chamado enviado/);assert.match(document.body.textContent,/inclusão na fatura pendente/);assert.doesNotMatch(document.body.textContent,/Código de uso único/);
+ const submissions=calls.filter(c=>c.url.endsWith('/submit'));assert.equal(submissions.length,2);assert.equal(submissions[0].options.body.code,'01234567');assert.equal(document.querySelectorAll('form').length,1);
+ console.log('Central support UI: allowance, administrator consent, scoped code, conflict recovery and pending invoice verified.');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
