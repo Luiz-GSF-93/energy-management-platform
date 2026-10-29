@@ -39,6 +39,7 @@ try{
  for(const migration of ['20260925_f1_34_monthly_inputs.sql','20260925_f1_48_billed_demand.sql','20261003_f3_1_operations.sql','20261008_ccee_private_intake.sql','20261113_ccee_private_readings.sql','20261114_ccee_binding_review.sql','20261115_ccee_invoice_reconciliation.sql','20261202_ccee_dri_private_readings.sql'])await db.exec(readFileSync(new URL('../../src/database/migrations/'+migration,import.meta.url),'utf8'));
  const dri=(actor,act,id,body={},org='o1')=>query('SELECT ccee_dri_action($1,$2,$3,$4,$5) result',[org,actor,act,id,JSON.stringify(body)]);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261213_ccee_dri_open_report_period.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261243_ccee_dri_diagnostics.sql',import.meta.url),'utf8'));
  const draft=await action(author,'binding',null,{requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'222',principalProfileCode:null,measurementPoint:'P',meterCode:null,representationKind:'PARTIAL',serviceScope:['DRI_READ'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'UNKNOWN',evidenceReference:'Evidência sintética revisada',reason:'Teste isolado',driAgentCode:'111',driTaxId:'11111111000111'});
  await denied(action(author,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Não pode aprovar a própria preparação'}));
  const b=await action(reviewer,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Representação DRI conferida'});ok(b.dri_agent_code==='111');ok(b.service_scope.includes('DRI_READ'));
@@ -71,6 +72,19 @@ try{
   ok(!(await db.query("SELECT has_table_privilege('authenticated',$1,'SELECT') allowed",[table])).rows[0].allowed);
   ok(!(await db.query("SELECT has_table_privilege('service_role',$1,'SELECT') allowed",[table])).rows[0].allowed);
  }
+ // Bounded append-only diagnostics reuse the existing lease and tenant checks.
+ const dj=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID()});const dc=await query('SELECT ccee_claim_dri_reading() result');ok(dc.id===dj.job.id);
+ const diagnostic={version:1,stage:'EVENT_IDENTITY',eventCode:'202609001000',sourceHashes:['a'.repeat(64),'b'.repeat(64)],changedPaths:['dataDivulgacao'],truncated:false};
+ const metric={requests:1,bytes:250,durationMs:1,httpStatus:200,hashes:['a'.repeat(64)],transactions:[],diagnostic};
+ const stop=(value,error='DRI_EVENT_IDENTITY_CONFLICT',lease=dc.lease_id)=>query('SELECT ccee_finish_dri_reading($1,$2,$3,$4) result',[dc.id,lease,JSON.stringify(value),error]);
+ for(const bad of [{...diagnostic,rawXml:'PRIVATE_PASSWORD'},{...diagnostic,changedPaths:['password']},{...diagnostic,changedPaths:Array(17).fill('field')},{...diagnostic,sourceHashes:['not-a-hash','b'.repeat(64)]}])await denied(stop({...metric,diagnostic:bad}));
+ await denied(stop(metric,'OTHER_ERROR'));await denied(stop(metric,'DRI_EVENT_IDENTITY_CONFLICT',randomUUID()));
+ await stop(metric);const readDiag=(actor,id=dc.id,latest=false,org='o1')=>query('SELECT ccee_dri_diagnostic_read($1,$2,$3,$4) result',[org,actor,id,latest]);
+ const rd=await readDiag(author);ok(rd.job.state==='FAILED');ok(rd.provenance.httpStatus===200);ok(rd.diagnostic.changedPaths[0]==='dataDivulgacao');ok(rd.diagnostic.sourceHashes.length===2);ok((await readDiag(author,b.id,true)).job.id===dc.id);
+ await denied(readDiag(foreign));await denied(readDiag(author,dc.id,false,'o2'));ok((await readDiag(foreign,dc.id,false,'o2')).job===null);
+ ok((await db.query('SELECT result FROM ccee_integration_jobs WHERE id=$1',[dc.id])).rows[0].result===null);ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
+ ok(!(await db.query("SELECT has_function_privilege('authenticated','ccee_dri_diagnostic_read(text,text,uuid,boolean)','EXECUTE') allowed")).rows[0].allowed);
+ ok(!(await db.query("SELECT has_function_privilege('service_role','ccee_finish_dri_reading_before_diagnostic(uuid,uuid,jsonb,text)','EXECUTE') allowed")).rows[0].allowed);
  if(real){
   const delay=ms=>new Promise(r=>setTimeout(r,ms));
   // Force two independently connected enqueue requests to wait for the same organization cap lock.

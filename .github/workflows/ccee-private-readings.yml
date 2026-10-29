@@ -71,6 +71,8 @@ jobs:
         working-directory: frontend
       - run: node test/ccee-dri.cjs
         working-directory: frontend
+      - run: node test/ccee-dri-diagnostic.cjs
+        working-directory: frontend
       - run: node test/ccee-contract-operations.cjs
         working-directory: frontend
       - run: node test/ccee-automatic.cjs

@@ -1,3 +1,4 @@
+import {driIdentityDiagnostic} from './ccee-dri-diagnostic';
 import {BadRequestException,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {cceeMonth,cceeObject,cceeUuid} from './ccee-data.model';
@@ -49,7 +50,7 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
  const pg=p.pagination,number=(x:unknown)=>typeof x==='string'&&/^\d{1,6}$/.test(x)?Number(x):-1;
  const pages=number(pg?.totalPaginas),total=number(pg?.quantidadeTotalItens);
  if(number(pg?.numero)!==page||pages<1||pages>10||total<0||total>10000||page>pages)throw new CceeReadingError('DRI_PAGINATION_LIMIT_OR_MISSING');
- let rows:any[]=[],providerRows=0;
+ let rows:any[]=[],providerRows=0;const eventSources=new Map<string,any>();
  const container=s.kind==='DRI_EVENTS'?'resultadoDivulgacaoEventoContabil':s.kind==='DRI_REPORTS'?'relatorios':'resultados';
  if(!Object.prototype.hasOwnProperty.call(p.body??{},container))throw new CceeReadingError('DRI_SCHEMA_REQUIRES_REVIEW');
  if(s.kind==='DRI_EVENTS'){
@@ -57,8 +58,8 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
   for(const x of originals){
    const e=x.eventoContabil,code=id(e?.codigo);if(e?.periodoReferencia?.mesAno!==s.month)throw new CceeReadingError('DRI_PERIOD_MISMATCH');
    const sourceIdentity=eventSourceIdentity(x),previous=events.get(code);
-   if(previous){if(previous.sourceIdentity!==sourceIdentity)throw new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');previous.providerOccurrences++;}
-   else{const row={code,name:text(e.nome),month:s.month,sourceIdentity,providerOccurrences:1};events.set(code,row);rows.push(row);}
+   if(previous){if(previous.sourceIdentity!==sourceIdentity){const error=new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');error.diagnostic=driIdentityDiagnostic(code,eventSources.get(code),x);throw error;}previous.providerOccurrences++;}
+   else{const row={code,name:text(e.nome),month:s.month,sourceIdentity,providerOccurrences:1};events.set(code,row);eventSources.set(code,x);rows.push(row);}
   }
  }
  else if(s.kind==='DRI_REPORTS')rows=list(p.body?.relatorios?.relatorio).map(r=>{
@@ -76,6 +77,6 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
  if(s.kind!=='DRI_EVENTS')providerRows=rows.length;
  if(providerRows>1000||providerRows>total)throw new CceeReadingError('DRI_ROW_LIMIT');
  if(new Set(rows.map(r=>r.code??r.id??JSON.stringify(r))).size!==rows.length)throw new CceeReadingError('DRI_DUPLICATE_ROW');
- return{rows,providerRows,pages,total,hash:p.hash,transactionId:p.transactionId};
+ return{rows,providerRows,pages,total,hash:p.hash,transactionId:p.transactionId,eventSources};
 }
 export function driDigest(hashes:string[]){return createHash('sha256').update(hashes.join(':')).digest('hex');}

@@ -1,4 +1,5 @@
 'use client';
+import DriDiagnostic,{driCause} from './DriDiagnostic';
 import {useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
@@ -6,15 +7,16 @@ import {Binding,BindingIdentity} from './BindingEvidence';
 import DriCostPreparation from './DriCostPreparation';
 const base='/api/v1/ccee-data/dri';
 type Job={id:string;kind:string;state:string;created_at:string;error_code?:string;result?:{data:{rows:any[];sourceHash:string;financialState:string;providerRows?:number;repeatedRows?:number}};request_payload?:any};
-type Scoped={organizationId:string;jobs?:Job[];job?:Job};
+type Scoped={organizationId:string;jobs?:Job[];job?:Job;diagnostic?:any};
 export default function DriWorkspace({organizationId,bindings,enabled,canManage}:{organizationId:string;bindings:Binding[];enabled:boolean;canManage:boolean}){
+ const [diagnostic,setDiagnostic]=useState<any>(null);
  const [binding,setBinding]=useState(''),[month,setMonth]=useState(''),[jobs,setJobs]=useState<Job[]>([]),[detail,setDetail]=useState<Job|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');const generation=useRef(0);
- useEffect(()=>{generation.current++;setBinding('');setMonth('');setJobs([]);setDetail(null);setError('');setMessage('');setBusy(false);return()=>{generation.current++;};},[organizationId]);
+ useEffect(()=>{generation.current++;setBinding('');setMonth('');setJobs([]);setDetail(null);setDiagnostic(null);setError('');setMessage('');setBusy(false);return()=>{generation.current++;};},[organizationId]);
  function scope(value:Scoped){if(value.organizationId!==organizationId)throw Error('Resposta fora da organização ativa.');return value;}
- function change(){generation.current++;setJobs([]);setDetail(null);setError('');setMessage('');setBusy(false);}
+ function change(){generation.current++;setJobs([]);setDetail(null);setDiagnostic(null);setError('');setMessage('');setBusy(false);}
  async function run(action:()=>Promise<void>){if(busy)return;const g=generation.current;setBusy(true);setError('');try{await action();}catch(e){if(g===generation.current)setError(e instanceof Error?e.message:'Resultado não confirmado; confira o histórico.');}finally{if(g===generation.current)setBusy(false);}}
  async function load(){const g=generation.current;const v=scope(await apiRequest<Scoped>(base+'?authorizationId='+encodeURIComponent(binding)+'&month='+encodeURIComponent(month)));if(g===generation.current)setJobs(v.jobs??[]);}
- async function show(id:string){const g=generation.current;const v=scope(await apiRequest<Scoped>(base+'/jobs/'+id));if(g===generation.current)setDetail(v.job??null);}
+ async function show(id:string){const g=generation.current;const v=scope(await apiRequest<Scoped>(base+'/jobs/'+id));if(g===generation.current){setDetail(v.job??null);setDiagnostic(v.diagnostic??null);}}
  async function enqueue(kind:string,selection:Record<string,string>={}){const g=generation.current;scope(await apiRequest<Scoped>(base+'/jobs',{method:'POST',body:{requestId:crypto.randomUUID(),authorizationId:binding,month,kind,...selection}}));if(g===generation.current){setMessage('Consulta registrada. Atualize o histórico para acompanhar; nenhuma alteração financeira foi feita.');await load();}}
  const selected=bindings.find(b=>b.id===binding);
  return <Card title="Resultados contábeis CCEE · DRI"><p>Eventos, relatórios e quadros com fonte preservada. Valores do agente não são rateados por unidade nem adicionados automaticamente ao fechamento. Valor a liquidar não comprova pagamento.</p>
@@ -26,11 +28,13 @@ export default function DriWorkspace({organizationId,bindings,enabled,canManage}
  <Input label="Competência encerrada" type="month" value={month} onChange={e=>{change();setMonth(e.target.value);}} required/>
  <Button type="submit" disabled={busy||!binding||!month}>Atualizar consultas DRI</Button>
  {canManage&&<Button type="button" disabled={busy||!binding||!month} onClick={()=>void run(()=>enqueue('DRI_EVENTS'))}>Consultar eventos divulgados</Button>}</form>
- <p>Últimas 25 consultas deste vínculo e competência. Consultas maiores que os limites permanecem sem consolidação.</p>
- {jobs.map(j=><p key={j.id}>{j.kind} · {j.state} {j.error_code&&'· '+j.error_code} <Button variant="secondary" disabled={busy} onClick={()=>void run(()=>show(j.id))}>Conferir fonte e resultado</Button></p>)}
+ <p>Consulte cada família no evento correspondente: contabilização, liquidação MCP, energia de reserva, reserva de capacidade, cotas nucleares, votos/contribuição, garantias e penalidades. Use os relatórios e quadros anunciados pelo catálogo; uma fonte ausente nesse evento não prova indisponibilidade geral.</p><p>Últimas 25 consultas deste vínculo e competência. Consultas maiores que os limites permanecem sem consolidação.</p>
+ {jobs.map(j=><p key={j.id}>{j.kind} · {j.state} {j.error_code&&'· '+j.error_code+' · '+driCause(j.error_code)} <Button variant="secondary" disabled={busy} onClick={()=>void run(()=>show(j.id))}>Conferir fonte e resultado</Button></p>)}
  {detail&&<section aria-label="Fonte DRI selecionada"><Button variant="secondary" onClick={()=>setDetail(null)}>Fechar resultado DRI</Button><h3>{detail.kind} · {detail.state}</h3><p>Consulta {detail.id}</p>
- {detail.error_code&&<Alert variant="error">Consulta não concluída: {detail.error_code}</Alert>}
+ {diagnostic&&<DriDiagnostic snapshot={diagnostic}/>}
+ {detail.error_code&&<Alert variant="error">Consulta não concluída: {detail.error_code}. {driCause(detail.error_code)}</Alert>}
  {detail.result&&<><p>SHA-256: <span style={{overflowWrap:'anywhere'}}>{detail.result.data.sourceHash}</span></p>
+ {detail.state==='SUCCEEDED'&&detail.result.data.rows.length===0&&<Alert>{detail.kind==='DRI_REPORTS'?'A consulta terminou, mas a CCEE não ofereceu relatórios neste evento/perfil. Consulte o evento correspondente à rubrica ou solicite o caminho oficial.':'A consulta terminou sem linhas neste recorte. Ausência de linha não significa valor zero nem comprova ausência de cobrança.'}</Alert>}
  {detail.kind==='DRI_EVENTS'&&detail.result.data.providerRows!==undefined&&<p>{detail.result.data.rows.length} eventos únicos · {detail.result.data.providerRows} linhas originais · {detail.result.data.repeatedRows??0} ocorrências integralmente iguais agrupadas. Hashes originais preservados; conteúdo divergente interrompe a leitura.</p>}
  {detail.kind==='DRI_EVENTS'&&detail.result.data.rows.map(e=><p key={e.code}>{e.name} · {e.month} {canManage&&detail.state==='SUCCEEDED'&&<Button disabled={busy} onClick={()=>void run(()=>enqueue('DRI_REPORTS',{parentJobId:detail.id,eventCode:e.code}))}>Consultar relatórios deste evento</Button>}</p>)}
  {detail.kind==='DRI_REPORTS'&&detail.result.data.rows.map(r=><details key={r.id}><summary>{r.name} · {r.id}</summary><p>{r.description} · Vigência {r.period.start} a {r.period.end??'sem término informado'}</p>{r.frames.map((f:any)=><div key={f.id}><p>{f.name} · {f.description} · Parâmetros: {f.parameters.join(', ')||'nenhum'}</p>{canManage&&<Button disabled={busy||detail.state!=='SUCCEEDED'||!f.parameters.includes('CODIGO_AGENTE')||f.parameters.some((p:string)=>!['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL'].includes(p))} onClick={()=>void run(()=>enqueue('DRI_RESULTS',{parentJobId:detail.id,eventCode:detail.request_payload.eventCode,reportId:r.id,frameId:f.id}))}>Consultar resultado deste quadro</Button>}</div>)}</details>)}

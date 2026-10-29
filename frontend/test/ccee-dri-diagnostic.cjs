@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{default:View,driCause}=require('../app/backoffice/ccee-data/DriDiagnostic.tsx');
+const snapshot={job:{id:'job',kind:'DRI_EVENTS',month:'2026-09-01',state:'FAILED',error_code:'DRI_EVENT_IDENTITY_CONFLICT',finished_at:'2026-10-29T18:00:00Z',request_payload:{}},provenance:{httpStatus:200,transactions:['10000000-0000-4000-8000-000000000001'],hashes:['a'.repeat(64)]},diagnostic:{version:1,stage:'EVENT_IDENTITY',eventCode:'202609001000',changedPaths:['dataDivulgacao','eventoContabil.nome'],sourceHashes:['b'.repeat(64),'c'.repeat(64)],truncated:false}};
+const render=s=>renderToStaticMarkup(React.createElement(View,{snapshot:s}));
+const html=render(snapshot);for(const text of ['Interpretação local','resposta recebida; validação local interrompida','dataDivulgacao','eventoContabil.nome','10000000-0000-4000-8000-000000000001','15:00:00','2026-09'])assert(html.includes(text),text);
+assert(!html.includes('SOURCE_PASSWORD'));assert.match(render({...snapshot,diagnostic:null}),/histórica não registrou os campos/);
+assert.match(render({...snapshot,job:{...snapshot.job,state:'QUEUED',error_code:null},provenance:null,diagnostic:null}),/aguarde o resultado desta mesma solicitação/);
+assert.match(render({...snapshot,job:{...snapshot.job,state:'SUCCEEDED',error_code:null},diagnostic:null}),/Fonte recebida/);
+assert.match(driCause('PROVIDER_REJECTED'),/HTTP isolado não determina/);assert.match(driCause('REPORT_SELECTION_REVIEW'),/ausência neste recorte/);assert.match(driCause('ACCESS_CHANGED'),/escopo/);assert.match(driCause('TIMEOUT'),/Comunicação não concluída/);assert.match(driCause('BUDGET_EXHAUSTED'),/limite/);
+assert.equal(render(null),'');assert(!render({...snapshot,diagnostic:{...snapshot.diagnostic,changedPaths:['<img src=x onerror=alert(1)>']}}).includes('<img'));
+console.log('PASS DRI diagnostic UI: parser/provider/source/access distinctions, protocol, BRT time, historical evidence, queued state and escaped metadata');

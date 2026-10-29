@@ -1,3 +1,4 @@
+import type {DriIdentityDiagnostic} from './ccee-dri-diagnostic';
 import {Injectable} from '@nestjs/common';
 import {request} from 'node:https';
 import {createHash} from 'node:crypto';
@@ -9,7 +10,8 @@ const SOAP='http://schemas.xmlsoap.org/soap/envelope/';
 const uri=(family:string,v:number)=>`http://xmlns.energia.org.br/${family}/v${v}`;
 const list=(v:any):any[]=>v==null||v===''?[]:Array.isArray(v)?v:[v];
 export class CceeReadingError extends Error{
- metrics?:{requests:number;bytes:number;durationMs:number;hashes:string[];transactions:string[];httpStatus:number|null};
+ metrics?:{requests:number;bytes:number;durationMs:number;hashes:string[];transactions:string[];httpStatus:number|null;diagnostic?:DriIdentityDiagnostic};
+ diagnostic?:DriIdentityDiagnostic;
  responseBytes=0;
  constructor(public readonly code:string,public readonly httpStatus:number|null=null,public readonly transactionId:string|null=null){super(code);}
 }
