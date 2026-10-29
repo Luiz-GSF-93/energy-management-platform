@@ -111,5 +111,6 @@ describe('NF-e fiscal identity across original files',()=>{
  const body=['35','2603','11222333000181','55','001','000000001','1','00000001'].join('');
  const accessKey=(()=>{let sum=0,w=2;for(let i=42;i>=0;i--){sum+=Number(body[i])*w;w=w===9?2:w+1;}const v=11-sum%11;return body+(v>=10?'0':String(v));})();
  it('recognizes the same valid fiscal identity in separately formatted PDFs',()=>{expect(accessKey).toHaveLength(44);const a=run(text+'\nCHAVE DE ACESSO\n'+accessKey),b=run(text+'\nCHAVE DE ACESSO\n'+accessKey.match(/.{1,4}/g)!.join(' '));expect(a?.fiscalIdentity).toEqual({kind:'NFE_ACCESS_KEY',key:accessKey});expect(b?.fiscalIdentity).toEqual(a?.fiscalIdentity);});
+ it('does not use a referenced invoice key as the identity of a complementary note',()=>{expect(run(text+'\nNF REFERENCIADA '+accessKey)?.fiscalIdentity).toBeNull();});
  it('does not trust a key with an invalid check digit or a cancelled invoice',()=>{const invalid=accessKey.slice(0,-1)+String((Number(accessKey.at(-1))+1)%10);expect(run(text+'\nCHAVE DE ACESSO\n'+invalid)?.fiscalIdentity).toBeNull();expect(run(text+'\nNF-E CANCELADA')).toBeNull();expect(run(text+'\nNOTA FISCAL DE CREDITO')).toBeNull();expect(run(text+'\nNOTA FISCAL DE DEVOLUCAO')).toBeNull();});
 });
