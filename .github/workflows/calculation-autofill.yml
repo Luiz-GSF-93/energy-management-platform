@@ -16,6 +16,8 @@ on:
       - "backend/src/database/migrations/20261245_eva_intake_administration.sql"
       - "backend/src/database/migrations/20261246_financial_ocr_capture_filter.sql"
       - "backend/test/financial-capture-filter.cjs"
+      - "backend/src/database/migrations/20261247_eva_closing_rpc_budget.sql"
+      - "backend/test/eva-closing-rpc-budget.cjs"
       - "backend/test/eva-automatic-intake.cjs"
       - "frontend/app/components/AutomaticInvoiceIntake*"
       - "frontend/app/components/PortalInvoices.tsx"
@@ -165,6 +167,8 @@ jobs:
       - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts
         working-directory: backend
       - run: node test/financial-capture-filter.cjs
+        working-directory: backend
+      - run: node test/eva-closing-rpc-budget.cjs
         working-directory: backend
       - run: node test/eva-automatic-intake.cjs
         working-directory: backend
