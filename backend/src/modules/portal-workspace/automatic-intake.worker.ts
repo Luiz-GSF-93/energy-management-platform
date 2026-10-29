@@ -45,7 +45,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
   try{
    const job=await this.rpc('claim_eva_automatic_intake',{p_organizations:organizations});if(!job)return;
    const transition=(action:string,body:any={})=>this.rpc('transition_eva_automatic_intake',{p_id:job.id,p_token:job.token,p_action:action,p_body:body});
-   let i:any;let preparing=false;let submitting=false;
+   let i:any;let preparing=false;let submitting=false;let stage="SOURCE_CHECK";
    try{
     const ctx=job.context??await this.rpc('eva_intake_work_context',{p_id:job.id,p_token:job.token});i=ctx.intake;
     const t:TenantContext={scope:'organization',organizationId:i.organization_id,email:'',...ctx.delegate};
@@ -120,11 +120,11 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     if(i.signature===signature){await transition('wait',{note:i.note});return;}
     // A failed read-only identity check has no uncertain financial writes.
     await this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id);
-    await transition('begin_prepare');preparing=true;
+    stage='DRAFT_PREPARATION';await transition('begin_prepare');preparing=true;
     const drafts=await this.assistant.prepareAutomatic(i.document_id,t);
     if(drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED'))throw Error('UNCONFIRMED_DRAFT_WRITE');
     if(this.drafts&&drafts.current)try{await this.drafts.fill(t,drafts.current);}catch{this.log.warn('EVA_INTAKE_FIELD_DRAFT_PENDING');}
-    const result=await this.closing.prepareInvoice(i.document_id,i.file_hash,{consumerUnitId:i.unit_id,month:i.month},t);
+    stage='CLOSING_PREPARATION';const result=await this.closing.prepareInvoice(i.document_id,i.file_hash,{consumerUnitId:i.unit_id,month:i.month},t);
     if(!['READY_FOR_REVIEW','INCOMPLETE'].includes(result.row?.state))throw Error('UNCONFIRMED_CLOSING_WRITE');
     const report=result.row.report,complete=report.preparation?.percent===100||report.approvalEligible===true;
     // One optional, budgeted explanation per original. Persist intent before
@@ -133,7 +133,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      await transition('begin_interpret');
      try{const plan=drafts.current??await this.assistant.inspect(i.document_id,t);const review=await this.ai.interpret(t,'Explique os preenchimentos da proposta e somente as confirmações restantes, sem inventar fontes ou valores.',assistantAiEvidence(plan),i.document_id);if(this.drafts&&review.state==='READY')await this.drafts.fill(t,plan,review);}catch{/* Source-backed proposal remains available if interpretation fails. */}
     }
-    const after=await this.signature(i,job);
+    stage='FINAL_SOURCE_CHECK';const after=await this.signature(i,job);
     await transition('prepared',{closingId:result.row.id,signature:after,sourcesChanged:signature!==after,complete,note:complete?'Preenchimento da proposta concluído. Revise somente as confirmações do resumo antes de aprovar.':'A EVA preencheu as fontes disponíveis e retomará automaticamente quando os documentos ou registros pendentes forem atualizados.'});
    }catch(e){
     const unknown=preparing||submitting;
@@ -145,9 +145,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     }
     // Unknown POST/write acknowledgements never become automatic retries.
     const duplicate=['P2091','P2092','23505'].includes((e as any)?.code);
-    const stage=i?.state==='LINKING'?'ARCHIVING':'SOURCE_CHECK',code=String((e as any)?.code??'').replace(/[^A-Z0-9_]/g,'').slice(0,32);
+    stage=i?.state==='LINKING'?'ARCHIVING':stage;const code=String((e as any)?.code??(/^[A-Z][A-Z0-9_]{2,63}$/.test((e as any)?.message??'')?(e as any).message:typeof(e as any)?.getStatus==='function'?'HTTP_'+(e as any).getStatus():'UNAVAILABLE')).replace(/[^A-Z0-9_]/g,'').slice(0,64);
     this.log.warn('EVA_INTAKE_FAILURE '+stage+' '+code);
-    try{await transition(unknown?'unknown':'review',{diagnostic:{stage,code:unknown?'UNCONFIRMED_RESULT':duplicate?'EXISTING_DOCUMENT':stage==='ARCHIVING'?'ARCHIVE_FAILED':'SOURCE_REVIEW_REQUIRED'},note:unknown?'Resultado não confirmado. Confira o histórico antes de repetir.':duplicate?'Já existe uma fatura desta unidade e competência. Confira a versão existente, sem iniciar outra leitura.':stage==='ARCHIVING'?'A identificação foi concluída, mas houve falha técnica ao arquivar. O original e suas respostas foram preservados; não reenvie o arquivo.':'A fonte ou autorização precisa de conferência. O arquivo original foi preservado.'});}catch{this.log.warn('EVA_INTAKE_ACK_PENDING');}
+    try{await transition(unknown?'unknown':'review',{diagnostic:{stage,...(unknown?{cause:code}:{}),code:unknown?'UNCONFIRMED_RESULT':duplicate?'EXISTING_DOCUMENT':stage==='ARCHIVING'?'ARCHIVE_FAILED':'SOURCE_REVIEW_REQUIRED'},note:unknown?'Resultado não confirmado. Confira o histórico antes de repetir.':duplicate?'Já existe uma fatura desta unidade e competência. Confira a versão existente, sem iniciar outra leitura.':stage==='ARCHIVING'?'A identificação foi concluída, mas houve falha técnica ao arquivar. O original e suas respostas foram preservados; não reenvie o arquivo.':'A fonte ou autorização precisa de conferência. O arquivo original foi preservado.'});}catch{this.log.warn('EVA_INTAKE_ACK_PENDING');}
    }
   }finally{this.busy=false;}
  }

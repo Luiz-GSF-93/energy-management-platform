@@ -115,5 +115,45 @@ await call('retry',id(40),{},id(71),'manager');ok((await db.query('SELECT raw_re
 await deny(()=>call('retry',id(40),{},id(71),'manager'));ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===beforeUsage);
 await db.exec('UPDATE licenses SET documents_limit=4');await deny(()=>call('reserve',id(41),metadata(5)));
 await db.exec(`UPDATE eva_automatic_intakes SET state='AWAITING_SOURCES' WHERE id='${id(10)}'`);ok((await call('list',null,{queueOnly:'true'})).completed.some(r=>r.id===id(10)&&r.percent===80));ok(!(await call('list',null,{queueOnly:'true'})).rows.some(r=>r.id===id(10)));
+
+// Administrative closure preserves originals, quotas and immutable history.
+await db.exec(`CREATE TABLE calculation_preparation_runs(id uuid PRIMARY KEY,organization_id text,consumer_unit_id text,month text,document_id text,source_hash text,source_basis text,created_at timestamptz DEFAULT now());
+CREATE TABLE calculation_preparation_run_events(run_id uuid,state text,sequence int,receipts jsonb);
+CREATE FUNCTION calculation_preparation_effective_state(o text,r uuid) RETURNS text LANGUAGE sql AS $$SELECT state FROM public.calculation_preparation_run_events WHERE run_id=r ORDER BY sequence DESC LIMIT 1$$;`);
+await db.exec(`CREATE SCHEMA portal_scope;CREATE TABLE portal_scope.routines(original_oid oid,source_hash text);CREATE FUNCTION portal_scope.function_signature(o oid) RETURNS text LANGUAGE sql AS $$SELECT md5(prosrc) FROM pg_proc WHERE oid=o$$;INSERT INTO portal_scope.routines SELECT 'public.eva_intake_action(text,text,text,boolean,text,uuid,jsonb)'::regprocedure,portal_scope.function_signature('public.eva_intake_action(text,text,text,boolean,text,uuid,jsonb)'::regprocedure);DO $$BEGIN EXECUTE replace(pg_get_functiondef('public.eva_intake_action(text,text,text,boolean,text,uuid,jsonb)'::regprocedure),'FUNCTION public.eva_intake_action(','FUNCTION portal_scope.eva_intake_action(');END$$;`);
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261245_eva_intake_administration.sql','utf8'));
+ok((await db.query('SELECT bool_and(source_hash=portal_scope.function_signature(original_oid)) valid FROM portal_scope.routines')).rows[0].valid);
+const admin=(action,receipt=null,body={},actor=id(71),role='manager',org='org')=>db.query('SELECT eva_intake_administration($1,$2,$3,false,$4,$5,$6) data',[org,actor,role,action,receipt,JSON.stringify(body)]).then(r=>r.rows[0].data);
+const reason={reason:'Wrong branch invoice explicitly checked by the manager'};
+await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[id(40)]);
+const usageBefore=(await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents;
+ok((await admin('list')).dismissible.includes(id(40)));
+await deny(()=>admin('dismiss',id(40),reason,id(70),'external'));
+await deny(()=>admin('dismiss',id(40),reason,id(71),'manager','other'));
+await deny(()=>admin('dismiss',id(10),reason)); // archived source is not disposable
+await db.query("UPDATE eva_automatic_intakes SET lease_token=$2,lease_until=now()+interval '1 minute' WHERE id=$1",[id(40),id(98)]);
+await deny(()=>admin('dismiss',id(40),reason));
+await db.query('UPDATE eva_automatic_intakes SET lease_token=NULL,lease_until=NULL WHERE id=$1',[id(40)]);
+ok((await admin('dismiss',id(40),reason)).state==='DISMISSED');
+ok((await admin('dismiss',id(40),reason)).replayed);
+ok(!(await call('list',null,{queueOnly:'true'},id(71),'manager')).rows.some(r=>r.id===id(40)));
+ok(!(await db.query("SELECT portal_scope.eva_intake_action('org',$1,'manager',false,'list',NULL,'{}') data",[id(71)])).rows[0].data.rows.some(r=>r.id===id(40)));
+ok((await admin('list')).dismissed.some(r=>r.id===id(40)&&r.reason===reason.reason));
+ok((await db.query("SELECT organization_resource_usage('org') data")).rows[0].data.documents===usageBefore);
+ok((await db.query('SELECT stored,raw_result IS NOT NULL preserved FROM eva_automatic_intakes WHERE id=$1',[id(40)])).rows[0].preserved);
+ok((await db.query("SELECT count(*) n FROM eva_automatic_intake_events WHERE intake_id=$1 AND event='DISMISSED'",[id(40)])).rows[0].n===1);
+// Acknowledged partial effects may resume; uncertain writes and approvals cannot.
+await db.query("UPDATE eva_automatic_intakes SET state='UNKNOWN',lease_token=NULL,lease_until=NULL WHERE id=$1",[id(10)]);
+await deny(()=>admin('reconcile_preparation',id(10),reason));
+await db.query("INSERT INTO calculation_preparation_runs VALUES($1,'org',$2,'2026-07',$3,$4,$5,now())",[id(91),id(1),id(10),'1'.repeat(64),'a'.repeat(64)]);
+await db.query("INSERT INTO calculation_preparation_run_events VALUES($1,'UNKNOWN',2,'[]')",[id(91)]);
+await deny(()=>admin('reconcile_preparation',id(10),reason));
+await db.query("UPDATE calculation_preparation_run_events SET state='PARTIAL' WHERE run_id=$1",[id(91)]);
+await db.query("UPDATE eva_assisted_closing_events SET state='APPROVED' WHERE closing_id=$1",[id(50)]);
+await deny(()=>admin('reconcile_preparation',id(10),reason));
+await db.query("UPDATE eva_assisted_closing_events SET state='INCOMPLETE' WHERE closing_id=$1",[id(50)]);
+ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
+ok((await db.query("SELECT body->>'repeatOcr' value FROM eva_automatic_intake_events WHERE intake_id=$1 AND event='PREPARATION_RECONCILED'",[id(10)])).rows[0].value==='false');
+for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_intake_administration(text,text,text,boolean,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
