@@ -1,8 +1,9 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
 const React=require('react'),{JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://example.test'});
-for(const k of ['window','document','navigator','HTMLElement','Event','CustomEvent','MouseEvent'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const k of ['window','document','navigator','Node','HTMLElement','Event','CustomEvent','MouseEvent'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
 const context={scope:'organization',user:{id:'actor',email:'synthetic@example.test'},currentOrganization:{id:'org'}};
+require.extensions['.css']=(m)=>{m.exports=new Proxy({},{get:(_,key)=>key});};
 let componentApi=null;const requests=[],original=Module._load;
 Module._load=function(n,p,m){
  if(n==='@/app/providers')return {useAuth:()=>({context})};
@@ -29,9 +30,16 @@ const {createRoot}=require('react-dom/client'),{act}=React;
  const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(Boundary,null,React.createElement(Child))));
  assert.equal(portalSelection().customerId,'b');const picker=document.querySelector('select');await act(async()=>{picker.value='a';picker.dispatchEvent(new Event('change',{bubbles:true}));});assert.equal(portalSelection().customerId,'a');assert.equal(mounts,2);assert.equal(unmounts,1,'switching company must remove old charts/PDF state');
  componentApi=async()=>{throw Error('Access revoked');};await act(async()=>window.dispatchEvent(new Event('portal-scope-denied')));assert(!document.body.textContent.includes('Authorized content'));assert(document.body.textContent.includes('Access revoked'));await act(async()=>root.unmount());
- componentApi=async(url,options)=>{if(options?.method==='POST'){requests.push(options.body);return {enabled:true};}return {enabled:true,organizationId:'org',members:[{id:'actor',name:'Reader'}],customers:[{id:'a',name:'Company A'}],units:[{id:'a1',customerId:'a',name:'A1',number:'101'},{id:'a2',customerId:'a',name:'A2',number:'102'}],grants:[],history:[]};};
+ componentApi=async(url,options)=>{if(options?.method==='POST'){requests.push(options.body);return {enabled:true};}return {enabled:true,organizationId:'org',members:[{id:'actor',name:'Reader with a complete long name Santos Filho'}],customers:[{id:'a',name:'Company A INDUSTRIA E COMERCIO DE PRODUTOS LTDA'}],units:[{id:'a1',customerId:'a',name:'A1',number:'101'},{id:'a2',customerId:'a',name:'A2',number:'102'}],grants:[],history:[]};};
  const Access=require('../app/backoffice/users/PortalCustomerAccess.tsx').default,root2=createRoot(document.getElementById('root'));await act(async()=>root2.render(React.createElement(Access)));
- for(const [label,value] of [['Usuário externo do Portal','actor'],['Cliente autorizado no Portal','a']])await act(async()=>{const el=document.querySelector('[aria-label="'+label+'"]');el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));});
+ for(const name of ['Reader with a complete long name Santos Filho','Company A INDUSTRIA E COMERCIO DE PRODUTOS LTDA'])await act(async()=>{
+  const option=[...document.querySelectorAll('details button')].find(el=>el.textContent===name);
+  assert(option,'Full option label must be rendered');option.closest('details').open=true;option.click();
+  assert.equal(option.closest('details').open,false,'Selection closes the list');
+ });
+ assert(document.querySelector('summary').textContent.includes('Acessos ao Portal'));
+ assert([...document.querySelectorAll('summary')].some(el=>el.textContent.includes('Reader with a complete long name Santos Filho')));
+ assert.equal(requests.length,0,'Choosing labels must not grant access or submit the form');
  await act(async()=>document.querySelector('fieldset input').click());const setter=Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value').set;
  await act(async()=>{const el=document.querySelector('textarea');setter.call(el,'Synthetic authorized unit selection');el.dispatchEvent(new Event('input',{bubbles:true}));});
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));assert.equal(requests.length,1);assert.deepEqual(requests[0].unitIds,['a1']);assert.equal(requests[0].customerId,'a');assert.equal(requests[0].active,true);assert(requests[0].requestId);await act(async()=>root2.unmount());
