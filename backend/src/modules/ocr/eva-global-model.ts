@@ -1,4 +1,5 @@
 import {cpflCreditMagnitudes} from './cpfl-credit-magnitudes';
+import {cpflCreditSubtotal} from './cpfl-credit-subtotal';
 import {reconcileCpflOperations} from './cpfl-reconciliation';
 import {cpflReference} from './cpfl-measurements';
 import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
@@ -42,8 +43,10 @@ export function globalModelLayout(raw:any){
   if(row.role!=='UNKNOWN'||row.component!=='OTHER'||!/^ATUALIZACAO MONETARIA(?:\s+(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/\d{2}(?:\d{2})?)?$/.test(label)||typeof amount!=='string'||! /^-?\d+(?:\.\d{1,2})?$/.test(amount)||!globalFieldEvidence(raw,row.fields.description).filled||!globalFieldEvidence(raw,row.fields.amount).filled)return row;
   return {...row,component:'MONETARY_CORRECTION',role:(amount.startsWith('-')?'CREDIT':'CHARGE') as typeof row.role,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
  });
- const interpreted=sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1?cpflCreditMagnitudes(operations,row=>globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled):{operations,proof:null};
- return {...layout,operations:interpreted.operations,...(interpreted.proof?{creditSignProof:interpreted.proof,reconciliation:reconcileCpflOperations(interpreted.operations)}:{}),...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(interpreted.operations,layout.blocks??[])}:{})};
+ const eligible=sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1;
+ const subtotal=eligible?cpflCreditSubtotal(operations,(row,amountOnly)=>{const amount=globalFieldEvidence(raw,row.fields.amount);return amount.filled&&amount.confidence!==null&&amount.confidence>0.85&&(amountOnly===true||globalFieldEvidence(raw,row.fields.description).filled);}):{operations,proof:null};
+ const interpreted=eligible?cpflCreditMagnitudes(subtotal.operations,row=>globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled):{operations:subtotal.operations,proof:null};
+ return {...layout,operations:interpreted.operations,...(subtotal.proof?{creditSubtotalProof:subtotal.proof}:{}),...(interpreted.proof?{creditSignProof:interpreted.proof}:{}),...(subtotal.proof||interpreted.proof?{reconciliation:reconcileCpflOperations(interpreted.operations)}:{}),...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(interpreted.operations,layout.blocks??[])}:{})};
 }
 /** V2 aggregates five equally weighted sections. Coverage is never hidden by a high average. */
 export function globalModelConfidence(raw:any,threshold=0.9,profile?:any,verifiedLayout?:ReturnType<typeof globalModelLayout>){
