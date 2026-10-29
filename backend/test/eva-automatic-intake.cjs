@@ -152,7 +152,7 @@ await db.query("UPDATE calculation_preparation_run_events SET state='PARTIAL' WH
 await db.query("UPDATE eva_assisted_closing_events SET state='APPROVED' WHERE closing_id=$1",[id(50)]);
 await deny(()=>admin('reconcile_preparation',id(10),reason));
 await db.query("UPDATE eva_assisted_closing_events SET state='INCOMPLETE' WHERE closing_id=$1",[id(50)]);
-ok((await admin('reconcile_preparation',id(10),reason)).state==='WAITING_OCR');
+ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
 ok((await db.query("SELECT body->>'repeatOcr' value FROM eva_automatic_intake_events WHERE intake_id=$1 AND event='PREPARATION_RECONCILED'",[id(10)])).rows[0].value==='false');
 for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_intake_administration(text,text,text,boolean,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
 console.log('Automatic intake SQL:',checks,'checks passed');
