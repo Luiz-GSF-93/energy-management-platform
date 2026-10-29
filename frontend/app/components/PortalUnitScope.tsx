@@ -1,12 +1,10 @@
 'use client';
-import {createContext,ReactNode,useContext,useEffect,useState} from 'react';
+import {ReactNode,useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button} from './ui';
 import styles from './PortalClientWorkspace.module.css';
-type Unit={id:string;name:string;installation:string|null;address:string|null};
-type Identity={organizationId:string;customerId:string;companyName:string;units:Unit[]};
-const Scope=createContext<{unitId:string;unitIds:string[];identity:Identity|null}|null>(null);
-export const usePortalUnitScope=()=>useContext(Scope);
+import {PortalUnitContext as Scope,type PortalUnit as Unit,type PortalIdentity as Identity} from './PortalUnitContext';
+export {usePortalUnitScope} from './PortalUnitContext';
 export default function PortalUnitScope({organizationId,children,showFilter=true}:{organizationId:string;children:ReactNode;showFilter?:boolean}){
  const [identity,setIdentity]=useState<Identity|null>(null),[unitIds,setUnits]=useState<string[]>([]),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{const abort=new AbortController();setIdentity(null);setUnits([]);setError('');apiRequest<Identity>('/api/v1/portal/workspace/presentation/identity',{signal:abort.signal,cache:'no-store'}).then(r=>{if(r.organizationId!==organizationId||!r.customerId||!Array.isArray(r.units)||new Set(r.units.map(u=>u.id)).size!==r.units.length)throw Error('Identificação do cliente não confirmada.');if(!abort.signal.aborted){setIdentity(r);setUnits(r.units.map(u=>u.id).sort());}}).catch(()=>{if(!abort.signal.aborted)setError('Não foi possível confirmar a empresa e as unidades. Atualize ou solicite atendimento.');});return()=>abort.abort();},[organizationId,attempt]);

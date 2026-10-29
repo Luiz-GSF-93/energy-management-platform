@@ -1,5 +1,5 @@
 'use client';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import BotEnergyAvatar from './BotEnergyAvatar';
 import {useEffect,useRef,useState} from 'react';
 import {Send,BookOpen} from 'lucide-react';

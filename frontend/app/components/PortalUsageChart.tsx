@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button} from './ui';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import styles from './PortalClientWorkspace.module.css';
 type Month={month:string;peak:number|null;offPeak:number|null;demand:number|null;demandPeak:number|null;demandOffPeak:number|null;coveredUnits:number;expectedUnits:number};
 type Data={organizationId:string;customerId:string;from:string;to:string;unitId:string|null;months:Month[];cards:{label:string;contracted:number|null;contractedMonth:string|null;utilization:number|null;months:number;totalMonths:number}[];notice:string};

@@ -7,7 +7,7 @@ import {statusLabels} from '@/app/lib/operations';
 import PortalCommunicationPreferences from './PortalCommunicationPreferences';
 import EvidenceThread from './EvidenceThread';
 import DocumentDialog from '@/app/backoffice/documents/DocumentDialog';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import styles from './PortalClientWorkspace.module.css';
 type Notice={id:string;title:string;href:string;read:boolean;date:string;recordId:string|null;documentId?:string|null;unitId?:string|null;firstDate?:string;firstTitle?:string};
 type Request={id:string;number:string;title:string;status:string;sector:string;dueAt:string;unitId:string;openedAt?:string};

@@ -1,5 +1,5 @@
 'use client';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import {usePublicationRefresh} from './usePublicationRefresh';
 import ApprovedFinancialCharts,{FinancialChartMonth} from './ApprovedFinancialCharts';
 import PublishedClientInsights from './PublishedClientInsights';

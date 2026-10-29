@@ -6,6 +6,7 @@ on:
       - 'backend/src/modules/portal-insights/**'
       - 'backend/src/common/services/portal-selected-units*'
       - 'frontend/test/portal-global-unit-scope.cjs'
+      - 'frontend/app/components/PortalUnitContext.tsx'
       - 'backend/src/modules/energy-prices/**'
       - 'backend/src/modules/reports/**'
       - 'backend/src/database/migrations/20261215*.sql'

@@ -1,5 +1,5 @@
 'use client';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import {usePublicationRefresh} from './usePublicationRefresh';
 import {useEffect,useId,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';

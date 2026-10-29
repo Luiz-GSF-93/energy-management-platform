@@ -1,5 +1,5 @@
 'use client';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import AnnualConsumptionComparison,{type AnnualPlanningView} from './AnnualConsumptionComparison';
 import {usePublicationRefresh} from './usePublicationRefresh';
 import {useEffect,useRef,useState} from 'react';

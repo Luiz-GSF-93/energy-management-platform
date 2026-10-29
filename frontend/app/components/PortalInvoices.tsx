@@ -6,7 +6,7 @@ import AutomaticInvoiceIntake from './AutomaticInvoiceIntake';
 import PortalInvoiceViewer from './PortalInvoiceViewer';
 import {Alert,Button} from './ui';
 import PortalInvoicePayment from './PortalInvoicePayment';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import styles from './PortalClientWorkspace.module.css';
 type Receipt={id:string;documentId:string|null;unitId:string;unitName:string;month:string;kind:string;filename:string;createdAt:string;status:{code:string;label:string};notice:string|null};
 export default function PortalInvoices(){
