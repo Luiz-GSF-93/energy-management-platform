@@ -18,6 +18,8 @@ export const autofillHash=(v:unknown):string=>{
  const canonical=(x:any):any=>Array.isArray(x)?x.map(canonical):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])):x;
  return createHash('sha256').update(JSON.stringify(canonical(v))).digest('hex');
 };
+/** Include independently verified interpretations in replay identity, without changing legacy keys. */
+export function invoiceInterpretationBasis(layout:any){return {...(layout?.creditSignProof?{creditSignProof:layout.creditSignProof}:{}),...(layout?.creditSubtotalProof?{creditSubtotalProof:layout.creditSubtotalProof}:{})};}
 const norm=(v:unknown)=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const tariffClass=(v:unknown)=>norm(v)==='COMERCIAL'?'COMMERCIAL':norm(v);
 const distributor=(v:unknown)=>norm(v)==='NEOENERGIAELEKTRO'?'ELEKTRO':norm(v);

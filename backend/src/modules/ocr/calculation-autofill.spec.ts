@@ -1,4 +1,4 @@
-import {calculationAutofillPlan,selectAutofillLibrary,autofillHash,proposedRegularSupplierAmount} from './calculation-autofill.model';
+import {calculationAutofillPlan,selectAutofillLibrary,autofillHash,invoiceInterpretationBasis,proposedRegularSupplierAmount} from './calculation-autofill.model';
 import {CalculationAutofillService} from './calculation-autofill.service';
 import {commercialProposal} from './calculation-autofill-manual';
 import {previousCalculationReference,referenceEnergyAmount,referenceMwh,proposalFieldsSafe} from './calculation-autofill-reference';
@@ -96,4 +96,19 @@ describe('V3 source conflicts do not become an automatic closing',()=>{
 it('displays an integral documented purchase without dereferencing a nonexistent regular IPCA memory',()=>{
  const old=process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED='true';
  try{const {c,library}=fixture();(c as any).contractDraft={format:'documented-supplier-settlement-1',mode:'SPOT',state:'COMPLETE',requirements:[],source:{documentId:'nf',fileHash:'a'.repeat(64)},memory:null,supplier:{contract:null,pricePerMwh:'245.38',contractedMwh:'105.0700',regularAmount:'25782.08',extraAmount:'0.00',totalAmount:'25782.08',taxTreatment:'COMPONENTS_CONFIRMED',requirements:[]}};const p=calculationAutofillPlan(c,[library]);expect(p.fields.find(f=>f.key==='supplier:total')).toMatchObject({value:'25782.08',source:expect.stringContaining('Nota verificada nf')});expect(p.fields.find(f=>f.key==='supplier:contract')?.value).toBe('Compra avulsa integral');expect(p.financialApproval).toBe(false);}finally{if(old===undefined)delete process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;else process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED=old;}
+});
+
+
+describe('Verified invoice interpretation replay identity',()=>{
+ it('keeps legacy identity unchanged and changes it only when the verified subtotal proof changes',()=>{
+  const original={evidence:'same-original',unit:'same-unit'},sign={method:'signed',sources:['row1']};
+  expect(autofillHash({...invoiceInterpretationBasis(null),...original})).toBe(autofillHash(original));
+  expect(autofillHash({...invoiceInterpretationBasis({creditSignProof:sign}),...original})).toBe(autofillHash({creditSignProof:sign,...original}));
+  const proof={method:'CPFL_UNLABELLED_CREDIT_SUBTOTAL_EXACT_SUMS',source:'tables[3].row[17]',subtotalCents:'-1200243',finalCents:'1278864'};
+  const key=(layout:any)=>autofillHash({...invoiceInterpretationBasis(layout),...original});
+  expect(key({creditSubtotalProof:proof})).not.toBe(key(null));
+  expect(key({creditSubtotalProof:{...proof}})).toBe(key({creditSubtotalProof:proof}));
+  expect(key({creditSubtotalProof:{...proof,source:'tables[4].row[17]'}})).not.toBe(key({creditSubtotalProof:proof}));
+  expect(key({creditSubtotalProof:{...proof,finalCents:'1278865'}})).not.toBe(key({creditSubtotalProof:proof}));
+ });
 });
