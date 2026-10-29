@@ -1,0 +1,40 @@
+name: Central support authorization and annual quota
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/platform-workflows/**'
+      - 'backend/src/database/migrations/20261240_central_support.sql'
+      - 'backend/test/database/central-support.test.mjs'
+      - 'frontend/app/components/CentralSupport*'
+      - 'frontend/app/components/BackofficeShell.tsx'
+      - 'frontend/app/backoffice/support/**'
+      - 'frontend/app/backoffice/plans/page.tsx'
+      - 'frontend/test/central-support.cjs'
+      - '.github/workflows/central-support.yml'
+permissions:
+  contents: read
+jobs:
+  authorization-quota-and-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/platform-workflows
+        working-directory: backend
+      - run: node test/database/central-support.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: npm install --no-save --package-lock=false --ignore-scripts jsdom@26.1.0
+        working-directory: frontend
+      - run: node test/central-support.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

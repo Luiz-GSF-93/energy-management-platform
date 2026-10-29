@@ -1,5 +1,6 @@
 'use client';
 import { ReactNode, useState } from 'react';
+import Link from 'next/link';
 
 import OperationNotificationBell from '@/app/components/OperationNotificationBell';
 import UserIdentity from '@/app/components/UserIdentity';
@@ -23,7 +24,7 @@ export default function BackofficeShell({
       <Sidebar collapsed={collapsed} onToggle={()=>setCollapsed(value=>!value)} />
 
       <main className="backoffice-main">
-        <div className="environment-topbar"><OperationNotificationBell /><UserIdentity /></div>
+        <div className="environment-topbar">{isOrganizationAuthContext(context)&&!context.accessMode&&['admin_org','gestor','operacional'].includes(context.currentOrganization.role)?<Link className="operation-bell" href="/backoffice/support">Atendimento Central</Link>:null}<OperationNotificationBell /><UserIdentity /></div>
         {children}
         <BotEnergyBackoffice />
       </main>
