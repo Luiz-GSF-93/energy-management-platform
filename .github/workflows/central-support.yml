@@ -4,6 +4,7 @@ on:
     paths:
       - 'backend/src/modules/platform-workflows/**'
       - 'backend/src/database/migrations/20261240_central_support.sql'
+      - 'backend/src/database/migrations/20261241_central_support_audit_names.sql'
       - 'backend/test/database/central-support.test.mjs'
       - 'frontend/app/components/CentralSupport*'
       - 'frontend/app/components/BackofficeShell.tsx'
