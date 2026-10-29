@@ -106,3 +106,10 @@ describe('Supplier NF proposal',()=>{
  it.each(['recipient','month','duplicate','total','discount','quantity'])('rejects ambiguous/mismatched %s',kind=>{let t=text;if(kind==='recipient')t=t.replace('11.222.333/0001-81','22.333.444/0001-82');if(kind==='month')t=t.replace('maio/2026','abril/2026');if(kind==='duplicate')t=t.replace('DADOS ADICIONAIS','MWh 1,0000 200,0000 200,00 DADOS ADICIONAIS');if(kind==='total')t=t.replace('Valor Líquido: 300,00','Valor Líquido: 301,00');if(kind==='discount')t=t.replace('Desconto: 0,00','Desconto: 1,00');if(kind==='quantity')t=t.replace('1,5000','1,5001');expect(run(t)).toBeNull();});
  it('does not accept the supplier CNPJ as recipient identity',()=>expect(run('11.222.333/0001-81 '+text.replace('11.222.333/0001-81','22.333.444/0001-82'))).toBeNull());
 });
+
+describe('NF-e fiscal identity across original files',()=>{
+ const body=['35','2603','11222333000181','55','001','000000001','1','00000001'].join('');
+ const accessKey=(()=>{let sum=0,w=2;for(let i=42;i>=0;i--){sum+=Number(body[i])*w;w=w===9?2:w+1;}const v=11-sum%11;return body+(v>=10?'0':String(v));})();
+ it('recognizes the same valid fiscal identity in separately formatted PDFs',()=>{expect(accessKey).toHaveLength(44);const a=run(text+'\nCHAVE DE ACESSO\n'+accessKey),b=run(text+'\nCHAVE DE ACESSO\n'+accessKey.match(/.{1,4}/g)!.join(' '));expect(a?.fiscalIdentity).toEqual({kind:'NFE_ACCESS_KEY',key:accessKey});expect(b?.fiscalIdentity).toEqual(a?.fiscalIdentity);});
+ it('does not trust a key with an invalid check digit or a cancelled invoice',()=>{const invalid=accessKey.slice(0,-1)+String((Number(accessKey.at(-1))+1)%10);expect(run(text+'\nCHAVE DE ACESSO\n'+invalid)?.fiscalIdentity).toBeNull();expect(run(text+'\nNF-E CANCELADA')).toBeNull();expect(run(text+'\nNOTA FISCAL DE CREDITO')).toBeNull();expect(run(text+'\nNOTA FISCAL DE DEVOLUCAO')).toBeNull();});
+});

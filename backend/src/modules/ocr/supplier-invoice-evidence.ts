@@ -1,3 +1,4 @@
+import {supplierInvoiceSet,supplierInvoiceSetDraft} from './supplier-invoice-set';
 import {settlementHash} from './documented-supplier-settlement';
 export async function collectSupplierInvoiceEvidence(documents:any[],read:(d:any)=>Promise<{kind:string;proposal:any}>){
  const kept:any[]=[],proposals:any[]=[],excluded:any[]=[],observations:string[]=[];
@@ -6,12 +7,14 @@ export async function collectSupplierInvoiceEvidence(documents:any[],read:(d:any
   try{const evidence=await read(d);if(evidence.kind==='CONTRACT'){excluded.push({id:d.id,name:d.original_filename,reason:'Conteúdo contratual; não é nota fiscal.'});continue;}kept.push(d);if(evidence.proposal)proposals.push(evidence.proposal);}
   catch{kept.push(d);observations.push('Nota do fornecedor: extração local exige revisão; sem nova chamada paga.');}
  }
- return {documents:kept,proposals,excluded,observations,selected:kept.length===1&&proposals.length===1?proposals[0]:null};
+ return {documents:kept,proposals,excluded,observations,selected:kept.length===1&&proposals.length===1?proposals[0]:supplierInvoiceSet(kept,proposals)};
 }
-export type SupplierInvoiceAllocation={documentId:string;fileHash:string;coverage:'FULL'|'WITH_DOCUMENTED_EXTRA';reason:string;costId?:string;costRevision?:number;costsHash?:string;taxConfirmation?:{treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}};
+export type SupplierInvoiceAllocation={documentId:string;fileHash:string;coverage:'FULL'|'WITH_DOCUMENTED_EXTRA';reason:string;invoiceSetHash?:string;invoiceTaxes?:{documentId:string;fileHash:string;treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}[];costId?:string;costRevision?:number;costsHash?:string;taxConfirmation?:{treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}};
 export function supplierInvoiceAllocationInput(v:any):SupplierInvoiceAllocation{
  const uuid=(s:any)=>typeof s==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
- if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).filter(k=>k!=='taxConfirmation').sort().join(',')!==(v.coverage==='WITH_DOCUMENTED_EXTRA'?'costId,costRevision,costsHash,coverage,documentId,fileHash,reason':'coverage,documentId,fileHash,reason')||!uuid(v.documentId)||!/^[a-f0-9]{64}$/.test(v.fileHash??'')||!['FULL','WITH_DOCUMENTED_EXTRA'].includes(v.coverage)||typeof v.reason!=='string'||v.reason.trim().length<20||v.reason.length>1000||v.coverage==='WITH_DOCUMENTED_EXTRA'&&(!uuid(v.costId)||!Number.isInteger(v.costRevision)||v.costRevision<1||!/^[a-f0-9]{64}$/.test(v.costsHash??'')))throw Error('Confirme a cobertura e as fontes atuais da nota e de eventual compra adicional.');
+ if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).filter(k=>!['taxConfirmation','invoiceSetHash','invoiceTaxes'].includes(k)).sort().join(',')!==(v.coverage==='WITH_DOCUMENTED_EXTRA'?'costId,costRevision,costsHash,coverage,documentId,fileHash,reason':'coverage,documentId,fileHash,reason')||!uuid(v.documentId)||!/^[a-f0-9]{64}$/.test(v.fileHash??'')||!['FULL','WITH_DOCUMENTED_EXTRA'].includes(v.coverage)||typeof v.reason!=='string'||v.reason.trim().length<20||v.reason.length>1000||v.coverage==='WITH_DOCUMENTED_EXTRA'&&(!uuid(v.costId)||!Number.isInteger(v.costRevision)||v.costRevision<1||!/^[a-f0-9]{64}$/.test(v.costsHash??'')))throw Error('Confirme a cobertura e as fontes atuais da nota e de eventual compra adicional.');
+ if(v.invoiceSetHash!==undefined&&(!/^[a-f0-9]{64}$/.test(v.invoiceSetHash)||v.taxConfirmation!==undefined))throw Error('Confirme o conjunto atual, com tributos individuais por nota.');
+ if(v.invoiceTaxes!==undefined){if(!v.invoiceSetHash||!Array.isArray(v.invoiceTaxes)||v.invoiceTaxes.length>10||new Set(v.invoiceTaxes.map((x:any)=>x.documentId)).size!==v.invoiceTaxes.length)throw Error('Confirmações fiscais inválidas.');for(const x of v.invoiceTaxes){if(!x||Object.keys(x).sort().join(',')!=='documentId,fileHash,reason,treatment'||!uuid(x.documentId)||!/^[a-f0-9]{64}$/.test(x.fileHash??'')||!['NET_DESTINATION_ICMS','INCLUDED'].includes(x.treatment)||typeof x.reason!=='string'||x.reason.trim().length<20||x.reason.length>1000)throw Error('Confira a fonte fiscal de cada nota.');}}
  if(v.taxConfirmation!==undefined){const x=v.taxConfirmation;if(!x||typeof x!=='object'||Array.isArray(x)||Object.keys(x).sort().join(',')!=='reason,treatment'||!['NET_DESTINATION_ICMS','INCLUDED'].includes(x.treatment)||typeof x.reason!=='string'||x.reason.trim().length<20||x.reason.length>1000)throw Error('Confirme o tratamento fiscal da NF e sua fonte, sem presumir isenção.');}
  return {...v,reason:v.reason.trim()};
 }
@@ -21,6 +24,7 @@ const value=(n:bigint)=>{const a=(n<0n?-n:n).toString().padStart(13,'0');return 
  * contract, payment, measurement, human attestation or cost record is changed. */
 export function supplierInvoiceEvidenceDraft(c:any){
  const p=c.supplierInvoiceProposal;
+ if(p?.setVersion)return supplierInvoiceSetDraft(c,supplierInvoiceEvidenceDraft,supplierInvoiceAllocationInput);
  if(c.manualOverrides?.supplierSettlement||c.manualOverrides?.supplierPricePerMwh!==undefined||!p||p.month!==c.month||p.format!=='supplier-invoice-proposal-1')return null;
  const requirements:any[]=[],differences:string[]=[],consumedCostSources:any[]=[],confirmedExtraCostSources:any[]=[];
  const need=(code:string,message:string,section='supply')=>requirements.push({code,message,section});
@@ -31,7 +35,7 @@ export function supplierInvoiceEvidenceDraft(c:any){
   const measured=scaled(c.measurements.consumptionTotal)/1000n,quantity=scaled(p.quantityMwh);
   difference=value(measured-quantity);
   const confirmation=c.manualOverrides?.supplierInvoiceAllocation;
-  if(confirmation){const v=supplierInvoiceAllocationInput(confirmation);if(!c.manualAuthor||v.documentId!==p.documentId||v.fileHash!==p.fileHash)throw Error('A nota mudou depois da confirmação de cobertura; confira a fonte atual.');source.allocation={...v,actor:c.manualAuthor};
+  if(confirmation){const v=supplierInvoiceAllocationInput(confirmation);if(v.invoiceSetHash||!c.manualAuthor||v.documentId!==p.documentId||v.fileHash!==p.fileHash)throw Error('A nota mudou depois da confirmação de cobertura; confira a fonte atual.');source.allocation={...v,actor:c.manualAuthor};
    if(v.taxConfirmation){if(p.taxTreatment==='NET_DESTINATION_ICMS'&&v.taxConfirmation.treatment!=='NET_DESTINATION_ICMS'||p.taxTreatment==='INCLUDED'&&p.taxEvidence?.kind==='INVOICE_ICMS_INCLUDED'&&v.taxConfirmation.treatment!=='INCLUDED')throw Error('A confirmação fiscal diverge da cláusula da NF; confira o documento.');taxTreatment=v.taxConfirmation.treatment;source.taxConfirmation={...v.taxConfirmation,actor:c.manualAuthor,documentId:p.documentId,fileHash:p.fileHash};}
   }
   if(measured!==quantity){differences.push('Quantidade faturada '+p.quantityMwh+' MWh; consumo medido '+value(measured)+' MWh; diferença '+difference+' MWh preservada, sem presumir perda ou compra extra.');if(!confirmation)need('SUPPLIER_INVOICE_COVERAGE','A NF já preenche quantidade, preço e valor. Confirme somente se cobre todo o faturamento da competência ou se existe outra nota.');}

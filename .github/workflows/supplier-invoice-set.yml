@@ -1,0 +1,31 @@
+name: Multiple supplier invoices
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/supplier-invoice-*'
+      - 'backend/src/modules/ocr/invoice-component-tax-v3*'
+      - 'backend/src/modules/ocr/calculation-autofill*'
+      - 'backend/src/modules/ocr/eva-assisted-closing*'
+      - 'backend/src/modules/portal-workspace/automatic-intake*'
+      - 'frontend/app/backoffice/contracts/SupplierInvoiceSetReview.tsx'
+      - 'frontend/app/backoffice/contracts/DocumentedSupplierSettlement.tsx'
+      - 'frontend/test/supplier-invoice-set.cjs'
+      - '.github/workflows/supplier-invoice-set.yml'
+permissions:
+  contents: read
+jobs:
+  invoice-set:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: npx jest --runInBand --testPathPattern 'supplier-invoice|invoice-component-tax-v3|eva-assisted-closing.model|ccee-preparation|automatic-intake.worker'
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/supplier-invoice-set.cjs && node test/supplier-invoice-evidence.cjs
+        working-directory: frontend
