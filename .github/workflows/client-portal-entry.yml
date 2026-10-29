@@ -9,6 +9,7 @@ on:
       - 'backend/src/common/interceptors/tenant.interceptor*'
       - 'backend/src/database/migrations/2026124*.sql'
       - 'backend/test/portal-customer-access.cjs'
+      - 'backend/test/eva-intake-signature-json.cjs'
       - 'backend/src/modules/portal-workspace/portal-customer-access.ts'
       - 'frontend/app/backoffice/users/**'
       - 'frontend/app/components/PortalCustomerBoundary.tsx'
@@ -47,6 +48,8 @@ jobs:
       - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.controller.platform-context.spec.ts src/common/guards/client-portal-access.spec.ts src/common/guards/client-portal-acl.spec.ts src/common/guards/portal-presentation-access.spec.ts src/modules/client-portal-licenses/portal-license.spec.ts src/modules/portal-workspace/portal-presentation.spec.ts src/common/services/portal-customer-context.spec.ts src/common/guards/tenant.guard.portal-units.spec.ts src/modules/contracts/services/portal-publication-units.spec.ts src/modules/portal-workspace/automatic-intake.portal-scope.spec.ts
         working-directory: backend
       - run: node test/portal-customer-access.cjs
+        working-directory: backend
+      - run: node test/eva-intake-signature-json.cjs
         working-directory: backend
       - run: npm run build
         working-directory: backend
