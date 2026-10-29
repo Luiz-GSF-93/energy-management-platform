@@ -30,6 +30,7 @@ export class EvaAssistedClosingService{
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso restrito ao backoffice autorizado.');
   if(['23505','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
   if(r.error?.code==='57014'&&action==='history')throw new ServiceUnavailableException('A consulta do histórico excedeu o prazo. Suas confirmações anteriores foram preservadas. Atualize o histórico antes de preparar outra versão.');
+  if(r.error?.code==='57014')throw new ServiceUnavailableException({message:'A atualização da proposta excedeu o tempo de consulta. Os registros já salvos foram preservados. Consulte o histórico antes de repetir.',code:'EVA_CLOSING_SOURCE_TIMEOUT',stage:action});
   if(r.error?.code==='22023')throw new BadRequestException('Dados insuficientes ou decisão inválida.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }
