@@ -33,3 +33,17 @@ it('updates the fingerprint and projection when a new publication replaces the p
  if(a.state!=='AVAILABLE'||b.state!=='AVAILABLE'||c.state!=='AVAILABLE')throw Error();expect(a.sourceFingerprint).not.toBe(b.sourceFingerprint);expect(a.current.futureKwh).not.toBe(b.current.futureKwh);expect(a.sourceFingerprint).toBe(c.sourceFingerprint);
 });
 it('rejects a foreign source bundle',()=>expect(()=>automaticPlanning(scope,{...scope,customerId:'foreign'},[],at)).toThrow('SCOPE'));
+
+it('returns an annual advisory view even when a gap prevents the legacy validated motor',()=>{
+ const h=history();h[4].days=0;(extractCpflPaulistaLayout as jest.Mock).mockReturnValue({measurements:{history:h}});
+ const p=automaticPlanning(scope,{...scope,invoice:invoice(),ccee:[]},[publication()],at);
+ expect(p.state).toBe('SOURCE_PENDING');expect(p.annualComparison.state).toBe('AVAILABLE');expect(p.annualComparison.years.at(-1)!.rows).toHaveLength(12);expect(p.annualComparison.pending).toHaveLength(1);
+});
+it.each(['valid','low','duplicate','tamper'])('recovers punctuation only with unique intact month/value/day evidence: %s',kind=>{
+ const h=history();let content='';const f=(text:string,confidence=0.99)=>{const offset=content.length;content+=text+' ';return {text,confidence,pages:[3],spans:[{offset,length:text.length}],issues:[]};};
+ const a=f('SET 25\n.'),b=f('1000,00',kind==='low'?0.8:0.99),d=f('30');
+ Object.assign(h[0],{decimal:null,evidence:[a,b,...(kind==='duplicate'?[f('2000,00')]:[]),d],issues:['HISTORY_VALUE_AMBIGUOUS','HISTORY_FIELD_REVIEW_REQUIRED']});
+ if(kind==='tamper')a.spans[0].offset+=1;
+ const before=JSON.stringify(h),inv={...invoice(),raw:{content,pages:[{pageNumber:3,words:[]}]}};(extractCpflPaulistaLayout as jest.Mock).mockReturnValue({measurements:{history:h}});
+ const r=invoicePlanningHistory(scope,inv);expect(r.rows).toHaveLength(kind==='valid'?13:12);expect(r.recovered).toEqual(kind==='valid'?['2025-09']:[]);expect(JSON.stringify(h)).toBe(before);
+});

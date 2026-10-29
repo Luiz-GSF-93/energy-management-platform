@@ -1,10 +1,11 @@
 'use client';
+import AnnualConsumptionComparison,{type AnnualPlanningView} from './AnnualConsumptionComparison';
 import {usePublicationRefresh} from './usePublicationRefresh';
 import {useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card} from '@/app/components/ui';
 import AnnualForecastPresentation,{type AnnualForecast} from '@/app/backoffice/reports/AnnualForecastPresentation';
-type Planning={forecastId:string;unitName?:string;sourceOrigins?:{month:string;kind:string}[];state:string;calculatedAt?:string;sourceFingerprint?:string;sourceMonths?:string[];notice:string;forecast?:Published};
+type Planning={annualComparison?:AnnualPlanningView;forecastId:string;unitName?:string;sourceOrigins?:{month:string;kind:string}[];state:string;calculatedAt?:string;sourceFingerprint?:string;sourceMonths?:string[];notice:string;forecast?:Published};
 type Published=AnnualForecast&{id:string;unitName:string;publishedAt:string;version:number};
 export default function PublishedForecastDashboard(){
  const publicationRevision=usePublicationRefresh();
@@ -23,7 +24,8 @@ export default function PublishedForecastDashboard(){
  <Button variant="secondary" disabled={rows===null&&!error} onClick={()=>{setRows(null);setError('');setRevision(n=>n+1);}}>Atualizar previsões</Button>
  {error?<Alert>{error}</Alert>:rows===null?<p role="status">Consultando previsões publicadas…</p>:!choices.length?<p>Nenhuma previsão publicada disponível. Versões em preparação ou somente validadas aguardam publicação pela equipe de gestão.</p>:<>
  <label>Unidade e competência de corte<select value={selected} onChange={e=>setSelected(e.target.value)}>{choices.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
- {current?.state==='AVAILABLE'&&current.forecast?<section aria-label="Planejamento atual com novas publicações"><h3>Planejamento atual · atualização automática</h3><p>{current.notice}</p><p>Atualizado em {new Date(current.calculatedAt!).toLocaleString('pt-BR')} · histórico utilizado: {current.sourceMonths?.join(', ')||'histórico aprovado'}</p>{current.sourceOrigins?.length?<p>Fontes utilizadas: {Array.from(new Set(current.sourceOrigins.map(s=>s.kind==='CCEE_FINAL'?'CCEE · medição final':s.kind==='PUBLISHED_CONSUMPTION'?'Consumo do fechamento publicado':s.kind==='PUBLISHED_INVOICE_HISTORY'?'Histórico da fatura publicada':'Histórico revisado'))).join('; ')}.</p>:null}<AnnualForecastPresentation forecast={{...current.forecast,qualifications:[]}} preliminary/><small style={{overflowWrap:'anywhere'}}>Referência das fontes: {current.sourceFingerprint}</small></section>:current?<Alert>{current.notice}</Alert>:null}
+ {current?.annualComparison?.state==='AVAILABLE'?<AnnualConsumptionComparison planning={current.annualComparison}/>:null}
+ {current?.state==='AVAILABLE'&&current.forecast?<section aria-label="Planejamento atual com novas publicações"><h3>Planejamento atual · atualização automática</h3><p>{current.notice}</p><p>Atualizado em {new Date(current.calculatedAt!).toLocaleString('pt-BR')} · histórico utilizado: {current.sourceMonths?.join(', ')||'histórico aprovado'}</p>{current.sourceOrigins?.length?<p>Fontes utilizadas: {Array.from(new Set(current.sourceOrigins.map(s=>s.kind==='CCEE_FINAL'?'CCEE · medição final':s.kind==='PUBLISHED_CONSUMPTION'?'Consumo do fechamento publicado':s.kind==='PUBLISHED_INVOICE_HISTORY'?'Histórico da fatura publicada':'Histórico revisado'))).join('; ')}.</p>:null}<>{current.annualComparison?.state==='AVAILABLE'?<details><summary>Previsão pelo motor histórico e faixas contratuais</summary><AnnualForecastPresentation forecast={{...current.forecast,qualifications:[]}} preliminary/></details>:<AnnualForecastPresentation forecast={{...current.forecast,qualifications:[]}} preliminary/>}</><small style={{overflowWrap:'anywhere'}}>Referência das fontes: {current.sourceFingerprint}</small></section>:current?current.annualComparison?.state==='AVAILABLE'?<details><summary>Conferência da previsão pelo motor histórico</summary><Alert>{current.notice}</Alert></details>:<Alert>{current.notice}</Alert>:null}
  {forecast?<details open={!current?.forecast}><summary>Previsão histórica publicada · versão {forecast.version}</summary><p>Publicado em {new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(forecast.publishedAt))} · Versão {forecast.version}</p><AnnualForecastPresentation forecast={{...forecast,qualifications:[]}}/></details>:null}
  </>}
  </Card>;

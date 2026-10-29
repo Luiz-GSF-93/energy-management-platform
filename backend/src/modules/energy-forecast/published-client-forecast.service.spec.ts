@@ -47,3 +47,10 @@ describe('client published forecast projection',()=>{
   expect(result.currentPlanning[0].state).toBe('AVAILABLE');expect(result.currentPlanning[0].forecast.actual.find((a:any)=>a.month==='2026-01').consumptionKwh).toBe('105223.661700');expect(result.rows[0].actual.find((a:any)=>a.month==='2026-01').consumptionKwh).toBe('100000');expect(JSON.stringify(body)).toBe(before);expect(JSON.stringify(result.currentPlanning)).not.toMatch(/validatedBy|evidence|expansions|jan-publication|customerId/);
   revoked=true;await expect(service.list(t)).rejects.toThrow('revogado');
  });
+
+it('exposes only aggregate annual comparison when sparse published history cannot run the legacy forecast',async()=>{
+ const scope={organizationId:'org',customerId:'customer',unitId:'unit'},publication={...scope,publicationId:'private-publication',sourceHash:'c'.repeat(64),publishedAt:'2026-10-29T12:00:00Z',month:'2026-01',fields:[{key:'consumptionTotal',value:'310'},{key:'consumptionPeak',value:'0'},{key:'consumptionOffPeak',value:'310'}],tariffLines:[{component:'TE',billedDays:'31'},{component:'TE',billedDays:'31'}]};
+ const rpc=jest.fn(async(name:string)=>({data:name==='energy_forecast_client_sources'?{customerId:'customer',units:[{...scope,unitName:'Test',publications:[publication],invoice:null,ccee:[]}]}:{customerId:'customer',rows:[]},error:null}));
+ const service=new PublishedClientForecastService({getClient:()=>({rpc})} as any,{requireEntitlement:jest.fn()} as any,{get:()=> 'true'} as any),t:any={organizationId:'org',userId:'actor',roleId:'role',role:'consulta',permissions:[P.DOCUMENTS_REPORTS_VIEW]};
+ const result:any=await service.list(t),p=result.currentPlanning[0];expect(p.state).toBe('SOURCE_PENDING');expect(p.annualComparison.state).toBe('AVAILABLE');expect(p.annualComparison.years[0].rows[1].simulatedKwh).toBe('280.000000');expect(JSON.stringify(result)).not.toMatch(/private-publication|validatedBy|evidence|sourceHash|raw|customerId/);
+});

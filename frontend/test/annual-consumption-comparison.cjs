@@ -1,0 +1,31 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript');
+const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
+for(const k of ['window','document','HTMLElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,p)=>m._compile(ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,p);
+require.extensions['.css']=m=>m.exports={};
+let resolve,reject,calls=[];
+const original=Module._load;Module._load=function(n,p,m){
+ if(n==='@/app/lib/api/client')return {apiRequest:(...args)=>{calls.push(args);return new Promise((a,b)=>{resolve=a;reject=b;});}};
+ if(n==='@/app/components/ui')return {Card:({children})=>React.createElement('section',null,children),Alert:({children})=>React.createElement('p',{role:'alert'},children),Button:({children,variant,...props})=>React.createElement('button',props,children)};
+ if(n.startsWith('@/'))return original.call(this,require('path').resolve(__dirname,'../',n.slice(2)),p,m);
+ return original.call(this,n,p,m);
+};
+const Comparison=require('../app/components/AnnualConsumptionComparison.tsx').default,root=createRoot(document.getElementById('root'));
+const difference={kwh:'300',percent:'100'},rows=Array.from({length:12},(_,i)=>({month:'2026-'+String(i+1).padStart(2,'0'),previousKwh:'300',previousOrigin:'PUBLISHED_INVOICE_HISTORY',simulatedKwh:'500',publishedKwh:i===0?'600':null,origin:i===0?'PUBLISHED_CONSUMPTION':null,billedDays:i===0?30:null,previousDays:30,projectedDays:31,historyMonths:10,historyFrom:'2025-02',historyTo:'2025-12',expansionKwh:'0',currentDailyKwh:i===0?'20':null,previousDailyKwh:'10',difference:i===0?difference:{kwh:null,percent:null},versusSimulation:i===0?{kwh:'100',percent:'20'}:{kwh:null,percent:null},dailyDifference:i===0?{kwh:'10',percent:'100'}:{kwh:null,percent:null}}));
+const year={year:2026,rows,estimatedYearKwh:'6100',estimatedMonths:12,comparableMonths:1,comparableCurrentKwh:'600',comparablePreviousKwh:'300',comparableDifference:difference};
+const planning={state:'AVAILABLE',cutoff:'2026-01',calculatedAt:'2026-10-29T12:00:00Z',formulaVersion:'annual-weighted-planning/1',sourceFingerprint:'a'.repeat(64),notice:'Simulação com fontes documentadas.',pending:['2025-02: revisar um campo.'],years:[{...year,year:2025,rows:rows.map(r=>({...r,month:r.month.replace('2026','2025')}))},year]};
+(async()=>{
+ await act(async()=>root.render(React.createElement(Comparison,{planning})));
+ assert.equal(document.querySelector('select').value,'2026');assert.equal(document.querySelectorAll('rect[role=button]').length,12);assert.equal(document.querySelectorAll('tbody tr').length,12);
+ assert.ok(document.querySelector('svg').textContent.includes('Jan'));assert.ok(document.querySelector('svg').textContent.includes('Dez'));
+ assert.equal(document.querySelectorAll('input[type=checkbox]').length,4);assert.ok(document.body.textContent.includes('rotina de operação'));assert.ok(document.body.textContent.includes('Converse com seu consultor'));assert.ok(document.body.textContent.includes('Referência preliminar'));
+ assert.ok(document.body.textContent.includes('2026 · simulado'));assert.ok(document.body.textContent.includes('2025 · histórico'));assert.ok(document.body.textContent.includes('12 meses'));assert.ok(document.body.textContent.includes('1 mês(es)'));
+ const circles=document.querySelectorAll('circle').length;await act(async()=>document.querySelector('input[type=checkbox]').click());assert.ok(document.querySelectorAll('circle').length<circles);
+ await act(async()=>document.querySelectorAll('rect[role=button]')[1].dispatchEvent(new MouseEvent('mouseover',{bubbles:true})));assert.ok(document.querySelector('[aria-live=polite]').textContent.startsWith('2026-02'));
+ await act(async()=>document.querySelectorAll('rect[role=button]')[1].dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})));assert.ok(document.querySelector('[aria-live=polite]').textContent.startsWith('2026-03'));
+ await act(async()=>{document.querySelector('select').value='2025';document.querySelector('select').dispatchEvent(new Event('change',{bubbles:true}));});assert.ok(document.querySelector('svg').getAttribute('aria-label').includes('2024 e 2025'));
+ await act(async()=>root.render(React.createElement(Comparison,{planning:{...planning,calculatedAt:'2026-10-29T13:00:00Z'}})));assert.equal(document.querySelector('select').value,'2025');assert.equal(document.querySelector('input[type=checkbox]').checked,false);
+ assert.ok(document.body.textContent.includes('Fontes que precisam de conferência'));assert.ok(!document.body.textContent.includes('NaN'));assert.ok(!document.body.textContent.includes('Infinity'));
+ assert.ok(document.body.textContent.includes('referência zero'));await act(async()=>root.unmount());console.log('Annual planning UI: month hover, keyboard, 12 rows, year selection, legends, differences, advice and refresh retention passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});
