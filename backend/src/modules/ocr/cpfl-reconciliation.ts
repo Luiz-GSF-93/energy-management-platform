@@ -6,7 +6,7 @@ export function reconcileCpflOperations(rows:CpflOperation[]){
  const unique=(component:string)=>{const found=rows.filter(r=>r.component===component);return found.length===1?found[0]:null;};
  let creditMagnitude:CpflOperation|null=null;
  const effectiveCents=(r:CpflOperation)=>r===creditMagnitude?-cents(r)!:cents(r);
- const check=(label:string,expected:CpflOperation|null,terms:CpflOperation[])=>{if(!expected||!terms.length||cents(expected)===null||terms.some(r=>cents(r)===null||!r.fields.description?.text.trim())){checks.push({label,state:'NOT_VERIFIABLE',differenceCents:null});return;}
+ const check=(label:string,expected:CpflOperation|null,terms:CpflOperation[])=>{if(!expected||!terms.length||cents(expected)===null||terms.some(r=>cents(r)===null||!r.fields.description?.text.trim()&&!(r.component==='ADJUSTMENTS_SUBTOTAL'&&r.issues?.includes('EXACT_CREDIT_SUBTOTAL')))){checks.push({label,state:'NOT_VERIFIABLE',differenceCents:null});return;}
   const diff=terms.reduce((sum,r)=>sum+effectiveCents(r)!,0n)-effectiveCents(expected)!;checks.push({label,state:diff===0n?'MATCH':'DIVERGENT',differenceCents:diff.toString()});};
  const subtotal=unique('SUBTOTAL'),distributor=unique('TOTAL_DISTRIBUIDORA'),adjustments=unique('ADJUSTMENTS_SUBTOTAL'),total=unique('TOTAL_A_PAGAR');
  const index=(r:CpflOperation|null)=>r?rows.indexOf(r):-1;
