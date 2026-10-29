@@ -1,3 +1,5 @@
+import {resolvePortalUnits} from '../../common/services/portal-selected-units';
+import {publishedUsage} from '../portal-workspace/portal-presentation.service';
 import {validClosingMemory,closingIntent} from '../ocr/eva-closing-context';
 import {ConfigService} from '@nestjs/config';
 import {PublishedClientForecastService} from '../energy-forecast/published-client-forecast.service';
@@ -38,8 +40,33 @@ export class BotReportsService {
   return t.portalCustomerScope?{...r.data,groups:[]}:r.data;
  }
  async clientUnits(from:unknown,to:unknown,t:TenantContext){await this.permission(t,'client');const period=reportPeriod(from,to),data=await this.client(t,period);return {units:data.units.map((u:any)=>({id:u.id,name:u.name})),period};}
+
+ private async consolidated(input:any,t:TenantContext){
+  if(Object.keys(input).some(k=>!['question','unitIds','from','to','kind','memory'].includes(k))||typeof input.question!=='string'||!input.question.trim()||input.question.length>500||!['OPERATIONAL','EXECUTIVE','FINANCIAL'].includes(input.kind)||!validClosingMemory(input.memory??[]))throw new BadRequestException('Confira a pergunta e o recorte consolidado.');
+  const period=reportPeriod(input.from,input.to),ids=await resolvePortalUnits(this.db.getClient(),t,input.unitIds);
+  if(!ids?.length||!this.insights)throw new BadRequestException('Selecione unidades autorizadas.');
+  const query={...period,unitIds:ids.join(',')};
+  const financial=await this.financial.portalFinancial(query,t),details=await this.insights.read(t,period.from,period.to,undefined,undefined,undefined,query.unitIds);
+  if(!financial.totals)return {state:'NO_EVIDENCE',message:'Não há fechamento publicado para este recorte. Fontes ausentes não são zero.'};
+  const question=closingIntent(input.question,input.memory??[]).query.slice(-500),q=questionText(question),months=questionMonths(question);
+  if(months.some(m=>m<period.from||m>period.to))return {state:'CONTEXT_REQUIRED',message:'A pergunta menciona outro período. Ajuste o recorte.'};
+  if(questionRegulation(question))return {state:'NO_EVIDENCE',message:'Para interpretar norma ou condição regulatória específica, consulte cada unidade e as fontes aplicáveis com a equipe de consultores. O consolidado abaixo preserva somente os resultados documentados.'};
+  if(/pagamento|quitad|\bpago|\bpaga/.test(q))return {state:'NO_EVIDENCE',message:'Valores apurados não comprovam pagamento ou recebimento bancário.'};
+  const usage=await this.db.getClient().rpc('portal_presentation_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_action:'usage',p_id:null,p_body:period});
+  if(usage.error||usage.data?.customerId!==financial.customerId||!Array.isArray(usage.data.rows))throw new ConflictException('Medições do recorte indisponíveis.');
+  const evidence=[{id:'consolidated-context',label:'Unidades e período autorizados',value:JSON.stringify({unitIds:ids,period,notice:'Somente unidades selecionadas do cliente ativo; dados ausentes não são zero. Não atribuir causa técnica ou recomendar intervenção elétrica. Demanda mensal agregada não é pico simultâneo. Custos apurados não comprovam pagamento.'}),source:'Vínculo atual do Portal'},
+   {id:'consolidated-financial',label:'Resultados consolidados publicados',value:JSON.stringify({totals:financial.totals,months:financial.months,coverage:('selectionCoverage' in financial?financial.selectionCoverage:null)??financial.unitMonthCount,publications:financial.rows.map((r:any)=>({id:r.id,hash:r.payloadHash,month:r.month,units:r.units}))}),source:'Fechamentos imutáveis aprovados e publicados'},
+   {id:'consolidated-details',label:'Composição, créditos e desperdícios por unidade',value:JSON.stringify(details.rows.map((r:any)=>({unitId:r.unitId,name:r.name,month:r.month,composition:r.composition,notice:r.compositionNotice,indicators:r.indicators,publicationId:r.publicationId,sourceHash:r.sourceHash}))),source:'Componentes da versão publicada; créditos deduzidos uma vez'},
+   {id:'consolidated-consumption',label:'Consumo e demanda com cobertura',value:JSON.stringify(publishedUsage(usage.data.rows.filter((r:any)=>ids.includes(r.unitId)),t.organizationId,ids,period.from,period.to)),source:'Medições das versões publicadas; kWh e kW preservados'}];
+  const result=await this.ai.interpret(t,question,evidence,'client');
+  const current=await this.financial.portalFinancial(query,t),next=await this.insights.read(t,period.from,period.to,undefined,undefined,undefined,query.unitIds);
+  if(JSON.stringify(current.rows)!==JSON.stringify(financial.rows)||JSON.stringify(next.rows)!==JSON.stringify(details.rows))throw new ConflictException('As fontes do consolidado mudaram. Consulte novamente.');
+  return {...result,context:{unitName:ids.length+' unidades selecionadas',period,kind:input.kind},officialSources:[]};
+ }
+
  async ask(input:any,t:TenantContext,audience:'client'|'backoffice'){
   await this.permission(t,audience);
+  if(audience==='client'&&input?.unitIds!==undefined)return this.consolidated(input,t);
   const keys=audience==='client'?['question','unitId','from','to','kind',...(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?['memory']:[])]:['question','reportId','kind'];
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!keys.includes(k))||typeof input.question!=='string'||!input.question.trim()||input.question.length>500||!['OPERATIONAL','EXECUTIVE','FINANCIAL'].includes(input.kind))throw new BadRequestException('Selecione o contexto e informe uma pergunta de até 500 caracteres.');
   const memory=input.memory??[];if(!validClosingMemory(memory))throw new BadRequestException('A conversa aceita até oito perguntas recentes e 3.000 caracteres.');

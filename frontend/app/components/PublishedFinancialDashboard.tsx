@@ -1,4 +1,5 @@
 'use client';
+import {usePortalUnitScope} from './PortalUnitContext';
 import {usePublicationRefresh} from './usePublicationRefresh';
 import ApprovedFinancialCharts,{FinancialChartMonth} from './ApprovedFinancialCharts';
 import PublishedClientInsights from './PublishedClientInsights';
@@ -9,7 +10,7 @@ import {Alert,Button,Card} from '@/app/components/ui';
 
 type Amounts={acr:string;aclBeforeFees:string;totalFees:string;aclAfterFees:string;savingsBeforeFees:string;savingsAfterFees:string;savingsPercent:string|null};
 type Publication={id:string;customerId:string;customerName:string;month:string;version:number;payloadHash:string;publishedAt:string;publicationNote:string;units:{id:string;name:string}[];reservations:string[];amounts:Amounts};
-type Data={charts?:FinancialChartMonth[];organizationId:string;audience?:string;customerId?:string;period:{from:string;to:string;customerId:string|null};updatedAt:string;publicationCount:number;customerCount:number;unitMonthCount:number;totals:Amounts|null;months:{month:string;publicationCount:number;totals:Amounts|null}[];rows:Publication[];disclosure:string};
+type Data={selectionCoverage?:{expectedUnits:number;months:{month:string;coveredUnits:number;expectedUnits:number}[]};charts?:FinancialChartMonth[];organizationId:string;audience?:string;customerId?:string;period:{from:string;to:string;customerId:string|null};updatedAt:string;publicationCount:number;customerCount:number;unitMonthCount:number;totals:Amounts|null;months:{month:string;publicationCount:number;totals:Amounts|null}[];rows:Publication[];disclosure:string};
 type Filters={from:string;to:string;customerId:string};
 const labels:Record<keyof Amounts,string>={acr:'Custo ACR',aclBeforeFees:'ACL antes dos honorários',totalFees:'Honorários',aclAfterFees:'ACL com honorários',savingsBeforeFees:'Economia antes dos honorários',savingsAfterFees:'Economia após honorários',savingsPercent:'Economia / ACR'};
 // Exact decimal formatting only; all totals and percentages come from the backend.
@@ -25,22 +26,22 @@ export function publishedFinancialCsv(data:Data){
  return '\uFEFF'+[header.map(cell).join(';'),...data.rows.map(r=>[cell(r.customerName),cell(r.month),String(r.version),numeric(r.amounts.acr),numeric(r.amounts.aclBeforeFees),numeric(r.amounts.totalFees),numeric(r.amounts.aclAfterFees),numeric(r.amounts.savingsAfterFees),cell(r.reservations.join(' | ')),cell(r.id),cell(r.payloadHash),cell(r.publishedAt)].join(';'))].join('\r\n');
 }
 export default function PublishedFinancialDashboard({organizationId,organizationName,audience='backoffice',previewCustomerId,canPreview=false}:{organizationId:string;organizationName:string;audience?:'backoffice'|'client';previewCustomerId?:string;canPreview?:boolean}){
- const publicationRevision=usePublicationRefresh();
+ const publicationRevision=usePublicationRefresh(),portalScope=usePortalUnitScope(),scopeUnits=audience==='client'&&!previewCustomerId?JSON.stringify(portalScope?.unitIds??null):'null';
  const scopeRef=useRef('');
  const publicationsId=useId(),[publicationsOpen,setPublicationsOpen]=useState(false);
  const current=new Date(),initial={from:current.getFullYear()+'-01',to:current.getFullYear()+'-12',customerId:''};
  const [filters,setFilters]=useState<Filters>(initial),[request,setRequest]=useState({...initial,revision:0}),[data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[customers,setCustomers]=useState<{id:string;name:string}[]>([]);
  useEffect(()=>{
   const abort=new AbortController();let cancelled=false;
-  const scope=JSON.stringify([organizationId,audience,previewCustomerId,request]);if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');setLoading(true);setPublicationsOpen(false);}
-  const query=new URLSearchParams({from:request.from,to:request.to});if(previewCustomerId)query.set('customerId',previewCustomerId);else if(audience==='backoffice'&&request.customerId)query.set('customerId',request.customerId);
+  const scope=JSON.stringify([organizationId,audience,previewCustomerId,request,scopeUnits]);if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');setLoading(true);setPublicationsOpen(false);}
+  const query=new URLSearchParams({from:request.from,to:request.to});if(scopeUnits!=='null')query.set('unitIds',JSON.parse(scopeUnits).join(','));if(previewCustomerId)query.set('customerId',previewCustomerId);else if(audience==='backoffice'&&request.customerId)query.set('customerId',request.customerId);
   apiRequest<Data>((previewCustomerId?'/api/v1/portal/preview?':audience==='client'?'/api/v1/portal/financial?':'/api/v1/financial-settlements/published?')+query,{signal:abort.signal,cache:'no-store'}).then(result=>{
    const validCustomer=audience==='client'?result.audience==='client'&&typeof result.customerId==='string'&&result.customerId.length>0&&(!previewCustomerId||result.customerId===previewCustomerId)&&result.period.customerId===result.customerId&&result.rows.every(r=>r.customerId===result.customerId):result.period.customerId===(request.customerId||null);
-   if(result.organizationId!==organizationId||result.period.from!==request.from||result.period.to!==request.to||!validCustomer)throw new Error('O escopo da consulta mudou. Atualize o painel.');
+   if(result.organizationId!==organizationId||result.period.from!==request.from||result.period.to!==request.to||!validCustomer||scopeUnits!=='null'&&result.rows.some(r=>r.units.some(u=>!JSON.parse(scopeUnits).includes(u.id))))throw new Error('O escopo da consulta mudou. Atualize o painel.');
    if(!cancelled){setError('');setData(result);if(audience==='backoffice'&&!request.customerId)setCustomers(Array.from(new Map(result.rows.map(r=>[r.customerId,{id:r.customerId,name:r.customerName}])).values()));}
   }).catch(e=>{if(!cancelled){setData(null);setError(e instanceof Error?e.message:'Não foi possível consultar as publicações.');}}).finally(()=>{if(!cancelled)setLoading(false);});
   return()=>{cancelled=true;abort.abort();};
- },[organizationId,request,audience,previewCustomerId,publicationRevision]);
+ },[organizationId,request,audience,previewCustomerId,publicationRevision,scopeUnits]);
  const update=(key:keyof Filters,value:string)=>{setFilters(f=>({...f,[key]:value}));setData(null);setError('');};
  const consult=(e:FormEvent)=>{e.preventDefault();setData(null);setError('');setLoading(true);setRequest({...filters,revision:request.revision+1});};
  const download=()=>{if(!data?.rows.length)return;const url=URL.createObjectURL(new Blob([publishedFinancialCsv(data)],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=`EnergyOS-publicacoes-${data.period.from}-${data.period.to}.csv`;link.hidden=true;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
@@ -57,7 +58,7 @@ export default function PublishedFinancialDashboard({organizationId,organization
    <div className="published-financial__actions"><Button variant="secondary" disabled={!data.rows.length} onClick={()=>window.print()}>Imprimir / salvar PDF</Button><Button variant="secondary" disabled={!data.rows.length} onClick={download}>Exportar CSV para Excel</Button></div>
    <div className="published-financial__report">
     <h3>EnergyOS · Relatório financeiro publicado</h3><p>{organizationName} · {data.period.from} a {data.period.to}</p><p>Consulta em {new Date(data.updatedAt).toLocaleString('pt-BR')}. {data.publicationCount} publicações de cliente/mês; {data.customerCount} clientes; {data.unitMonthCount} unidades/mês.</p>
-    <p>{data.disclosure}</p>
+    <p>{data.disclosure}</p>{data.selectionCoverage?<p>Unidades selecionadas: {data.selectionCoverage.expectedUnits}. {data.selectionCoverage.months.filter(m=>m.coveredUnits>0&&m.coveredUnits<m.expectedUnits).map(m=>m.month+': '+m.coveredUnits+'/'+m.expectedUnits+' unidades publicadas').join('; ')} {data.selectionCoverage.months.some(m=>m.coveredUnits>0&&m.coveredUnits<m.expectedUnits)?'Cobertura parcial: os valores somam somente as unidades publicadas, sem estimar as ausentes.':''}</p>:null}
     {data.totals?<>{audience==='client'?<article className="portal-savings-highlight" aria-label="Economia acumulada do período"><div><span>Economia acumulada após honorários</span><strong>{financialDisplay(data.totals.savingsAfterFees)}</strong><small>{data.period.from} a {data.period.to} · somente competências publicadas</small></div><div className="portal-savings-percent"><strong>{financialDisplay(data.totals.savingsPercent,false)}</strong><span>Economia média ponderada</span></div><p>Percentual do período: economia acumulada ÷ custo ACR acumulado. Meses sem publicação não representam zero.</p></article>:null}<div className="published-financial__totals">{(Object.keys(labels) as (keyof Amounts)[]).filter(key=>audience!=='client'||['acr','aclAfterFees','totalFees'].includes(key)).map(key=><Card key={key} title={labels[key]}><strong>{financialDisplay(data.totals![key],key!=='savingsPercent')}</strong></Card>)}</div></>:<Alert>Nenhuma apuração publicada neste período. Não há total financeiro disponível.</Alert>}
     {data.charts?<ApprovedFinancialCharts months={data.charts}/>:null}
     {audience==='client'&&!previewCustomerId&&data.customerId?<PublishedClientInsights key={JSON.stringify([organizationId,data.customerId,data.period])} organizationId={organizationId} customerId={data.customerId} from={data.period.from} to={data.period.to} publicationIds={data.rows.map(r=>r.id)}/>:null}

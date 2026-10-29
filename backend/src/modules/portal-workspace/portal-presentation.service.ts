@@ -1,3 +1,4 @@
+import {selectedPortalUnits} from '../../common/services/portal-selected-units';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -39,7 +40,7 @@ export function publishedUsage(rows:any[],org:string,unitIds:string[],from:strin
   return {label,contracted:last?.[contracted]??null,contractedMonth:last?.month??null,months:eligible.length,totalMonths:months.length,
    utilization:eligible.length?eligible.reduce((n,m)=>n+m[measured]!,0)/eligible.reduce((n,m)=>n+m[contracted]!,0)*100:null};
  }).filter(c=>c.contracted!==null||c.months>0);
- return {months,cards,sources,notice:'Consumo em kWh; demanda medida e contratada em kW. Somente versões aprovadas e publicadas. Utilização ponderada = soma das demandas medidas / soma das demandas contratadas dos mesmos meses e unidades. Lacunas não representam zero. Demanda faturada não substitui demanda medida.'};
+ return {months,cards,sources,notice:'Consumo em kWh; demanda medida e contratada em kW. Somente versões aprovadas e publicadas. Utilização ponderada = soma das demandas medidas / soma das demandas contratadas dos mesmos meses e unidades. Lacunas não representam zero. Demanda faturada não substitui demanda medida. Soma das demandas mensais das unidades não comprova pico simultâneo.'};
 }
 @Injectable()
 export class PortalPresentationService{
@@ -57,10 +58,13 @@ export class PortalPresentationService{
  async invoice(t:TenantContext,id:string){const r=await this.action(t,'invoice',id);return {id:r.id,dueDate:invoiceDueDate(r.raw),declaration:r.declaration,notice:'Pagamento informado pelo cliente; não equivale a confirmação bancária ou baixa financeira.'};}
  async declare(t:TenantContext,id:string,body:unknown){const r=await this.action(t,'declare',id,body);return {id:r.id,declaration:r.declaration};}
  async usage(t:TenantContext,q:Record<string,string>){
-  if(Object.keys(q).some(k=>!['from','to','unitId'].includes(k)))throw new BadRequestException('Filtros inválidos.');
-  const identity=await this.action(t,'identity'),raw=await this.action(t,'usage',null,q);
+  if(Object.keys(q).some(k=>!['from','to','unitId','unitIds'].includes(k)))throw new BadRequestException('Filtros inválidos.');
+  const identity=await this.action(t,'identity');
+  const selection=selectedPortalUnits(q.unitIds,identity.units.map((u:any)=>u.id),q.unitId);
+  const {unitIds:ignored,...legacyQuery}=q;
+  const raw=await this.action(t,'usage',null,legacyQuery);
   if(identity.customerId!==raw.customerId||raw.organizationId!==t.organizationId||!Array.isArray(raw.rows)||raw.rows.some((r:any)=>r.customerId!==identity.customerId))throw new ForbiddenException('O vínculo mudou.');
-  const ids=identity.units.filter((u:any)=>!q.unitId||u.id===q.unitId).map((u:any)=>u.id);
-  return {organizationId:t.organizationId,customerId:identity.customerId,from:q.from,to:q.to,unitId:q.unitId??null,...publishedUsage(raw.rows,t.organizationId,ids,q.from,q.to)};
+  const ids=identity.units.filter((u:any)=>!selection||selection.includes(u.id)).map((u:any)=>u.id);
+  return {organizationId:t.organizationId,customerId:identity.customerId,from:q.from,to:q.to,unitId:q.unitId??(q.unitIds&&ids.length===1?ids[0]:null),...publishedUsage(raw.rows.filter((r:any)=>ids.includes(r.unitId)),t.organizationId,ids,q.from,q.to)};
  }
 }

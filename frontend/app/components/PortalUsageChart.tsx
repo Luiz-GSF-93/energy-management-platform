@@ -2,16 +2,16 @@
 import {useEffect,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button} from './ui';
-import {usePortalUnitScope} from './PortalUnitScope';
+import {usePortalUnitScope} from './PortalUnitContext';
 import styles from './PortalClientWorkspace.module.css';
 type Month={month:string;peak:number|null;offPeak:number|null;demand:number|null;demandPeak:number|null;demandOffPeak:number|null;coveredUnits:number;expectedUnits:number};
 type Data={organizationId:string;customerId:string;from:string;to:string;unitId:string|null;months:Month[];cards:{label:string;contracted:number|null;contractedMonth:string|null;utilization:number|null;months:number;totalMonths:number}[];notice:string};
 const fmt=(n:number|null)=>n===null?'Sem fonte publicada':n.toLocaleString('pt-BR',{maximumFractionDigits:2});
 const lines=[['demand','Demanda medida única','#f8c559'],['demandPeak','Demanda medida ponta','#b49bff'],['demandOffPeak','Demanda medida fora ponta','#f78ab9']] as const;
 export default function PortalUsageChart(){
- const scope=usePortalUnitScope(),identity=scope?.identity,unitId=scope?.unitId??'';
+ const scope=usePortalUnitScope(),identity=scope?.identity,unitId=scope?.unitId??'',scopeUnits=JSON.stringify(scope?.unitIds??null);
  const [year,setYear]=useState(new Date().getFullYear()),[data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0),[active,setActive]=useState<number|null>(null);
- useEffect(()=>{setData(null);setActive(null);setError('');if(!identity)return;const abort=new AbortController(),from=year+'-01',to=year+'-12';apiRequest<Data>('/api/v1/portal/workspace/presentation/usage?'+new URLSearchParams({from,to,...(unitId?{unitId}:{})}),{signal:abort.signal,cache:'no-store'}).then(r=>{if(r.organizationId!==identity.organizationId||r.customerId!==identity.customerId||r.unitId!==(unitId||null)||r.from!==from||r.to!==to)throw Error('Recorte não confirmado.');if(!abort.signal.aborted)setData(r);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[identity,unitId,year,attempt]);
+ useEffect(()=>{setData(null);setActive(null);setError('');if(!identity)return;const abort=new AbortController(),from=year+'-01',to=year+'-12';apiRequest<Data>('/api/v1/portal/workspace/presentation/usage?'+new URLSearchParams({from,to,...(scope?.unitIds?{unitIds:scope.unitIds.join(',')}:unitId?{unitId}:{})}),{signal:abort.signal,cache:'no-store'}).then(r=>{if(r.organizationId!==identity.organizationId||r.customerId!==identity.customerId||r.unitId!==(unitId||null)||r.from!==from||r.to!==to)throw Error('Recorte não confirmado.');if(!abort.signal.aborted)setData(r);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[identity,unitId,year,attempt,scopeUnits]);
  if(!identity)return null;
  const months=data?.months??[],width=1000,height=360,left=65,right=930,top=35,bottom=300,step=(right-left)/Math.max(months.length,1);
  const ymax=Math.max(1,...months.flatMap(m=>[m.peak??0,m.offPeak??0]))*1.1,dmax=Math.max(1,...months.flatMap(m=>[m.demand??0,m.demandPeak??0,m.demandOffPeak??0]))*1.1;

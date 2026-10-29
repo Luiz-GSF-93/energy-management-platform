@@ -25,7 +25,7 @@ export default function ClientPortalContent({entitlement,invoices=false}:{entitl
  const workspace=process.env.NEXT_PUBLIC_PORTAL_CLIENT_WORKSPACE_ENABLED==='true';
  const allowed=(module:PortalModule)=>!checkLicense||license.modules?.includes(module);
  const key=JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.permissions]);
- if(invoices)return workspace&&allowed('documents')?<PortalUnitScope showFilter={false} organizationId={context.currentOrganization.id}><PortalInvoices/><PortalInvoiceEva enabled={!!allowed('bot')}/></PortalUnitScope>:<Alert>Minhas faturas não está disponível nesta licença.</Alert>;
+ if(invoices)return workspace&&allowed('documents')?<PortalUnitScope organizationId={context.currentOrganization.id}><PortalInvoices/><PortalInvoiceEva enabled={!!allowed('bot')}/></PortalUnitScope>:<Alert>Minhas faturas não está disponível nesta licença.</Alert>;
  const content=<>{license.enabled?<p>Licença do Portal: {license.starts} a {license.ends}. Os resultados exibidos são publicados e pertencem à empresa vinculada ao seu usuário.</p>:null}
  {allowed('acl')?<div id="adesao"><AclAdmissionStatus key={'acl:'+key}/></div>:null}
  {allowed('documents')&&!workspace?<div id="documentos"><ClientEvidenceInbox key={'documents:'+key}/></div>:null}

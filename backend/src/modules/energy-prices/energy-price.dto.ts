@@ -1,5 +1,6 @@
 import {Equals,IsBoolean,IsOptional,IsString,IsUUID,Matches,MaxLength} from 'class-validator';
 export class EnergyPriceQueryDto{
+ @IsOptional() @IsString() @MaxLength(21000) unitIds?:string;
  @Matches(/^(20[0-9]{2}|2100)$/) year!:string;
  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9_-]{1,100}$/) customerId?:string;
  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9_-]{1,100}$/) unitId?:string;

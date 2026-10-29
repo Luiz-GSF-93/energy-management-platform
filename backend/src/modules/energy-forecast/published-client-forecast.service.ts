@@ -1,3 +1,5 @@
+import {consolidatedPlanning} from './consolidated-planning';
+import {resolvePortalUnits} from '../../common/services/portal-selected-units';
 import {automaticPlanning} from './automatic-planning';
 import {publicationPlanning} from './publication-planning';
 import {normalizePublishedDetail} from '../portal-insights/portal-legacy-detail';
@@ -38,14 +40,16 @@ export class PublishedClientForecastService {
    return {...('annualComparison' in plan?{annualComparison:plan.annualComparison}:{}),forecastId:row.id,state:'AVAILABLE',calculatedAt,sourceFingerprint:reportHash({planning:plan.sourceFingerprint,contractSources:(exposure as any).sources??[],rows:exposure.rows}),sourceMonths:c.actual.map((p:any)=>p.month),sourceOrigins:'origins' in plan?plan.origins:undefined,unitName:row.unitName,notice:'Planejamento estimado atualizado automaticamente: prioridade para CCEE final completa; na ausência, consumo publicado e histórico documentado da fatura. Não altera fechamentos ou a previsão histórica preservada.',forecast:{id:row.id,version:row.version,unitId:row.consumer_unit_id,unitName:row.unitName,asOfMonth:c.asOfMonth,publishedAt:row.publishedAt,formulaVersion:c.formulaVersion,method:c.method,weatherStatus:c.weatherStatus,climateSummary:climateCycleSummary(c.climateAssessment),contractExposure:publicContractExposure(exposure),contractingScenario:c.contractingScenario,actual:c.actual.map((a:any)=>({month:a.month,consumptionKwh:a.consumptionKwh})),future:c.future.map((a:any)=>({month:a.month,predictedKwh:a.predictedKwh,expansionKwh:a.expansionKwh,averageBasis:a.averageBasis})),observedYearKwh:c.observedYearKwh,futureKwh:c.futureKwh,estimatedYearKwh:c.estimatedYearKwh}};
   }catch(e){if(e instanceof ForbiddenException)throw e;return unavailable('A equipe deve conferir a continuidade, os dias de leitura e a conciliação das fontes antes de atualizar o planejamento. A previsão histórica foi preservada.');}
  }
- async list(t:TenantContext){
+ async list(t:TenantContext,unitIds?:string){
   if(this.config.get('ENERGY_FORECAST_ENABLED')!=='true'||!t?.organizationId||!t.userId||!t.roleId||t.role!=='consulta'||t.accessMode||!t.permissions?.includes(P.DOCUMENTS_REPORTS_VIEW))throw new ForbiddenException('Consulta externa vinculada ao cliente necessária.');
   await this.licenses.requireEntitlement(t.organizationId,'report_generation');
   await this.licenses.requireEntitlement(t.organizationId,'free_market_management');
+  const selectedUnits=await resolvePortalUnits(this.db.getClient(),t,unitIds);
   // Customer is derived in SQL from live membership. No customer/unit selector is accepted.
   const {data,error}=await this.db.getClient().rpc('energy_forecast_client_published',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId});
   if(error){if(error.code==='42501')throw new ForbiddenException('Vínculo, permissão ou licença indisponível.');throw new InternalServerErrorException('Não foi possível consultar as previsões publicadas.');}
   if(!data?.customerId||!Array.isArray(data.rows))throw new InternalServerErrorException('Consulta de previsão indisponível.');
+  if(selectedUnits)data.rows=data.rows.filter((r:any)=>selectedUnits.includes(r.consumer_unit_id));
   const rows=data.rows.map((r:any)=>{
    const b=r.body;
    if(r.organization_id!==t.organizationId||r.customer_id!==data.customerId||b?.organizationId!==t.organizationId||b.customerId!==data.customerId||b.unitId!==r.consumer_unit_id||b.asOfMonth!==r.cutoff||r.payload_hash!==reportHash(b)||!r.publishedAt||!r.validatedAt)throw new InternalServerErrorException('Integridade da previsão indisponível.');
@@ -61,6 +65,7 @@ export class PublishedClientForecastService {
   if(sourceResult.error||sourceResult.data?.customerId!==data.customerId||!Array.isArray(sourceResult.data?.units))throw new InternalServerErrorException('Não foi possível conferir as fontes do planejamento.');
   const unitSources=new Map<string,any>();
   for(const source of sourceResult.data.units){
+   if(selectedUnits&&!selectedUnits.includes(source.unitId))continue;
    if(source.organizationId!==t.organizationId||source.customerId!==data.customerId||typeof source.unitId!=='string'||unitSources.has(source.unitId)||!Array.isArray(source.publications)||source.publications.some((p:any)=>p.customerId!==data.customerId||p.unitId!==source.unitId))throw new InternalServerErrorException('Integridade das fontes de planejamento indisponível.');
    unitSources.set(source.unitId,source);
   }
@@ -70,7 +75,8 @@ export class PublishedClientForecastService {
   for(const row of data.rows){const old=latest.get(row.consumer_unit_id);if(!old||row.cutoff>old.cutoff||row.cutoff===old.cutoff&&row.version>old.version)latest.set(row.consumer_unit_id,row);}
   for(const source of unitSources.values())if(!latest.has(source.unitId)){const cutoff=source.publications.map((p:any)=>p.month).sort().at(-1);if(cutoff)latest.set(source.unitId,{id:'planning:'+source.unitId,consumer_unit_id:source.unitId,unitName:source.unitName,synthetic:true,body:{asOfMonth:cutoff},cutoff});}
   const selected=[...latest.values()];
-  for(let i=0;i<selected.length;i+=4)currentPlanning.push(...await Promise.all(selected.slice(i,i+4).map(row=>this.current(row,data.customerId,t,reads,unitSources.get(row.consumer_unit_id)))));
-  return {rows,currentPlanning};
+  for(let i=0;i<selected.length;i+=4)currentPlanning.push(...await Promise.all(selected.slice(i,i+4).map(async row=>({...await this.current(row,data.customerId,t,reads,unitSources.get(row.consumer_unit_id)),unitId:row.consumer_unit_id}))));
+  const consolidatedAnnual=consolidatedPlanning(currentPlanning,selectedUnits??[...unitSources.keys()]);
+  return {rows,currentPlanning,...(selectedUnits?{selectedUnitIds:selectedUnits}:{}),...(consolidatedAnnual?{consolidatedAnnual}:{})};
  }
 }

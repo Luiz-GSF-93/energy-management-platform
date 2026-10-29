@@ -4,6 +4,9 @@ on:
     paths:
       - 'backend/src/modules/portal-workspace/**'
       - 'backend/src/modules/portal-insights/**'
+      - 'backend/src/common/services/portal-selected-units*'
+      - 'frontend/test/portal-global-unit-scope.cjs'
+      - 'frontend/app/components/PortalUnitContext.tsx'
       - 'backend/src/modules/energy-prices/**'
       - 'backend/src/modules/reports/**'
       - 'backend/src/database/migrations/20261215*.sql'
@@ -55,7 +58,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/reports src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-queue.service.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
+      - run: node node_modules/jest/bin/jest.js --runInBand src/common/services/portal-selected-units.spec.ts src/modules/portal-workspace src/modules/portal-insights src/modules/energy-prices src/modules/reports src/modules/bot-reports src/modules/operations src/modules/sms-delivery src/modules/customer-notices src/modules/ocr/eva-product-guide.spec.ts src/modules/ocr/ocr-identity-resume.spec.ts src/modules/ocr/ocr-queue.service.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/ocr.worker.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/documents/services/documents.upload.spec.ts src/modules/whatsapp-delivery
         working-directory: backend
       - run: node test/portal-client-workspace.cjs
         working-directory: backend
@@ -73,7 +76,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs && node test/portal-usage-ui.cjs && node test/portal-composition-corrections.cjs && node test/energy-market-spreads.cjs && node test/published-financial-dashboard.cjs && node test/reports-workspace.cjs && node test/publication-refresh.cjs
+      - run: node test/portal-global-unit-scope.cjs && node test/portal-workspace-ui.cjs && node test/portal-identity-ui.cjs && node test/portal-usage-ui.cjs && node test/portal-composition-corrections.cjs && node test/energy-market-spreads.cjs && node test/published-financial-dashboard.cjs && node test/reports-workspace.cjs && node test/publication-refresh.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
