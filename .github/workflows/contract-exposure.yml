@@ -4,6 +4,8 @@ on:
     paths:
       - 'backend/src/modules/energy-forecast/**'
       - 'frontend/app/components/PublishedForecastDashboard.tsx'
+      - 'frontend/app/components/AnnualConsumptionComparison.tsx'
+      - 'frontend/test/annual-consumption-comparison.cjs'
       - 'frontend/test/client-forecast.cjs'
       - 'backend/src/modules/reports/**'
       - 'backend/src/modules/bot-reports/**'
@@ -30,6 +32,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: frontend
       - run: node test/client-forecast.cjs
+      - run: node test/annual-consumption-comparison.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
