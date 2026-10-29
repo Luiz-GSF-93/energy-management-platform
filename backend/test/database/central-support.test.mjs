@@ -38,7 +38,7 @@ try{
  const ownerRole=randomUUID(),supportRole=randomUUID();
  await q("INSERT INTO roles(id,name,scope,permissions) VALUES($1,'admin_platform','global',$3),($2,'platform_support','global',$4)",[ownerRole,supportRole,JSON.stringify(['a7c8f257-580d-4d39-8900-4a5788068203','a7c8f257-580d-4d39-8900-4a5788068204','af285642-16b0-405a-982c-58de1a10f987']),JSON.stringify(['a7c8f257-580d-4d39-8900-4a5788068204'])]);
  await q('INSERT INTO user_roles VALUES($1,$2),($3,$4)',[owner,ownerRole,support,supportRole]);
- for(const user of [admin,operator,foreign,owner,support,outsider])await q("INSERT INTO user_profiles VALUES($1,'Synthetic user')",[user]);
+ for(const user of [admin,operator,foreign,owner,support,outsider])await q("INSERT INTO user_profiles VALUES($1,$2)",[user,'Synthetic '+user]);
  await db.exec('DROP FUNCTION public.platform_workflow_actor(uuid,text);DROP FUNCTION public.save_platform_support_case(uuid,uuid,integer,jsonb,text,text);');
  const originalWorkflows=readFileSync(new URL('../../src/database/migrations/20261010_platform_workflows.sql',import.meta.url),'utf8');
  for(const name of ['platform_workflow_actor','platform_workflow_name','save_platform_support_case']){
@@ -54,6 +54,7 @@ try{
  }
  await db.exec('CREATE TRIGGER guard_license_governance BEFORE INSERT OR UPDATE ON public.licenses FOR EACH ROW EXECUTE FUNCTION public.guard_license_governance();');
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261240_central_support.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261241_central_support_audit_names.sql',import.meta.url),'utf8'));
  await deny(()=>action('list'));await deny(()=>action('list',null,{},outsider));
  await platform('policy',plan,{revision:0,allowance:1,extraMinor:2500,reason:'Approved test policy'});
  await platform('activate',null,{licenseId:'license',enabled:true,reason:'Test rollout'});
@@ -70,6 +71,8 @@ try{
  inbox=await action('list');ok(inbox.summary.remaining===0&&inbox.summary.includedUsed===1);
  ok(!JSON.stringify(inbox).includes(hash));ok(inbox.rows[0].consent.authorizedBy===admin);
  await platform('triage',id,{replyRevision:0,assigneeId:support,priority:'NORMAL',deadline:'2026-12-31',status:'OPEN',reason:'Prazo inicial informado'});
+ const initialEvent=(await q('SELECT details FROM platform_support_case_events WHERE case_id=$1 AND revision=1',[id]))[0].details;
+ ok(initialEvent.requesterNameAtTime==='Synthetic '+operator&&initialEvent.organizationRequesterId===operator&&initialEvent.authorizationReference===id);
  inbox=await action('list');ok(inbox.rows[0].deadline==='2026-12-31');ok(inbox.rows[0].reply==='Prazo inicial informado');
  await deny(()=>platform('reply',id,{replyRevision:0,reason:'Stale reply'}));
  await platform('reply',id,{replyRevision:1,reason:'Resposta pública registrada'},support);
