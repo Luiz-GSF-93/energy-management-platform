@@ -1,4 +1,5 @@
 'use client';
+import AneelTariffFlags from './AneelTariffFlags';
 import TariffModelReview from './TariffModelReview';
 import type {OcrAutofill} from './ocr-autofill';
 import type {CorrectionContext} from './preparation-navigation';
@@ -56,6 +57,7 @@ export default function TariffLibrary({customerId,units,onApplied,autofill,initi
  const visible=latest.filter(r=>(!search||JSON.stringify(r.profile).toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))&&(!dist||r.profile.distributor===dist)&&(!group||r.profile.group===group)&&(!subgroup||r.profile.subgroup===subgroup)&&(!modality||r.profile.modality===modality)&&(!category||r.profile.category===category)&&(!cls||r.profile.consumptionClass===cls));
  const selectFilter=(label:string,property:keyof Profile,value:string,set:(x:string)=>void)=><label>{label}<select style={field} value={value} onChange={e=>set(e.target.value)}><option value="">Todas</option>{Array.from(new Set(latest.map(r=>String(r.profile[property])))).sort().map(s=><option key={s} value={s}>{labels[s]||s}</option>)}</select></label>;
  return <section onChangeCapture={e=>{if((e.target as HTMLElement).dataset.auditCheck!=='true'){setPreview(null);setCheckedPdf(false);onDirty?.(true);}}} aria-label="Biblioteca tarifária" style={{border:'1px solid #4b6078',padding:18,borderRadius:12,margin:'18px 0'}}>
+ <AneelTariffFlags/>
  <h3>Biblioteca tarifária por distribuidora</h3><p>Tarifas fixas por enquadramento e vigência. Para corrigir valores, crie uma nova versão com justificativa; as versões usadas em apurações anteriores são preservadas.</p>
  {canCreate&&canUpdate&&!open&&<button type="button" style={button} onClick={()=>{setOpen(true);setPrevious(null);setEditor(matrix(empty()));setImportScope(null);setReason('');}}>Inserir nova biblioteca</button>}
  {!expanded&&<button type="button" style={button} onClick={()=>setOpen(!open)}>{open?'Fechar biblioteca':'Abrir biblioteca tarifária'}</button>}

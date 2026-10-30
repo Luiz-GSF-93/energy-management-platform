@@ -1,3 +1,4 @@
+import {validatedFlagReference} from './aneel-tariff-flags.model';
 import {supplementalTariffFlagReference} from './supplemental-tariff-flag-reference';
 import {invoiceComparisonV2} from './invoice-comparison-v2';
 import {globalModelLayout} from './eva-global-model';
@@ -67,7 +68,7 @@ export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceCompar
   const flag=tariffFlag(c,p,layout,base);
   for(const line of [...adjusted,...flag]){const [n,d]=rational(line),gross=componentGross(n,d,rates,line.component!=='TUSD_DEMAND_UNUSED');r.lines.push({...line,...gross,taxTreatment:'GROSS',netRate:line.value});}
   const excluded=new Set(['TE','TUSD_ENERGY','DEMAND_BILLED','DEMAND_UNUSED','DEMAND_CONTRACT_DIFFERENCE','ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT','TARIFF_SUBSIDY','SUBSIDY_CREDIT','CDE_WATER_SCARCITY','CDE_COVID','TARIFF_FLAG','REFUND']);
-  for(const row of rows){if(excluded.has(row.component))continue;const amount=row.fields.amount.decimal!;cents(amount);r.retained.push({kind:row.component==='REACTIVE_ENERGY'?'REACTIVE':'INVOICE_CHARGE',label:row.component==='DEMAND_EXCESS'?'Ultrapassagem de demanda · '+row.fields.description.text:row.fields.description.text,amount,source:row.source,quantity:row.fields.quantity?.decimal??null,note:'Valor final conciliado da fatura; mantido uma vez, sem novos tributos.'});}
+  for(const row of rows){if(excluded.has(row.component))continue;const amount=row.fields.amount.decimal!;cents(amount);r.retained.push({kind:['REACTIVE_ENERGY','REACTIVE_DEMAND'].includes(row.component)?'REACTIVE':'INVOICE_CHARGE',label:row.component==='DEMAND_EXCESS'?'Ultrapassagem de demanda · '+row.fields.description.text:row.fields.description.text,amount,source:row.source,quantity:row.fields.quantity?.decimal??null,note:'Valor final conciliado da fatura; mantido uma vez, sem novos tributos.'});}
   const keys=['icmsAmount','pisAmount','cofinsAmount'];
   r.acrTaxes=keys.map(code=>({code,scenario:'ACR',amount:fixed(r.lines.reduce((n,line)=>n+cents(line.taxes[code]),0n)),printedRate:base.taxes!.find(t=>t.code===code).printedRate,method:'RECALCULATED_COMPONENT_INSIDE',summarySource:'Memória fiscal ACR V3',cells:r.lines.map(line=>({source:line.source,amount:line.taxes[code],component:line.component})),note:'Imposto já incluído nos valores brutos das linhas; não somar novamente.'}));
   r.supplierIcms=supplierInside(p,rates.icms,base.taxes!.find(t=>t.code==='icmsAmount').printedRate.source);
@@ -101,6 +102,13 @@ function tariffFlag(c:any,p:any,layout:any,base:InvoiceComparison){
  let rate:string,source:string;
  if(registered.length){return base.lines.filter(line=>line.component==='TE').map(line=>{const matches=registered.filter((x:any)=>x.time_band==='ALL'||x.time_band===line.band);if(matches.length!==1||!['BRL_KWH','BRL_MWH'].includes(matches[0].measure))throw Error('Bandeira ACR: conferir tarifa única para o posto '+line.band);const record=matches[0];if(!Number.isInteger(record.revision)||record.revision<1||!record.unit_context||['distributor','tariff_group','tariff_subgroup','tariff_modality','state','consumption_class','free_market'].some(key=>(record.unit_context[key]??null)!==(c.unit[key]??null)))throw Error('Bandeira ACR: contexto cadastral ou revisão da tarifa mudou.');dec(record.amount_text);return {component:'TARIFF_FLAG',label:'Adicional de bandeira tarifária',band:line.band,measure:record.measure,value:record.amount_text,quantity:line.quantity,quantitySource:line.quantitySource,source:'Parâmetro '+record.id+' r'+record.revision+' · '+record.source};});}
  else {
+  const official=c.officialTariffFlag;
+  if(official){
+   const ref=validatedFlagReference(official,c.unit.organization_id,c.month);
+   if(!ref)throw Error('Bandeira ACR: referência oficial divergente ou pendente de revisão.');
+   if(matches.length!==1||matches[0].days!==cycleDays||!Number.isInteger(cycleDays)||matches[0].color.replace('PATAMAR ','')!==ref.color)throw Error('Bandeira ACR: cor ou dias da fatura divergem da referência oficial; confira o ciclo.');
+   return base.lines.filter(line=>line.component==='TE').map(line=>({component:'TARIFF_FLAG',label:'Adicional de bandeira tarifária',band:line.band,measure:'BRL_KWH',value:ref.rate,quantity:line.quantity,quantitySource:line.quantitySource,source:'ANEEL · '+ref.month+' · '+ref.color+' · referência '+ref.id+' v'+ref.version+' · SHA-256 '+ref.hash+' · '+ref.urls.join(' · ')}));
+  }
   if(matches.length!==1||!Number.isInteger(cycleDays)||matches[0].days!==cycleDays)throw Error('Bandeira ACR: conferir cor, dias e tarifa vigente; CDE não substitui bandeira.');
   // A dated public evidence set, not an indefinitely extended regulatory constant.
   const juneSource='https://www.gov.br/aneel/pt-br/assuntos/tarifas/bandeiras-tarifarias';

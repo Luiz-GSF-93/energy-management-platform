@@ -1,0 +1,1 @@
+backend/test/fixtures/aneel-flags/*.csv -text whitespace=cr-at-eol

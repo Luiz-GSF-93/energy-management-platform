@@ -1,3 +1,4 @@
+import {AneelTariffFlagsService} from './aneel-tariff-flags.service';
 import {regularSupplierReference} from './documented-supplier-settlement';
 import {cceeCostEstimate,cceeEstimateEnabled} from './ccee-cost-estimate';
 import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
@@ -25,7 +26,7 @@ import {MonthlyInputsService} from '../contracts/services/monthly-inputs.service
 const uuid=(x:unknown)=>typeof x==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
 @Injectable()
 export class CalculationAutofillService{
- constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService,private sourcePreparation?:SourcePreparationService){}
+ constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService,private sourcePreparation?:SourcePreparationService,private officialFlags?:AneelTariffFlagsService){}
  private enabled(){return this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true';}
  private canWrite(t:TenantContext){return ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions.includes(P.ENERGIA_OCR_PROCESS);}
  private async allowed(t:TenantContext,write=false){
@@ -79,6 +80,9 @@ export class CalculationAutofillService{
   let restored:any=null;
   if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
   c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
+  const flagEnd=month+'-'+String(new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate());
+  c.officialFlagParameterOverride=c.captured.parameters.some((x:any)=>x.kind==='TARIFF'&&x.component_code==='TARIFF_FLAG'&&x.scenario==='ACR'&&x.organization_id===t.organizationId&&x.consumer_unit_id===unit&&x.customer_id===u.customer_id&&x.status==='APPROVED'&&x.treatment==='NET'&&x.source?.trim()&&x.start_date<=month+'-01'&&x.end_date>=flagEnd);
+  if(this.officialFlags&&!c.officialFlagParameterOverride)c.officialTariffFlag=await this.officialFlags.reference(t.organizationId,month);
   c.libraryRecord=selectAutofillLibrary(libraries,u,month).record;
   c.sourcePreparation=await this.sourcePreparation?.inspect(c)??null;
   if(contractClosingDraftEnabled()&&contractClosingDraftApplicable(c)){
@@ -118,11 +122,16 @@ export class CalculationAutofillService{
   }
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
-  const basis=autofillHash({...invoiceInterpretationBasis(c.layout),cceeEstimate:c.cceeEstimate??null,supplierInvoiceProposal:c.supplierInvoiceProposal??null,v:documentedSettlementEnabled()?6:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),...(documentedSettlementEnabled()?{documentedInvoice:c.documentedSupplierInvoice??null}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const basis=autofillHash({...invoiceInterpretationBasis(c.layout),...(c.officialTariffFlag?{officialTariffFlag:c.officialTariffFlag}:{}),cceeEstimate:c.cceeEstimate??null,supplierInvoiceProposal:c.supplierInvoiceProposal??null,v:documentedSettlementEnabled()?6:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),...(documentedSettlementEnabled()?{documentedInvoice:c.documentedSupplierInvoice??null}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }
  private output(c:Awaited<ReturnType<CalculationAutofillService['context']>>,t:TenantContext){if(!c.available)return {enabled:true,available:false,percent:0,canPrepare:false,observations:[c.observation],unitId:c.unit,month:c.month};return {enabled:true,available:true,unitId:c.unit,month:c.month,documentId:c.documentId,sourceHash:c.sourceHash,basis:c.basis,token:c.token,canPrepare:this.canWrite(t),...c.plan};}
+ async assertOfficialFlagReferences(report:any,t:TenantContext){
+  if(!this.officialFlags)return;if(report?.organizationId!==t.organizationId||!Array.isArray(report.units))throw new ConflictException('Referência oficial fora da organização.');
+  const current=await this.officialFlags.reference(t.organizationId,report.month);
+  for(const unit of report.units)if(!unit.sources?.officialFlagParameterOverride&&autofillHash(unit.sources?.officialTariffFlag??null)!==autofillHash(current))throw new ConflictException('A referência mensal da ANEEL mudou. Reconfira a proposta antes de aprovar.');
+ }
  async closingSnapshot(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())throw new ServiceUnavailableException('Preparação automática indisponível.');return this.context(q,t);}
  async inspect(q:Record<string,unknown>,t:TenantContext){if(!this.enabled())return {enabled:false};await this.allowed(t);this.query(q);return this.output(await this.context(q,t),t);}
  private async rpc(action:string,q:{unit:string;month:string},t:TenantContext,run:string|null,body:any){return this.fail(await this.db.getClient().rpc('calculation_autofill_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.unit,p_month:q.month,p_run:run,p_body:body}));}
