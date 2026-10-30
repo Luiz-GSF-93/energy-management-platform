@@ -91,3 +91,16 @@ it.each(['Compl.TUSD Mês JAN/26','Compl.TUSD Mês DEZ/25'])('V3 keeps historic 
   row.fields.description=x.field(label);row.fields.description.issues=['UNVERIFIED_SOURCE'];expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('TUSD_ENERGY');
  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
 });
+
+it('limits documented amount-only billing to the verified current CPFL Green profile',()=>{
+ const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+ try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();x.layout.layoutId='cpfl-paulista-a';x.layout.fields.find((f:any)=>f.name==='reference').value=x.field('JUL/2026');
+ const row:any={source:'tables[1].row[2]',row:2,component:'OTHER',role:'UNKNOWN',issues:['UNMAPPED_COMPONENT'],fields:{description:x.field('Dem Dif Contrato USD [KW] 49.69% JUL/26'),amount:x.field('120.00')},arithmetic:{state:'NOT_VERIFIABLE'}};x.layout.operations.push(row);const before=JSON.stringify({raw:x.raw,layout:x.layout});
+ expect(globalModelLayout(x.raw).amountOnlyBillingProofs).toHaveLength(1);expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('DEMAND_CONTRACT_DIFFERENCE');expect(row.fields.quantity).toBeUndefined();expect(JSON.stringify({raw:x.raw,layout:x.layout})).toBe(before);
+ x.layout.layoutId='other-layout';expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');x.layout.layoutId='cpfl-paulista-a';
+ x.layout.fields.find((f:any)=>f.name==='classification').value=x.field('A4 AZUL');expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');x.layout.fields.find((f:any)=>f.name==='classification').value=x.field('A4 VERDE');
+ x.layout.fields.find((f:any)=>f.name==='reference').value=x.field('AGO/2026');expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');x.layout.fields.find((f:any)=>f.name==='reference').value=x.field('JUL/2026');
+ row.fields.amount.confidence=0.85;expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');row.fields.amount.confidence=0.99;
+ process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='false';expect(globalModelLayout(x.raw).operations.at(-1)?.role).toBe('UNKNOWN');
+ }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+});
