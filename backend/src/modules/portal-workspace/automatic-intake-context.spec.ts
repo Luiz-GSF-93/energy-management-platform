@@ -20,6 +20,16 @@ describe('Automatic intake recognition',()=>{
  it('classifies the supplier NF and its supplied month instead of requiring a previous contract insertion',()=>expect(run(nf)).toMatchObject({state:'MATCH',documentType:'INVOICE_SUPPLIER',month:'2026-05'}));
  it('requires recipient evidence for multiple authorized units',()=>{const units=[unit,{...unit,id:'second',address:'Rua Outra 123'}];expect(run(nf,units)).toMatchObject({state:'MATCH',unitId:'unit'});expect(run(nf.replace('Rua Exemplo 123',''),units).state).toBe('REVIEW_REQUIRED');});
  it('does not classify a contract as an invoice',()=>expect(run('CONTRATO CONTRATANTE CLAUSULA Referência JUL/2026')).toMatchObject({state:'REVIEW_REQUIRED'}));
+ it('keeps an NF3e bill with incidental contract/demand words in the distributor identity path',()=>{
+  const bill='DANF3E - DOCUMENTO AUXILIAR DA NOTA\nFISCAL DE ENERGIA ELETRICA ELETRONICA\n'+invoice+'\nRef: mês/ano JUL/2026\nLeitura atual 31/07/2026\nLeitura anterior 30/06/2026\nTotal a pagar 100,00\nConsumo KWH 100\nDem Dif Contrato USD\nGrandezas contratadas\nPlaneje o aumento da demanda contratada';
+  expect(run(bill)).toMatchObject({state:'MATCH',documentType:'INVOICE_DISTRIBUTOR',month:'2026-07',unitId:'unit'});
+  expect(automaticOcrIdentityConfidence({pages:[{words:bill.split(/\s/).map(content=>({content,confidence:0.99}))}]},run(bill),customer,unit)).toBe(true);
+  expect(run(bill.replace('11.222.333/0001-81','22.333.444/0001-82')).state).toBe('REVIEW_REQUIRED');
+  expect(run(bill.replace('UC 1234567','UC 7654321')).state).toBe('REVIEW_REQUIRED');
+  expect(run(bill.replace('Rua Exemplo 123','Rua Outra 321')).state).toBe('REVIEW_REQUIRED');
+  expect(run(bill,[unit],{month:'2026-08'}).state).toBe('REVIEW_REQUIRED');
+  expect(run('MINUTA DE CONTRATO CONTRATANTE CLAUSULA\n'+bill).state).toBe('REVIEW_REQUIRED');
+ });
  it('rejects a mixed customer scope rather than choosing its first unit',()=>expect(run(invoice,[{...unit,customer_id:'foreign'}]).state).toBe('REVIEW_REQUIRED'));
  it.each([undefined,0.5,0.85])('does not turn missing/low OCR confidence into automatic identity: %s',confidence=>{const raw={pages:[{words:invoice.split(/\s/).map(content=>({content,confidence}))}]};expect(automaticOcrIdentityConfidence(raw,run(),customer,unit)).toBe(false);});
  it('accepts original OCR words only when the identity tokens are sourced with adequate confidence',()=>{const raw={pages:[{words:invoice.split(/\s/).map(content=>({content,confidence:0.99}))}]};expect(automaticOcrIdentityConfidence(raw,run(),customer,unit)).toBe(true);});

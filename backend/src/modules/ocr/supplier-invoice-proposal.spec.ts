@@ -114,3 +114,11 @@ describe('NF-e fiscal identity across original files',()=>{
  it('does not use a referenced invoice key as the identity of a complementary note',()=>{expect(run(text+'\nNF REFERENCIADA '+accessKey)?.fiscalIdentity).toBeNull();});
  it('does not trust a key with an invalid check digit or a cancelled invoice',()=>{const invalid=accessKey.slice(0,-1)+String((Number(accessKey.at(-1))+1)%10);expect(run(text+'\nCHAVE DE ACESSO\n'+invalid)?.fiscalIdentity).toBeNull();expect(run(text+'\nNF-E CANCELADA')).toBeNull();expect(run(text+'\nNOTA FISCAL DE CREDITO')).toBeNull();expect(run(text+'\nNOTA FISCAL DE DEVOLUCAO')).toBeNull();});
 });
+
+it('does not confuse a complete NF3e distributor bill with a contract or a supplier DANFE',()=>{
+ const bill='DANF3E - DOCUMENTO AUXILIAR DA NOTA\nFISCAL DE ENERGIA ELETRICA ELETRONICA\nCNPJ 11.222.333/0001-81\nRef: mês/ano JUL/2026\nLeitura atual 31/07/2026\nLeitura anterior 30/06/2026\nTotal a pagar 100,00\nConsumo KWH 100\nDem Dif Contrato USD\nGrandezas contratadas';
+ expect(supplierDocumentKind(bill)).toBe('UNKNOWN');
+ expect(supplierDocumentKind(bill.replace('Leitura anterior','Campo ausente'))).toBe('CONTRACT');
+ expect(supplierDocumentKind('MINUTA DE CONTRATO CONTRATANTE CLAUSULA\n'+bill)).toBe('CONTRACT');
+ expect(supplierDocumentKind('MINUTA DE CONTRATO CONTRATANTE CLAUSULA')).toBe('CONTRACT');
+});
