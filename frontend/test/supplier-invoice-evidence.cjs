@@ -30,6 +30,7 @@ const acknowledge=()=>act(async()=>document.querySelector('input[type=checkbox]'
  plan.contractDraft={format:'supplier-invoice-evidence-1',requirements:[{code:'SUPPLIER_INVOICE_TAX'}]};
  nf.taxEvidence={kind:'ORIGIN_NON_INCIDENCE_REVIEW',source:'Origin statement does not attest destination exemption'};
  plan.manualOverrides={fixedFee:'10.00',supplierInvoiceAllocation:{documentId:nf.documentId,fileHash:nf.fileHash,coverage:'FULL',reason:'Previously accepted full invoice coverage with separate measurement'}};
+ setup();await render('stale-coverage-question-current-fiscal-source');assert(document.body.textContent.includes('Como considerar o valor da NF?'),'A closing with stale coverage must use the current saved coverage and open the fiscal form');assert(!document.body.textContent.includes('Lançamento da nota em custos mensais'));assert(!calls.some(([,o])=>o?.method==='POST'));
  setup();await act(async()=>root.render(React.createElement(C,{key:'fiscal-only',unitId:'unit',month:'2026-01',taxOnly:true,fiscalPreview:{base:'300.00',rate:'18',icmsAmount:'65.85',amount:'365.85'},onSaved:()=>{}})));
  assert(document.body.textContent.includes('Falta somente o tratamento fiscal'));assert(!document.querySelector('input[inputmode=decimal]'));assert(!calls.some(([,o])=>o?.method==='POST'));
  await change('Como considerar o valor da NF?','NET_DESTINATION_ICMS');assert(document.body.textContent.includes('65.85'));await change('Fonte e justificativa desta confirmação','Original supplier NF and destination ICMS confirmed for this month.');
