@@ -63,6 +63,9 @@ export class CalculationAutofillService{
   if(historical.data.length){const top=historical.data[0];if(historical.data.some((r:any)=>r.id!==top.id&&r.month===top.month&&r.version_number===top.version_number))throw new ConflictException('Fechamento anterior ambíguo.');const row=await db.from('monthly_energy_settlements').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('id',top.id).maybeSingle();if(row.error||!row.data||row.data.financial_hash!==top.financial_hash)throw new ConflictException('Fechamento anterior mudou durante a consulta.');prior=previousCalculationReference([row.data],u,month);if(!prior)throw new ServiceUnavailableException('Integridade do fechamento anterior requer conferência.');}
   c.reference=prior;c.customerUnits=units.data;
   if(cceeEstimateEnabled()){
+   const current=cceeCostEstimate([],u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
+   if(current.state==='CURRENT_RECORD')c.cceeEstimate=current;
+   else {
    const months=[...new Set<string>(historical.data.map((r:any)=>String(r.month).slice(0,7)))].filter(m=>Number(month.slice(0,4))*12+Number(month.slice(5))-Number(m.slice(0,4))*12-Number(m.slice(5))<=6);
    const history:any[]=[];
    for(const m of months){const candidates=historical.data.filter((r:any)=>String(r.month).slice(0,7)===m),top=candidates[0];if(candidates.filter((r:any)=>r.version_number===top.version_number).length!==1)continue;const r=await db.from('monthly_energy_settlements').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('id',top.id).maybeSingle();if(r.error||!r.data||r.data.financial_hash!==top.financial_hash)throw new ConflictException('Histórico CCEE mudou durante a preparação.');history.push(r.data);}
@@ -76,6 +79,7 @@ export class CalculationAutofillService{
    }));
    history.push(...closingHistory.flat());
    c.cceeEstimate=cceeCostEstimate(history,u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
+   }
   }
   let restored:any=null;
   if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
