@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
 for(const k of ['window','document','HTMLElement','HTMLInputElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+window.scrollTo=()=>{};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
 let context,authStatus='authenticated',api,calls=[],routes=[],authCalls=0;
@@ -9,7 +10,7 @@ const router={replace:p=>routes.push(p)},logout=()=>{authStatus='unauthenticated
 let login=async()=>{authCalls++;};
 const original=Module._load;Module._load=function(name,parent,main){
  if(name.endsWith('.css'))return {};
- if(name==='next/navigation')return {useRouter:()=>router};
+ if(name==='next/navigation')return {useRouter:()=>router,usePathname:()=>'/backoffice/dashboard'};
  if(name==='next/link')return {__esModule:true,default:({children,href,...p})=>React.createElement('a',{href,...p},children)};
  if(name==='@/app/providers')return {useAuth:()=>({context,status:authStatus,logout,login,hasPermission:()=>true})};
  if(name==='@/app/lib/api/client')return {apiRequest:(p,o)=>{calls.push([p,o]);return api(p,o);}};
