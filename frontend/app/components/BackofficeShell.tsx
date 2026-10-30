@@ -1,6 +1,7 @@
 'use client';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
+import {usePathname} from 'next/navigation';
 
 import OperationNotificationBell from '@/app/components/OperationNotificationBell';
 import UserIdentity from '@/app/components/UserIdentity';
@@ -18,6 +19,8 @@ export default function BackofficeShell({
   children,
 }: BackofficeShellProps) {
   const [collapsed,setCollapsed]=useState(false);
+  const pathname=usePathname();
+  useEffect(()=>{window.scrollTo({top:0,behavior:'instant' as ScrollBehavior});},[pathname]);
   const {context}=useAuth();
   const content=(
     <div className={`backoffice${collapsed?' backoffice--collapsed':''}`}>

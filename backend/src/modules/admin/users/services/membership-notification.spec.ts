@@ -5,6 +5,7 @@ describe('membership notification',()=>{
  const originalFetch=global.fetch; const env={...process.env};
  beforeEach(()=>{process.env.RESEND_API_KEY='test-key';process.env.FRONTEND_URL='https://app.example.test';global.fetch=jest.fn().mockResolvedValue({ok:true,json:async()=>({id:'mail-id'})});});
  afterEach(()=>{global.fetch=originalFetch;process.env={...env};jest.restoreAllMocks();});
+ it('confirms each approved scope change with its own idempotency key and escaped unit names',async()=>{await sendMembershipNotification({...input,roleName:'consulta',customerName:'Client',unitNames:['Unit <A>'],scopeEventId:'approved-request',scopeActive:true});const options=(global.fetch as jest.Mock).mock.calls[0][1],body=JSON.parse(options.body);expect(options.headers['Idempotency-Key']).toBe('organization-portal-scope/approved-request');expect(body.subject).toContain('Portal');expect(body.text).toContain('Unit <A>');expect(body.html).toContain('Unit &lt;A&gt;');expect(body.html).not.toContain('Unit <A>');expect(body.html).toContain('senha atual permanece válida');});
  it('uses existing login, tenant name, role, affiliation and idempotent membership key',async()=>{
   expect(await sendMembershipNotification(input)).toBe('accepted');
   const [url,options]=(global.fetch as jest.Mock).mock.calls[0];const body=JSON.parse(options.body);

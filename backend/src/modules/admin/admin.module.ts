@@ -1,4 +1,6 @@
 import { AuthModule } from '../auth/auth.module';
+import {UserRequestsController} from './users/controllers/user-requests.controller';
+import {UserRequestsService} from './users/services/user-requests.service';
 import { UserRecoveryController } from './users/controllers/user-recovery.controller';
 import { UserRecoveryService } from './users/services/user-recovery.service';
 import { OrganizationSetupController } from './organizations/controllers/organization-setup.controller';
@@ -11,8 +13,8 @@ import { UsersService } from './users/services/users.service';
 
 @Module({
   imports: [CommonModule, AuthModule],
-  controllers: [UserRecoveryController, OrganizationsController, OrganizationSetupController, UsersController],
-  providers: [UserRecoveryService, OrganizationsService, UsersService],
-  exports: [OrganizationsService],
+  controllers: [UserRequestsController, UserRecoveryController, OrganizationsController, OrganizationSetupController, UsersController],
+  providers: [UserRequestsService, UserRecoveryService, OrganizationsService, UsersService],
+  exports: [OrganizationsService,UserRequestsService],
 })
 export class AdminModule {}

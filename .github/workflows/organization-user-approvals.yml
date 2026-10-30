@@ -1,0 +1,46 @@
+name: Organization user approvals and scoped permissions
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/admin/**'
+      - 'backend/src/modules/auth/**'
+      - 'backend/src/common/guards/tenant.guard.ts'
+      - 'backend/src/common/auth/invite-password-policy*'
+      - 'backend/src/common/services/*member-permissions*'
+      - 'backend/src/common/interfaces/tenant-context.interface.ts'
+      - 'backend/src/modules/client-portal-licenses/portal-license.guard.ts'
+      - 'backend/src/modules/portal-workspace/portal-customer-access.ts'
+      - 'backend/src/modules/operations/operations.service.ts'
+      - 'backend/src/database/migrations/20261216_organization_user_approvals.sql'
+      - 'backend/test/user-approvals-database.cjs'
+      - 'frontend/app/backoffice/users/**'
+      - 'frontend/app/components/Sidebar.tsx'
+      - 'frontend/app/components/BackofficeShell.tsx'
+      - 'frontend/test/user-access-governance.cjs'
+      - 'frontend/test/sidebar-scroll.cjs'
+      - '.github/workflows/organization-user-approvals.yml'
+permissions:
+  contents: read
+jobs:
+  authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --silent src/modules/admin/users src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.service.accept-invite.spec.ts src/modules/auth/password-recovery.spec.ts src/common/auth/invite-password-policy.spec.ts src/common/services/portal-member-permissions.spec.ts src/common/guards/tenant.guard.portal-units.spec.ts src/common/guards/tenant.guard.platform.spec.ts
+        working-directory: backend
+      - run: node test/user-approvals-database.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/user-access-governance.cjs && node test/sidebar-scroll.cjs
+        working-directory: frontend
+      - run: node node_modules/typescript/bin/tsc --noEmit --incremental false
+        working-directory: frontend

@@ -1,3 +1,4 @@
+import {memberPermissions} from '../../common/services/member-permissions';
 import { Injectable, BadRequestException, UnauthorizedException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
@@ -85,6 +86,7 @@ export class AuthService {
           organization_id,
           role_id,
           status,
+          permission_limit,
           roles(id, name, organization_id, permissions),
           organizations(id, name, deleted_at)
         `)
@@ -142,9 +144,7 @@ export class AuthService {
           id: currentMembership.organization_id,
           name: currentMembership.organizations.name,
           role: currentRole.name,
-          permissions: Array.isArray(currentRole.permissions)
-            ? currentRole.permissions
-            : [],
+          permissions: memberPermissions(currentRole.permissions,currentMembership.permission_limit),
         },
       };
     } catch (err) {
@@ -233,6 +233,7 @@ export class AuthService {
           organization_id,
           role_id,
           status,
+          permission_limit,
           roles(id, name, organization_id, permissions),
           organizations(id, name, deleted_at)
         `)
@@ -294,7 +295,7 @@ export class AuthService {
     const client=this.supabaseService.createAuthClient();
     const {data,error}=await client.auth.admin.getUserById(userId);
     if(error || !data?.user?.invited_at) throw new ForbiddenException('Convite inválido ou indisponível');
-    const result=await client.auth.admin.updateUserById(userId,{password});
+    const result=await client.auth.admin.updateUserById(userId,{password,...(data.user.app_metadata?.energyos_password_setup_required===true?{app_metadata:{...data.user.app_metadata,energyos_password_setup_required:false}}:{})});
     if(result.error) throw new BadRequestException('Não foi possível definir a senha. Verifique os requisitos de segurança.');
     return {success:true};
   }

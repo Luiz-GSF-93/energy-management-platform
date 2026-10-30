@@ -30,6 +30,14 @@ describe('Password recovery', () => {
     expect(auth.updateUser).toHaveBeenCalledWith({ password: 'test-password-only' });
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'global' });
   });
+  it('sets the first password only for the identity proved by recovery and clears the trusted flag atomically',async()=>{
+    auth.verifyOtp.mockResolvedValue({data:{session:{access_token:'private'},user:{id:'proved-user',app_metadata:{energyos_password_setup_required:true,provider:'email'}}},error:null});
+    const updateUserById=jest.fn().mockResolvedValue({error:null});
+    supabase.createAuthClient.mockReturnValueOnce({auth}).mockReturnValueOnce({auth:{admin:{updateUserById}}});
+    await expect(service.complete('a'.repeat(64),'test-password-only','ip')).resolves.toEqual({success:true});
+    expect(updateUserById).toHaveBeenCalledWith('proved-user',{password:'test-password-only',app_metadata:{energyos_password_setup_required:false,provider:'email'}});
+    expect(auth.updateUser).not.toHaveBeenCalled();expect(auth.signOut).toHaveBeenCalledWith({scope:'global'});
+  });
   it('rejects invalid or replayed tokens without changing any user', async () => {
     auth.verifyOtp.mockResolvedValue({ data: null, error: { message: 'expired' } });
     await expect(service.complete('a'.repeat(64), 'test-password-only', 'ip')).rejects.toThrow(BadRequestException);

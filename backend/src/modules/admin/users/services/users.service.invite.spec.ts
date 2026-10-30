@@ -171,6 +171,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
     };
 
     const authAdmin = {
+      updateUserById:jest.fn().mockResolvedValue({data:{},error:null}),
       getUserById: jest.fn().mockResolvedValue({
         data: {
           user: {

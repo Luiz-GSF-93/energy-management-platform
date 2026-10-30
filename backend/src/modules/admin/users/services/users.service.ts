@@ -1,4 +1,5 @@
 import {WelcomeContext,welcomeContent} from './welcome-content';
+import {TenantContext} from '../../../../common/interfaces/tenant-context.interface';
 import {checkPortalInvite} from './portal-invite';
 import { sendMembershipNotification, MembershipNotificationStatus } from './membership-notification';
 import { PERMISSIONS } from '../../../../common/constants/permissions';
@@ -764,6 +765,7 @@ export class UsersService {
         );
       }
 
+      if(dto.permissionIds!==undefined&&(!Array.isArray(dto.permissionIds)||dto.permissionIds.some(p=>!Array.isArray(role.permissions)||!role.permissions.includes(p))))throw new BadRequestException('Permissões individuais fora da função.');
       // Profile-first lookup is the preferred identity resolution path.
       await checkPortalInvite(client,dto,role,auditContext.organizationId);
 
@@ -912,6 +914,8 @@ export class UsersService {
         targetUserId = inviteData.user.id;
         createdIdentity = true;
         provisioningPath = 'new_identity';
+        const passwordSetup=await authClient.auth.admin.updateUserById(targetUserId,{app_metadata:{...inviteData.user.app_metadata,energyos_password_setup_required:true}});
+        if(passwordSetup.error)throw new InternalServerErrorException('Não foi possível preparar a definição obrigatória da senha.');
 
         const { data: insertedProfiles, error: profileInsertError } =
           await client
@@ -1010,6 +1014,8 @@ export class UsersService {
             user_id: targetUserId,
             organization_id: auditContext.organizationId,
             role_id: dto.roleId,
+            ...(dto.permissionIds!==undefined?{permission_limit:dto.permissionIds}:{}),
+            ...(dto.portalUnitIds?{portal_scope_managed:true}:{}),
             affiliation_type: dto.affiliationType,
             display_name: normalizedName,
             ...(dto.customerId ? {exclusive_customer_id:dto.customerId} : {}),
@@ -1096,7 +1102,7 @@ export class UsersService {
         membershipId: confirmedMembershipId,
         membershipStatus: 'active',
         provisioningPath,
-        ...(provisioningPath === 'existing_identity' ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType, undefined, targetUserId)} : {}),
+        ...(provisioningPath === 'existing_identity' && !dto.portalUnitIds ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType, undefined, targetUserId)} : {}),
       };
     } catch (error) {
       // Compensate owned writes at most once per invite execution.
@@ -1151,6 +1157,16 @@ export class UsersService {
     const {data,error}=await this.supabaseService.getClient().from('organization_members').select('id').eq('user_id',userId).eq('organization_id',context.organizationId).eq('status','active').eq('role_id',member.role.id);
     if(error || data?.length!==1 || typeof data[0].id!=='string') throw new ConflictException('O vínculo mudou. Atualize a lista.');
     return {notificationStatus:await this.notifyMembership(data[0].id,member.email,context.organizationId,member.role.name,member.affiliationType || 'internal',undefined,userId)};
+  }
+
+  async notifyPortalScope(body:{userId:string;customerId:string;unitIds:string[];active:boolean},t:TenantContext,eventId:string){
+    const member=await this.findOne(body.userId,t.organizationId);
+    if(member.membershipStatus!=='active'||member.affiliationType!=='external'||member.role.name!=='consulta')throw new ForbiddenException('Usuário externo indisponível para confirmação.');
+    const client=this.supabaseService.getClient();
+    const units=await client.from('consumer_units').select('id,name,consumer_unit_number').eq('organization_id',t.organizationId).eq('customer_id',body.customerId).in('id',body.unitIds.length?body.unitIds:['00000000-0000-4000-8000-000000000000']);
+    if(units.error||!Array.isArray(units.data)||body.active&&units.data.length!==body.unitIds.length) return {notificationStatus:'failed' as MembershipNotificationStatus};
+    const context=await this.welcomeContext(t.organizationId,member.role.name,'external',body.customerId);
+    return {notificationStatus:await sendMembershipNotification({...context,unitNames:body.active?units.data.map((u:any)=>(u.name||'Unidade')+' · '+u.consumer_unit_number):[],scopeActive:body.active,scopeEventId:eventId,membershipId:body.userId,email:member.email})};
   }
 
   async assertAssignable(roleId:string,organizationId:string,actorPermissions:string[],platformOperation=false) {
