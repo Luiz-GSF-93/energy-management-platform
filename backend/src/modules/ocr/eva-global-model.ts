@@ -1,5 +1,6 @@
 import {cpflCreditMagnitudes} from './cpfl-credit-magnitudes';
 import {cpflCreditSubtotal} from './cpfl-credit-subtotal';
+import {cpflAmountOnlyBilling} from './cpfl-amount-only-billing';
 import {reconcileCpflOperations} from './cpfl-reconciliation';
 import {cpflReference} from './cpfl-measurements';
 import {reconcileCpflTaxes} from './cpfl-tax-reconciliation';
@@ -44,9 +45,11 @@ export function globalModelLayout(raw:any){
   return {...row,component:'MONETARY_CORRECTION',role:(amount.startsWith('-')?'CREDIT':'CHARGE') as typeof row.role,issues:row.issues.filter(i=>i!=='UNMAPPED_COMPONENT')};
  });
  const eligible=sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1;
- const subtotal=eligible?cpflCreditSubtotal(operations,(row,amountOnly)=>{const amount=globalFieldEvidence(raw,row.fields.amount);return amount.filled&&amount.confidence!==null&&amount.confidence>0.85&&(amountOnly===true||globalFieldEvidence(raw,row.fields.description).filled);}):{operations,proof:null};
+ const green=layout.fields.some(f=>f.name==='classification'&&/\bVERDE\b/.test(String(f.value.text).toUpperCase())&&globalFieldEvidence(raw,f.value).filled);
+ const documented=eligible&&green?cpflAmountOnlyBilling(operations,references[0]!,field=>{const e=globalFieldEvidence(raw,field);return e.filled&&e.confidence!==null&&e.confidence>0.85;}):{operations,proofs:[]};
+ const subtotal=eligible?cpflCreditSubtotal(documented.operations,(row,amountOnly)=>{const amount=globalFieldEvidence(raw,row.fields.amount);return amount.filled&&amount.confidence!==null&&amount.confidence>0.85&&(amountOnly===true||globalFieldEvidence(raw,row.fields.description).filled);}):{operations,proof:null};
  const interpreted=eligible?cpflCreditMagnitudes(subtotal.operations,row=>globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled):{operations:subtotal.operations,proof:null};
- return {...layout,operations:interpreted.operations,...(subtotal.proof?{creditSubtotalProof:subtotal.proof}:{}),...(interpreted.proof?{creditSignProof:interpreted.proof}:{}),...(subtotal.proof||interpreted.proof?{reconciliation:reconcileCpflOperations(interpreted.operations)}:{}),...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(interpreted.operations,layout.blocks??[])}:{})};
+ return {...layout,operations:interpreted.operations,...(documented.proofs.length?{amountOnlyBillingProofs:documented.proofs}:{}),...(subtotal.proof?{creditSubtotalProof:subtotal.proof}:{}),...(interpreted.proof?{creditSignProof:interpreted.proof}:{}),...(subtotal.proof||interpreted.proof?{reconciliation:reconcileCpflOperations(interpreted.operations)}:{}),...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(interpreted.operations,layout.blocks??[])}:{})};
 }
 /** V2 aggregates five equally weighted sections. Coverage is never hidden by a high average. */
 export function globalModelConfidence(raw:any,threshold=0.9,profile?:any,verifiedLayout?:ReturnType<typeof globalModelLayout>){

@@ -31,11 +31,11 @@ function ratesOf(base:InvoiceComparison){
  * V3 then builds a separate ACR fiscal base; it never rewrites the original invoice or OCR. */
 export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceComparison{
  const expanded=libraries.map(lib=>!Array.isArray(lib?.profile?.items)?lib:({...lib,profile:{...lib.profile,items:[...lib.profile.items,...lib.profile.items.filter((i:any)=>i.component==='TUSD_DEMAND_USED'&&!lib.profile.items.some((x:any)=>x.component==='TUSD_DEMAND_UNUSED'&&x.band===i.band)).map((i:any)=>({...i,component:'TUSD_DEMAND_UNUSED',label:'Demanda não utilizada · mesma TUSD líquida'}))]}}));
- const base=invoiceComparisonV2(c,p,expanded),r:InvoiceComparison={...base,method:'COMPONENT_TAXES_V3',amount:null,lines:[],retained:[],taxes:base.taxes,observations:[...base.observations.filter(o=>o.startsWith('Créditos impressos como magnitudes:')||o.startsWith('Subtotal de créditos sem descrição')),'ACR recalculado por componente: ICMS por dentro na parcela utilizada; demanda não utilizada sem ICMS. PIS/Cofins calculados sobre a base sem ICMS. Valores ACL da fatura preservados.'],missing:[...base.missing]};
+ const base=invoiceComparisonV2(c,p,expanded),r:InvoiceComparison={...base,method:'COMPONENT_TAXES_V3',amount:null,lines:[],retained:[],taxes:base.taxes,observations:[...base.observations.filter(o=>o.startsWith('Créditos impressos como magnitudes:')||o.startsWith('Subtotal de créditos sem descrição')||o.startsWith('Rubricas documentais por valor:')),'ACR recalculado por componente: ICMS por dentro na parcela utilizada; demanda não utilizada sem ICMS. PIS/Cofins calculados sobre a base sem ICMS. Valores ACL da fatura preservados.'],missing:[...base.missing]};
  if(base.amount===null||base.missing.length)return r;
  try{
   const rates=ratesOf(base),layout:ReturnType<typeof globalModelLayout>=c.layout??globalModelLayout(c.source.raw),rows=layout.operations.filter(row=>['CHARGE','CREDIT'].includes(row.role)),demand=rows.filter(row=>row.role==='CHARGE'&&['DEMAND_BILLED','DEMAND_UNUSED'].includes(row.component));
-  const adjusted:any[]=[];
+  const adjusted:any[]=[],documentedDifferences=rows.filter(row=>row.component==='DEMAND_CONTRACT_DIFFERENCE'),appliedDifferences=new Set<string>();
   for(const line of base.lines){
    if(!['TUSD_DEMAND_USED','TUSD_DEMAND_UNUSED'].includes(line.component)){adjusted.push({...line});continue;}
    if(line.component==='TUSD_DEMAND_UNUSED')continue;
@@ -51,11 +51,21 @@ export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceCompar
    if(!used.length||used.length>1||unused.length>1)throw Error('Parcelas de demanda ambíguas: '+band);
    for(const [component,group] of [['TUSD_DEMAND_USED',used],['TUSD_DEMAND_UNUSED',unused]] as const){if(!group.length)continue;const q=group[0].fields.quantity.decimal;if(!q)throw Error('Quantidade faturada da demanda ausente.');adjusted.push({...line,component,label:component==='TUSD_DEMAND_USED'?'Demanda utilizada':'Demanda não utilizada',quantity:q,quantitySource:group[0].source,partitionMethod:explicitUnused.length?'EXPLICIT_BILLED_COMPONENT':'CONTRACT_TOTAL_MINUS_POSITIVE_ICMS_BILLED_SHARE'});}
    const contract=c.unit[band==='PEAK'?'contracted_demand_peak':band==='OFF_PEAK'?'contracted_demand_off_peak':'contracted_demand'];
-   if(contract!=null){const proof=demandConsumptionRule(String(contract),used[0].fields.quantity.decimal!);(r as any).demandRules=[...((r as any).demandRules??[]),{band,...proof,source:used[0].source}];}
+   if(contract!=null){const proof=demandConsumptionRule(String(contract),used[0].fields.quantity.decimal!);(r as any).demandRules=[...((r as any).demandRules??[]),{band,...proof,source:used[0].source}];
+    const amountOnly=documentedDifferences.filter(row=>(row.period==='UNSPECIFIED'?'ALL':row.period)===band);
+    if(amountOnly.length){
+     if(amountOnly.length!==1||unused.length||ds.length!==1||!amountOnly[0].issues.includes('DOCUMENTED_AMOUNT_ONLY_BILLING')||['quantity','aneelRate','grossRate'].some(k=>amountOnly[0].fields[k]?.text.trim()))throw Error('Diferença documental de demanda exige uma única partição comprovada.');
+     if(dec(proof.unused)===0n&&cents(amountOnly[0].fields.amount.decimal!)>0n)throw Error('Diferença de demanda cobrada sem saldo contratual não utilizado; conferir cadastro e fonte.');
+     appliedDifferences.add(amountOnly[0].source);
+     if(dec(proof.unused)>0n)adjusted.push({...line,component:'TUSD_DEMAND_UNUSED',label:'Demanda não utilizada · contratada menos faturada',quantity:proof.unused,quantitySource:'Cadastro '+c.unit.id+' · demanda contratada '+contract+' kW menos '+used[0].fields.quantity.decimal+' kW · '+used[0].source,partitionMethod:'REGISTERED_CONTRACT_MINUS_DOCUMENTED_BILLED_USED',documentaryDifference:{source:amountOnly[0].source,amount:amountOnly[0].fields.amount.decimal,quantityPrinted:false,ratePrinted:false}});
+     r.observations.push('A diferença contratual da fatura informa somente valor. No ACR, a parcela não utilizada foi calculada pelo contrato vigente menos a demanda faturada comprovada, com tarifa da biblioteca e sem ICMS; quantidade e tarifa não foram extraídas do valor monetário.');
+    }
+   }
   }
+  if(documentedDifferences.some(row=>!appliedDifferences.has(row.source)))throw Error('Diferença documental de demanda sem contrato e parcela faturada compatíveis.');
   const flag=tariffFlag(c,p,layout,base);
   for(const line of [...adjusted,...flag]){const [n,d]=rational(line),gross=componentGross(n,d,rates,line.component!=='TUSD_DEMAND_UNUSED');r.lines.push({...line,...gross,taxTreatment:'GROSS',netRate:line.value});}
-  const excluded=new Set(['TE','TUSD_ENERGY','DEMAND_BILLED','DEMAND_UNUSED','ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT','TARIFF_SUBSIDY','SUBSIDY_CREDIT','CDE_WATER_SCARCITY','CDE_COVID','TARIFF_FLAG','REFUND']);
+  const excluded=new Set(['TE','TUSD_ENERGY','DEMAND_BILLED','DEMAND_UNUSED','DEMAND_CONTRACT_DIFFERENCE','ACL_DISTRIBUTOR_INFORMATION','ACL_ENERGY_DISCOUNT','TARIFF_SUBSIDY','SUBSIDY_CREDIT','CDE_WATER_SCARCITY','CDE_COVID','TARIFF_FLAG','REFUND']);
   for(const row of rows){if(excluded.has(row.component))continue;const amount=row.fields.amount.decimal!;cents(amount);r.retained.push({kind:row.component==='REACTIVE_ENERGY'?'REACTIVE':'INVOICE_CHARGE',label:row.component==='DEMAND_EXCESS'?'Ultrapassagem de demanda · '+row.fields.description.text:row.fields.description.text,amount,source:row.source,quantity:row.fields.quantity?.decimal??null,note:'Valor final conciliado da fatura; mantido uma vez, sem novos tributos.'});}
   const keys=['icmsAmount','pisAmount','cofinsAmount'];
   r.acrTaxes=keys.map(code=>({code,scenario:'ACR',amount:fixed(r.lines.reduce((n,line)=>n+cents(line.taxes[code]),0n)),printedRate:base.taxes!.find(t=>t.code===code).printedRate,method:'RECALCULATED_COMPONENT_INSIDE',summarySource:'Memória fiscal ACR V3',cells:r.lines.map(line=>({source:line.source,amount:line.taxes[code],component:line.component})),note:'Imposto já incluído nos valores brutos das linhas; não somar novamente.'}));
