@@ -112,3 +112,21 @@ describe('Verified invoice interpretation replay identity',()=>{
   expect(key({creditSubtotalProof:{...proof,finalCents:'1278865'}})).not.toBe(key({creditSubtotalProof:proof}));
  });
 });
+
+
+describe('Current CCEE records do not depend on historical availability',()=>{
+ it.each(['cost','credit','noCosts'])('keeps %s and skips unrelated historical CCEE calls',async kind=>{
+  const previous=process.env.CCEE_COST_ESTIMATE_ENABLED;process.env.CCEE_COST_ESTIMATE_ENABLED='true';
+  try{
+   const s=setup();s.read.mockRestore();const c=s.context.c,u=c.unit;
+   c.cost={costs:{noCosts:kind==='noCosts',items:kind==='noCosts'?[]:[{category:'CCEE',scenario:'ACL',effect:kind==='credit'?'CREDIT':'COST',amount:'868.28'}]}};
+   s.resolution.preparationSnapshot=jest.fn(async()=>c);
+   const tableReads:string[]=[];const db={from:jest.fn((table:string)=>{tableReads.push(table);const data=table==='consumer_units'?u:table==='customers'?{id:u.customer_id,status:'ACTIVE'}:table==='eva_operational_invoices'?[{...c.document,file_verified:true}]:[];let single=false;const q:any={then:(resolve:any)=>Promise.resolve({data:table==='consumer_units'&&!single?[data]:data,error:null}).then(resolve)};for(const method of ['select','eq','is','gte','lte','order','limit','range','in','not','lt'])q[method]=()=>q;q.maybeSingle=()=>{single=true;return q};return q}),rpc:jest.fn(async()=>{throw Error('Historical CCEE is unavailable')})};
+   s.db.getClient.mockReturnValue(db);
+   (s.service as any).sourcePreparation={inspect:jest.fn(async()=>{throw Error('Reached current CCEE')})};
+   await expect((s.service as any).context({consumerUnitId:u.id,month:c.month},s.t,{})).rejects.toThrow('Reached current CCEE');
+   expect(c.cceeEstimate.state).toBe('CURRENT_RECORD');expect(c.cost.costs.items[0]?.effect).toBe(kind==='noCosts'?undefined:kind==='credit'?'CREDIT':'COST');expect(db.rpc).not.toHaveBeenCalled();
+   expect(tableReads.filter(t=>t==='monthly_energy_settlements')).toHaveLength(1);
+  }finally{if(previous===undefined)delete process.env.CCEE_COST_ESTIMATE_ENABLED;else process.env.CCEE_COST_ESTIMATE_ENABLED=previous}
+ });
+});

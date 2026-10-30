@@ -1,4 +1,5 @@
 'use client';
+import {supplierSourceRequest} from './supplier-source-request';
 import SupplierInvoiceSetReview from './SupplierInvoiceSetReview';
 import EvaProcessingStatus from '../../components/EvaProcessingStatus';
 import {useEffect,useRef,useState} from 'react';
@@ -17,7 +18,7 @@ export default function DocumentedSupplierSettlement({unitId,month,onSaved,disab
  const [coverageKind,setCoverageKind]=useState('FULL');
  const reviewInvoice=invoiceFromReview(review,unitId,month);
  const query=new URLSearchParams({consumerUnitId:unitId,month}).toString(),opts:Options|undefined=plan?.documentedSupplierOptions;
- useEffect(()=>{live.current=true;setPlan(null);setLoading(true);setError('');setCoverageAck(false);let active=true;apiRequest<any>('/api/v1/calculation-autofill?'+query).then(p=>{if(!active)return;if(p.unitId!==unitId||p.month!==month)throw Error('Conferência fora da unidade e competência.');setPlan(p);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;live.current=false;};},[query,unitId,month]);
+ useEffect(()=>{live.current=true;setPlan(null);setLoading(true);setError('');setCoverageAck(false);let active=true;const controller=new AbortController();supplierSourceRequest<any>('/api/v1/calculation-autofill?'+query,controller.signal).then(p=>{if(!active)return;if(p.unitId!==unitId||p.month!==month)throw Error('Conferência fora da unidade e competência.');setPlan(p);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;live.current=false;controller.abort();};},[query,unitId,month]);
  const currentProposal=opts?.proposals?.length===1&&opts.documents.length===1&&opts.proposals[0].documentId===opts.documents[0].id&&opts.proposals[0].fileHash===opts.documents[0].file_hash?opts.proposals[0]:null;
  // A saved coverage decision is independent of the recalculated contract draft.
  // A fiscal-only question must never fall back to the optional extra-purchase editor.
@@ -70,8 +71,8 @@ export default function DocumentedSupplierSettlement({unitId,month,onSaved,disab
   finally{working.current=false;if(live.current)setBusy(false);}
  }
  async function inspect(){if(working.current||!uncertain)return;working.current=true;setBusy(true);try{const h=await apiRequest<any>('/api/v1/calculation-autofill/history?'+query+'&page=0'),r=h.rows?.find((r:any)=>r.id===uncertain&&r.consumer_unit_id===unitId&&r.month===month);if(!r||!['PREPARED','PARTIAL'].includes(r.state))throw Error('A gravação ainda não está confirmada; não reenviar.');if(live.current){setUncertain(null);setError('');onSaved();}}catch(e){if(live.current)setError(e instanceof Error?e.message:'Histórico indisponível.');}finally{working.current=false;if(live.current)setBusy(false);}}
- async function refresh(){if(working.current||uncertain)return;working.current=true;setBusy(true);const captured=key;try{const p=await apiRequest<any>('/api/v1/calculation-autofill?'+query);if(!live.current||scope.current!==captured)return;if(p.unitId!==unitId||p.month!==month)throw Error('Fontes fora da seleção.');setPlan(p);setDocument('');setItem('');setRefreshRequired(false);setError('');}catch(e){if(live.current&&scope.current===captured)setError(e instanceof Error?e.message:'Fontes indisponíveis.');}finally{working.current=false;if(live.current)setBusy(false);}}
- const progress=busy?<EvaProcessingStatus floating detail='Conferindo a confirmação da nota fiscal e suas fontes…'/>:null;
+ async function refresh(){if(working.current||uncertain)return;working.current=true;setBusy(true);const captured=key;try{const p=await supplierSourceRequest<any>('/api/v1/calculation-autofill?'+query);if(!live.current||scope.current!==captured)return;if(p.unitId!==unitId||p.month!==month)throw Error('Fontes fora da seleção.');setPlan(p);setDocument('');setItem('');setRefreshRequired(false);setError('');}catch(e){if(live.current&&scope.current===captured)setError(e instanceof Error?e.message:'Fontes indisponíveis.');}finally{working.current=false;if(live.current)setBusy(false);}}
+ const progress=(busy||loading)?<EvaProcessingStatus floating detail='Conferindo a confirmação da nota fiscal e suas fontes…'/>:null;
  if(!opts?.enabled||!plan?.canPrepare)return <section>{progress}{reviewInvoice?<InvoiceValues proposal={reviewInvoice}/>:null}<p role='status'>{loading?(reviewInvoice?'Conferindo as fontes atuais da NF; os valores da revisão já estão preenchidos.':'Consultando a NF e as confirmações registradas…'):error||'A fonte atual precisa de reconferência; os valores da revisão foram preservados.'}</p>{!loading?<Button disabled={busy||!!uncertain} onClick={()=>void refresh()}>Atualizar fontes da NF</Button>:null}</section>;
  const invoiceDraft=plan.contractDraft?.format==='supplier-invoice-evidence-1'?plan.contractDraft:null;
  if(invoiceDraft?.setVersion)return <SupplierInvoiceSetReview key={unitId+'|'+month+'|'+invoiceDraft.source.invoiceSetHash} plan={plan} unitId={unitId} month={month} disabled={disabled} onSaved={onSaved} onPlan={setPlan}/>;
