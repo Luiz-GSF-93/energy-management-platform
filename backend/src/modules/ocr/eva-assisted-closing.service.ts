@@ -105,6 +105,11 @@ export class EvaAssistedClosingService{
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento assistido desligado.');
   if(!b||!['acknowledge,consumerUnitId,decision,hash,id,month,note','acknowledge,consumerUnitId,decision,disclose,hash,id,month,note'].includes(Object.keys(b).sort().join(','))||!uuid(b.id)||typeof b.hash!=='string'||!/^[a-f0-9]{64}$/.test(b.hash)||!['APPROVE','REJECT'].includes(b.decision)||b.acknowledge!==true||typeof b.note!=='string'||b.note.trim().length<20||b.note.length>2000)throw new BadRequestException('Confirme a decisão e sua justificativa.');
   if(b.disclose!==undefined&&typeof b.disclose!=='boolean'||b.decision==='APPROVE'&&this.publicationEnabled()&&b.disclose!==true)throw new BadRequestException('Atualize o relatório e confirme a disponibilização ao cliente.');
+  if(b.decision==='APPROVE'&&typeof this.autofill.assertOfficialFlagReferences==='function'){
+   const history=await this.rpc('history',{consumerUnitId:b.consumerUnitId,month:b.month},t,null,{page:0});const row=history.rows?.find((x:any)=>x.id===b.id&&x.payload_hash===b.hash);
+   if(!row)throw new ConflictException('Atualize a versão antes de aprovar.');
+   await this.autofill.assertOfficialFlagReferences?.(row.report,t);
+  }
   return {row:await this.rpc('decide',this.scope({consumerUnitId:b.consumerUnitId,month:b.month}),t,b.id,{hash:b.hash,decision:b.decision,note:b.note.trim(),acknowledge:true,...(b.decision==='APPROVE'&&this.publicationEnabled()?{disclose:true}:{})})};
  }
  async publication(b:any,t:TenantContext){

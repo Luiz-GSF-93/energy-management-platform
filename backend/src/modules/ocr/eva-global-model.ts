@@ -1,3 +1,4 @@
+import {cpflReactiveDemand} from './cpfl-reactive-demand';
 import {cpflCreditMagnitudes} from './cpfl-credit-magnitudes';
 import {cpflCreditSubtotal} from './cpfl-credit-subtotal';
 import {cpflAmountOnlyBilling} from './cpfl-amount-only-billing';
@@ -46,7 +47,8 @@ export function globalModelLayout(raw:any){
  });
  const eligible=sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1;
  const green=layout.fields.some(f=>f.name==='classification'&&/\bVERDE\b/.test(String(f.value.text).toUpperCase())&&globalFieldEvidence(raw,f.value).filled);
- const documented=eligible&&green?cpflAmountOnlyBilling(operations,references[0]!,field=>{const e=globalFieldEvidence(raw,field);return e.filled&&e.confidence!==null&&e.confidence>0.85;}):{operations,proofs:[]};
+ const reactive=eligible?cpflReactiveDemand(operations,references[0]!,field=>!!field&&globalFieldEvidence(raw,field).filled):operations;
+ const documented=eligible&&green?cpflAmountOnlyBilling(reactive,references[0]!,field=>{const e=globalFieldEvidence(raw,field);return e.filled&&e.confidence!==null&&e.confidence>0.85;}):{operations:reactive,proofs:[]};
  const subtotal=eligible?cpflCreditSubtotal(documented.operations,(row,amountOnly)=>{const amount=globalFieldEvidence(raw,row.fields.amount);return amount.filled&&amount.confidence!==null&&amount.confidence>0.85&&(amountOnly===true||globalFieldEvidence(raw,row.fields.description).filled);}):{operations,proof:null};
  const interpreted=eligible?cpflCreditMagnitudes(subtotal.operations,row=>globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled):{operations:subtotal.operations,proof:null};
  return {...layout,operations:interpreted.operations,...(documented.proofs.length?{amountOnlyBillingProofs:documented.proofs}:{}),...(subtotal.proof?{creditSubtotalProof:subtotal.proof}:{}),...(interpreted.proof?{creditSignProof:interpreted.proof}:{}),...(subtotal.proof||interpreted.proof?{reconciliation:reconcileCpflOperations(interpreted.operations)}:{}),...(sourceEnabled?{taxReconciliation:reconcileCpflTaxes(interpreted.operations,layout.blocks??[])}:{})};

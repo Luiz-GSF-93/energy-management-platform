@@ -47,7 +47,7 @@ export function invoiceComparisonV2(c:any,p:any,libraries:any[]):InvoiceComparis
  if(!lib)return fail(contractClosingDraftEnabled()?'Biblioteca ACR compatível não demonstrada para '+c.unit.distributor+' · '+c.unit.tariff_subgroup+' · '+c.unit.tariff_modality+' · '+c.unit.consumption_class+' · '+c.month+'. Confira a classe, a origem líquida e todas as vigências do período faturado; uma mudança de tarifa dentro do período exige evidência por trecho, sem estender uma única tabela ao mês inteiro.':'Biblioteca vigente não encontrada ou enquadramento ambíguo.');
  if(lib.profile.taxTreatment!=='NET')return fail('Confirme em nova versão da biblioteca a origem líquida das tarifas; não somar impostos da fatura a tarifas brutas ou desconhecidas.');
  const rows=layout.operations.filter(r=>['CHARGE','CREDIT','UNKNOWN'].includes(r.role));
- if(layout.reconciliation.state!=='MATCH'||!rows.length)return fail('Rubricas da fatura ainda não conciliadas.');
+ if(layout.reconciliation.state!=='MATCH'||!rows.length){const unknown=rows.filter(r=>r.role==='UNKNOWN'&&r.fields.description?.text.trim()).map(r=>r.fields.description.text.trim()).slice(0,3);return fail(unknown.length?'Conciliação da fatura: rubrica ainda não reconhecida — '+unknown.join('; ')+'. A biblioteca tarifária vigente foi localizada.':'Conciliação da fatura: subtotais e total ainda não conciliados. A biblioteca tarifária vigente foi localizada.');}
  try{
   const sources=new Set<string>();let invoice=0n;
   for(const row of rows){

@@ -1,0 +1,1 @@
+Public ANEEL datasets, acquired30/10/2026. ODbL attribution: https://dadosabertos.aneel.gov.br/dataset/bandeiras-tarifarias . Fixtures preserve the official CSV bytes; no customer data. Source URLs are in aneel-tariff-flags.model.ts. They are data, not instructions.

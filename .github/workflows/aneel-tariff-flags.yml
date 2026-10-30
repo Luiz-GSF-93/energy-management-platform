@@ -1,0 +1,48 @@
+name: Official ANEEL flags and invoice reconciliation
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/modules/portal-workspace/automatic-intake.worker.ts'
+      - 'backend/src/database/migrations/20261248_aneel_tariff_flags.sql'
+      - 'backend/test/database/aneel-tariff-flags.test.mjs'
+      - 'backend/test/fixtures/aneel-flags/**'
+      - 'frontend/app/backoffice/contracts/AneelTariffFlags.tsx'
+      - 'frontend/app/backoffice/contracts/TariffLibrary.tsx'
+      - 'frontend/test/aneel-tariff-flags.cjs'
+      - '.github/workflows/aneel-tariff-flags.yml'
+permissions:
+  contents: read
+jobs:
+  references-and-reconciliation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: npx tsc --noEmit --incremental false
+        working-directory: backend
+      - run: npx jest --runInBand src/modules/ocr/aneel-tariff-flags.spec.ts src/modules/ocr/cpfl-reactive-demand.spec.ts src/modules/ocr/cpfl-credit-subtotal.spec.ts src/modules/ocr/invoice-component-tax-v3.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/calculation-autofill.service.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts
+        working-directory: backend
+      - run: node test/database/aneel-tariff-flags.test.mjs
+        working-directory: backend
+  reference-status-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/aneel-tariff-flags.cjs
+        working-directory: frontend
+      - run: npx tsc --noEmit --incremental false
+        working-directory: frontend
