@@ -51,6 +51,11 @@ const acknowledge=()=>act(async()=>document.querySelector('input[type=checkbox]'
   plan.manualOverrides={supplierInvoiceAllocation:allocation};setup();await act(async()=>root.render(React.createElement(C,{key:'coverage-'+variant,unitId:'unit',month:'2026-01',taxOnly:true,onSaved:()=>{}})));
   assert(!fiscalButton());assert(document.body.textContent.includes('Atualizar fontes da NF'));assert(!document.body.textContent.includes('Lançamento da nota em custos mensais'));assert(!calls.some(([,o])=>o?.method==='POST'));
  }
+ // A stale closing can still ask a question whose answer is already durably saved.
+ plan.manualOverrides={supplierInvoiceAllocation:{...coveredAllocation,taxConfirmation:{treatment:'NET_DESTINATION_ICMS',reason:'Already confirmed destination ICMS in the original supplier source.'}}};plan.contractDraft={format:'supplier-invoice-evidence-1',requirements:[]};setup();let recoveredSaved=0;
+ await act(async()=>root.render(React.createElement(C,{key:'already-saved-tax',unitId:'unit',month:'2026-01',taxOnly:true,onSaved:()=>{recoveredSaved++}})));
+ assert(document.body.textContent.includes('Confirmação fiscal registrada'));assert(!fiscalButton());assert(!document.querySelector('textarea'));assert.equal(recoveredSaved,0);
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Usar confirmação fiscal já salva').click());assert.equal(recoveredSaved,1);assert(!calls.some(([,o])=>o?.method==='POST'),'Recovering saved confirmation never writes or duplicates an execution');
  plan.contractDraft=coveredDraft;plan.manualOverrides={supplierInvoiceAllocation:coveredAllocation};
  const sourceDraft={format:'supplier-invoice-evidence-1',source:{kind:'VERIFIED_INVOICE',documentId:nf.documentId,fileHash:nf.fileHash,taxEvidence:nf.taxEvidence},supplier:{contractedMwh:nf.quantityMwh,pricePerMwh:nf.pricePerMwh,regularAmount:nf.amount,taxTreatment:'NET_DESTINATION_ICMS'},requirements:[{code:'SUPPLIER_INVOICE_COVERAGE'}],differences:[]};
  const review={month:'2026-01',unit:{id:'unit',sources:{contractDraft:sourceDraft}}};
