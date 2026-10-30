@@ -1,3 +1,4 @@
+import {supplementalTariffFlagReference} from '../ocr/supplemental-tariff-flag-reference';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit,Optional} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -24,6 +25,8 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
  private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
  private async signature(i:any,job:{id:string;token:string}){
   const rows:any[]=[];
+  const flagReference=supplementalTariffFlagReference(i.month);
+  if(flagReference)rows.push(['supplementalTariffFlagReference',flagReference]);
   rows.push(['referenceVersions',await this.rpc('eva_intake_reference_signature',{p_id:job.id,p_token:job.token})]);
   for(const [table,id] of [['consumer_units',i.unit_id],['customers',i.customer_id]]){const r=await this.db.getClient().from(table).select('*').eq('organization_id',i.organization_id).eq('id',id).limit(2);if(r.error||!Array.isArray(r.data)||r.data.length!==1)throw Error('SOURCE_REGISTRATION_UNAVAILABLE');rows.push([table,r.data]);}
   const tables=['documents','energy_contracts','calculation_parameters','calculation_monthly_inputs','calculation_monthly_costs','supplier_billing_rules','supplier_spot_reconciliations','calculation_cost_absences','management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions'];
