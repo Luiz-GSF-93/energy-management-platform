@@ -2,7 +2,7 @@ import {auditAuthorNames} from '../contracts/services/audit-author-names';
 
 import {sourceNotification,SourceOrigin} from './source-notifications';
 
-import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException} from '@nestjs/common';
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException,NotFoundException,ServiceUnavailableException} from '@nestjs/common';
 
 import {SupabaseService} from '../../services/supabase.service';
 
@@ -119,6 +119,13 @@ export class OperationsService {
   const keys=new Set(reads.data.map((v:any)=>v.notification_key)),now=Date.now();const operational=(await this.visible(items.data,t)).map((v:any)=>({key:v.id+':'+v.revision,title:v.title,priority:v.priority,date:v.updated_at,dueAt:v.due_at,overdue:!!v.due_at&&Date.parse(v.due_at)<now,origin:v.kind,status:v.status,read:keys.has(v.id+':'+v.revision),href:'/backoffice/operation/'+v.kind,id:v.id}));
 
   const sourceRows=includeSources?await this.sourceAlerts(t):[];
+  if(t.permissions.includes(P.ORGANIZATION_USERS_INVITE)&&['admin_org','gestor'].includes(t.role)){
+   let query=this.client().from('organization_user_requests').select('id,actor_id,kind,state,created_at,updated_at').eq('organization_id',t.organizationId);
+   if(t.role!=='admin_org')query=query.eq('actor_id',t.userId);else query=query.or('state.eq.PENDING,actor_id.eq.'+t.userId);
+   const approvals=await query.order('updated_at',{ascending:false}).limit(50);this.fail(approvals.error);
+   if(!Array.isArray(approvals.data))throw new ServiceUnavailableException('Avisos de autorização indisponíveis.');
+   for(const r of approvals.data.filter((r:any)=>t.role==='admin_org'&&r.state==='PENDING'||r.actor_id===t.userId&&r.state!=='PENDING'))sourceRows.push({key:'users:'+r.id+':'+r.state,title:r.state==='PENDING'?'Usuários: solicitação aguardando sua aprovação':'Usuários: decisão da solicitação atualizada',priority:'NORMAL',date:r.updated_at,dueAt:null,overdue:false,origin:'users',status:r.state,href:'/backoffice/users',id:r.id} as any);
+  }
   if(process.env.CENTRAL_SUPPORT_EMAIL_ENABLED==='true'&&!t.accessMode){const support=await this.client().rpc('central_support_notifications',{o:t.organizationId,a:t.userId,k:null});this.fail(support.error);if(!Array.isArray(support.data?.rows))throw new InternalServerErrorException('Avisos de atendimento indisponíveis.');sourceRows.push(...support.data.rows);}
 
   if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED==='true'){
@@ -159,7 +166,7 @@ export class OperationsService {
 
  }
 
- async markRead(input:NotificationReadDto,t:TenantContext){const d=await validateWriteDto(NotificationReadDto,input),n=await this.notifications(t,true);if(!n.rows.some((r:{key:string})=>r.key===d.key))throw new NotFoundException('Notificação fora do escopo atual.');if(d.key.startsWith('portal:')){const saved=await this.client().rpc('portal_workspace_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:'read',p_id:d.key.slice(7),p_body:{}});this.fail(saved.error);return {read:true};}if(d.key.startsWith('support:')){const saved=await this.client().rpc('central_support_notifications',{o:t.organizationId,a:t.userId,k:d.key});this.fail(saved.error);return {read:true};}const r=await this.client().rpc(/^(ocr|energy|management|license):/.test(d.key)?'read_source_operation_notification':'read_operation_notification',{p_org:t.organizationId,p_actor:t.userId,p_key:d.key});this.fail(r.error);return {read:true};}
+ async markRead(input:NotificationReadDto,t:TenantContext){const d=await validateWriteDto(NotificationReadDto,input),n=await this.notifications(t,true);if(!n.rows.some((r:{key:string})=>r.key===d.key))throw new NotFoundException('Notificação fora do escopo atual.');if(d.key.startsWith('users:')){const saved=await this.client().rpc('organization_user_request_action',{o:t.organizationId,a:t.userId,platform:t.accessMode==='platform_operation',action:'read',rid:d.key.split(':')[1],b:{key:d.key}});this.fail(saved.error);return {read:true};}if(d.key.startsWith('portal:')){const saved=await this.client().rpc('portal_workspace_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:'read',p_id:d.key.slice(7),p_body:{}});this.fail(saved.error);return {read:true};}if(d.key.startsWith('support:')){const saved=await this.client().rpc('central_support_notifications',{o:t.organizationId,a:t.userId,k:d.key});this.fail(saved.error);return {read:true};}const r=await this.client().rpc(/^(ocr|energy|management|license):/.test(d.key)?'read_source_operation_notification':'read_operation_notification',{p_org:t.organizationId,p_actor:t.userId,p_key:d.key});this.fail(r.error);return {read:true};}
 
 }
 

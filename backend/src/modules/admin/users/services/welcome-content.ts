@@ -3,6 +3,7 @@ export type WelcomeContext = {
   roleName: string;
   affiliationType: string;
   customerName?: string;
+  unitNames?: string[];
 };
 export const welcomeRoleLabel = (role: string) => ({admin_org:'Administrador da organização',gestor:'Gestor',operacional:'Operador',consulta:'Consulta'}[role] || role);
 export function welcomeContent(input: WelcomeContext) {

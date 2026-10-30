@@ -100,6 +100,7 @@ describe('UsersController authorization contract', () => {
 
   it('E — findAll forwards tenant organization', async () => {
     const tenant: any = {
+      role: 'admin_org',
       userId: actorUserId,
       organizationId,
       permissions: [PERMISSIONS.ORGANIZATION_USERS_VIEW],
@@ -112,6 +113,7 @@ describe('UsersController authorization contract', () => {
 
   it('F — findOne forwards target and tenant organization', async () => {
     const tenant: any = {
+      role: 'admin_org',
       userId: actorUserId,
       organizationId,
       permissions: [PERMISSIONS.ORGANIZATION_USERS_VIEW],
@@ -152,9 +154,9 @@ describe('UsersController authorization contract', () => {
 
   it('J — affiliation forwards existing audit context unchanged', async () => {
     const tenant: any = {
+      role: 'admin_org',
       userId: actorUserId,
       organizationId,
-      role: 'manager',
       roleId: 'role-a',
       permissions: [PERMISSIONS.ORGANIZATION_USERS_UPDATE],
       email: 'actor@example.test',

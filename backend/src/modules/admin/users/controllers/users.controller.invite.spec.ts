@@ -25,10 +25,12 @@ describe('UsersController.invite — F1.2.4c.2.2a', () => {
       }),
     };
 
-    const controller = new UsersController(usersService as any);
+    const requests={submitInvite:jest.fn().mockResolvedValue({pendingApproval:true})};
+    const controller = new UsersController(usersService as any,requests as any);
 
     return {
       usersService,
+      requests,
       controller,
     };
   }
@@ -108,15 +110,9 @@ describe('UsersController.invite — F1.2.4c.2.2a', () => {
 
     await h.controller.invite(dto, tenant, request);
 
-    expect(h.usersService.invite).toHaveBeenCalledTimes(1);
-    expect(h.usersService.invite).toHaveBeenCalledWith(dto, {
-      actorUserId,
-      organizationId,
-      ipAddress: '203.0.113.10',
-      userAgent: 'invite-contract-test',
-    });
-
-    const forwarded = h.usersService.invite.mock.calls[0][0];
+    expect(h.requests.submitInvite).toHaveBeenCalledWith(dto,tenant);
+    expect(h.usersService.invite).not.toHaveBeenCalled();
+    const forwarded=h.requests.submitInvite.mock.calls[0][0];
 
     expect(forwarded).not.toHaveProperty('organizationId');
     expect(forwarded).not.toHaveProperty('tenantId');

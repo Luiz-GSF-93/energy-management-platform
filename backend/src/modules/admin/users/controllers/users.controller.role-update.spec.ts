@@ -34,7 +34,7 @@ describe('UsersController.updateRole', () => {
           ? {
               userId: actorUserId,
               organizationId,
-              role: 'manager',
+              role: 'admin_org',
               roleId: 'role-a',
               permissions,
               email: 'actor@example.test',
@@ -90,6 +90,7 @@ describe('UsersController.updateRole', () => {
 
   it('D — forwards target, role, tenant, actor and request origin', async () => {
     const tenant: any = {
+      role: 'admin_org',
       userId: actorUserId,
       organizationId,
       permissions: [PERMISSIONS.ORGANIZATION_USERS_UPDATE],

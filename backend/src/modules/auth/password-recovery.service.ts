@@ -63,7 +63,9 @@ export class PasswordRecoveryService {
       }
       verified = true;
       // updateUser uses ONLY the isolated session proved by the recovery token.
-      const update = await client.auth.updateUser({ password });
+      const update = data.user.app_metadata?.energyos_password_setup_required===true
+        ? await this.supabase.createAuthClient().auth.admin.updateUserById(data.user.id,{password,app_metadata:{...data.user.app_metadata,energyos_password_setup_required:false}})
+        : await client.auth.updateUser({ password });
       if (update.error) {
         throw new BadRequestException('Não foi possível alterar a senha. Use uma senha diferente e solicite um novo link.');
       }

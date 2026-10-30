@@ -5,11 +5,17 @@ import {
   IsNotEmpty,
   IsString,
   IsUUID,
+  IsArray,
+  ArrayMaxSize,
+  ArrayUnique,
   MaxLength,
   MinLength,
 } from 'class-validator';
 
 export class InviteUserDto {
+  @IsOptional() @IsUUID() requestId?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(300) @ArrayUnique() @IsUUID(undefined,{each:true}) permissionIds?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID(undefined,{each:true}) portalUnitIds?: string[];
   @IsOptional()
   @IsUUID()
   customerId?: string;

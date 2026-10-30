@@ -1,3 +1,5 @@
+import {memberPermissions} from '../services/member-permissions';
+import {assertInvitePasswordSetup} from '../auth/invite-password-policy';
 import { resolvePlatformOperation, PLATFORM_SESSION_HEADER } from '../services/platform-operation';
 import {assertMfa, MFA_HANDSHAKE} from '../auth/mfa-policy';
 import {restrictClientPortalRequest} from './client-portal-access';
@@ -73,6 +75,7 @@ export class TenantGuard implements CanActivate {
       }
 
       const userId = data.user.id;
+      assertInvitePasswordSetup(data.user,request.path);
       this.logger.log(`[SUPABASE_SUCCESS] userId extracted`);
 
       // 4. Extrair iat e exp do JWT (PRESERVADO DO ORIGINAL - apenas leitura, sem verificação)
@@ -248,6 +251,7 @@ export class TenantGuard implements CanActivate {
           affiliation_type,
           exclusive_customer_id,
           portal_scope_managed,
+          permission_limit,
           roles(id, name, permissions, organization_id, scope)
         `)
         .eq('user_id', userId)
@@ -304,11 +308,12 @@ export class TenantGuard implements CanActivate {
       }
 
       // 10. Extrair permissions (PRESERVADO DO ORIGINAL)
-      const permissions: string[] = Array.isArray(role.permissions) ? role.permissions : [];
+      const permissions: string[] = memberPermissions(role.permissions,membership.permission_limit);
       this.logger.log(`[PERMISSIONS] extracted from role`);
 
       // 11. Montar TenantContext completo (PRESERVADO DO ORIGINAL + NOVO roleId)
       const tenantContext: TenantContext = {
+        ...(membership.permission_limit!=null?{individualPermissions:true}:{}),
         ...(portalCustomerScope?{portalCustomerScope}:{}),
         scope: 'organization',
         userId,

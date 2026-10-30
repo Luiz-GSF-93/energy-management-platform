@@ -4,7 +4,7 @@ export type OperationKind=keyof typeof operations;
 
 export type OperationRow={auditIdentities?:Record<string,import("@/app/components/AuditIdentity").Identity>;auditCompany?:{id:string;currentName:string|null};id:string;operation_number?:number;requested_by_name?:string;created_at?:string;kind:OperationKind;title:string;description:string;status:string;priority:string;customer_id:string|null;consumer_unit_id:string|null;responsible_id:string;due_at:string|null;starts_at:string|null;ends_at:string|null;document_id:string|null;request_type:string|null;table_text:string|null;revision:number;updated_at:string;created_by:string};
 
-export type NotificationRow={key:string;id:string;title:string;priority:string;date:string;dueAt:string|null;overdue:boolean;origin:OperationKind|'ocr'|'energy'|'management'|'license'|'portal'|'support';description?:string;status:string;read:boolean;href:string};
+export type NotificationRow={key:string;id:string;title:string;priority:string;date:string;dueAt:string|null;overdue:boolean;origin:OperationKind|'ocr'|'energy'|'management'|'license'|'portal'|'support'|'users';description?:string;status:string;read:boolean;href:string};
 
 export const statusLabels:Record<string,string>={OPEN:'Aberta',DRAFT:'Rascunho',IN_PROGRESS:'Em andamento',WAITING:'Aguardando retorno',DONE:'Concluída',CANCELLED:'Cancelada',REVIEW:'Em revisão',PUBLISHED:'Publicado',ARCHIVED:'Arquivado'};
 
@@ -14,7 +14,7 @@ export function nextOperationStatuses(kind:OperationKind,status:string):string[]
 
 
 
-export const notificationOrigins:Record<string,string>={support:'Atendimento Central',portal:'Portal do cliente',agenda:'Agenda',requests:'Solicitações',events:'Eventos',ocr:'OCR / documentos',energy:'Contratos de energia',management:'Honorários',license:'Licença'};
+export const notificationOrigins:Record<string,string>={users:'Usuários e acessos',support:'Atendimento Central',portal:'Portal do cliente',agenda:'Agenda',requests:'Solicitações',events:'Eventos',ocr:'OCR / documentos',energy:'Contratos de energia',management:'Honorários',license:'Licença'};
 
-export const notificationStates:Record<string,string>={...statusLabels,TRIAGE:'Aguardando triagem',RESOLVED:'Resolvido',CLOSED:'Encerrado',SUCCEEDED:'Extração concluída',FAILED:'Falha de processamento',SUBMISSION_UNKNOWN:'Envio com resultado incerto',EXPIRING:'Prazo próximo',OVERDUE:'Prazo ultrapassado'};
+export const notificationStates:Record<string,string>={...statusLabels,PENDING:'Aguardando aprovação',EXECUTING:'Efetivando autorização',COMPLETE:'Autorização concluída',REJECTED:'Rejeitada',UNKNOWN:'Resultado não confirmado',TRIAGE:'Aguardando triagem',RESOLVED:'Resolvido',CLOSED:'Encerrado',SUCCEEDED:'Extração concluída',FAILED:'Falha de processamento',SUBMISSION_UNKNOWN:'Envio com resultado incerto',EXPIRING:'Prazo próximo',OVERDUE:'Prazo ultrapassado'};
 
