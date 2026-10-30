@@ -1,0 +1,32 @@
+name: Trading form and readable user selectors
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/trading-hub/**'
+      - 'frontend/app/backoffice/trading-hub/**'
+      - 'frontend/app/backoffice/users/UserAccessGovernance.tsx'
+      - 'frontend/test/trading-required-fields.cjs'
+      - 'frontend/test/user-access-governance.cjs'
+      - '.github/workflows/trading-form-validation.yml'
+permissions:
+  contents: read
+jobs:
+  trading-and-selectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --silent src/modules/trading-hub
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/trading-required-fields.cjs && node test/user-access-governance.cjs
+        working-directory: frontend
+      - run: node node_modules/typescript/bin/tsc --noEmit --incremental false
+        working-directory: frontend
