@@ -7,7 +7,14 @@ describe('Trading Hub boundaries and calculations',()=>{
  it('validates CNPJ digits and disallows repeated digits',()=>{expect(cnpj('11.222.333/0001-81')).toBe(true);expect(cnpj('11111111111111')).toBe(false);expect(cnpj('11222333000182')).toBe(false);});
  it('normalizes contacts and rejects unauthorized tenant/status fields',()=>{expect(validateTrading('supplier',supplier).cnpj).toBe('11222333000181');expect(()=>validateTrading('supplier',{...supplier,organization_id:'other'})).toThrow();expect(()=>validateTrading('opportunity',{...op,status:'OPEN'})).toThrow();});
  it('rejects invalid quotation contact, modality and past expiry',()=>{expect(()=>validateTrading('supplier',{...supplier,quotationContacts:[{name:'A',email:'bad'}]})).toThrow();expect(()=>validateTrading('opportunity',{...op,energyType:'INVALID'})).toThrow();expect(()=>validateTrading('opportunity',{...op,expiresAt:'2020-01-01'})).toThrow();});
- it('requires documented full scenario costs before savings',()=>{expect(()=>validateTrading('opportunity',{...op,acrMonthlyBrl:100})).toThrow();});
+ it('identifies the missing comparison source without removing the documented-cost rule',()=>{
+  for(const costs of [{acrMonthlyBrl:250},{aclOtherMonthlyBrl:10},{acrMonthlyBrl:0}]){
+   expect(()=>validateTrading('opportunity',{...op,...costs,comparisonBasis:''})).toThrow(/Fonte e premissas.*10.*1000/);
+   expect(validateTrading('opportunity',{...op,...costs,comparisonBasis:'Fonte documental da mesma competência'}).comparisonBasis).toBe('Fonte documental da mesma competência');
+  }
+  expect(validateTrading('opportunity',op).comparisonBasis).toBeUndefined();
+  expect(()=>validateTrading('opportunity',{...op,title:''})).toThrow(/Título da oportunidade/);
+ });
  const proposal=(id:string,price:number,type='CONVENTIONAL',status='RECEIVED')=>({id,status,data:{supplierId:id,priceBrlMwh:price,energyType:type,validUntil:'2099-01-01'}});
  it('does not fabricate savings, NPV or payback when inputs are missing',()=>{const r=compareTrading({data:op},[proposal('a',145)])[0];expect(r.estimatedSavingBrl).toBeNull();expect(r.npvBrl).toBeNull();expect(r.paybackMonths).toBeNull();});
  it('ranks only matching modality/valid proposals; equal prices share rank',()=>{const r=compareTrading({data:op},[proposal('a',145),proposal('b',145),proposal('c',151),proposal('x',1,'INCENTIVIZED_50'),proposal('z',1,'CONVENTIONAL','REJECTED')]);expect(r.map(v=>v.rank)).toEqual([1,1,3]);});

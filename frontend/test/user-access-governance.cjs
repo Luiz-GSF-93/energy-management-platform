@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
-const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});for(const k of ['window','document','navigator','HTMLElement','Event','FormData'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});for(const k of ['window','document','navigator','HTMLElement','Event','FormData','Node'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+require.extensions['.css']=(m)=>{m.exports=new Proxy({},{get:(_,k)=>k==='__esModule'?false:String(k)});};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');let calls=[],rows=[],release;const original=Module._load;
 Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:async(path,o)=>{calls.push([path,o]);if(o?.method==='POST')return new Promise(resolve=>{release=()=>{rows=rows.map(r=>({...r,state:'COMPLETE'}));resolve({});};});return {rows};}};if(n==='@/app/components/ui')return {Button:({children,variant,...p})=>React.createElement('button',p,children),Card:({children,title})=>React.createElement('section',null,title,children),Alert:({children})=>React.createElement('p',{role:'alert'},children)};return original.call(this,n,p,m);};
 const Governance=require('../app/backoffice/users/UserAccessGovernance.tsx').default,{PermissionOptions}=require('../app/backoffice/users/UserAccessGovernance.tsx');const root=createRoot(document.getElementById('root'));
@@ -8,6 +9,11 @@ const catalog={units:[],members:[],roles:[{id:'role',name:'operacional',permissi
 const click=async text=>act(async()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent===text);assert(b,text);b.click();});
 (async()=>{try{
  await act(async()=>root.render(React.createElement(PermissionOptions,{catalog,roleId:'role',selected:[]})));assert.equal(document.querySelectorAll('input[type=checkbox]').length,2);assert([...document.querySelectorAll('input')].every(x=>!x.checked),'An empty allowlist must not become full access');assert(!document.body.textContent.includes('Plataforma'));
+ const longName='Pessoa com nome completo extenso para verificar a seleção sem corte';const email='usuario.completo@example.test';
+ await act(async()=>root.render(React.createElement(Governance,{key:'selection',catalog:{...catalog,members:[{user_id:'target',role_id:'role',permission_limit:null}]},users:[{userId:'target',name:longName,email,membershipStatus:'active',role:{id:'role'}}],onChanged:async()=>{}})));
+ assert(!document.querySelector('select'),'Use wrapping selectors rather than native popup options');
+ await click(longName+' · '+email);assert(document.body.textContent.includes('Operador'));
+ assert([...document.querySelectorAll('summary')].some(s=>s.textContent.includes(longName+' · '+email)),'Selected full identity remains readable');
  rows=[{id:'request',actor_id:'manager',kind:'INVITE',state:'PENDING',created_at:'2026-10-30T12:00:00Z',body:{name:'Synthetic Person',email:'person@example.test',roleId:'role',permissionIds:['p1']}}];
  await act(async()=>root.render(React.createElement(Governance,{key:'manager',catalog,users:[],onChanged:async()=>{}})));assert(!document.body.textContent.includes('Aprovar e efetivar'));assert.equal(calls.filter(c=>c[1]?.method==='POST').length,0);
  await act(async()=>root.render(React.createElement(Governance,{key:'admin',catalog:{...catalog,canApprove:true},users:[],onChanged:async()=>{}})));const approve=[...document.querySelectorAll('button')].find(b=>b.textContent==='Aprovar e efetivar');assert(approve.disabled,'Administrator must enter a decision reason');
