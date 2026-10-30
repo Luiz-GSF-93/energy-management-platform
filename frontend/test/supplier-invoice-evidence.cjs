@@ -37,6 +37,26 @@ const acknowledge=()=>act(async()=>document.querySelector('input[type=checkbox]'
  await act(async()=>[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Conferi o tratamento selecionado')).querySelector('input').click());await act(async()=>fiscalButton().click());
  const fiscalManual=calls.find(([,o])=>o?.method==='POST')[1].body.manual;
  assert.equal(fiscalManual.fixedFee,'10.00');assert.equal(fiscalManual.supplierInvoiceAllocation.reason,plan.manualOverrides.supplierInvoiceAllocation.reason);assert.equal(fiscalManual.supplierInvoiceAllocation.taxConfirmation.treatment,'NET_DESTINATION_ICMS');assert(document.body.textContent.includes('Confirmação fiscal registrada'));assert(!calls.some(([p])=>/decision|publication|ocr/.test(p)));
+ // Fiscal-only confirmation does not depend on a recalculated contract draft or extra costs.
+ const coveredDraft=plan.contractDraft,coveredAllocation={...plan.manualOverrides.supplierInvoiceAllocation};
+ for(const [variant,draft] of [['missing',null],['recalculated',{format:'supplier-invoice-evidence-1',requirements:[]}],['stale-requirements',{format:'supplier-invoice-evidence-1',requirements:[{code:'SUPPLIER_INVOICE_COVERAGE'}]}]]){
+  plan.contractDraft=draft;plan.documentedSupplierOptions.cost.items=[];plan.manualOverrides={fixedFee:'10.00',supplierInvoiceAllocation:{...coveredAllocation}};setup();
+  await act(async()=>root.render(React.createElement(C,{key:'fiscal-'+variant,unitId:'unit',month:'2026-01',taxOnly:true,onSaved:()=>{}})));
+  assert(fiscalButton(),variant+': fiscal confirmation must remain available');assert(!document.body.textContent.includes('Lançamento da nota em custos mensais'));assert(!document.body.textContent.includes('Modalidade da compra'));assert(fiscalButton().disabled);
+  await change('Como considerar o valor da NF?','INCLUDED');await change('Fonte e justificativa desta confirmação','Confirmed final invoice amount includes taxes in the reviewed source.');
+  await act(async()=>[...document.querySelectorAll('label')].find(l=>l.textContent.startsWith('Conferi o tratamento selecionado')).querySelector('input').click());assert(!fiscalButton().disabled);await act(async()=>fiscalButton().click());
+  const writes=calls.filter(([,o])=>o?.method==='POST');assert.equal(writes.length,2);assert.equal(writes[0][1].body.manual.supplierSettlement,undefined);assert.equal(writes[0][1].body.manual.supplierInvoiceAllocation.taxConfirmation.treatment,'INCLUDED');assert.equal(writes[0][1].body.manual.supplierInvoiceAllocation.documentId,nf.documentId);assert.equal(writes[0][1].body.manual.fixedFee,'10.00');assert(!calls.some(([p])=>/decision|publication|ocr/.test(p)));
+ }
+ for(const [variant,allocation] of [['missing',undefined],['other-document',{...coveredAllocation,documentId:'other'}],['other-hash',{...coveredAllocation,fileHash:'d'.repeat(64)}],['invalid-coverage',{...coveredAllocation,coverage:'UNKNOWN'}]]){
+  plan.manualOverrides={supplierInvoiceAllocation:allocation};setup();await act(async()=>root.render(React.createElement(C,{key:'coverage-'+variant,unitId:'unit',month:'2026-01',taxOnly:true,onSaved:()=>{}})));
+  assert(!fiscalButton());assert(document.body.textContent.includes('Atualizar fontes da NF'));assert(!document.body.textContent.includes('Lançamento da nota em custos mensais'));assert(!calls.some(([,o])=>o?.method==='POST'));
+ }
+ // A stale closing can still ask a question whose answer is already durably saved.
+ plan.manualOverrides={supplierInvoiceAllocation:{...coveredAllocation,taxConfirmation:{treatment:'NET_DESTINATION_ICMS',reason:'Already confirmed destination ICMS in the original supplier source.'}}};plan.contractDraft={format:'supplier-invoice-evidence-1',requirements:[]};setup();let recoveredSaved=0;
+ await act(async()=>root.render(React.createElement(C,{key:'already-saved-tax',unitId:'unit',month:'2026-01',taxOnly:true,onSaved:()=>{recoveredSaved++}})));
+ assert(document.body.textContent.includes('Confirmação fiscal registrada'));assert(!fiscalButton());assert(!document.querySelector('textarea'));assert.equal(recoveredSaved,0);
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Usar confirmação fiscal já salva').click());assert.equal(recoveredSaved,1);assert(!calls.some(([,o])=>o?.method==='POST'),'Recovering saved confirmation never writes or duplicates an execution');
+ plan.contractDraft=coveredDraft;plan.manualOverrides={supplierInvoiceAllocation:coveredAllocation};
  const sourceDraft={format:'supplier-invoice-evidence-1',source:{kind:'VERIFIED_INVOICE',documentId:nf.documentId,fileHash:nf.fileHash,taxEvidence:nf.taxEvidence},supplier:{contractedMwh:nf.quantityMwh,pricePerMwh:nf.pricePerMwh,regularAmount:nf.amount,taxTreatment:'NET_DESTINATION_ICMS'},requirements:[{code:'SUPPLIER_INVOICE_COVERAGE'}],differences:[]};
  const review={month:'2026-01',unit:{id:'unit',sources:{contractDraft:sourceDraft}}};
  const fresh={...plan,manualOverrides:{},contractDraft:sourceDraft,documentedSupplierOptions:{...plan.documentedSupplierOptions,proposals:[nf],documents:[{id:nf.documentId,file_hash:nf.fileHash,original_filename:'nota.pdf'}]}};
