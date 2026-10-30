@@ -2,6 +2,12 @@ const normalized=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g
 export function supplierDocumentKind(text:string):'INVOICE'|'CONTRACT'|'UNKNOWN'{
  const t=normalized(text).replace(/DADOS DOS PRODUTOS\s*\/\s*SERVICOS/g,'DADOS DO PRODUTO / SERVICO');
  if(/\bDANFE\b/.test(t)&&/DADOS DO PRODUTO\s*\/\s*SERVI.O/.test(t)&&/CNPJ/.test(t))return 'INVOICE';
+ // NF3e bills legitimately mention "contrato" and "demanda contratada".
+ // A fiscal heading plus the full billing structure takes precedence over
+ // those incidental words. UNKNOWN preserves the distributor identity path;
+ // it does not turn a distributor bill into a supplier DANFE or waive identity.
+ const fiscal=t.indexOf('DANF3E'),header=t.slice(0,800);
+ if(fiscal>=0&&fiscal<300&&!/\b(?:CONTRATO|MINUTA|ANEXO)\b/.test(t.slice(0,fiscal))&&/FISCAL\s+DE\s+ENERGIA\s+ELETRICA\s+ELETRONICA/.test(header)&&/\bCNPJ\b/.test(t)&&/\bKWH\b/.test(t)&&/LEITURA\s+ATUAL/.test(t)&&/LEITURA\s+ANTERIOR/.test(t)&&/REF\s*:?\s*MES\s*\/\s*ANO/.test(t)&&/TOTAL\s+A\s+PAGAR/.test(t))return 'UNKNOWN';
  if(/\b(?:CONTRATO|MINUTA|ANEXO)\b/.test(t)&&/CONTRATANTE|CONTRATADA|COMPRADORA|VENDEDORA|CLAUSULA/.test(t))return 'CONTRACT';
  return 'UNKNOWN';
 }
