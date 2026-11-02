@@ -50,6 +50,6 @@ export class AuditInterceptor implements NestInterceptor {
   }
 
   private logAudit(data: any): void {
-    console.log('[AuditLog]', JSON.stringify(data));
+    console.log('[AuditLog]', JSON.stringify({organizationId:data.organizationId,userId:data.userId,action:data.action,status:data.status,duration:data.duration,timestamp:data.timestamp}));
   }
 }
