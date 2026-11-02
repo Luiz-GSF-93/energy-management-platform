@@ -5,6 +5,7 @@ on:
       - 'backend/src/modules/audit/**'
       - 'backend/src/database/migrations/20261218_audit_workspaces.sql'
       - 'backend/src/database/migrations/20261219_audit_historical_dates.sql'
+      - 'backend/src/database/migrations/20261220_audit_actor_names.sql'
       - 'backend/test/audit-workspaces.cjs'
       - 'frontend/app/components/Audit*'
       - 'frontend/app/backoffice/audit/**'
