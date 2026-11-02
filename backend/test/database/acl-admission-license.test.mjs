@@ -1,0 +1,53 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite(),actor='11111111-1111-4111-8111-111111111111',admin='22222222-2222-4222-8222-222222222222';let checks=0;
+const ok=(v)=>{assert.ok(v);checks++;};
+const reject=async(p,code)=>{await assert.rejects(p,e=>e.code===code);checks++;};
+const migration=n=>readFileSync(new URL('../../src/database/migrations/'+n,import.meta.url),'utf8');
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE permissions(id uuid PRIMARY KEY,code text UNIQUE,name text,module text,resource text,action text);
+ CREATE TABLE roles(id text PRIMARY KEY,name text,scope text,permissions jsonb,organization_id text);
+ CREATE TABLE user_roles(user_id uuid,role_id text);
+ CREATE TABLE organizations(id text PRIMARY KEY,name text,deleted_at timestamptz);
+ CREATE TABLE organization_members(id text PRIMARY KEY,user_id uuid,organization_id text,status text,role_id text);
+ CREATE TABLE platform_organization_sessions(organization_id text,user_id uuid,expires_at timestamptz,revoked_at timestamptz);
+ CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,status text,deleted_at timestamptz);
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,upload_license_id text);
+ CREATE TABLE audit_logs(id text,organization_id text NOT NULL,user_id uuid,action text,resource_type text,resource_id text,changes jsonb,status text,ip_address text,user_agent text);
+ CREATE TABLE licenses(id text PRIMARY KEY,organization_id text,license_type text,documents_limit int,documents_used int,renewal_date date,start_date date,end_date date,status text,active bool,max_consumer_units int,document_management bool,advanced_analytics bool,report_generation bool,free_market_management bool,updated_at timestamptz);
+ INSERT INTO roles VALUES('global','admin_platform','global','[]',null);INSERT INTO user_roles VALUES('${actor}','global');INSERT INTO organizations VALUES('a','A',null),('b','B',null);`);
+ for(const name of ['20260924_f1_15_plan_catalog.sql','20260925_f1_39_license_governance.sql'])await db.exec(migration(name));
+ await db.exec(`ALTER TABLE plan_catalog ADD trading_hub boolean DEFAULT false,ADD bot_energy_rag boolean DEFAULT false,ADD ai_monthly_limit_micro_usd bigint DEFAULT 10000000,ADD monthly_price_brl_cents bigint;
+ ALTER TABLE licenses ADD trading_hub boolean DEFAULT false,ADD bot_energy_rag boolean DEFAULT false,ADD ai_monthly_limit_micro_usd bigint DEFAULT 0,ADD monthly_price_brl_cents bigint;`);
+ await db.exec(migration('20261008_ccee_registration_plan.sql'));
+ const definition={name:'Available CCEE',description:'Explicit per organization',active:true,documents_limit:10,documents_unlimited:false,max_consumer_units:10,max_users:10,document_management:false,advanced_analytics:false,report_generation:false,free_market_management:true,ccee_registrations:false};
+ const save=async(d=definition,id=null,v=null)=>(await db.query('SELECT save_catalog_plan($1,$2,$3,$4,null,null) p',[id,v,d,actor])).rows[0].p;
+ const apply=async(org,p,prev=null,modules=null)=>(await db.query("SELECT save_plan_license($1,$2,$3,$4,$5,CURRENT_DATE,null,CURRENT_DATE,'ACTIVE',$6,$7,null,null) l",[org,prev?.id??null,prev?.governance_revision??null,p.id,p.version,modules,actor])).rows[0].l;
+ const oldPlan=await save(),oldLicense=await apply('a',oldPlan);
+ await db.exec(migration('20261212_ccee_data_license.sql'));
+
+ await db.exec(migration('20261249_acl_admission_license.sql'));
+ ok((await db.query('SELECT acl_admissions FROM licenses WHERE id=$1',[oldLicense.id])).rows[0].acl_admissions===false);
+ await reject(save({...definition,name:'ACL incompatible',acl_admissions:true,free_market_management:false}),'P4A01');
+ const p=await save({...definition,name:'ACL available',acl_admissions:true,ccee_data:true});ok(p.acl_admissions&&p.ccee_data);
+ const a=await apply('a',p,oldLicense);ok(a.acl_admissions===false); // availability is not a grant
+ const modules={document_management:false,advanced_analytics:false,report_generation:false,free_market_management:true,ccee_data:true,acl_admissions:true};
+ const enabled=await apply('a',p,a,modules);ok(enabled.acl_admissions&&enabled.ccee_data);ok(enabled.plan_snapshot.acl_admissions===true);
+ await reject(apply('a',p,enabled,{...modules,free_market_management:false}),'P4A01');
+ await reject(apply('a',p,enabled,{...modules,acl_admissions:'true'}),'22023');
+ const legacy=await apply('a',p,enabled);ok(legacy.acl_admissions===true);
+ const oldCatalog=await save({...definition,name:p.name,ccee_data:true},p.id,p.version);ok(oldCatalog.acl_admissions===true);
+ const planOff=await save({...definition,name:p.name,acl_admissions:false,ccee_data:true},oldCatalog.id,oldCatalog.version);
+ ok((await db.query('SELECT acl_admissions FROM licenses WHERE id=$1',[legacy.id])).rows[0].acl_admissions===true);
+ await reject(apply('b',planOff,null,modules),'P4A02');
+ const off=await apply('a',planOff,legacy,{...modules,acl_admissions:false});ok(off.acl_admissions===false&&off.ccee_data===true);
+ const audit=(await db.query("SELECT changes FROM audit_logs WHERE resource_id=$1 AND changes->'after'->>'governance_revision'=$2",[off.id,String(off.governance_revision)])).rows;
+ ok(audit.length===1&&audit[0].changes.before.acl_admissions===true&&audit[0].changes.after.acl_admissions===false);
+ await reject(db.query('UPDATE licenses SET acl_admissions=true WHERE id=$1',[off.id]),'42501');
+ await reject(apply('b',planOff,off,{...modules,acl_admissions:false}),'P3150');
+ await db.exec('SET ROLE authenticated');await reject(save(),'42501');await db.exec('RESET ROLE');
+ ok(!(await db.query("SELECT has_function_privilege('service_role','public.save_plan_license_before_acl_admissions(text,text,integer,uuid,integer,date,date,date,text,jsonb,uuid,text,text)','execute') allowed")).rows[0].allowed);
+ console.log(checks+' ACL catalog/license checks passed');
+}finally{await db.close();}

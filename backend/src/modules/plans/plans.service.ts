@@ -17,6 +17,8 @@ export class PlansService {
  }
  private check(error:any){
   if(!error)return;
+  if(error.code==='P4A01')throw new BadRequestException('Adesão ACL exige Gestão do mercado livre selecionada no plano e na licença.');
+  if(error.code==='P4A02')throw new BadRequestException('Adesão ACL não está disponível no plano selecionado.');
   if(error.code==='42501')throw new ForbiddenException('Somente o administrador da plataforma pode alterar planos e licenças.');
   if(error.code==='P3412')throw new ConflictException('O limite de clientes é inferior aos cadastros mantidos. Revise o plano ou os adicionais.');
   if(error.code==='P3393')throw new ConflictException('O plano selecionado é inferior ao consumo atual. Revise usuários, unidades e documentos.');

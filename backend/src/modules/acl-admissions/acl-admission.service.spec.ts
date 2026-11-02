@@ -1,3 +1,4 @@
+import {ForbiddenException} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AclAdmissionService, aclCursor, ACL_MANAGE, ACL_VIEW } from './acl-admission.service';
 import { TenantContext } from '../../common/interfaces/tenant-context.interface';
@@ -9,7 +10,7 @@ function harness(enabled=true) {
   if(name==='acl_create')return{data:{organizationId:p.p_org,customerId:p.p_customer,unitId:p.p_unit,id:randomUUID()}};
   return{data:[]};
  });
- const licenses={requireEntitlement:jest.fn().mockResolvedValue({})};
+ const licenses={requireEntitlement:jest.fn().mockImplementation(async(_org,cap)=>{if(cap==='acl_admissions'&&!enabled)throw new ForbiddenException('Module not contracted');return {};})};
  const service=new AclAdmissionService({getClient:()=>({rpc})} as any,licenses as any,{get:()=>enabled?'o1':''} as any);
  return{rpc,licenses,service};
 }
@@ -49,7 +50,7 @@ describe('ACL registry API authorization and projection',()=>{
   expect(h.rpc).toHaveBeenLastCalledWith('acl_economic_study_command',expect.objectContaining({p_org:'o1',p_actor:t.userId,p_id:id,p_revision:11,p_action:'SAVE',p_snapshot:{schemaVersion:'acl-economic-study/1',source:{evidenceId,history:{},documents:[]},result}}));
  });
  it('requires scoped independent-premise review and refuses economic approval actions',async()=>{
-  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']},body={requestId:randomUUID(),expectedRevision:12,studyId:randomUUID(),action:'REVIEW',hash:'a'.repeat(64),reason:'Premissas e pendências conferidas nesta versão.',checkedDocument:true};
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed','26cadaa7-2eea-4080-91f6-1f26f87ca809']},body={requestId:randomUUID(),expectedRevision:12,studyId:randomUUID(),action:'REVIEW',hash:'a'.repeat(64),reason:'Premissas e pendências conferidas nesta versão.',checkedDocument:true};
   await expect(h.service.reviewStudy(id,body,{...t,role:'operacional'})).rejects.toThrow('aprovação');
   for(const extra of [{action:'APPROVE'},{action:'PUBLISH'},{hash:'bad'},{checkedDocument:false},{reason:'short'},{snapshot:{}},{organizationId:'o2'}])await expect(h.service.reviewStudy(id,{...body,...extra},t)).rejects.toThrow();
   h.rpc.mockImplementation(async(name,p)=>({data:name==='acl_assert_actor'?{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}:{ok:true,studyId:body.studyId,admission:{id,organizationId:'o1'}}}));
@@ -121,7 +122,7 @@ describe('ACL registry API authorization and projection',()=>{
  it('authorizes reopening and rejects body-supplied history, scope and approvals',async()=>{
   const h=harness(),id=randomUUID(),body={requestId:randomUUID(),expectedRevision:5,reason:'Correção revisada pelo Consultor responsável.',checkedDocument:true};
   for(const extra of [{generation:2},{previousId:id},{organizationId:'o2'},{checkedDocument:false},{state:{}}])await expect(h.service.reopen(id,{...body,...extra},tenant)).rejects.toThrow();
-  const t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed','26cadaa7-2eea-4080-91f6-1f26f87ca809']};
   await expect(h.service.reopen(id,body,{...t,role:'operacional'})).rejects.toThrow('aprovação');
   h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,admission:{id:randomUUID(),previousId:id,organizationId:'o1'}}});
   expect((await h.service.reopen(id,body,t)).previousId).toBe(id);expect(h.rpc).toHaveBeenLastCalledWith('acl_reopen',expect.objectContaining({p_org:'o1',p_id:id,p_reason:body.reason,p_actor:t.userId}));
@@ -140,7 +141,7 @@ describe('ACL registry API authorization and projection',()=>{
   expect(h.rpc.mock.calls.some(c=>c[0]==='acl_closure_command')).toBe(false);
  });
  it('binds publication to the reviewed hash, uses live scope and rejects foreign performance',async()=>{
-  const h=harness(),id=randomUUID(),hash='a'.repeat(64),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const h=harness(),id=randomUUID(),hash='a'.repeat(64),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed','26cadaa7-2eea-4080-91f6-1f26f87ca809']};
   const body={requestId:randomUUID(),expectedRevision:50,action:'PUBLISH',checkedDocument:true,performanceHash:hash,conclusion:'Adesão concluída e suprimento confirmado.'};
   h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:true,admission:{id,organizationId:'o1'},closure:{performance:{body:{organizationId:'o1',admissionId:id}}}}});
   expect((await h.service.closureCommand(id,body,t)).admission.id).toBe(id);
@@ -149,7 +150,7 @@ describe('ACL registry API authorization and projection',()=>{
   await expect(h.service.closureRead(id,t)).rejects.toThrow('Escopo');
  });
  it('surfaces committed closure conflicts without repeating a command automatically',async()=>{
-  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed']};
+  const h=harness(),id=randomUUID(),t={...tenant,permissions:[...tenant.permissions,'8f105b02-4443-49de-b188-847e0284e7ed','26cadaa7-2eea-4080-91f6-1f26f87ca809']};
   h.rpc.mockImplementation(async(name,p)=>name==='acl_assert_actor'?{data:{organizationId:p.p_org,actorId:p.p_actor,canWork:true,canApprove:true}}:{data:{ok:false,code:'DEPENDENCIES'}});
   await expect(h.service.closureCommand(id,{requestId:randomUUID(),expectedRevision:8,action:'CLOSE',checkedDocument:true},t)).rejects.toThrow('Conclua');
   expect(h.rpc.mock.calls.filter(c=>c[0]==='acl_closure_command')).toHaveLength(1);
@@ -213,10 +214,17 @@ describe('ACL registry API authorization and projection',()=>{
   expect(await h.service.heartbeat(id,{stageKey:'registration'},tenant)).toEqual({confirmedAt:'2026-10-06T20:00:00Z',revision:2});
   await expect(h.service.heartbeat(id,{stageKey:'registration'},{...tenant,role:'consulta'})).rejects.toThrow('backoffice');
  });
- it('keeps rollout disabled by default and never calls a write RPC when disabled',async()=>{
+ it('keeps uncontracted Adesão ACL disabled and never calls a write RPC',async()=>{
   const h=harness(false);expect((await h.service.access(tenant)).enabled).toBe(false);
   await expect(h.service.create({requestId:randomUUID(),customerId:'c1',unitId:'u1'},tenant)).rejects.toThrow('não habilitada');
   expect(h.rpc).not.toHaveBeenCalled();
+ });
+ it('uses the contracted module without requiring an environment allowlist entry',async()=>{
+  const h=harness();const service=new AclAdmissionService({getClient:()=>({rpc:h.rpc})} as any,h.licenses as any,{get:()=>''} as any);
+  expect((await service.access(tenant)).enabled).toBe(true);expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','acl_admissions');
+ });
+ it('never restores individually restricted work or approval from the broader role',async()=>{
+  const h=harness();const access=await h.service.access({...tenant,permissions:[ACL_VIEW,customerView]});expect(access.enabled).toBe(true);expect(access.canWork).toBe(false);expect(access.canApprove).toBe(false);
  });
  it('rejects global context, client role and insufficient permissions',async()=>{
   const h=harness();
@@ -235,7 +243,7 @@ describe('ACL registry API authorization and projection',()=>{
  it('passes server-resolved organization, actor and role to the authorized create RPC',async()=>{
   const h=harness();const requestId=randomUUID();await h.service.create({requestId,customerId:'c1',unitId:'u1'},tenant);
   expect(h.rpc).toHaveBeenCalledWith('acl_create',{p_org:'o1',p_actor:tenant.userId,p_role:tenant.roleId,p_platform:false,p_request:requestId,p_customer:'c1',p_unit:'u1'});
-  expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','free_market_management');
+  expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','free_market_management');expect(h.licenses.requireEntitlement).toHaveBeenCalledWith('o1','acl_admissions');
  });
  it('fails closed when live database authorization is revoked or its scope differs',async()=>{
   const h=harness();h.rpc.mockResolvedValueOnce({error:{code:'42501'}});

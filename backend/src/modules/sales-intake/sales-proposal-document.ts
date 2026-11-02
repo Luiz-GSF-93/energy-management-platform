@@ -4,7 +4,7 @@ import {proposalLogo} from './sales-proposal-logo';
 
 export type ProposalDocumentModel={id:string;receipt:string;title:string;notice:string;sections:{title:string;rows:{label:string;value:string}[]}[]};
 const missing='Não registrado nesta versão';
-const labels:Record<string,string>={trading_hub:'Trading Hub',energy_map:'Mapa energético',document_management:'Documentos',advanced_analytics:'Análises avançadas / OCR + IA',report_generation:'Relatórios',free_market_management:'Gestão do mercado livre',bot_energy_rag:'Bot-Energy + RAG',client_portal:'Portal do cliente',ccee_registrations:'Registros CCEE (avulso)'};
+const labels:Record<string,string>={trading_hub:'Trading Hub',energy_map:'Mapa energético',document_management:'Documentos',advanced_analytics:'Análises avançadas / OCR + IA',report_generation:'Relatórios',acl_admissions:'Adesão ACL',free_market_management:'Gestão do mercado livre',bot_energy_rag:'Bot-Energy + RAG',client_portal:'Portal do cliente',ccee_registrations:'Registros CCEE (avulso)'};
 const text=(v:unknown)=>typeof v==='string'&&v.trim()?v.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,4000):missing;
 const count=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0?String(v):missing;
 const money=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0?(Number(v)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):missing;

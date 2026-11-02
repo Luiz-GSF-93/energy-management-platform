@@ -11,7 +11,7 @@ export class SalesAdvisorService{
   const lead=leads.rows?.find((row:any)=>row.receipt===receipt.toLowerCase());
   if(!lead)throw new NotFoundException('Solicitação não encontrada nesta seleção. Atualize a lista.');
   const {data,error}=await this.db.getClient().from('plan_catalog')
-   .select('id,name,version,active,max_consumer_units,max_users,document_management,advanced_analytics,report_generation,free_market_management,bot_energy_rag,trading_hub')
+   .select('id,name,version,active,max_consumer_units,max_users,document_management,advanced_analytics,report_generation,acl_admissions,free_market_management,bot_energy_rag,trading_hub')
    .eq('active',true);
   if(error||!Array.isArray(data))throw new ServiceUnavailableException('Catálogo indisponível. Tente atualizar.');
   try{return {receipt:lead.receipt,evaluatedAt:new Date().toISOString(),...advisePlan(lead.data,data)};}
