@@ -6,6 +6,7 @@ const {safeText,auditFilters}=require('../src/modules/audit/audit.model.ts');
 assert.ok(!safeText('senha=private https://example.test/?token=abc\nBearer abcd').includes('private'));for(const q of [{size:999},{from:'2020-01-01'},{module:"x' OR true"},{organization:['x']}])assert.throws(()=>auditFilters(q));passed.push('Filtros, limites e sanitização');
 await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;CREATE SCHEMA auth;
 CREATE TABLE auth.users(id uuid PRIMARY KEY,deleted_at timestamptz,banned_until timestamptz);
+CREATE TABLE user_profiles(user_id uuid,full_name text);
 CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);
 CREATE TABLE roles(id uuid PRIMARY KEY,organization_id text,name text,scope text,permissions jsonb);
 CREATE TABLE organization_members(organization_id text,user_id uuid,role_id uuid,status text,affiliation_type text,permission_limit jsonb);
