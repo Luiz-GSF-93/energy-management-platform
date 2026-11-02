@@ -1,0 +1,14 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'https://example.test/backoffice/platform/support'});
+for(const k of ['window','document','navigator','HTMLElement','Event','CustomEvent','MouseEvent','FormData'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+const calls=[],row={id:'11111111-1111-4111-8111-111111111111',protocol:'AT-TEST',organizationName:'Synthetic',title:'Synthetic support',description:'Original request',status:'RESOLVED',state:'SUBMITTED',revision:2,manager:false,canReply:true,canUpload:true,deadline:'2027-01-01',priority:'NORMAL',resolution:{noticeState:'UNKNOWN',closeDueAt:null},messages:[{id:'m',actor_name:'Test administrator',actor_scope:'PLATFORM',body:'Solução aplicada',status:'RESOLVED',created_at:'2026-11-01T12:00:00Z'}],attachments:[{id:'f',name:'private.pdf',bytes:100,state:'AVAILABLE'}],messageTotal:1,supportMembers:[]};
+const apiRequest=async(url,options)=>{calls.push({url,options});return structuredClone(row);};
+const original=Module._load;Module._load=function(n,p,m){if(n==='next/link')return {__esModule:true,default:({href,children})=>React.createElement('a',{href},children)};if(n==='@/app/lib/api/client')return {apiRequest};if(n==='@/app/providers')return {useAuth:()=>({hasPermission:p=>p==='a7c8f257-580d-4d39-8900-4a5788068203'})};if(n==='@/app/components/ui')return original.call(this,path.resolve(__dirname,'../app/components/ui/index.ts'),p,m);return original.call(this,n,p,m);};
+const {createRoot}=require('react-dom/client'),{act}=React,Component=require('../app/components/CentralSupportThread.tsx').default,root=createRoot(document.getElementById('root'));
+(async()=>{try{
+ await act(async()=>root.render(React.createElement(Component,{id:row.id})));
+ assert.match(document.body.textContent,/aguarda confirmação do aviso/);assert.match(document.body.textContent,/Test administrator/);assert.match(document.body.textContent,/private.pdf/);
+ const confirm=[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar solução e encerrar');assert.ok(confirm);assert.equal(confirm.disabled,true);assert.ok(calls.every(c=>c.url.startsWith('/api/v1/central-support/'+row.id+'/thread')));
+ console.log('Platform support UI: administrator can record deadline and public response without a Support assignee or any access grant.');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

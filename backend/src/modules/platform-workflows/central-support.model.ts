@@ -41,7 +41,8 @@ export function supportEmail(payload:any){
  'Tickets extras utilizados: '+s.extrasUsed,'Total de chamados utilizados: '+s.totalUsed,
  payload.quoteMinor>0?'Este chamado tem custo extra autorizado: '+money(payload.quoteMinor)+'. Inclusão na fatura depende da confirmação financeira.':'Valor extra deste chamado: '+money(payload.quoteMinor??0)+'.',
  'Consulte o conteúdo e as respostas no Atendimento Central, com seu acesso autorizado.',
- 'https://app.expertenergy.com.br/backoffice/support',
+ payload.confirmationHours===24?'Solução informada: confira no painel e confirme ou conteste. Sem contestação, o chamado será encerrado 24 horas após o aviso no painel e o aceite deste e-mail pelo provedor. Aceite não comprova leitura. Após encerrado, abra um novo chamado.':'Respostas no mesmo chamado não consomem outra franquia.',
+ 'https://app.expertenergy.com.br'+(/^\/backoffice\/support\/[a-f0-9-]{36}$/.test(payload.ticketPath??'')?payload.ticketPath:'/backoffice/support'),
  ].join('\n')};
 }
 

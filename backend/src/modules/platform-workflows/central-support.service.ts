@@ -1,3 +1,4 @@
+import {SUPPORT_ERRORS,supportFailure} from './central-support-thread.service';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,OnModuleDestroy,OnModuleInit,ServiceUnavailableException} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -12,6 +13,7 @@ export class CentralSupportService implements OnModuleInit,OnModuleDestroy{
  onModuleDestroy(){if(this.timer)clearInterval(this.timer);}
  private async rpc(name:string,args:Record<string,unknown>){
   let result:any;try{result=await this.db.getClient().rpc(name,args);}catch{throw new ServiceUnavailableException('Atendimento indisponível. Confira o protocolo antes de repetir.');}
+  if(SUPPORT_ERRORS[result.error?.message])supportFailure(result.error);
   if(result.error?.code==='42501')throw new ForbiddenException('Acesso ou autorização de atendimento não permitidos.');
   if(['40001','23505'].includes(result.error?.code))throw new ConflictException('Os dados mudaram. Atualize e confira o chamado antes de repetir.');
   if(['22023','23514','22P02','23503'].includes(result.error?.code))throw new BadRequestException('Confira a configuração de atendimento da licença, os campos e a autorização.');
