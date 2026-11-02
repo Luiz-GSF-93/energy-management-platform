@@ -108,5 +108,6 @@ try{
  const dup=await f3('reserve',{filename:'duplicate.png',mime:'image/png',bytes:5242880,sha256:'1'.repeat(64)});ok(dup.state==='RESERVED');
  await deny(()=>f3('reserve',{filename:'oversized.pdf',mime:'application/pdf',bytes:5242881,sha256:'7'.repeat(64)}));
  await db.exec('SET ROLE authenticated');await deny(()=>q('SELECT * FROM central_support_messages'));await db.exec('RESET ROLE');
+ const queue=await platform('list');ok(queue.rows.length===2);ok(queue.rows.every(r=>typeof r.hasOrganizationReply==='boolean'));
  console.log('Support thread database assertions passed:',assertions);
 }catch(e){console.error(e.message,e.code,e.where);process.exitCode=1;}finally{await db.close();}
