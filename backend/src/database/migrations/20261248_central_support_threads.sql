@@ -73,13 +73,15 @@ CREATE FUNCTION public.central_support_case_closure_guard() RETURNS trigger LANG
 DECLARE r public.central_support_requests;
 BEGIN
  SELECT * INTO r FROM public.central_support_requests WHERE id=NEW.id AND state='SUBMITTED';IF r.id IS NULL THEN RETURN NEW;END IF;
+ IF TG_OP='INSERT' THEN IF r.closed_at IS NOT NULL OR r.triage_status='CLOSED' THEN RAISE EXCEPTION 'SC_CLOSED_NEW_TICKET' USING ERRCODE='22023';END IF;RETURN NEW;END IF;
+ IF OLD.status='CLOSED' AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'SC_CLOSED_NEW_TICKET' USING ERRCODE='22023';END IF;
  IF NEW.status IS DISTINCT FROM OLD.status AND NEW.status IS DISTINCT FROM r.triage_status THEN RAISE EXCEPTION 'SC_USE_THREAD' USING ERRCODE='22023';END IF;
  IF OLD.status='CLOSED' AND NEW.status<>'CLOSED' THEN RAISE EXCEPTION 'SC_CLOSED_NEW_TICKET' USING ERRCODE='22023';END IF;
  IF NEW.status='CLOSED' AND OLD.status<>'CLOSED' AND(r.closed_at IS NULL OR r.closure_kind IS NULL OR NOT EXISTS(SELECT 1 FROM public.central_support_messages WHERE request_id=r.id AND kind='CLOSE')) THEN RAISE EXCEPTION 'SC_CONFIRM_REQUIRED' USING ERRCODE='22023';END IF;
  IF OLD.status='RESOLVED' AND NEW.status IN('OPEN','IN_PROGRESS','WAITING') AND r.resolution_id IS NOT NULL THEN RAISE EXCEPTION 'SC_CONTEST_REQUIRED' USING ERRCODE='22023';END IF;
  RETURN NEW;
 END$$;
-CREATE TRIGGER central_support_case_closure_guard BEFORE UPDATE ON public.platform_support_cases FOR EACH ROW EXECUTE FUNCTION public.central_support_case_closure_guard();
+CREATE TRIGGER central_support_case_closure_guard BEFORE INSERT OR UPDATE ON public.platform_support_cases FOR EACH ROW EXECUTE FUNCTION public.central_support_case_closure_guard();
 
 -- System closures must not be attributed to an impersonated human account.
 ALTER TABLE public.platform_support_case_events ALTER COLUMN actor_id DROP NOT NULL;

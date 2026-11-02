@@ -104,6 +104,8 @@ try{
  await q("UPDATE central_support_requests SET close_due_at=now()-interval '1 hour' WHERE id=$1",[id2]);
  ok((await q('SELECT central_support_close_due(50) v'))[0].v.closed===1);ok((await q('SELECT central_support_close_due(50) v'))[0].v.closed===0);
  ok((await t2('read')).status==='CLOSED');
+ await deny(()=>q("UPDATE platform_support_cases SET deadline='2028-01-01' WHERE id=$1",[id2]));
+ await deny(()=>q("SELECT save_platform_support_case($1,$2,0,$3,NULL,NULL)",[owner,id,JSON.stringify({title:'Attempt to reopen closed ticket',organizationId:'org_default',assigneeId:support,priority:'NORMAL',deadline:'2027-12-31',status:'OPEN',reason:'Must remain read only'})]));
  const id3=randomUUID();await action('draft',id3,{title:'Attachment limits test',description:'Private attachment limit verification'});
  const f3=async(x,b)=>(await q('SELECT central_support_files($1,$2,false,$3,$4,$5) v',['org_default',admin,x,id3,JSON.stringify(b)]))[0].v;
  for(let n=1;n<=5;n++)await f3('reserve',{filename:'evidence'+n+'.png',mime:'image/png',bytes:5242880,sha256:String(n).repeat(64)});
