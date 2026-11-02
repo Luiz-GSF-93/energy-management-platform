@@ -30,7 +30,12 @@ CREATE TRIGGER central_support_thread_immutable BEFORE UPDATE OR DELETE ON publi
 DO $$BEGIN IF to_regclass('storage.buckets') IS NOT NULL THEN
  INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types) VALUES('central-support-private','central-support-private',false,5242880,ARRAY['application/pdf','image/jpeg','image/png']) ON CONFLICT(id) DO NOTHING;
  IF NOT EXISTS(SELECT 1 FROM storage.buckets WHERE id='central-support-private' AND NOT public AND file_size_limit=5242880 AND allowed_mime_types@>ARRAY['application/pdf','image/jpeg','image/png']) THEN RAISE EXCEPTION 'Private support bucket conflict';END IF;
-END IF;END$$;
+END IF;
+ IF to_regclass('storage.objects') IS NOT NULL THEN
+ -- Restrictive AND policy denies direct client access even if another bucket has broad permissive rules.
+ EXECUTE 'CREATE POLICY central_support_private_client_deny ON storage.objects AS RESTRICTIVE FOR ALL TO anon,authenticated USING(bucket_id<>''central-support-private'') WITH CHECK(bucket_id<>''central-support-private'')';
+ END IF;
+END$$;
 
 CREATE FUNCTION public.central_support_thread_actor(o text,a uuid,p boolean,i uuid) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE r public.central_support_requests;role_name text;

@@ -57,7 +57,10 @@ try{
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261241_central_support_audit_names.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261242_central_support_admin_triage.sql',import.meta.url),'utf8'));
 
+ await db.exec(`CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);CREATE TABLE storage.objects(bucket_id text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;GRANT USAGE ON SCHEMA storage TO authenticated;GRANT SELECT,INSERT ON storage.objects TO authenticated;CREATE POLICY existing_permissive ON storage.objects FOR ALL TO authenticated USING(true) WITH CHECK(true);INSERT INTO storage.objects VALUES('other-private'),('central-support-private');`);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261248_central_support_threads.sql',import.meta.url),'utf8'));
+ await db.exec('SET ROLE authenticated');ok((await q('SELECT * FROM storage.objects')).every(r=>r.bucket_id!=='central-support-private'));await deny(()=>q("INSERT INTO storage.objects VALUES('central-support-private')"));await q("INSERT INTO storage.objects VALUES('other-private')");await db.exec('RESET ROLE');
+
  await platform('policy',plan,{revision:0,allowance:60,extraMinor:2500,reason:'Approved test policy'});
  await platform('activate',null,{licenseId:'license',enabled:true,reason:'Test rollout'});
  const id=randomUUID(),hash='a'.repeat(64);
