@@ -1,3 +1,5 @@
+import {AuditModule} from './modules/audit/audit.module';
+import {AuditCaptureMiddleware} from './modules/audit/audit.middleware';
 import {PortalWorkspaceModule} from './modules/portal-workspace/portal-workspace.module';
 import {SalesIntakeModule} from './modules/sales-intake/sales-intake.module';
 import {OrganizationBrandingModule} from './modules/organization-branding/organization-branding.module';
@@ -44,7 +46,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
 @Module({
-  imports: [PortalWorkspaceModule,
+  imports: [AuditModule,PortalWorkspaceModule,
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
     OrganizationBrandingModule,
@@ -103,6 +105,6 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(PerformanceMiddleware,RateLimitMiddleware).forRoutes('*');
+    consumer.apply(AuditCaptureMiddleware,PerformanceMiddleware,RateLimitMiddleware).forRoutes('*');
   }
 }

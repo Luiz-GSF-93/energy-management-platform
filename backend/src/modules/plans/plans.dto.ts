@@ -14,6 +14,7 @@ export class SavePlanDto {
  @IsBoolean() advanced_analytics!:boolean;
  @IsBoolean() report_generation!:boolean;
  @IsBoolean() free_market_management!:boolean;
+ @IsOptional() @IsBoolean() organization_audit?:boolean;
  @IsOptional() @IsBoolean() ccee_data?:boolean;
  @IsOptional() @IsBoolean() ccee_registrations?:boolean;
  @IsOptional() @IsBoolean() trading_hub?:boolean;
@@ -24,6 +25,7 @@ export class SavePlanDto {
 }
 export class LicenseModulesDto {
  @IsOptional() @IsBoolean() client_portal?:boolean;
+ @IsOptional() @IsBoolean() organization_audit?:boolean;
  @IsOptional() @IsBoolean() ccee_data?:boolean;
  @IsOptional() @IsBoolean() ccee_registrations?:boolean;
  @IsOptional() @IsBoolean() trading_hub?:boolean;

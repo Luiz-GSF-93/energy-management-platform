@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import {apiRequest} from '@/app/lib/api/client';
 import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import {
   BookOpen, Settings, BarChart3,
@@ -9,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   ChangeEvent,
-  useState, useLayoutEffect, useRef,
+  useState, useEffect, useLayoutEffect, useRef,
 } from 'react';
 import { useRouter,usePathname } from 'next/navigation';
 
@@ -44,7 +45,9 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
   const [switchError, setSwitchError] =
     useState('');
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const c=new AbortController();const timer=setTimeout(()=>c.abort(),1000);
+    try{await apiRequest(context?.scope==='global'?'/api/v1/admin/audit/presence':'/api/v1/audit/presence',{method:'POST',body:{module:pathname,stop:true},signal:c.signal});}catch{}finally{clearTimeout(timer);}
     sidebarMemory=null;
     logout();
     router.replace('/auth/login');
@@ -114,7 +117,9 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
         : undefined,
       context?.scope==='organization' && context.accessMode==='platform_operation',
     );
-  const navigationItems=allNavigationItems.filter(item=>!item.group);
+  const [auditLicensed,setAuditLicensed]=useState(false);
+  useEffect(()=>{setAuditLicensed(false);if(!organizationContext||!hasPermission('dbb580ca-d940-4e80-97fb-e9f9619a0001'))return;const c=new AbortController();void apiRequest('/api/v1/audit?size=25',{signal:c.signal}).then(l=>{if(!c.signal.aborted)setAuditLicensed(true);}).catch(()=>{});return()=>c.abort();},[organizationContext?.currentOrganization.id,hasPermission('dbb580ca-d940-4e80-97fb-e9f9619a0001')]);
+  const navigationItems=allNavigationItems.filter(item=>item.href!=='/backoffice/audit'||auditLicensed).filter(item=>!item.group);
   const operationItems=allNavigationItems.filter(item=>item.group==='operation');
   const reportItems=allNavigationItems.filter(item=>item.group==='reports');
   const reportIndex=reportItems.findIndex(item=>pathname===item.href);

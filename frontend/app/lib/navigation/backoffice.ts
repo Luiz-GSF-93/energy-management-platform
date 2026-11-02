@@ -16,6 +16,8 @@ export interface BackofficeNavigationItem {
 
 export const backofficeNavigation:
   readonly BackofficeNavigationItem[] = [
+    {href:'/backoffice/audit',label:'Auditoria',permission:'dbb580ca-d940-4e80-97fb-e9f9619a0001',scope:'organization'},
+    {href:'/backoffice/platform-audit',label:'Auditoria Global',permission:'dbb580ca-d940-4e80-97fb-e9f9619a0004',scope:'global'},
     {
       href: '/backoffice/dashboard',
       label: 'Dashboard',
