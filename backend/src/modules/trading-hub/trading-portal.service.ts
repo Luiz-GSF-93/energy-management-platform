@@ -1,4 +1,4 @@
-import {BadRequestException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 
 
 import {SupabaseService} from '../../services/supabase.service';
@@ -16,7 +16,7 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {object,text,uuid,validateTrading} from './trading-validation';
 
 
-import {digest,randomToken,otp,otpDigest,sendTradingMail,tradingMailConfigured} from './trading-mail';
+import {digest,randomToken,otp,otpDigest,sendTradingMail,tradingMailConfigured,tradingMailFailure} from './trading-mail';
 import {tradingEmailHtml} from './trading-email-template';
 
 
@@ -45,7 +45,7 @@ export class TradingPortalService {
 
 
  async hubContract(id:string,b:unknown,t:TenantContext){return this.hub.contract(id,b,t);}
- async invitations(t:TenantContext){await this.hub.allowed(t);const r=await this.client().from('trading_invitations').select('id,opportunity_id,supplier_id,proposal_id,kind,email,state,email_status,expires_at,created_at').eq('organization_id',t.organizationId).order('created_at',{ascending:false}).limit(1001);this.check(r.error);if(r.data.length>1000)throw new BadRequestException('Consulta extensa; restrinja o período.');return r.data;}
+ async invitations(t:TenantContext){await this.hub.allowed(t);const r=await this.client().from('trading_invitations').select('id,opportunity_id,supplier_id,proposal_id,kind,email,state,email_status,email_revision,email_attempt_at,email_http_status,email_error_code,expires_at,created_at').eq('organization_id',t.organizationId).order('created_at',{ascending:false}).limit(1001);this.check(r.error);if(r.data.length>1000)throw new BadRequestException('Consulta extensa; restrinja o período.');return r.data;}
 
 
  async revoke(id:string,t:TenantContext){await this.hub.allowed(t,true);uuid(id);const r=await this.client().rpc('revoke_trading_invitation',{p_org:t.organizationId,p_actor:t.userId,p_id:id});this.check(r.error);return {revoked:!!r.data};}
@@ -60,14 +60,36 @@ export class TradingPortalService {
   if(r.error?.code==='23505')return {email,state:'EXISTING_INVITATION'};this.check(r.error);const i=r.data;
 
 
-  try{const messageId=await sendTradingMail(email,kind==='CLIENT'?'EnergyOS — proposta disponível para sua decisão':'EnergyOS — nova solicitação de cotação ACL',`Existe uma ${kind==='CLIENT'?'proposta aprovada internamente':'cotação'} no Trading Hub da Expert Energy.\n\nAcesse https://app.expertenergy.com.br/cotacao#${token}\n\nO acesso exige código enviado a este mesmo e-mail e expira em ${new Date(o.data.expiresAt).toISOString()}.\nIdentificador: ${o.id}\n\nNão compartilhe o convite.`, 'trading-invite-'+i.id,tradingEmailHtml({title:kind==='CLIENT'?'Sua proposta está pronta para análise':'Convite para cotação de energia',intro:kind==='CLIENT'?'A equipe Expert Energy analisou uma proposta para sua unidade. Acesse o portal para consultar as condições e registrar sua decisão comercial.':'A Expert Energy convida sua empresa a apresentar uma proposta de fornecimento de energia para a oportunidade abaixo. Envie sua cotação e os documentos pelo portal seguro.',actionLabel:kind==='CLIENT'?'Analisar proposta':'Enviar cotação',actionUrl:'https://app.expertenergy.com.br/cotacao#'+token,facts:[['Oportunidade',o.data.title],['Submercado',({SE_CO:'Sudeste / Centro-Oeste',S:'Sul',NE:'Nordeste',N:'Norte'} as Record<string,string>)[o.data.submarket]??o.data.submarket],['Modalidade',({CONVENTIONAL:'Convencional',INCENTIVIZED_50:'Incentivada 50%',INCENTIVIZED_100:'Incentivada 100%'} as Record<string,string>)[o.data.energyType]??o.data.energyType],['Consumo médio',Number(o.data.averageMwhMonth).toLocaleString('pt-BR')+' MWh/mês'],['Fornecimento',o.data.startMonth+' · '+o.data.months+' meses'],['Prazo para resposta',new Date(o.data.expiresAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' (Brasília)']],footer:'O acesso exige um código enviado a este mesmo e-mail. O convite é individual e expira no prazo informado. A decisão comercial não substitui a formalização do contrato.'}));const u=await this.client().from('trading_invitations').update({email_status:'ACCEPTED',email_message_id:messageId}).eq('id',i.id);this.check(u.error);await this.audit(i,'EMAIL_ACCEPTED',{messageId});return {email,state:'ACCEPTED'};}
-
-
-  catch{await this.client().from('trading_invitations').update({email_status:'UNKNOWN'}).eq('id',i.id);await this.audit(i,'EMAIL_UNCONFIRMED',{});return {email,state:'UNKNOWN'};}
-
-
+  return this.deliver(t,o,i,token,0);
  }
-
+ private async deliver(t:TenantContext,o:any,i:any,token:string,revision:number,requestId?:string){
+  const email=i.email,kind=i.kind;
+  let result:{state:string;messageId?:string;httpStatus:number|null;code:string|null};
+  try{const messageId=await sendTradingMail(email,kind==='CLIENT'?'EnergyOS — proposta disponível para sua decisão':'EnergyOS — nova solicitação de cotação ACL',`Existe uma ${kind==='CLIENT'?'proposta aprovada internamente':'cotação'} no Trading Hub da Expert Energy.\n\nAcesse https://app.expertenergy.com.br/cotacao#${token}\n\nO acesso exige código enviado a este mesmo e-mail e expira em ${new Date(o.data.expiresAt).toISOString()}.\nIdentificador: ${o.id}\n\nNão compartilhe o convite.`, 'trading-invite-'+i.id+(requestId?'-'+requestId:''),tradingEmailHtml({title:kind==='CLIENT'?'Sua proposta está pronta para análise':'Convite para cotação de energia',intro:kind==='CLIENT'?'A equipe Expert Energy analisou uma proposta para sua unidade. Acesse o portal para consultar as condições e registrar sua decisão comercial.':'A Expert Energy convida sua empresa a apresentar uma proposta de fornecimento de energia para a oportunidade abaixo. Envie sua cotação e os documentos pelo portal seguro.',actionLabel:kind==='CLIENT'?'Analisar proposta':'Enviar cotação',actionUrl:'https://app.expertenergy.com.br/cotacao#'+token,facts:[['Oportunidade',o.data.title],['Submercado',({SE_CO:'Sudeste / Centro-Oeste',S:'Sul',NE:'Nordeste',N:'Norte'} as Record<string,string>)[o.data.submarket]??o.data.submarket],['Modalidade',({CONVENTIONAL:'Convencional',INCENTIVIZED_50:'Incentivada 50%',INCENTIVIZED_100:'Incentivada 100%'} as Record<string,string>)[o.data.energyType]??o.data.energyType],['Consumo médio',Number(o.data.averageMwhMonth).toLocaleString('pt-BR')+' MWh/mês'],['Fornecimento',o.data.startMonth+' · '+o.data.months+' meses'],['Prazo para resposta',new Date(o.data.expiresAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' (Brasília)']],footer:'O acesso exige um código enviado a este mesmo e-mail. O convite é individual e expira no prazo informado. A decisão comercial não substitui a formalização do contrato.'}));result={state:'ACCEPTED',messageId,httpStatus:200,code:null};}
+  catch(error){const f=tradingMailFailure(error);result={state:f.state,httpStatus:f.httpStatus,code:f.code};}
+  if(requestId){
+   const saved=await this.client().rpc('resend_trading_invitation',{p_org:t.organizationId,p_actor:t.userId,p_id:i.id,p_request:requestId,p_expected:revision,p_action:'finish',p_token:null,p_reason:null,p_result:result});this.check(saved.error);
+   if(!saved.data?.recorded)throw new ConflictException('O convite mudou durante o envio. Atualize o histórico; não repita automaticamente.');
+  }else{
+   const saved=await this.client().from('trading_invitations').update({email_status:result.state,email_message_id:result.messageId??null,email_http_status:result.httpStatus,email_error_code:result.code,email_attempt_at:new Date().toISOString()}).eq('organization_id',t.organizationId).eq('id',i.id).eq('email_revision',revision).eq('state','PENDING').select('id');this.check(saved.error);
+   if(saved.data?.length!==1)throw new ConflictException('O convite mudou durante o envio. Confira o histórico antes de repetir.');
+   await this.audit(i,result.state==='ACCEPTED'?'EMAIL_ACCEPTED':result.state==='REJECTED'?'EMAIL_REJECTED':'EMAIL_UNCONFIRMED',{messageId:result.messageId??null,httpStatus:result.httpStatus,code:result.code,revision});
+  }
+  return {email,state:result.state,httpStatus:result.httpStatus,code:result.code};
+ }
+ async resend(id:string,input:unknown,t:TenantContext){
+  await this.hub.allowed(t,true);uuid(id);const b=object(input);
+  if(Object.keys(b).sort().join(',')!=='reason,requestId,revision'||!Number.isInteger(b.revision)||b.revision<0)throw new BadRequestException('Confira a revisão, o motivo e o identificador do reenvio.');
+  uuid(b.requestId);const reason=text(b.reason,3,500);
+  if(!tradingMailConfigured())throw new ServiceUnavailableException('Configure TRADING_RESEND_API_KEY e o remetente exclusivo antes de reenviar.');
+  const token=randomToken();const r=await this.client().rpc('resend_trading_invitation',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_request:b.requestId,p_expected:b.revision,p_action:'reserve',p_token:digest(token),p_reason:reason,p_result:null});
+  if(r.error?.code==='40001'||r.error?.code==='23505')throw new ConflictException('O convite mudou ou já está em reenvio. Atualize o acompanhamento.');
+  if(r.error?.code==='42501')throw new ForbiddenException('Convite fora do escopo, encerrado ou sem autorização.');
+  if(r.error?.code==='22023')throw new BadRequestException('Reenvio indisponível: confira prazo, contato e intervalo de 60 segundos.');
+  this.check(r.error);const data=r.data;
+  if(!data?.claimed)return {email:data?.email,state:data?.state??'UNKNOWN',replayed:true};
+  return this.deliver(t,{id:data.opportunityId,data:data.opportunity},{id,organization_id:t.organizationId,email:data.email,kind:data.kind},token,data.revision,b.requestId);
+ }
 
  async dispatch(id:string,input:unknown,t:TenantContext){await this.hub.allowed(t,true);if(!tradingMailConfigured())throw new ServiceUnavailableException('Configure o remetente verificado de cotações no Resend antes de solicitar.');const b=object(input);if(Object.keys(b).some(k=>!['supplierIds','revision'].includes(k))||!Array.isArray(b.supplierIds)||!b.supplierIds.length||b.supplierIds.length>20)throw new BadRequestException('Selecione até 20 fornecedores.');const o=await this.hub.one(id,t);if(o.kind!=='opportunity'||!['DRAFT','OPEN'].includes(o.status)||Date.parse(o.data.expiresAt)<=Date.now()||o.revision!==b.revision)throw new BadRequestException('Cotação mudou ou expirou.');const recipients:{supplierId:string;email:string}[]=[];for(const sId of [...new Set<string>(b.supplierIds)]){const s=await this.hub.one(uuid(sId),t);if(s.kind!=='supplier'||s.status!=='ACTIVE')throw new BadRequestException('Fornecedor precisa estar ativo.');for(const c of s.data.quotationContacts)recipients.push({supplierId:s.id,email:c.email});}if(recipients.length>50)throw new BadRequestException('Até 50 destinatários por solicitação.');if(o.status==='DRAFT')await this.hub.transition(o.id,{status:'OPEN',revision:o.revision,reason:'Solicitação de cotação enviada aos fornecedores selecionados'},t);const results=[];for(const r of recipients)results.push(await this.issue(t,o,r.email,'SUPPLIER',r.supplierId,null));return {results};}
 

@@ -31,6 +31,8 @@ export class TradingInvitationsController {
  @Get('invitations') list(@Tenant() t:TenantContext){return this.service.invitations(t);}
 
 
+ @Post('invitations/:id/resend') resend(@Param('id') id:string,@Body() b:unknown,@Tenant() t:TenantContext){return this.service.resend(id,b,t);}
+
  @Post('invitations/:id/revoke') revoke(@Param('id') id:string,@Tenant() t:TenantContext){return this.service.revoke(id,t);}
 
 
