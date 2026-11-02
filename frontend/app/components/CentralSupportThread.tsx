@@ -14,7 +14,7 @@ export default function CentralSupportThread({id,platform=false}:{id:string;plat
  const load=useCallback(async()=>{const seq=++sequence.current;try{const t=await apiRequest<Ticket>(base+'/thread?page='+page);if(seq===sequence.current){setData(t);setDeadline(t.deadline??'');setPriority(t.priority);setAssignee(t.assigneeId??'');setError('');}}catch(e){if(seq===sequence.current)setError(e instanceof Error?e.message:'Consulta indisponível.');}},[base,page]);
  useEffect(()=>{void load();return()=>{sequence.current++;};},[load]);
  async function send(action:string){if(active.current||!data)return;active.current=true;setBusy(true);setError('');try{
- const metadata=platform&&data.manager&&data.status!=='RESOLVED'?{deadline,priority,...(assignee?{assigneeId:assignee}:{})}:{};
+ const metadata=platform&&data.manager&&data.status!=='RESOLVED'?{...(deadline!==(data.deadline??'')?{deadline}:{}),...(priority!==data.priority?{priority}:{}),...(assignee&&assignee!==(data.assigneeId??'')?{assigneeId:assignee}:{})}:{};
  const body={action,revision:data.revision,text,...metadata},key=JSON.stringify(body);if(!pending.current||pending.current.key!==key)pending.current={key,commandId:crypto.randomUUID()};
  await apiRequest(base+'/thread',{method:'POST',body:{...body,commandId:pending.current.commandId}});pending.current=null;setText('');setNotice('Atualização registrada no histórico do chamado.');await load();
  }catch(e){setError(e instanceof Error?e.message:'Envio não confirmado. Atualize antes de repetir.');}finally{active.current=false;setBusy(false);}}
