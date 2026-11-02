@@ -8,6 +8,7 @@ import {AUDIT} from './audit.model';
 export class OrganizationAuditController{
  constructor(private readonly audit:AuditWorkspaceService){}
  @Get() @Header('Cache-Control','private, no-store') @RequirePermission([AUDIT.view]) read(@Req() r:RequestWithTenant,@Query() q:Record<string,unknown>){return this.audit.read(r,false,q);}
+ @Get('retention') @Header('Cache-Control','private, no-store') @RequirePermission([AUDIT.view]) retention(@Req() r:RequestWithTenant){return this.audit.retention(r,false);}
  @Post('alerts/:id') @RequirePermission([AUDIT.review]) decide(@Req() r:RequestWithTenant,@Param('id') id:string,@Body() b:unknown){return this.audit.decide(r,false,id,b);}
  @Post('presence') presence(@Req() r:RequestWithTenant,@Body() b:unknown){return this.audit.presence(r,b);}
 }
@@ -15,6 +16,8 @@ export class OrganizationAuditController{
 export class GlobalAuditController{
  constructor(private readonly audit:AuditWorkspaceService){}
  @Get() @Header('Cache-Control','private, no-store') @RequirePermission([AUDIT.global]) read(@Req() r:RequestWithTenant,@Query() q:Record<string,unknown>){return this.audit.read(r,true,q);}
+ @Get('retention') @Header('Cache-Control','private, no-store') @RequirePermission([AUDIT.global]) retention(@Req() r:RequestWithTenant){return this.audit.retention(r,true);}
+ @Post('retention') retentionAct(@Req() r:RequestWithTenant,@Body() b:unknown){return this.audit.retentionAct(r,b);}
  @Post('alerts/:id') @RequirePermission([AUDIT.globalReview]) decide(@Req() r:RequestWithTenant,@Param('id') id:string,@Body() b:unknown){return this.audit.decide(r,true,id,b);}
  @Post('presence') presence(@Req() r:RequestWithTenant,@Body() b:unknown){return this.audit.presence(r,b);}
 }

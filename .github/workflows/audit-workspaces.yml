@@ -6,11 +6,14 @@ on:
       - 'backend/src/database/migrations/20261218_audit_workspaces.sql'
       - 'backend/src/database/migrations/20261219_audit_historical_dates.sql'
       - 'backend/src/database/migrations/20261220_audit_actor_names.sql'
+      - 'backend/src/database/migrations/20261221_audit_retention.sql'
+      - 'backend/test/audit-retention.cjs'
       - 'backend/test/audit-workspaces.cjs'
       - 'frontend/app/components/Audit*'
       - 'frontend/app/backoffice/audit/**'
       - 'frontend/app/backoffice/platform-audit/**'
       - 'frontend/test/audit-workspaces.cjs'
+      - 'frontend/test/audit-retention.cjs'
       - '.github/workflows/audit-workspaces.yml'
 permissions:
   contents: read
@@ -27,6 +30,8 @@ jobs:
         working-directory: backend
       - run: node test/audit-workspaces.cjs
         working-directory: backend
+      - run: node test/audit-retention.cjs
+        working-directory: backend
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
@@ -34,6 +39,8 @@ jobs:
       - run: npm install --no-save --package-lock=false --ignore-scripts jsdom@26.1.0
         working-directory: frontend
       - run: node test/audit-workspaces.cjs
+        working-directory: frontend
+      - run: node test/audit-retention.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
