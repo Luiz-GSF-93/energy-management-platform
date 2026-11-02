@@ -18,7 +18,7 @@ describe('Trading transactional email',()=>{
  });
  it('sends HTML with a plain text alternative and stable idempotency key',async()=>{
   const previous={...process.env};const original=global.fetch;
-  process.env.RESEND_API_KEY='unit-test-only';process.env.TRADING_EMAIL_FROM='cotacoes@cotacoes.expertenergy.com.br';
+  process.env.TRADING_RESEND_API_KEY='unit-test-only';process.env.TRADING_EMAIL_FROM='cotacoes@cotacoes.expertenergy.com.br';
   const mock=jest.fn().mockResolvedValue({ok:true,json:async()=>({id:'test-message'})});global.fetch=mock;
   try{
    const html=tradingEmailHtml(base);
