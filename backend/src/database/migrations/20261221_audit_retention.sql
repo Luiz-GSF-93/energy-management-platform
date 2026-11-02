@@ -71,9 +71,10 @@ CREATE FUNCTION public.energy_audit_retention_class(p_source text,p_action text,
 LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog AS $$
 DECLARE a text:=upper(coalesce(p_action,''));m text:=lower(coalesce(p_module,''));s text:=lower(coalesce(p_source,'')); mutation boolean;
 BEGIN
+ IF a IN('PASSWORD_CHANGE','PASSWORD_RESET','MFA','MFA_CHANGE','ACCOUNT_BLOCK') THEN RETURN 'SECURITY';END IF;
  mutation:=a~'(^|_)(CREATE|INSERT|UPDATE|EDIT|CHANGE|DELETE|REMOVE|APPROVE|APPROVED|SIGN|GRANT|REVOKE|DECIDE|AUTHORIZE|POST|PUT|PATCH)(_|$)';
  IF a~'(^|_)(DELETE|REMOVE|GRANT|REVOKE|APPROVE|APPROVED|SIGN|AUTHORIZE)(_|$)'
- OR mutation AND (m~'(user|permission|role|contract|financial|finance|tariff|license|plan|compliance|signature)' OR s~'(platform_plan_audit|platform_team_audit|portal_customer_access_events|organization_user_request_events|contract_entry_events|calculation_parameter_events|calculation_monthly_cost_events|eva_tariff_events|eva_closing_change_events)')
+ OR mutation AND (m~'(user|permission|role|contract|financial|finance|invoice|billing|cost|calculation|payment|expense|tariff|license|plan|compliance|signature)' OR s~'(platform_plan_audit|platform_team_audit|portal_customer_access_events|organization_user_request_events|contract_entry_events|calculation_parameter_events|calculation_monthly_cost_events|eva_tariff_events|eva_closing_change_events)')
  OR mutation AND p_role IN('admin_platform','OWNER') THEN RETURN 'CRITICAL';END IF;
  IF a IN('AUTH_FAILURE','PASSWORD_CHANGE','PASSWORD_RESET','MFA','MFA_CHANGE','ACCOUNT_BLOCK','ADMIN_ACCESS')
  OR p_result IN('AUTH_FAILURE','DENIED') OR m IN('security','auth','authentication') AND a NOT IN('READ','LOGIN','LOGOUT','MODULE_VISIT') THEN RETURN 'SECURITY';END IF;
@@ -130,8 +131,12 @@ BEGIN
  cy:=cy+interval '3 hours';IF now()<cy THEN cy:=cy-interval '1 month';END IF;
  SELECT * INTO pol FROM public.audit_retention_policies WHERE enabled AND organization_id='org_default' ORDER BY created_at DESC LIMIT 1;
  IF pol.version IS NULL THEN RETURN jsonb_build_object('state','DISABLED');END IF;
+ SELECT * INTO j FROM public.audit_retention_jobs WHERE policy_version=pol.version AND organization_id=pol.organization_id AND kind='SIMULATION' AND state='RUNNING' ORDER BY cycle LIMIT 1 FOR UPDATE;
+ IF j.id IS NULL THEN
  INSERT INTO public.audit_retention_jobs(policy_version,organization_id,cycle,kind,state) VALUES(pol.version,pol.organization_id,cy,'SIMULATION','RUNNING') ON CONFLICT DO NOTHING;
  SELECT * INTO j FROM public.audit_retention_jobs WHERE policy_version=pol.version AND organization_id=pol.organization_id AND cycle=cy AND kind='SIMULATION' FOR UPDATE;
+ END IF;
+ cy:=j.cycle;
  IF j.state='COMPLETED' THEN RETURN jsonb_build_object('state','COMPLETED','id',j.id);END IF;
  FOR e IN SELECT * FROM public.energy_audit_retained_events WHERE organization_id=pol.organization_id
  AND(created_at IS NULL OR created_at<=cy) AND (j.cursor_source IS NULL OR (source,id)>(j.cursor_source,j.cursor_id)) ORDER BY source,id LIMIT p_limit LOOP
