@@ -1,0 +1,43 @@
+name: Adesão ACL catalog and organization license
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/acl-admissions/**'
+      - 'backend/src/modules/plans/**'
+      - 'backend/src/modules/licenses/**'
+      - 'backend/src/database/migrations/20261249_acl_admission_license.sql'
+      - 'backend/src/database/migrations/20261250_acl_admission_license_access.sql'
+      - 'backend/test/database/acl-admission-license*.mjs'
+      - 'frontend/app/components/Sidebar.tsx'
+      - 'frontend/app/components/LicenseFromPlan.tsx'
+      - 'frontend/app/lib/api/plans.ts'
+      - 'frontend/app/backoffice/plans/**'
+      - 'frontend/test/acl-license-menu.cjs'
+      - '.github/workflows/acl-admission-license.yml'
+permissions:
+  contents: read
+jobs:
+  catalog-license-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/acl-admissions src/modules/plans src/modules/licenses src/modules/sales-intake
+        working-directory: backend
+      - run: node test/database/acl-admission-license.test.mjs && node test/database/acl-admission-license-access.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: npm install --no-save --package-lock=false --ignore-scripts jsdom@26.1.0
+        working-directory: frontend
+      - run: node test/acl-license-menu.cjs && node test/sidebar-scroll.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

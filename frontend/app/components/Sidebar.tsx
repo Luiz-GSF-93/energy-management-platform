@@ -119,7 +119,15 @@ export default function Sidebar({collapsed=false,onToggle}:{collapsed?:boolean;o
     );
   const [auditLicensed,setAuditLicensed]=useState(false);
   useEffect(()=>{setAuditLicensed(false);if(!organizationContext||!hasPermission('dbb580ca-d940-4e80-97fb-e9f9619a0001'))return;const c=new AbortController();void apiRequest('/api/v1/audit?size=25',{signal:c.signal}).then(l=>{if(!c.signal.aborted)setAuditLicensed(true);}).catch(()=>{});return()=>c.abort();},[organizationContext?.currentOrganization.id,hasPermission('dbb580ca-d940-4e80-97fb-e9f9619a0001')]);
-  const navigationItems=allNavigationItems.filter(item=>item.href!=='/backoffice/audit'||auditLicensed).filter(item=>!item.group);
+  const canViewAcl=allNavigationItems.some(item=>item.href==='/backoffice/acl-admissions');
+  const aclScope=organizationContext&&context?context.user.id+':'+organizationContext.currentOrganization.id+':'+organizationContext.currentOrganization.role+':'+(organizationContext.accessMode??'organization')+':'+canViewAcl:'';
+  const [aclLicense,setAclLicense]=useState({scope:'',enabled:false});
+  useEffect(()=>{if(!aclScope||!canViewAcl)return;const c=new AbortController();let seq=0;
+    const verify=()=>{const current=++seq;void apiRequest<{enabled:boolean}>('/api/v1/acl-admissions/access',{signal:c.signal}).then(r=>{if(!c.signal.aborted&&current===seq)setAclLicense({scope:aclScope,enabled:r.enabled===true});}).catch(()=>{if(!c.signal.aborted&&current===seq)setAclLicense({scope:aclScope,enabled:false});});};
+    verify();window.addEventListener('focus',verify);window.addEventListener('energyos:license-changed',verify);
+    return()=>{c.abort();window.removeEventListener('focus',verify);window.removeEventListener('energyos:license-changed',verify);};
+  },[aclScope,canViewAcl,pathname]);
+  const navigationItems=allNavigationItems.filter(item=>item.href!=='/backoffice/audit'||auditLicensed).filter(item=>item.href!=='/backoffice/acl-admissions'||aclLicense.scope===aclScope&&aclLicense.enabled).filter(item=>!item.group);
   const operationItems=allNavigationItems.filter(item=>item.group==='operation');
   const reportItems=allNavigationItems.filter(item=>item.group==='reports');
   const reportIndex=reportItems.findIndex(item=>pathname===item.href);

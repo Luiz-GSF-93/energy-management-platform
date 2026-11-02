@@ -32,7 +32,7 @@ export function aclCursor(q: unknown, candidate = false): string | null {
 @Injectable()
 export class AclAdmissionService {
   constructor(private db: SupabaseService, private licenses: LicensesService, private config: ConfigService) {}
-  private enabled(org: string) { return (this.config.get<string>('ACL_ADMISSION_ORGANIZATIONS') || '').split(',').map(v => v.trim()).includes(org); }
+  private async licensed(org: string) { try { await this.licenses.requireEntitlement(org, 'acl_admissions'); return true; } catch(e) { if(e instanceof ForbiddenException) return false; throw e; } }
   private scope(t: TenantContext) {
     if (!t?.organizationId || !t.userId || !t.roleId || (t.scope as string) === 'global') throw new ForbiddenException('Selecione uma organização autorizada.');
   }
@@ -56,13 +56,15 @@ export class AclAdmissionService {
       throw new ForbiddenException('Adesão disponível ao backoffice autorizado.');
     }
     await this.licenses.requireEntitlement(t.organizationId, 'free_market_management');
-    if (!this.enabled(t.organizationId)) return { enabled: false, canWork: false, canApprove: false };
+    if (!await this.licensed(t.organizationId)) return { enabled: false, canWork: false, canApprove: false };
     const actor = await this.rpc('acl_assert_actor', { ...this.params(t), p_write: write, p_customer: null });
     if (actor?.organizationId !== t.organizationId || actor?.actorId !== t.userId || typeof actor.canWork !== 'boolean' || typeof actor.canApprove !== 'boolean') throw new InternalServerErrorException('Escopo da adesão indisponível.');
     const requestEnabled=(this.config.get<string>('ACL_ADMISSION_REQUEST_ORGANIZATIONS')||'').split(',').map(v=>v.trim()).includes(t.organizationId);
     const canReadRequests=requestEnabled&&(t.accessMode==='platform_operation'||['8f105b02-4443-49de-b188-847e0284e7ed','1479c0b7-9608-4e95-bd83-7e6899255a78','cb949e2a-e01d-4cf0-8c69-6ca74fe4d627'].every(p=>t.permissions?.includes(p)));
-    const canRequest=canReadRequests&&actor.canWork&&(t.accessMode==='platform_operation'||['d1f1b3be-a842-41e7-aeb1-45fefeb2f4c1','6da45eb4-810c-4e40-9933-d9cda66a8841'].every(p=>t.permissions?.includes(p)));
-    return { enabled: true, canWork: actor.canWork, canApprove: actor.canApprove && (t.accessMode === 'platform_operation' || ['admin_org','gestor'].includes(t.role)),canReadRequests,canRequest };
+    const canWork=actor.canWork&&(t.accessMode==='platform_operation'||t.permissions?.includes(ACL_MANAGE));
+    const canApprove=actor.canApprove&&(t.accessMode==='platform_operation'||['admin_org','gestor'].includes(t.role)&&t.permissions?.includes(ACL_APPROVE));
+    const canRequest=canReadRequests&&canWork&&(t.accessMode==='platform_operation'||['d1f1b3be-a842-41e7-aeb1-45fefeb2f4c1','6da45eb4-810c-4e40-9933-d9cda66a8841'].every(p=>t.permissions?.includes(p)));
+    return {enabled:true,canWork,canApprove,canReadRequests,canRequest};
   }
   private async allowed(t: TenantContext, write = false) { if (!(await this.access(t, write)).enabled) throw new ForbiddenException('Adesão ACL ainda não habilitada nesta organização.'); }
   private page(value: unknown, key: string) {
@@ -329,7 +331,7 @@ export class AclAdmissionService {
     const after = aclCursor(q); this.scope(t);
     if (t.accessMode || t.role !== 'consulta' || !t.permissions?.includes(REPORT_VIEW)) throw new ForbiddenException('Portal exige consulta externa e vínculo com cliente.');
     await this.licenses.requireEntitlement(t.organizationId, 'free_market_management');
-    if (!this.enabled(t.organizationId)) return { enabled: false, rows: [], nextCursor: null };
+    if (!await this.licensed(t.organizationId)) return { enabled: false, rows: [], nextCursor: null };
     const page = this.page(await this.rpc('acl_portal', { p_org: t.organizationId, p_actor: t.userId, p_role: t.roleId, p_after: after }), 'cursor');
     const rows = page.rows.map(row => {
       if (typeof row.unitId !== 'string' || typeof row.unitName !== 'string' || !['NOT_STARTED', 'IN_PROGRESS', 'CONCLUDED'].includes(row.status)) throw new InternalServerErrorException('Status de adesão inválido.');

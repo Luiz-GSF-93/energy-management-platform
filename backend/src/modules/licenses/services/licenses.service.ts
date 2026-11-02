@@ -17,6 +17,7 @@ export type LicenseCapability =
   | 'advanced_analytics'
   | 'report_generation'
   | 'free_market_management'
+  | 'acl_admissions'
   | 'organization_audit'
   | 'ccee_data'
   | 'ccee_registrations'
@@ -24,6 +25,7 @@ export type LicenseCapability =
   | 'bot_energy_rag';
 
 export interface LicenseRecord {
+  acl_admissions?:boolean;
   organization_audit?:boolean;
   ccee_data?:boolean;
   ccee_registrations?:boolean;
