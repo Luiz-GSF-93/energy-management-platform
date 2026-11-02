@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import {FormEvent,useCallback,useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
@@ -21,7 +22,7 @@ export default function CentralSupport(){
  <Card title="Franquia da licença"><SupportAllowance summary={data.summary}/></Card>
  <Card title="Novo chamado"><form onSubmit={e=>void create(e)}><Input name="title" label="Assunto" required minLength={5} maxLength={200} disabled={busy}/><label className="ds-field"><span className="ds-label">Descreva a solicitação</span><textarea className="ds-input" name="description" rows={5} required minLength={10} maxLength={12000} disabled={busy}/></label><p>Informe somente os dados necessários ao suporte. Não inclua senhas, certificados ou códigos de acesso.</p><Button type="submit" disabled={busy}>{busy?'Aguarde…':'Solicitar liberação ao administrador'}</Button></form></Card>
  <h2>Seus chamados e autorizações</h2><p>Histórico paginado, incluindo ciclos anteriores. Administradores consultam as solicitações da organização; os demais usuários consultam as próprias.</p>
- {data.rows.length?data.rows.map(row=><Card key={row.id} title={row.title}><p><strong>{row.protocol}</strong> · {states[row.status]??row.status}</p><details><summary>Conteúdo do chamado</summary><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{row.description}</p></details>
+ {data.rows.length?data.rows.map(row=><Card key={row.id} title={row.title}><p><Link href={"/backoffice/support/"+row.id}>{row.state==='SUBMITTED'?'Abrir atendimento e responder':'Anexos e acompanhamento'}</Link></p><p><strong>{row.protocol}</strong> · {states[row.status]??row.status}</p><details><summary>Conteúdo do chamado</summary><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{row.description}</p></details>
  {row.state!=='SUBMITTED'?<>
  {data.canAuthorize?<form onSubmit={e=>void authorize(e,row)}><p>Valor para envio agora: <strong>{money(data.summary.remaining>0?0:data.summary.extraMinor)}</strong>{data.summary.remaining>0?' · dentro da franquia':' · ticket extra, destinado à fatura da organização'}.</p><label><input type="checkbox" required disabled={busy}/> Como administrador, conferi o conteúdo e autorizo seu compartilhamento confidencial com o suporte e o custo informado, quando houver.</label><div><Button type="submit" disabled={busy}>Autorizar e gerar código de liberação</Button></div></form>:<p>Solicite a liberação ao administrador da organização. Ele encontra este rascunho no Atendimento Central.</p>}
  {released?.id===row.id?<div role="status"><p>Código de uso único: <strong>{released.code}</strong></p><p>Válido até {new Date(released.expires).toLocaleString('pt-BR')}. Informe-o somente ao solicitante autorizado. Ele não será exibido novamente após sair desta tela.</p></div>:null}
