@@ -12,7 +12,7 @@ export function clientPublishedInsight(r:any,extended=false):PublishedInsight{
  try{const total=fields.get('consumptionTotal'),peak=fields.get('consumptionPeak'),off=fields.get('consumptionOffPeak');const q=decimal(total);if(q<=0n||decimal(peak)+decimal(off)!==q)throw Error();volume=String(total);
   const lines=r.tariffLines;if(Array.isArray(lines)&&lines.length===2&&new Set(lines.map((l:any)=>l.band)).size===2&&lines.every((l:any)=>l.component==='TE'&&['PEAK','OFF_PEAK'].includes(l.band)&&['BRL_KWH','BRL_MWH'].includes(l.measure)&&decimal(l.quantity)===decimal(fields.get(l.band==='PEAK'?'consumptionPeak':'consumptionOffPeak')))){
    if(r.method==='SAME_INVOICE_AMOUNTS_V2')netAcr=specificPrice(lines.reduce((n:bigint,l:any)=>n+amount(l.amount),0n),q);
-   if(r.method==='COMPONENT_TAXES_V3'&&lines.every((l:any)=>typeof l.netAmount==='string'&&amount(l.netAmount)<=amount(l.amount)))netAcr=specificPrice(lines.reduce((n:bigint,l:any)=>n+amount(l.netAmount),0n),q);
+   if(['COMPONENT_TAXES_V3','LEGACY_PUBLISHED'].includes(r.method)&&lines.every((l:any)=>typeof l.netAmount==='string'&&amount(l.netAmount)<=amount(l.amount)))netAcr=specificPrice(lines.reduce((n:bigint,l:any)=>n+amount(l.netAmount),0n),q);
   }
   if(['GROSS','INCLUDED'].includes(String(fields.get('supplier:tax'))))acl=specificPrice(amount(r.supplier),q);
   if(fields.get('supplier:tax')==='NET')aclNet=specificPrice(amount(r.supplier),q);
