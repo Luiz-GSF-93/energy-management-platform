@@ -6,7 +6,7 @@ const {safeText,auditFilters}=require('../src/modules/audit/audit.model.ts');
 assert.ok(!safeText('senha=private https://example.test/?token=abc\nBearer abcd').includes('private'));for(const q of [{size:999},{from:'2020-01-01'},{module:"x' OR true"},{organization:['x']}])assert.throws(()=>auditFilters(q));passed.push('Filtros, limites e sanitização');
 await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;CREATE SCHEMA auth;
 CREATE TABLE auth.users(id uuid PRIMARY KEY,deleted_at timestamptz,banned_until timestamptz);
-CREATE TABLE user_profiles(user_id uuid,full_name text);
+CREATE TABLE user_profiles(user_id uuid,full_name text,name text);
 CREATE TABLE organizations(id text PRIMARY KEY,deleted_at timestamptz);
 CREATE TABLE roles(id uuid PRIMARY KEY,organization_id text,name text,scope text,permissions jsonb);
 CREATE TABLE organization_members(organization_id text,user_id uuid,role_id uuid,status text,affiliation_type text,permission_limit jsonb);
@@ -26,6 +26,7 @@ CREATE FUNCTION save_catalog_plan(target_id uuid,expected_version integer,defini
 CREATE FUNCTION save_plan_license(target_organization text,target_license text,expected_revision integer,target_plan uuid,expected_version integer,starts date,ends date,renews date,next_status text,selected_modules jsonb,actor_id uuid,audit_ip text,audit_agent text) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN RETURN jsonb_build_object('id',target_license);END$$;`);
 await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261218_audit_workspaces.sql'),'utf8'));
 await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261219_audit_historical_dates.sql'),'utf8'));
+await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261220_audit_actor_names.sql'),'utf8'));
 const a='11111111-1111-4111-8111-111111111111',b='22222222-2222-4222-8222-222222222222',g='33333333-3333-4333-8333-333333333333';
 for(const [id,org] of [[a,'A'],[b,'B'],[g,null]]){
 await db.query('INSERT INTO auth.users(id)VALUES($1)',[id]);
@@ -35,7 +36,8 @@ else{await db.query('INSERT INTO user_roles VALUES($1,$1)',[id]);await db.query(
 const filters={from:new Date(Date.now()-86400000).toISOString(),to:new Date(Date.now()+86400000).toISOString(),size:25,page:0};
 async function read(org,actor,global=false,f=filters){return(await db.query('SELECT energy_audit_read($1,$2,$3,$4) d',[org,actor,global,f])).rows[0].d;}
 async function event(org,actor,result='SUCCESS',id=require('node:crypto').randomUUID()){await db.query('SELECT energy_audit_capture($1)',[{id,organization_id:org,actor_id:actor,module:'documents',action:'READ',result,ip:'127.0.0.1',ip_basis:'CONNECTION_ONLY',origin:'origin'}]);return id;}
-const id=await event('A',a);await event('B',b);let d=await read('A',a);assert.equal(d.total,1);assert.equal(d.rows[0].ip,null);await assert.rejects(read('B',a));await assert.rejects(read('A',a,false,{...filters,organization:'B'}));await assert.rejects(read(null,a,true));assert.equal((await read(null,g,true)).total,2);passed.push('Isolamento organização/plataforma e IP restrito');
+await db.query("INSERT INTO user_profiles(user_id,full_name,name)VALUES($1,'  ','Luiz Santos')",[a]);
+const id=await event('A',a);await event('B',b);let d=await read('A',a);assert.equal(d.total,1);assert.equal(d.rows[0].actor_name_current,'Luiz Santos');assert.equal(d.rows[0].actor_id,a);assert.equal(d.rows[0].ip,null);await assert.rejects(read('B',a));await assert.rejects(read('A',a,false,{...filters,organization:'B'}));await assert.rejects(read(null,a,true));assert.equal((await read(null,g,true)).total,2);passed.push('Isolamento organização/plataforma e IP restrito');
 await db.query("UPDATE organization_members SET permission_limit='[]' WHERE user_id=$1",[a]);await assert.rejects(read('A',a));await db.query('UPDATE organization_members SET permission_limit=NULL WHERE user_id=$1',[a]);await db.exec("UPDATE licenses SET organization_audit=false WHERE organization_id='A'");await assert.rejects(read('A',a));await db.exec("UPDATE licenses SET organization_audit=true WHERE organization_id='A'");passed.push('Limite individual e licença');
 await event('A',a,'SUCCESS',id);assert.equal((await read('A',a)).total,1);
 for(let n=0;n<5;n++)await event(null,null,'AUTH_FAILURE');d=await read(null,g,true);assert.equal(d.alerts.length,1);assert.equal(d.alerts[0].evidence_count,5);assert.equal((await read('A',a)).alerts.length,0);
