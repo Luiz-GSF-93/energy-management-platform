@@ -26,14 +26,15 @@ export function servicePolicyPlan(c:any,now=new Date()){
    const candidates=rows.filter((r:any)=>eventNameText(r.name)===eventNameText(expectedName)&&r.month===month);
    if(!candidates.length)return finish('WAITING_FOR_SOURCE',{cursor:{...cursor,month},sourceMonth:month});
    if(candidates.length!==1)return stop('EVENT_SELECTION_REVIEW');
-   return enqueue('DRI_REPORTS',{parentJobId:job.id,eventCode:candidates[0].code},'REPORTS',{...cursor,month,eventCode:candidates[0].code,eventsHash:hash});
+   return enqueue('DRI_REPORTS',{parentJobId:job.id,eventCode:candidates[0].code,...(candidates[0].eventKey?{eventKey:candidates[0].eventKey}:{})},'REPORTS',{...cursor,month,eventCode:candidates[0].code,eventKey:candidates[0].eventKey??null,eventsHash:hash});
   }
   if(cursor.stage==='REPORTS'){
+   if(job.result.data.availability==='NO_REPORTS'&&rows.length===0)return finish('WAITING_FOR_SOURCE',{sourceMonth:month,cursor:{month,eventsHash:cursor.eventsHash,availability:'NO_REPORTS'}});
    const monthEnd=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
    const reports=rows.filter((r:any)=>r.name===p.source_selector.reportName&&r.period?.start?.slice(0,10)<=month+'-01'&&(!r.period.end||r.period.end.slice(0,10)>=monthEnd));
    if(reports.length!==1)return stop('REPORT_SELECTION_REVIEW');const frames=reports[0].frames?.filter((f:any)=>f.name===p.source_selector.frameName)??[];
    if(frames.length!==1||!frames[0].parameters?.includes('CODIGO_AGENTE')||frames[0].parameters.some((v:string)=>!['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL'].includes(v)))return stop('FRAME_SELECTION_REVIEW');
-   return enqueue('DRI_RESULTS',{parentJobId:job.id,eventCode:cursor.eventCode,reportId:reports[0].id,frameId:frames[0].id},'RESULTS',cursor);
+   return enqueue('DRI_RESULTS',{parentJobId:job.id,eventCode:cursor.eventCode,...(cursor.eventKey?{eventKey:cursor.eventKey}:{}),reportId:reports[0].id,frameId:frames[0].id},'RESULTS',cursor);
   }
   if(cursor.stage==='RESULTS')return finish('READY',{success:true,sourceMonth:month,cursor:{month,eventsHash:cursor.eventsHash,sourceHash:hash}});
   return stop('AUTOMATIC_PHASE_REVIEW');

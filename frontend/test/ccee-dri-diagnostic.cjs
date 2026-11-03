@@ -8,5 +8,6 @@ assert(!html.includes('SOURCE_PASSWORD'));assert.match(render({...snapshot,diagn
 assert.match(render({...snapshot,job:{...snapshot.job,state:'QUEUED',error_code:null},provenance:null,diagnostic:null}),/aguarde o resultado desta mesma solicitação/);
 assert.match(render({...snapshot,job:{...snapshot.job,state:'SUCCEEDED',error_code:null},diagnostic:null}),/Fonte recebida/);
 assert.match(driCause('PROVIDER_REJECTED'),/HTTP isolado não determina/);assert.match(driCause('REPORT_SELECTION_REVIEW'),/ausência neste recorte/);assert.match(driCause('ACCESS_CHANGED'),/escopo/);assert.match(driCause('TIMEOUT'),/Comunicação não concluída/);assert.match(driCause('BUDGET_EXHAUSTED'),/limite/);
+const noReports=render({...snapshot,job:{...snapshot.job,kind:'DRI_REPORTS',state:'SUCCEEDED',error_code:null,availability:'NO_REPORTS',providerHttpStatus:500,providerFaultCode:'Server.3001'},provenance:{httpStatus:null},diagnostic:null});for(const text of ['sem relatórios','Server.3001','500','ausência não é valor zero'])assert(noReports.includes(text),text);
 assert.equal(render(null),'');assert(!render({...snapshot,diagnostic:{...snapshot.diagnostic,changedPaths:['<img src=x onerror=alert(1)>']}}).includes('<img'));
 console.log('PASS DRI diagnostic UI: parser/provider/source/access distinctions, protocol, BRT time, historical evidence, queued state and escaped metadata');

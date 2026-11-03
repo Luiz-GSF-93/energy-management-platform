@@ -1,3 +1,4 @@
+import {driNoReports} from './ccee-dri-fault';
 import {driIdentityDiagnostic} from './ccee-dri-diagnostic';
 import {Injectable} from '@nestjs/common';
 import {request} from 'node:https';
@@ -11,7 +12,7 @@ export function driFaultTransaction(xml:string){
 }
 @Injectable()
 export class CceeDriConnector{
- async fetch(config:CceeConfig,kind:DriKind,payload:Buffer):Promise<{xml:string;bytes:number;httpStatus:number}>{
+ async fetch(config:CceeConfig,kind:DriKind,payload:Buffer):Promise<{xml:string;bytes:number;httpStatus:number;noReports?:boolean}>{
   if(!isDri(kind))throw new CceeReadingError('SERVICE_NOT_ALLOWED');
   const service=DRI_SERVICES[kind];
   return new Promise((resolve,reject)=>{let done=false;let req:ReturnType<typeof request>|undefined;
@@ -20,7 +21,7 @@ export class CceeDriConnector{
    try{req=request({hostname:CCEE_HOST,port:443,path:service.path,method:'POST',agent:false,pfx:config.pfx,passphrase:config.passphrase,ca:config.ca,rejectUnauthorized:true,minVersion:'TLSv1.2',maxVersion:'TLSv1.2',headers:{'Content-Type':'text/xml; charset=utf-8',SOAPAction:service.action,'Content-Length':payload.length,Connection:'close'}},res=>{
     let bytes=0;const chunks:Buffer[]=[];res.on('data',(b:Buffer)=>{bytes+=b.length;if(bytes>2097152){req?.destroy();finish(new CceeReadingError('RESPONSE_LIMIT'));}else chunks.push(b);});
     res.on('aborted',()=>finish(new CceeReadingError('TRUNCATED_RESPONSE')));res.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));
-    res.on('end',()=>{const xml=Buffer.concat(chunks).toString('utf8');if(res.statusCode!==200||!/(?:text|application)\/xml/i.test(String(res.headers['content-type']??''))){const error=new CceeReadingError('PROVIDER_REJECTED',res.statusCode??null,driFaultTransaction(xml));error.responseBytes=bytes;finish(error);}else finish(undefined,{xml,bytes,httpStatus:200});});
+    res.on('end',()=>{const xml=Buffer.concat(chunks).toString('utf8');if(res.statusCode===500&&/(?:text|application)\/xml/i.test(String(res.headers['content-type']??''))&&driNoReports(xml,kind,500)){finish(undefined,{xml,bytes,httpStatus:500,noReports:true});}else if(res.statusCode!==200||!/(?:text|application)\/xml/i.test(String(res.headers['content-type']??''))){const error=new CceeReadingError('PROVIDER_REJECTED',res.statusCode??null,driFaultTransaction(xml));error.responseBytes=bytes;finish(error);}else finish(undefined,{xml,bytes,httpStatus:200});});
    });req.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));req.end(payload);}catch{finish(new CceeReadingError('TRANSPORT_ERROR'));}
   });
  }
@@ -31,19 +32,20 @@ export class CceeDriConnector{
   const began=Date.now(),hashes:string[]=[],transactions:string[]=[],rows:any[]=[];let config:CceeConfig|undefined,requests=0,bytes=0,httpStatus:number|null=null;
   try{
    await revalidate();config={...cceeConfig(process.env),profile:job.binding.profile_code};
-   const selection={...job.request_payload,month:job.month.slice(0,7)};let pages=1,total:number|null=null;const seen=new Map<string,any>(),eventSources=new Map<string,any>();let providerRows=0;
+   const selection={...job.request_payload,month:job.month.slice(0,7)};let pages=1,total:number|null=null;const seen=new Map<string,any>(),eventSources=new Map<string,any>();let providerRows=0,noReports=false;
    for(let page=1;page<=pages;page++){
     driEnabled();if(Date.now()-began>95000||requests>=maxRequests)throw new CceeReadingError('RUN_TIME_LIMIT');await revalidate();
-    const payload=Buffer.from(driSoap(config,selection,job.binding.dri_agent_code,job.dri_parameters??[],page));let response:{xml:string;bytes:number;httpStatus:number};
+    const payload=Buffer.from(driSoap(config,selection,job.binding.dri_agent_code,job.dri_parameters??[],page));let response:{xml:string;bytes:number;httpStatus:number;noReports?:boolean};
     try{await reserveRequest?.();requests++;response=await this.fetch(config,job.kind,payload);}finally{payload.fill(0);}
     bytes+=response.bytes;httpStatus=response.httpStatus;hashes.push(createHash('sha256').update(response.xml).digest('hex'));const transaction=driFaultTransaction(response.xml);if(transaction&&!transactions.includes(transaction))transactions.push(transaction);
+    if(response.noReports){if(page!==1||!driNoReports(response.xml,job.kind,response.httpStatus))throw new CceeReadingError('DRI_FAULT_COVERAGE_REVIEW');noReports=true;total=0;break;}
     const p=driPage(response.xml,selection,page,job.binding.dri_tax_id);providerRows+=p.providerRows;
     if(page>1&&(pages!==p.pages||total!==p.total))throw new CceeReadingError('DRI_PAGINATION_CHANGED');pages=p.pages;total=p.total;
-    for(const row of p.rows){const key=row.code??row.id??JSON.stringify(row),previous=seen.get(key);if(previous){if(job.kind!=='DRI_EVENTS')throw new CceeReadingError('DRI_DUPLICATE_ROW');if(previous.sourceIdentity!==row.sourceIdentity){const error=new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');error.diagnostic=driIdentityDiagnostic(String(key),eventSources.get(key),p.eventSources.get(key));throw error;}previous.providerOccurrences+=row.providerOccurrences;}else{seen.set(key,row);if(job.kind==='DRI_EVENTS')eventSources.set(key,p.eventSources.get(key));rows.push(row);}}
+    for(const row of p.rows){const key=row.eventKey??row.code??row.id??JSON.stringify(row),previous=seen.get(key);if(previous){if(job.kind!=='DRI_EVENTS')throw new CceeReadingError('DRI_DUPLICATE_ROW');if(previous.sourceIdentity!==row.sourceIdentity){const error=new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');error.diagnostic=driIdentityDiagnostic(row.code??String(key),eventSources.get(key),p.eventSources.get(key));throw error;}previous.providerOccurrences+=row.providerOccurrences;}else{seen.set(key,row);if(job.kind==='DRI_EVENTS')eventSources.set(key,p.eventSources.get(key));rows.push(row);}}
     if(Buffer.byteLength(JSON.stringify(rows))>1800000)throw new CceeReadingError('DRI_RESULT_LIMIT');
    }
    if(providerRows!==total)throw new CceeReadingError('DRI_COVERAGE_INCOMPLETE');await revalidate();
-   return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes,transactions,data:{kind:job.kind,month:selection.month,eventCode:selection.eventCode??null,reportId:selection.reportId??null,frameId:selection.frameId??null,participantCode:job.binding.dri_agent_code,participantTaxId:job.binding.dri_tax_id,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED',sourceHash:driDigest(hashes),providerRows,uniqueRows:rows.length,repeatedRows:providerRows-rows.length,rows}};
+   return{complete:true,requests,bytes,durationMs:Date.now()-began,hashes,transactions,data:{providerHttpStatus:httpStatus,availability:noReports?'NO_REPORTS':'AVAILABLE',providerFaultCode:noReports?'Server.3001':null,eventKey:selection.eventKey??null,kind:job.kind,month:selection.month,eventCode:selection.eventCode??null,reportId:selection.reportId??null,frameId:selection.frameId??null,participantCode:job.binding.dri_agent_code,participantTaxId:job.binding.dri_tax_id,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED',sourceHash:driDigest(hashes),providerRows,uniqueRows:rows.length,repeatedRows:providerRows-rows.length,rows}};
   }catch(e){const error=e instanceof CceeReadingError?e:new CceeReadingError('DRI_READ_NOT_CONFIRMED');error.metrics={requests,bytes:bytes+error.responseBytes,durationMs:Date.now()-began,hashes,transactions:[...transactions,...(error.transactionId?[error.transactionId]:[])],httpStatus:error.httpStatus??httpStatus,...(error.diagnostic?{diagnostic:error.diagnostic}:{})};throw error;}
   finally{config?.pfx.fill(0);}
  }

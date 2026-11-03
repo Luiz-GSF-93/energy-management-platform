@@ -40,6 +40,7 @@ try{
  const dri=(actor,act,id,body={},org='o1')=>query('SELECT ccee_dri_action($1,$2,$3,$4,$5) result',[org,actor,act,id,JSON.stringify(body)]);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261213_ccee_dri_open_report_period.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261243_ccee_dri_diagnostics.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261256_ccee_dri_disclosures_no_reports.sql',import.meta.url),'utf8'));
  const draft=await action(author,'binding',null,{requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'222',principalProfileCode:null,measurementPoint:'P',meterCode:null,representationKind:'PARTIAL',serviceScope:['DRI_READ'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'UNKNOWN',evidenceReference:'Evidência sintética revisada',reason:'Teste isolado',driAgentCode:'111',driTaxId:'11111111000111'});
  await denied(action(author,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Não pode aprovar a própria preparação'}));
  const b=await action(reviewer,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Representação DRI conferida'});ok(b.dri_agent_code==='111');ok(b.service_scope.includes('DRI_READ'));
@@ -49,7 +50,7 @@ try{
  await denied(dri(author,'enqueue',b.id,{...request,kind:'DRI_REPORTS'}));
  ok((await query('SELECT ccee_claim_reading(true) result'))===null); // old worker never claims DRI
  const claim=await query('SELECT ccee_claim_dri_reading() result');ok(claim.id===first.job.id);ok(claim.binding.dri_agent_code==='111');
- const finish=async(j,rows)=>query('SELECT ccee_finish_dri_reading($1,$2,$3,NULL) result',[j.id,j.lease_id,JSON.stringify({complete:true,requests:1,bytes:100,durationMs:1,hashes:['a'.repeat(64)],transactions:[],data:{kind:j.kind,month:'2026-09',participantCode:'111',participantTaxId:'11111111000111',eventCode:j.request_payload.eventCode??null,reportId:j.request_payload.reportId??null,frameId:j.request_payload.frameId??null,sourceHash:'a'.repeat(64),rows}})]);
+ const finish=async(j,rows)=>query('SELECT ccee_finish_dri_reading($1,$2,$3,NULL) result',[j.id,j.lease_id,JSON.stringify({complete:true,requests:1,bytes:100,durationMs:1,hashes:['a'.repeat(64)],transactions:[],data:{kind:j.kind,month:'2026-09',participantCode:'111',participantTaxId:'11111111000111',eventCode:j.request_payload.eventCode??null,eventKey:j.request_payload.eventKey??null,reportId:j.request_payload.reportId??null,frameId:j.request_payload.frameId??null,sourceHash:'a'.repeat(64),rows}})]);
  await finish(claim,[{code:'202609001000',name:'Evento sintético',month:'2026-09'}]);
  const catalog=await dri(author,'job',first.job.id);ok(catalog.job.state==='SUCCEEDED');ok((await db.query('SELECT count(*) n FROM ccee_dri_catalog_versions')).rows[0].n===1);
  await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_REPORTS',parentJobId:first.job.id,eventCode:'999'}));
@@ -85,6 +86,22 @@ try{
  ok((await db.query('SELECT result FROM ccee_integration_jobs WHERE id=$1',[dc.id])).rows[0].result===null);ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
  ok(!(await db.query("SELECT has_function_privilege('authenticated','ccee_dri_diagnostic_read(text,text,uuid,boolean)','EXECUTE') allowed")).rows[0].allowed);
  ok(!(await db.query("SELECT has_function_privilege('service_role','ccee_finish_dri_reading_before_diagnostic(uuid,uuid,jsonb,text)','EXECUTE') allowed")).rows[0].allowed);
+ // Distinct names under one code require an explicit disclosure selection, server-side.
+ const ej=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID()});const ec=await query('SELECT ccee_claim_dri_reading() result');ok(ec.id===ej.job.id);
+ const variants=['c'.repeat(64),'d'.repeat(64)];await finish(ec,variants.map((eventKey,i)=>({code:'202609040036',name:i?'2026_08 - MS+01 PRÉVIA DE MEDIÇÃO':'2026_09 - MS+01 PRÉVIA DE MEDIÇÃO',month:'2026-09',eventKey})));
+ const reportSelection={...request,requestId:randomUUID(),kind:'DRI_REPORTS',parentJobId:ej.job.id,eventCode:'202609040036'};
+ await denied(dri(author,'enqueue',b.id,reportSelection));await denied(dri(author,'enqueue',b.id,{...reportSelection,eventKey:'f'.repeat(64)}));await denied(dri(foreign,'enqueue',b.id,{...reportSelection,eventKey:variants[0]}));
+ const exact=await dri(author,'enqueue',b.id,{...reportSelection,eventKey:variants[0]});ok(exact.job.request_payload.eventKey===variants[0]);ok((await dri(author,'enqueue',b.id,{...reportSelection,eventKey:variants[0]})).job.id===exact.job.id);
+ await denied(dri(author,'enqueue',b.id,{...reportSelection,eventKey:variants[1]}));
+ const exactClaim=await query('SELECT ccee_claim_dri_reading() result');ok(exactClaim.id===exact.job.id);
+ const emptyCatalog={complete:true,requests:1,bytes:627,durationMs:1,hashes:['e'.repeat(64)],transactions:[],data:{kind:'DRI_REPORTS',month:'2026-09',participantCode:'111',participantTaxId:'11111111000111',eventCode:'202609040036',eventKey:variants[0],reportId:null,frameId:null,sourceHash:'e'.repeat(64),rows:[],availability:'NO_REPORTS',providerHttpStatus:500,providerFaultCode:'Server.3001'}};
+ const completeExact=value=>query('SELECT ccee_finish_dri_reading($1,$2,$3,NULL) result',[exactClaim.id,exactClaim.lease_id,JSON.stringify(value)]);
+ await denied(completeExact({...emptyCatalog,data:{...emptyCatalog.data,eventKey:variants[1]}}));await denied(completeExact({...emptyCatalog,data:{...emptyCatalog.data,providerHttpStatus:200}}));await completeExact(emptyCatalog);
+ const noReports=await readDiag(author,exactClaim.id);ok(noReports.job.availability==='NO_REPORTS');ok(noReports.job.providerHttpStatus===500);ok(noReports.job.providerFaultCode==='Server.3001');ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
+ await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:exact.job.id,eventCode:'202609040036',eventKey:variants[0],reportId:'8',frameId:'31'}));
+ // Migration is idempotent and preserves the existing private grants.
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261256_ccee_dri_disclosures_no_reports.sql',import.meta.url),'utf8'));
+ ok(!(await db.query("SELECT has_function_privilege('authenticated','ccee_dri_action(text,text,text,uuid,jsonb)','EXECUTE') allowed")).rows[0].allowed);
  if(real){
   const delay=ms=>new Promise(r=>setTimeout(r,ms));
   // Force two independently connected enqueue requests to wait for the same organization cap lock.

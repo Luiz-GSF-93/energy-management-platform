@@ -1,0 +1,18 @@
+import {driNoReports} from './ccee-dri-fault';
+import {CceeDriConnector} from './ccee-dri.connector';
+import {driCommand,driSoap} from './ccee-dri.model';
+const tx='10000000-0000-4000-8000-000000000001';
+const fault=`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><faultcode>Server.3001</faultcode><faultstring>Dados não encontrados</faultstring><detail><f:noDataFoundFault xmlns:f="http://xmlns.energia.org.br/FM/v2"><f:errorCode>3001</f:errorCode><f:message>Nenhum(a) relatorio encontrado(a)</f:message><f:uri>/ws/v2/RelatorioBSv2</f:uri><f:transactionId>${tx}</f:transactionId></f:noDataFoundFault></detail></s:Fault></s:Body></s:Envelope>`;
+describe('CCEE 00460253 bounded no-report fault',()=>{
+ it('recognizes only the confirmed no-data fault in report discovery',()=>{expect(driNoReports(fault,'DRI_REPORTS',500)).toBe(true);for(const status of [200,401,403,502])expect(driNoReports(fault,'DRI_REPORTS',status)).toBe(false);for(const kind of ['DRI_RESULTS','DRI_EVENTS'])expect(driNoReports(fault,kind,500)).toBe(false);});
+ it.each([fault.replace('Server.3001','Server.2001'),fault.replace('FM/v2','BO/v2'),fault.replace('schemas.xmlsoap.org','foreign.invalid'),fault.replace('/ws/v2/RelatorioBSv2','/ws/v2/ResultadoRelatorioBSv2'),fault.replace('<f:errorCode>3001','<f:errorCode>2001'),fault.replace('noDataFoundFault','securityFault'),fault.replace('<faultcode>Server.3001</faultcode>','<faultcode>Server.3001</faultcode><faultcode>Server.3001</faultcode>'),fault+'<other/>','<!DOCTYPE x [<!ENTITY a "value">]>'+fault,'HTTP 500'])('rejects unrelated/malformed faults',xml=>expect(driNoReports(xml,'DRI_REPORTS',500)).toBe(false));
+ it('completes an empty catalog with protocol and hash but no fabricated financial values',async()=>{
+  const old={...process.env};process.env.CCEE_DRI_READ_ENABLED='true';const config={profile:'222',username:'synthetic',password:'synthetic',pfx:Buffer.from('synthetic'),passphrase:''},spy=jest.spyOn(require('./ccee-config'),'cceeConfig').mockReturnValue(config);
+  const connector=new CceeDriConnector();connector.fetch=jest.fn().mockResolvedValue({xml:fault,bytes:Buffer.byteLength(fault),httpStatus:500,noReports:true});const reserve=jest.fn();
+  try{const result=await connector.execute({kind:'DRI_REPORTS',month:'2026-03-01',environment:'PRODUCTION',binding:{profile_code:'222',dri_agent_code:'111',dri_tax_id:'11111111000111'},request_payload:{kind:'DRI_REPORTS',eventCode:'202603157000',eventKey:'a'.repeat(64)}},async()=>{},reserve);expect(result).toMatchObject({complete:true,requests:1,transactions:[tx],data:{availability:'NO_REPORTS',providerHttpStatus:500,providerFaultCode:'Server.3001',eventKey:'a'.repeat(64),rows:[],financialState:'UNMAPPED_REVIEW_REQUIRED'}});expect(result.hashes).toHaveLength(1);expect(result.data).not.toHaveProperty('amount');expect(reserve).toHaveBeenCalledTimes(1);expect(config.pfx.every(x=>x===0)).toBe(true);}finally{spy.mockRestore();process.env=old;}
+ });
+ it('validates the additive identity without transmitting it as a SOAP parameter',()=>{
+  const command={requestId:tx,authorizationId:tx,kind:'DRI_REPORTS',month:'2026-03',parentJobId:tx,eventCode:'202603001000',eventKey:'a'.repeat(64)};expect(driCommand(command).eventKey).toBe(command.eventKey);expect(()=>driCommand({...command,eventKey:'INVALID'})).toThrow();expect(()=>driCommand({requestId:tx,authorizationId:tx,kind:'DRI_EVENTS',month:'2026-03',eventKey:command.eventKey})).toThrow();
+  const xml=driSoap({profile:'222',username:'synthetic',password:'synthetic'} as any,command as any,'111',[],1);expect(xml).not.toContain(command.eventKey);expect(xml).not.toContain('eventKey');expect(xml).toContain('<bo:codigo>202603001000</bo:codigo>');
+ });
+});
