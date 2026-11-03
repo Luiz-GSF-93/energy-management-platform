@@ -7,8 +7,7 @@ BEGIN
  SELECT pg_get_functiondef('public.ccee_finish_dri_reading(uuid,uuid,jsonb,text)'::regprocedure) INTO definition;
  definition:=replace(definition,E'\r\n',E'\n');
  IF strpos(definition,'Invalid bounded DRI header diagnostic')=0 THEN
- old_text:=$old$ IF d IS NOT NULL THEN
-  IF p_error IS DISTINCT FROM 'DRI_EVENT_IDENTITY_CONFLICT'$old$;
+ old_text:=substring(definition from 'IF d IS NOT NULL THEN[[:space:]]+IF p_error IS DISTINCT FROM ''DRI_EVENT_IDENTITY_CONFLICT''');
  new_text:=$new$ IF d IS NOT NULL THEN
   IF d->>'stage'='RESULT_HEADERS' THEN
    SELECT * INTO STRICT j FROM public.ccee_integration_jobs WHERE id=p_id;
@@ -19,14 +18,13 @@ BEGIN
    END LOOP;
   ELSE
   IF p_error IS DISTINCT FROM 'DRI_EVENT_IDENTITY_CONFLICT'$new$;
- IF (length(definition)-length(replace(definition,old_text,'')))/length(old_text)<>1 THEN RAISE EXCEPTION 'DRI diagnostic guard changed';END IF;
+ IF old_text IS NULL OR (length(definition)-length(replace(definition,old_text,'')))/length(old_text)<>1 THEN RAISE EXCEPTION 'DRI diagnostic guard changed';END IF;
  definition:=replace(definition,old_text,new_text);
- old_text:=$old$ END IF;
- -- Strip additive metadata$old$;
+ old_text:=substring(definition from 'END IF;[[:space:]]+-- Strip additive metadata');
  new_text:=$new$  END IF;
  END IF;
  -- Strip additive metadata$new$;
- IF (length(definition)-length(replace(definition,old_text,'')))/length(old_text)<>1 THEN RAISE EXCEPTION 'DRI diagnostic completion changed';END IF;
+ IF old_text IS NULL OR (length(definition)-length(replace(definition,old_text,'')))/length(old_text)<>1 THEN RAISE EXCEPTION 'DRI diagnostic completion changed';END IF;
  EXECUTE replace(definition,old_text,new_text);
  END IF;
 END$migration$;
