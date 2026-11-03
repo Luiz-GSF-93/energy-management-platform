@@ -1,0 +1,23 @@
+name: Portal ACL scoped runtime compatibility
+on:
+  pull_request:
+    paths:
+      - 'backend/src/database/migrations/20261254_portal_acl_runtime_compatibility.sql'
+      - 'backend/test/database/portal-acl-runtime.test.cjs'
+      - '.github/workflows/portal-acl-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  scoped-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: node test/database/portal-acl-runtime.test.cjs && node test/portal-customer-access.cjs
+        working-directory: backend
+      - run: npm test -- --runInBand --runTestsByPath src/modules/client-portal-licenses/portal-license.spec.ts
+        working-directory: backend
