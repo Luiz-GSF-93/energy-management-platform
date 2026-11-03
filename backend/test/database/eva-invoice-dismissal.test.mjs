@@ -1,0 +1,75 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite();let checks=0;
+const read=n=>readFileSync(new URL('../../src/database/migrations/'+n,import.meta.url),'utf8');
+const hash='a'.repeat(64),newHash='b'.repeat(64),doc='10000000-0000-4000-8000-000000000001';
+let sequence=1;
+const command=(state,sourceHash=hash,requestId)=>({requestId:requestId??'20000000-0000-4000-8000-'+String(sequence++).padStart(12,'0'),sourceHash,state,note:'Reviewed synthetic notice only',agendaId:null});
+const call=async(action='list',document=null,body={},actor='alice',org='a')=>(await db.query('SELECT public.eva_invoice_attention($1,$2,$3,false,$4,$5,$6) AS value',[org,actor,'role',action,document,JSON.stringify(body)])).rows[0].value;
+const pass=(v,label)=>{assert.ok(v,label);checks++;};
+const rejects=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE organizations(id text PRIMARY KEY);
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,file_hash text,customer_id text,consumer_unit_id text,reference_month date,original_filename text,created_at timestamptz DEFAULT now(),file_verified boolean DEFAULT true,document_type text DEFAULT 'INVOICE_DISTRIBUTOR');
+ CREATE TABLE portal_document_intakes(id uuid PRIMARY KEY,document_id text,organization_id text,file_hash text,kind text,created_at timestamptz DEFAULT now());
+ CREATE TABLE portal_document_events(intake_id uuid,event_key text);
+ CREATE TABLE consumer_units(id text,organization_id text,customer_id text,name text);
+ CREATE TABLE customers(id text,organization_id text,company_name text);
+ CREATE TABLE document_ocr_jobs(id uuid,document_id text,organization_id text,state text,created_at timestamptz DEFAULT now());
+ CREATE TABLE operation_records(id uuid,organization_id text,kind text,document_id text,consumer_unit_id text,customer_id text,created_by text,status text);
+ CREATE TABLE eva_closing_publications(id uuid,organization_id text,customer_id text,closing_id uuid,source_hash text,projection jsonb);
+ CREATE TABLE eva_assisted_closing_versions(id uuid,organization_id text,customer_id text,month text,payload_hash text,report jsonb);
+ CREATE TABLE eva_closing_publication_events(organization_id text,publication_id uuid,sequence integer,state text);
+ CREATE TABLE eva_assisted_closing_events(organization_id text,closing_id uuid,sequence integer,state text);
+ CREATE FUNCTION preserve_calculation_autofill() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'Immutable';END$$;
+ CREATE FUNCTION calculation_autofill_action(o text,a text,r text,p boolean,action text,u text,m text,i uuid,b jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN IF o<>'a' OR a NOT IN('alice','bob') THEN RAISE EXCEPTION 'Scope denied' USING ERRCODE='42501';END IF;RETURN '{}';END$$;
+ INSERT INTO organizations VALUES('a'),('b');INSERT INTO customers VALUES('customer','a','Synthetic');INSERT INTO consumer_units VALUES('unit','a','customer','Synthetic unit');`);
+ await db.exec(read('20261214_eva_invoice_attention.sql'));
+ const previous=read('20261218_eva_invoice_attention_publications.sql');
+ await db.exec(previous.slice(previous.indexOf('CREATE OR REPLACE FUNCTION'),previous.lastIndexOf('COMMIT;')));
+ await db.exec(read('20261253_eva_invoice_dismissal.sql'));
+ async function seed(id=doc,h=hash){await db.query("INSERT INTO documents(id,organization_id,file_hash,customer_id,consumer_unit_id,reference_month,original_filename) VALUES($1,'a',$2,'customer','unit','2026-08-01','synthetic.pdf')",[id,h]);await db.query("INSERT INTO portal_document_intakes VALUES(gen_random_uuid(),$1,'a',$2,'INVOICE',now())",[id,h]);}
+ await seed();pass((await call()).rows.length===1,'New source appears');
+ const dismissed=command('DISMISSED');pass((await call('record',doc,dismissed)).recorded,'Dismissal acknowledged');
+ pass((await call()).rows.length===0,'Personal active list excludes dismissal before display');
+ pass((await call('list',null,{},'bob')).rows.length===1,'Another user keeps the notice');
+ pass((await call('list-dismissed',null,{page:0})).rows.length===1,'Personal dismissal persists on a new read');
+ pass((await call('list-dismissed',null,{page:0},'bob')).rows.length===0,'Other user cannot see personal dismissals');
+ pass((await call('record',doc,dismissed)).recorded,'Same request replay is acknowledged');
+ pass(Number((await db.query('SELECT count(*) AS n FROM eva_invoice_attention_events')).rows[0].n)===1,'Replay never duplicates the decision');
+ await rejects(()=>call('record',doc,command('RESTORED'), 'bob'),'40001');
+ await rejects(()=>call('record',doc,command('DISMISSED',newHash)),'40001');
+ await rejects(()=>call('inspect',doc,{},'mallory'),'42501');
+ pass((await call('list',null,{},'alice','b')).rows.length===0,'Organization scope does not expose another tenant');
+ await rejects(()=>call('list-dismissed',null,{page:-1}),'22023');
+ await rejects(()=>call('list-dismissed',null,{page:0,actor:'bob'}),'22023');
+ await rejects(()=>call('list-dismissed',null,{page:0.5}),'22023');
+ pass((await call('inspect',doc)).state==='DISMISSED','Source inspection supports authorized restoration');
+ const restored=command('RESTORED');await call('record',doc,restored);pass((await call()).rows[0].state==='RESTORED','Restore returns source to active list');
+ pass((await call('record',doc,restored)).recorded,'Restoration replay is idempotent');
+ pass((await call('list-dismissed',null,{page:0})).rows.length===0,'Restored notice leaves archive');
+ await call('record',doc,command('DEFERRED'));pass((await call()).rows.length===1,'Existing defer behavior unchanged');
+ await call('record',doc,command('DISMISSED'));
+ await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[doc,newHash]);await db.query("INSERT INTO portal_document_intakes VALUES(gen_random_uuid(),$1,'a',$2,'INVOICE',now())",[doc,newHash]);
+ pass((await call()).rows.length===1,'Changed exact source never inherits old dismissal');
+ pass((await call('list-dismissed',null,{page:0})).rows.length===0,'Old source not restored onto replacement');
+ await call('record',doc,command('DISMISSED',newHash));
+ // Publish the exact source: neither active list nor dismissed history should offer another financial action.
+ const closing='30000000-0000-4000-8000-000000000001',publication='40000000-0000-4000-8000-000000000001',payload='c'.repeat(64);
+ await db.query("INSERT INTO eva_assisted_closing_versions VALUES($1,'a','customer','2026-08',$2,$3)",[closing,payload,JSON.stringify({units:[{id:'unit',documentId:doc,sourceHash:newHash}]})]);
+ await db.query("INSERT INTO eva_closing_publications VALUES($1,'a','customer',$2,$3,$4)",[publication,closing,payload,JSON.stringify({sourceHash:payload,organizationId:'a',customerId:'customer',month:'2026-08'})]);
+ await db.query("INSERT INTO eva_assisted_closing_events VALUES('a',$1,1,'APPROVED')",[closing]);await db.query("INSERT INTO eva_closing_publication_events VALUES('a',$1,1,'PUBLISHED')",[publication]);
+ pass((await call()).rows.length===0,'Exact published source excluded');pass((await call('list-dismissed',null,{page:0})).rows.length===0,'Published source needs no restoration');
+ await rejects(()=>call('record',doc,command('RESTORED',newHash)),'42501');
+ // Historical dismissals must not consume the active queue limit; history remains paginated.
+ for(let n=1;n<=27;n++){const id='50000000-0000-4000-8000-'+String(n).padStart(12,'0');await seed(id);await call('record',id,command('DISMISSED'));}
+ const p0=await call('list-dismissed',null,{page:0}),p1=await call('list-dismissed',null,{page:1});
+ pass(p0.rows.length===25&&p0.hasMore&&p0.page===0,'First dismissed page bounded to 25');pass(p1.rows.length===2&&!p1.hasMore,'Remaining history page');
+ pass(!p0.rows.some(a=>p1.rows.some(b=>a.documentId===b.documentId)),'Stable pagination without duplicates');
+ const fresh='60000000-0000-4000-8000-000000000001';await seed(fresh);pass((await call()).rows.length===1,'Dismissed history does not occupy active queue');
+ pass(Number((await db.query('SELECT count(*) AS n FROM operation_records')).rows[0].n)===0,'No agenda record or financial update created');
+ await db.exec('SET ROLE authenticated');await rejects(()=>call(),'42501');await rejects(()=>db.query('SELECT * FROM eva_invoice_attention_events'),'42501');await db.exec('RESET ROLE');
+ console.log('PASS invoice dismissal:',checks,'database checks');
+}catch(e){console.error({message:e.message,code:e.code,where:e.where,query:e.query?.slice(0,180)});process.exitCode=1;}finally{await db.close();}

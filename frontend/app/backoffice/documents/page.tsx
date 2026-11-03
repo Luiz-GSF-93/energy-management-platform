@@ -1,5 +1,6 @@
 'use client';
 import { FormEvent, useCallback, useEffect, useState, useRef } from 'react';
+import EvaDismissedInvoices from '@/app/components/EvaDismissedInvoices';
 import AutomaticInvoiceIntake from '@/app/components/AutomaticInvoiceIntake';
 import DocumentDialog from './DocumentDialog';
 import DocumentCatalog,{documentTags,type CatalogDocument} from './DocumentCatalog';
@@ -131,6 +132,7 @@ function DocumentsContent() {
     <header className="backoffice-page__header"><h1 className="backoffice-page__title">Documentos</h1><p>Gerencie faturas, contratos, notas e modelos por cliente, unidade, classificação e versão.</p></header>
     {error && <div><p role="alert">{error}</p><button type="button" disabled={busy} onClick={()=>{setError('');setAttempt(n=>n+1);}}>Tentar carregar novamente</button></div>}{notice && <p role="status">{notice}</p>}
     {loading ? <p role="status">Carregando documentos…</p> : <>
+      {context?.scope==='organization'&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')&&hasPermission(viewPermission)&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')?<EvaDismissedInvoices key={organizationId+':'+context.user.id} organizationId={organizationId}/>:null}
       <AutomaticInvoiceIntake customers={customers} units={units} onEnabled={setAutomaticEnabled} canUpload={canUpload} onUpdated={()=>setAttempt(n=>n+1)}/>
       <DocumentCatalog documents={documents} types={types} canUpload={canUpload} canEdit={hasPermission('613b71d0-67db-4761-9e11-61fdf63ac8d5')} canApprove={!!context&&context.scope!=='global'&&(['gestor','admin_org'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')} onNew={()=>{setDropFile(null);setError('');setPreviousDocument(null);setUploadTag('DRAFT');setCustomer('');setShowUpload(true);}} onVersion={d=>{setDropFile(null);setError('');setPreviousDocument(d as Document);setUploadTag('REVIEWED');setCustomer(d.customer_id);setShowUpload(true);}} onReload={()=>setAttempt(n=>n+1)} onPreview={id=>void preview(id)} onDownload={id=>void download(id)} onOcr={id=>{if(canAssist&&!inbox.some(v=>v.id===id))track(id);setOcrId(id);setOpened(old=>({id,request:(old?.request??0)+1}));}}/>
       {canUpload && showUpload && <DocumentDialog label="Inserir documento" busy={busy} onClose={()=>setShowUpload(false)}><button disabled={busy} onClick={()=>setShowUpload(false)} autoFocus>Fechar cadastro</button><form key={organizationId} onInvalidCapture={e=>{let d=(e.target as HTMLElement).closest('details');while(d){d.open=true;d=d.parentElement?.closest('details')??null;}}} onSubmit={send} style={{display:'grid',gap:16,maxWidth:680,padding:24,border:'1px solid var(--color-border)',borderRadius:12,background:'var(--color-surface)',color:'var(--color-text)'}}>
