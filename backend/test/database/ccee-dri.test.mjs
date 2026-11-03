@@ -41,6 +41,7 @@ try{
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261213_ccee_dri_open_report_period.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261243_ccee_dri_diagnostics.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261256_ccee_dri_disclosures_no_reports.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261257_ccee_dri_header_diagnostic.sql',import.meta.url),'utf8'));
  const draft=await action(author,'binding',null,{requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'222',principalProfileCode:null,measurementPoint:'P',meterCode:null,representationKind:'PARTIAL',serviceScope:['DRI_READ'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'UNKNOWN',evidenceReference:'Evidência sintética revisada',reason:'Teste isolado',driAgentCode:'111',driTaxId:'11111111000111'});
  await denied(action(author,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Não pode aprovar a própria preparação'}));
  const b=await action(reviewer,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Representação DRI conferida'});ok(b.dri_agent_code==='111');ok(b.service_scope.includes('DRI_READ'));
@@ -99,7 +100,17 @@ try{
  await denied(completeExact({...emptyCatalog,data:{...emptyCatalog.data,eventKey:variants[1]}}));await denied(completeExact({...emptyCatalog,data:{...emptyCatalog.data,providerHttpStatus:200}}));await completeExact(emptyCatalog);
  const noReports=await readDiag(author,exactClaim.id);ok(noReports.job.availability==='NO_REPORTS');ok(noReports.job.providerHttpStatus===500);ok(noReports.job.providerFaultCode==='Server.3001');ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
  await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:exact.job.id,eventCode:'202609040036',eventKey:variants[0],reportId:'8',frameId:'31'}));
+ // Header diagnostics cannot store cells, change scope, bypass leases, or become results.
+ const hj=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'8',frameId:'31'});
+ const hc=await query('SELECT ccee_claim_dri_reading() result');ok(hc.id===hj.job.id);
+ const hd={version:1,stage:'RESULT_HEADERS',eventCode:'202609001000',reportId:'8',frameId:'31',sourceHashes:['a'.repeat(64)],headers:['CODIGO DO AGENTE','VALOR (R$)'],truncated:false};
+ const hm={requests:1,bytes:500,durationMs:1,httpStatus:200,hashes:['a'.repeat(64)],transactions:[],diagnostic:hd};
+ const headerStop=(value,error='DRI_PARTICIPANT_PROOF_REQUIRED',lease=hc.lease_id)=>query('SELECT ccee_finish_dri_reading($1,$2,$3,$4) result',[hc.id,lease,JSON.stringify(value),error]);
+ for(const bad of [{...hd,cells:['PRIVATE']},{...hd,headers:['password']},{...hd,headers:['person@example.com']},{...hd,headers:Array(25).fill('X')},{...hd,headers:['11264299999999']},{...hd,reportId:'99'},{...hd,sourceHashes:['b'.repeat(64)]}])await denied(headerStop({...hm,diagnostic:bad}));
+ await denied(headerStop(hm,'OTHER'));await denied(headerStop(hm,'DRI_PARTICIPANT_PROOF_REQUIRED',randomUUID()));
+ await headerStop(hm);const hr=await readDiag(author,hc.id);ok(hr.job.state==='FAILED');ok(hr.diagnostic.headers[0]==='CODIGO DO AGENTE');await denied(readDiag(foreign,hc.id));ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===1);
  // Migration is idempotent and preserves the existing private grants.
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261257_ccee_dri_header_diagnostic.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261256_ccee_dri_disclosures_no_reports.sql',import.meta.url),'utf8'));
  ok(!(await db.query("SELECT has_function_privilege('authenticated','ccee_dri_action(text,text,text,uuid,jsonb)','EXECUTE') allowed")).rows[0].allowed);
  if(real){

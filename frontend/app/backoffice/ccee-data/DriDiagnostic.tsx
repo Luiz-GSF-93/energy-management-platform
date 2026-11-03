@@ -19,6 +19,7 @@ export default function DriDiagnostic({snapshot}:{snapshot:any}){
  const noReports=j.availability==='NO_REPORTS';
  const available=j.state==='SUCCEEDED',running=['QUEUED','RUNNING'].includes(j.state),date=j.finished_at??j.created_at;
  const paths=d?.version===1&&d.stage==='EVENT_IDENTITY'&&Array.isArray(d.changedPaths)?d.changedPaths.slice(0,16).filter((x:any)=>typeof x==='string'):[];
+ const headers=d?.version===1&&d.stage==='RESULT_HEADERS'&&Array.isArray(d.headers)?d.headers.slice(0,24).filter((x:any)=>typeof x==='string'&&x.length<=160):[];
  return <section aria-label='Diagnóstico da consulta CCEE' style={{padding:12,border:'1px solid #55718a',borderRadius:8,overflowWrap:'anywhere'}}>
   <h4>{names[j.kind]??'Consulta CCEE'} · {j.state}</h4>
   <p>{date?new Date(date).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Horário não registrado'} · horário de Brasília · competência {String(j.month??'').slice(0,7)}</p>
@@ -26,6 +27,7 @@ export default function DriDiagnostic({snapshot}:{snapshot:any}){
   <dl><dt>Etapa / código</dt><dd>{names[j.kind]??j.kind} · {j.error_code??'Sem erro registrado'}</dd><dt>Seleção</dt><dd>Evento {selection.eventCode??'a listar'} · relatório {selection.reportId??'a selecionar no catálogo'} · quadro {selection.frameId??'a selecionar no catálogo'}</dd><dt>HTTP</dt><dd>{proof.httpStatus??j.providerHttpStatus??'Não registrado nesta evidência'}{proof.httpStatus===200&&!available?' · resposta recebida; validação local interrompida':''}</dd></dl>
   {Array.isArray(proof.transactions)&&proof.transactions.length?<p>Transaction ID: {proof.transactions.slice(0,10).join(' · ')}</p>:null}
   {Array.isArray(proof.hashes)&&proof.hashes.length?<details><summary>Hashes das respostas preservadas</summary>{proof.hashes.slice(0,10).map((h:string)=><p key={h}>{h}</p>)}</details>:null}
+  {headers.length?<><p>Cabeçalhos recebidos · relatório {d.reportId} · quadro {d.frameId}:</p><ul>{headers.map((h:string,i:number)=><li key={i}>{h}</li>)}</ul><p>Somente nomes de colunas; células e XML não são exibidos. A identidade do participante ainda não foi comprovada; nenhum valor foi incorporado.</p>{d.truncated?<p>Cabeçalhos limitados ou protegidos para preservar o diagnóstico.</p>:null}</>:null}
   {paths.length?<><p>Evento com identidade divergente: {d.eventCode}. Campos diferentes: {paths.join(', ')}.</p><p>Os valores desses campos e o XML não são exibidos neste diagnóstico. Confirmar a chave oficial da divulgação antes de retomar.</p>{d.truncated?<p>Lista de campos limitada; diagnóstico preservado para conferência.</p>:null}</>:j.error_code==='DRI_EVENT_IDENTITY_CONFLICT'?<p>Esta tentativa histórica não registrou os campos divergentes. Uma reprodução diagnóstica autorizada é necessária para identificá-los.</p>:null}
  </section>;
 }

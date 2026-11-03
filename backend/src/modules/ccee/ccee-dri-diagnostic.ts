@@ -1,6 +1,18 @@
 import {createHash} from 'node:crypto';
 export type DriIdentityDiagnostic={version:1;stage:'EVENT_IDENTITY';eventCode:string;sourceHashes:string[];changedPaths:string[];truncated:boolean};
+export type DriHeaderDiagnostic={version:1;stage:'RESULT_HEADERS';eventCode:string;reportId:string;frameId:string;sourceHashes:string[];headers:string[];truncated:boolean};
+export type DriDiagnostic=DriIdentityDiagnostic|DriHeaderDiagnostic;
 const sensitive=/password|senha|secret|token|pfx|private|credential|username|usuario|authorization/i;
+/** Column names only, never cells. Redact identifiers, links and credential-like labels. */
+export function driHeaderDiagnostic(eventCode:string,reportId:string,frameId:string,columns:string[],sourceHash:string):DriHeaderDiagnostic{
+ let truncated=columns.length>24;
+ const headers=columns.slice(0,24).map(value=>{
+  const name=value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  if(name.length>160||sensitive.test(name)||/\d{7,}|HTTPS?:|WWW\./.test(name)||! /^[A-Z0-9 _().,/%:+&#;$=\-]{1,160}$/.test(name)){truncated=true;return 'CABECALHO_PROTEGIDO';}
+  return name;
+ });
+ return{version:1,stage:'RESULT_HEADERS',eventCode,reportId,frameId,sourceHashes:[sourceHash],headers,truncated};
+}
 const canonical=(x:any):any=>Array.isArray(x)?x.map(canonical):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canonical(x[k])])):x;
 /** Metadata paths and hashes only. Never return XML, credentials or field values. */
 export function driIdentityDiagnostic(eventCode:string,before:unknown,after:unknown):DriIdentityDiagnostic{
