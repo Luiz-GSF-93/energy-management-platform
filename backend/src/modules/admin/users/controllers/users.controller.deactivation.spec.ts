@@ -26,6 +26,7 @@ describe('UsersController.deactivate — F1.2.3b', () => {
     const controller = new UsersController(usersService as any);
 
     const tenant = {
+      role:'admin_org',
       userId: actorUserId,
       organizationId,
       permissions: [PERMISSIONS.ORGANIZATION_USERS_DELETE],

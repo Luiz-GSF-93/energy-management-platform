@@ -43,7 +43,7 @@ describe('UsersController.invite — F1.2.4c.2.2a', () => {
           tenantContext: {
             userId: actorUserId,
             organizationId,
-            role: 'manager',
+            role: 'admin_org',
             roleId,
             permissions,
             email: 'actor@example.test',
@@ -95,7 +95,7 @@ describe('UsersController.invite — F1.2.4c.2.2a', () => {
     const tenant: any = {
       userId: actorUserId,
       organizationId,
-      role: 'manager',
+      role: 'admin_org',
       roleId: 'manager-role',
       permissions: [PERMISSIONS.ORGANIZATION_USERS_INVITE],
       email: 'actor@example.test',

@@ -1,0 +1,45 @@
+name: Organization permission catalog
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/admin/users/**'
+      - 'backend/src/modules/trading-hub/**'
+      - 'backend/src/modules/portal-workspace/portal-customer-access.ts'
+      - 'backend/src/database/migrations/2026125*.sql'
+      - 'backend/test/database/organization-permission-catalog.test.mjs'
+      - 'frontend/app/backoffice/users/**'
+      - 'frontend/app/backoffice/trading-hub/page.tsx'
+      - 'frontend/test/organization-permission-catalog.cjs'
+      - '.github/workflows/organization-permission-catalog.yml'
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand --testPathPattern='admin/users|trading-hub'
+        working-directory: backend
+      - run: node test/database/organization-permission-catalog.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: node test/user-access-governance.cjs && node test/organization-permission-catalog.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend
+

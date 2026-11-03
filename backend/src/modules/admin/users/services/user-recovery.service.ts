@@ -1,3 +1,4 @@
+import {assertUserAdministrator} from './user-administration';
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { TenantContext } from '../../../../common/interfaces/tenant-context.interface';
 import { PasswordRecoveryService } from '../../../auth/password-recovery.service';
@@ -9,6 +10,7 @@ export class UserRecoveryService {
   constructor(private readonly users: UsersService, private readonly recovery: PasswordRecoveryService) {}
 
   async request(targetUserId: string, tenant: TenantContext, ip: string) {
+    if(targetUserId!==tenant.userId)assertUserAdministrator(tenant);
     const user = await this.users.findOne(targetUserId, tenant.organizationId);
     if (user.membershipStatus !== 'active') throw new BadRequestException('O vínculo deste usuário está inativo nesta organização.');
     if (targetUserId !== tenant.userId) {

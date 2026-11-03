@@ -4,6 +4,7 @@ import {SupabaseService} from '../../../../services/supabase.service';
 import {TenantContext} from '../../../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../../../common/constants/permissions';
 import {UsersService} from './users.service';
+import {assertUserAdministrator} from './user-administration';
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
 export function permissionSelection(value:unknown,role:string[],actor:string[]){
  if(!Array.isArray(value)||value.length>300||value.some(p=>!uuid(p))||new Set(value).size!==value.length)throw new BadRequestException('Selecione permissões válidas, sem duplicidade.');
@@ -14,19 +15,20 @@ export function permissionSelection(value:unknown,role:string[],actor:string[]){
 export class UserRequestsService{
  constructor(private db:SupabaseService,private users:UsersService){}
  private allowed(t:TenantContext,write=false){
-  if((t.scope as string)==='global'||!t.organizationId||!t.userId||!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation'||!t.permissions.includes(write?P.ORGANIZATION_USERS_INVITE:P.ORGANIZATION_USERS_VIEW))throw new ForbiddenException('Gestão de usuários indisponível neste contexto.');
+  assertUserAdministrator(t);
+  if(!t.permissions.includes(write?P.ORGANIZATION_USERS_INVITE:P.ORGANIZATION_USERS_VIEW))throw new ForbiddenException('Gestão de usuários indisponível neste contexto.');
  }
  private fail(r:any){if(!r.error)return r.data;if(r.error.code==='42501')throw new ForbiddenException('Acesso ou escopo da solicitação indisponível.');if(r.error.code==='40001'||r.error.code==='23505')throw new ConflictException('Solicitação já processada ou alterada. Atualize o histórico antes de repetir.');if(['22023','22P02','23514'].includes(r.error.code))throw new BadRequestException('Confira a seleção e a justificativa.');throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');}
  private action(t:TenantContext,action:string,id:string,body:any){return this.db.getClient().rpc('organization_user_request_action',{o:t.organizationId,a:t.userId,platform:t.accessMode==='platform_operation',action,rid:id,b:body}).then((r:any)=>this.fail(r));}
  async catalog(t:TenantContext){
   this.allowed(t);const c=this.db.getClient();
-  const [rs,ps,ms]=await Promise.all([c.from('roles').select('id,name,permissions').eq('organization_id',t.organizationId).eq('scope','organization'),c.from('permissions').select('id,code,name,module').in('id',t.permissions).order('code').limit(301),c.from('organization_members').select('user_id,role_id,permission_limit').eq('organization_id',t.organizationId).ilike('status','active').limit(501)]);
-  const roles=this.fail(rs),permissions=this.fail(ps),members=this.fail(ms);if(!Array.isArray(roles)||!Array.isArray(permissions)||permissions.length>300||!Array.isArray(members)||members.length>500)throw new ServiceUnavailableException('Catálogo extenso ou indisponível. Nenhuma lista parcial foi apresentada.');
+  const catalog=this.fail(await c.rpc('organization_user_permission_catalog',{o:t.organizationId,a:t.userId,platform:t.accessMode==='platform_operation'}));
+  if(catalog?.metadataVersion!==2||!Array.isArray(catalog.roles)||!Array.isArray(catalog.permissions)||catalog.permissions.length>300||!Array.isArray(catalog.members)||catalog.members.length>500)throw new ServiceUnavailableException('Catálogo de permissões indisponível. Nenhuma liberação parcial foi apresentada.');
   const units=t.permissions.includes(P.ORGANIZATION_CONSUMER_UNITS_VIEW)?this.fail(await c.from('consumer_units').select('id,customer_id,name,consumer_unit_number').eq('organization_id',t.organizationId).ilike('status','active').limit(501)):[];
   const customers=t.permissions.includes(P.ORGANIZATION_CUSTOMERS_VIEW)?this.fail(await c.from('customers').select('id,company_name').eq('organization_id',t.organizationId).is('deleted_at',null).limit(501)):[];
   if(!Array.isArray(customers)||customers.length>500)throw new BadRequestException('Lista de clientes extensa. Consulte a administração.');
   if(!Array.isArray(units)||units.length>500)throw new BadRequestException('Lista de unidades extensa. Consulte a administração.');
-  return {units,customers,roles:roles.filter((r:any)=>(r.name!=='admin_org'||t.accessMode==='platform_operation')&&Array.isArray(r.permissions)&&r.permissions.every((p:string)=>t.permissions.includes(p))),permissions:permissions.filter((p:any)=>t.permissions.includes(p.id)),members,canApprove:t.role==='admin_org'||t.accessMode==='platform_operation'};
+  return {...catalog,units,customers,canApprove:true};
  }
  async list(t:TenantContext,query:Record<string,string>={}){
   this.allowed(t);const page=Number(query.page??0);if(Object.keys(query).some(k=>!['page','state'].includes(k))||!Number.isInteger(page)||page<0||page>10000||query.state&&!['PENDING','ALL'].includes(query.state))throw new BadRequestException('Filtro de solicitações inválido.');let q=this.db.getClient().from('organization_user_requests').select('id,actor_id,kind,body,state,decision_by,decision_reason,result,created_at,updated_at').eq('organization_id',t.organizationId);
@@ -35,9 +37,15 @@ export class UserRequestsService{
   const rows=this.fail(await q.order('created_at',{ascending:false}).order('id').range(page*50,page*50+49));if(!Array.isArray(rows)||rows.length>50)throw new ServiceUnavailableException('Histórico indisponível.');return {rows,page,hasMore:rows.length===50,canApprove:t.role==='admin_org'||t.accessMode==='platform_operation'};
  }
  private async role(t:TenantContext,id:string,selected:unknown){
-  await this.users.assertAssignable(id,t.organizationId,t.permissions,t.accessMode==='platform_operation');
-  const role=this.fail(await this.db.getClient().from('roles').select('id,name,permissions').eq('organization_id',t.organizationId).eq('scope','organization').eq('id',id).single());
-  return {role,permissions:permissionSelection(selected??role.permissions,role.permissions,t.permissions)};
+  const result=this.fail(await this.db.getClient().rpc('organization_user_permission_selection',{o:t.organizationId,a:t.userId,platform:t.accessMode==='platform_operation',roleid:id,selected:selected??null}));
+  if(result?.role?.id!==id||!Array.isArray(result.permissions))throw new ServiceUnavailableException('Não foi possível validar a função e as permissões atuais.');
+  return result;
+ }
+ async configureRole(id:string,input:any,t:TenantContext){
+  this.allowed(t,true);
+  if(!t.permissions.includes(P.ORGANIZATION_USERS_UPDATE))throw new ForbiddenException('Sem permissão para configurar funções.');
+  if(!uuid(id)||!input||Object.keys(input).sort().join(',')!=='permissionIds,reason,revision'||typeof input.revision!=='string'||!/^[a-f0-9]{32}$/.test(input.revision)||typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.length>1000||!Array.isArray(input.permissionIds)||input.permissionIds.length>300||input.permissionIds.some((p:unknown)=>!uuid(p))||new Set(input.permissionIds).size!==input.permissionIds.length)throw new BadRequestException('Confira a função, a revisão, as permissões e a justificativa.');
+  return this.fail(await this.db.getClient().rpc('configure_organization_role_permissions',{o:t.organizationId,a:t.userId,platform:t.accessMode==='platform_operation',roleid:id,expected:input.revision,selected:[...input.permissionIds].sort(),reason:input.reason.trim()}));
  }
  async submitInvite(dto:any,t:TenantContext){
   this.allowed(t,true);const {permissions,role}=await this.role(t,dto.roleId,dto.permissionIds);
@@ -45,7 +53,7 @@ export class UserRequestsService{
   if(dto.customerId)await this.portalUnits(dto,t);
   const {requestId,permissionIds,...invite}=dto;const id=requestId??randomUUID();if(!uuid(id))throw new BadRequestException('Identificador inválido.');
   const row=await this.action(t,'submit',id,{kind:'INVITE',body:{...invite,permissionIds:permissions}});
-  return {pendingApproval:true,request:row,message:'Solicitação encaminhada ao administrador da organização para aprovação. O acesso e o convite ainda não foram liberados.'};
+  return {pendingApproval:true,request:row,message:'Convite preparado. O Administrador deve conferir e confirmar o acesso antes do envio.'};
  }
  private async portalUnits(dto:any,t:TenantContext){
   if(dto.affiliationType!=='external'||!Array.isArray(dto.portalUnitIds)||!dto.portalUnitIds.length||dto.portalUnitIds.length>100||new Set(dto.portalUnitIds).size!==dto.portalUnitIds.length||dto.portalUnitIds.some((v:any)=>!uuid(v)))throw new BadRequestException('Selecione as unidades autorizadas para o usuário externo do Portal.');
