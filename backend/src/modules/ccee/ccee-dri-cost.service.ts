@@ -1,3 +1,4 @@
+import {cceeFinancialCandidate} from './ccee-financial-candidate';
 import {Body,Controller,ForbiddenException,Get,Injectable,Param,Post,BadRequestException,ConflictException} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -18,25 +19,29 @@ export function driMcpCandidate(value:any){
  const amount=BigInt(whole).toString()+'.'+fraction.padEnd(2,'0').slice(0,2);
  return{mapVersion:'CCEE_SUM001_Q4_MCP_1',jobId:j.id,authorizationId:j.authorization_id,unitId:b.consumer_unit_id,customerId:b.customer_id,accountingMonth:d.month,eventCode:d.eventCode,reportId:d.reportId,frameId:d.frameId,sourceHash:d.sourceHash,sourceColumn:columns[indexes[0].i],signedValue:signed,amount,suggestedEffect:signed.startsWith('-')?'COST':'CREDIT',notice:'Valor a liquidar no escopo do agente. Confirme unidade, competência de desembolso, natureza e composição; não comprova pagamento nem todos os encargos CCEE.'};
 }
+export function driCostCandidate(value:any){const d=value?.job?.result?.data;return d?.reportId==='114'&&d?.frameId==='451'?{...driMcpCandidate(value),rubric:'MCP',label:'CCEE · liquidação MCP'}:cceeFinancialCandidate(value);}
 @Injectable()
 export class CceeDriCostService{
  constructor(private dri:CceeDriService,private costs:MonthlyCostsService){}
- async candidate(t:TenantContext,id:string){const source=await this.dri.job(t,id);return{organizationId:t.organizationId,candidate:driMcpCandidate(source)};}
+ async candidate(t:TenantContext,id:string){const source=await this.dri.job(t,id);return{organizationId:t.organizationId,candidate:driCostCandidate(source)};}
  async prepare(t:TenantContext,id:string,input:unknown){
   if(t.accessMode!=='platform_operation'&&!t.permissions.includes(PERMISSIONS.ORGANIZATION_CONTRACTS_UPDATE))throw new ForbiddenException('Preparar custos exige permissão de contratos.');
   const b=cceeObject(input,['month','effect','sourceHash','reason','confirmed']);cceeMonth(b.month);cceeText(b.reason,700,30);
   if(b.confirmed!==true||!['COST','CREDIT'].includes(b.effect))throw new BadRequestException('Confirme a alocação e o valor final.');
-  const source=await this.dri.job(t,id),c=driMcpCandidate(source),binding=source.binding;
+  const source=await this.dri.job(t,id),c=driCostCandidate(source),binding=source.binding;
+  if(c.mapVersion!=='CCEE_SUM001_Q4_MCP_1'&&b.effect!==c.suggestedEffect)throw new BadRequestException('Natureza divergente do campo monetário homologado; confira a fonte.');
   if(b.sourceHash!==c.sourceHash)throw new ConflictException('A fonte mudou.');
   if(binding.valid_from>b.month+'-01'||binding.valid_to&&binding.valid_to<new Date(Date.UTC(Number(b.month.slice(0,4)),Number(b.month.slice(5,7)),0)).toISOString().slice(0,10))throw new BadRequestException('Competência fora da representação conferida.');
   const hash=contractHash(JSON.stringify([t.organizationId,c.authorizationId,c.eventCode,c.reportId,c.frameId,c.unitId,b.month]));
   const itemId=hash.slice(0,8)+'-'+hash.slice(8,12)+'-5'+hash.slice(13,16)+'-a'+hash.slice(17,20)+'-'+hash.slice(20,32);
-  const provenance=`CCEE DRI · ${c.eventCode} · relatório 114/quadro 451 · ${c.mapVersion} · SHA-256 ${c.sourceHash} · ${b.reason}`;
+  const provenance=`CCEE DRI · ${c.eventCode} · relatório ${c.reportId}/quadro ${c.frameId} · ${c.mapVersion} · SHA-256 ${c.sourceHash} · ${b.reason}`;
   const query={consumerUnitId:c.unitId,month:b.month},listed=await this.costs.list(query,t),latest=listed.rows[0],old=latest?.costs?.items??[];
   const duplicate=old.find((i:any)=>i.id===itemId);
   if(duplicate){if(duplicate.amount===c.amount&&duplicate.effect===b.effect&&duplicate.source===provenance)return{organizationId:t.organizationId,cost:latest,reused:true};throw new ConflictException('O mesmo fato contábil já foi alocado; concilie a revisão existente.');}
-  if(old.some((i:any)=>i.category==='CCEE'&&/MCP|MERCADO DE CURTO PRAZO/i.test(i.label)))throw new ConflictException('Já existe liquidação MCP nesta competência. Confira a correspondência antes de importar para evitar duplicidade.');
-  const costs={noCosts:false,items:[...old,{id:itemId,label:'CCEE · liquidação MCP · evento '+c.eventCode,category:'CCEE',scenario:'ACL',effect:b.effect,amount:c.amount,source:provenance,taxTreatment:'INCLUDED'}]};
+  if(c.rubric==='MCP'&&old.some((i:any)=>i.category==='CCEE'&&/MCP|MERCADO DE CURTO PRAZO/i.test(i.label)))throw new ConflictException('Já existe liquidação MCP nesta competência. Confira a correspondência antes de importar para evitar duplicidade.');
+  if(c.rubric==='MCP'&&old.some((i:any)=>i.category==='CCEE'&&!/CCEE DRI �/.test(i.source??'')))throw new ConflictException('J� existe custo CCEE manual ou agregado. Concilie os componentes para evitar duplicidade.');
+  if(c.rubric!=='MCP'&&old.some((i:any)=>i.category==='CCEE'&&(!/CCEE DRI ·/.test(i.source??'')||String(i.source).includes(c.mapVersion))))throw new ConflictException('Já existe custo CCEE manual, agregado ou desta rubrica. Concilie os componentes existentes para evitar duplicidade.');
+  const costs={noCosts:false,items:[...old,{id:itemId,label:c.label+' · evento '+c.eventCode,category:'CCEE',scenario:'ACL',effect:b.effect,amount:c.amount,source:provenance,taxTreatment:c.rubric==='GUARANTEE'?'NOT_APPLICABLE':'INCLUDED'}]};
   const body:any={...query,costs,sourceReference:provenance,notes:'Fonte CCEE com alocação confirmada pelo operador. Demais custos preservados. Não comprova quitação nem cobertura de todos os encargos.',correctionReason:b.reason,...(latest?.status!=='DRAFT'&&latest?{previousId:latest.id}:{})};
   const saved=latest?.status==='DRAFT'?await this.costs.update(latest.id,{...body,previousId:latest.previous_id??null,revision:latest.revision},t):await this.costs.create(body,t);
   return{organizationId:t.organizationId,cost:saved,reused:false,notice:'Custo preparado em rascunho para a EVA. Nenhum fechamento aprovado foi substituído.'};

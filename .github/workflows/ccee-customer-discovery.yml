@@ -4,6 +4,7 @@ on:
     paths:
       - 'backend/src/modules/ccee/**'
       - 'backend/src/database/migrations/20261259_ccee_customer_discovery.sql'
+      - 'backend/src/database/migrations/20261260_ccee_discovery_shared_batch.sql'
       - 'backend/test/database/ccee-customer-discovery.test.mjs'
       - 'frontend/app/backoffice/ccee-data/**'
       - 'frontend/test/ccee-customer-discovery.cjs'
@@ -20,7 +21,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand --runTestsByPath src/modules/ccee/ccee-customer-discovery.spec.ts src/modules/ccee/ccee-market.connector.spec.ts
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ccee/ccee-customer-discovery.spec.ts src/modules/ccee/ccee-market.connector.spec.ts src/modules/ccee/ccee-dri-cost.spec.ts src/modules/ccee/ccee-financial-candidate.spec.ts src/modules/ccee/ccee-vca-participant.spec.ts
         working-directory: backend
       - run: node test/database/ccee-customer-discovery.test.mjs
         working-directory: backend
