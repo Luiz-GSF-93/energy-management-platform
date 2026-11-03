@@ -1,0 +1,26 @@
+name: Agenda readable choices and view preference
+on:
+  pull_request:
+    paths:
+      - 'frontend/app/components/OperationsWorkspace.tsx'
+      - 'frontend/app/components/OperationChoice.tsx'
+      - 'frontend/app/components/AgendaViews.tsx'
+      - 'frontend/app/backoffice/contracts/CustomerSelector*'
+      - 'frontend/test/agenda-selectors-view.cjs'
+      - '.github/workflows/agenda-selectors-view.yml'
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: node test/agenda-selectors-view.cjs && node test/agenda-evidence-ui.cjs && node test/document-evidence-selector.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend
