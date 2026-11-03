@@ -2,7 +2,7 @@ import {BadRequestException} from '@nestjs/common';
 
 export type TradingKind='supplier'|'opportunity'|'proposal';
 
-export const fields={supplier:['legalName','tradeName','cnpj','phone','administrativeEmail','administrativeContact','quotationContacts','address','city','state'],opportunity:['title','customerId','unitId','distributor','submarket','averageMwhMonth','energyType','startMonth','months','expiresAt','acrMonthlyBrl','aclOtherMonthlyBrl','comparisonBasis','investmentBrl','discountAnnualPercent','documents'],proposal:['supplierId','priceBrlMwh','energyType','flexibility','modulation','guarantees','validUntil','conditions','documents']} as const;
+export const fields={supplier:['legalName','tradeName','cnpj','phone','administrativeEmail','administrativeContact','quotationContacts','address','city','state'],opportunity:['title','customerId','unitId','distributor','submarket','averageMwhMonth','energyType','startMonth','purchaseType','months','expiresAt','acrMonthlyBrl','aclOtherMonthlyBrl','comparisonBasis','investmentBrl','discountAnnualPercent','documents'],proposal:['supplierId','priceBrlMwh','energyType','flexibility','modulation','guarantees','validUntil','conditions','documents']} as const;
 export function object(value:unknown):Record<string,any>{if(!value||Array.isArray(value)||typeof value!=='object')throw new BadRequestException('Objeto inválido.');return value as Record<string,any>;}
 
 export function text(value:any,min=1,max=500,label?:string){if(typeof value!=='string'||value.trim().length<min||value.trim().length>max)throw new BadRequestException(label?`${label}: informe de ${min} a ${max} caracteres.`:'Preencha os textos obrigatórios dentro dos limites.');return value.trim();}
@@ -42,6 +42,7 @@ export function validateTrading(kind:string,input:unknown){
   if(!['CONVENTIONAL','INCENTIVIZED_50','INCENTIVIZED_100'].includes(d.energyType))throw new BadRequestException('Modalidade de energia inválida.');
 
   if(kind==='opportunity'){
+   if(d.purchaseType!=null&&!['AVULSA','CONTRATO'].includes(d.purchaseType))throw new BadRequestException('Tipo de compra inválido.');
 
    for(const [k,label] of [['title','Título da oportunidade'],['customerId','Cliente'],['unitId','Unidade consumidora'],['distributor','Distribuidora']])d[k]=text(d[k],1,200,label);
 

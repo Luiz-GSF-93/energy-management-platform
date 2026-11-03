@@ -8,8 +8,10 @@ on:
       - 'backend/src/database/migrations/2026125*.sql'
       - 'backend/test/database/organization-permission-catalog.test.mjs'
       - 'frontend/app/backoffice/users/**'
-      - 'frontend/app/backoffice/trading-hub/page.tsx'
+      - 'frontend/app/backoffice/trading-hub/**'
       - 'frontend/test/organization-permission-catalog.cjs'
+      - 'frontend/test/trading-period-suppliers.cjs'
+      - 'frontend/test/trading-analysis.cjs'
       - '.github/workflows/organization-permission-catalog.yml'
 permissions:
   contents: read
@@ -38,7 +40,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/user-access-governance.cjs && node test/organization-permission-catalog.cjs
+      - run: node test/user-access-governance.cjs && node test/organization-permission-catalog.cjs && node test/trading-period-suppliers.cjs && node test/trading-analysis.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
