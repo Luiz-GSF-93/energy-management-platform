@@ -7,6 +7,9 @@ on:
       - 'backend/src/database/migrations/20261253_eva_invoice_dismissal.sql'
       - 'backend/test/database/eva-invoice-dismissal.test.mjs'
       - 'frontend/app/components/EvaInvoiceInbox.tsx'
+      - 'frontend/app/components/DocumentEvidenceWorkspace.tsx'
+      - 'frontend/app/components/AuditWorkspace.tsx'
+      - 'frontend/test/document-evidence-selector.cjs'
       - 'frontend/app/components/EvaDismissedInvoices.tsx'
       - 'frontend/app/backoffice/documents/page.tsx'
       - 'frontend/test/eva-invoice-dismissal.cjs'
@@ -38,7 +41,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/eva-invoice-dismissal.cjs && node test/eva-guided-review.cjs && node test/documents-upload-routing.cjs
+      - run: node test/eva-invoice-dismissal.cjs && node test/eva-guided-review.cjs && node test/documents-upload-routing.cjs && node test/document-evidence-selector.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
