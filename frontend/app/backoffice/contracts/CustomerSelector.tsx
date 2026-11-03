@@ -5,7 +5,7 @@ import styles from './CustomerSelector.module.css';
 
 type Customer = {id: string; company_name: string};
 
-export default function CustomerSelector({customers, value, onChange, label='Cliente em operação', placeholder='Selecione o cliente', emptyMessage='Nenhum cliente encontrado. Ajuste a busca acima.', disabled=false}: {
+export default function CustomerSelector({customers, value, onChange, label='Cliente em operação', placeholder='Selecione o cliente', emptyMessage='Nenhum cliente encontrado. Ajuste a busca acima.', disabled=false, allowEmpty=true}: {
   customers: Customer[];
   value: string;
   onChange: (id: string) => void;
@@ -13,6 +13,7 @@ export default function CustomerSelector({customers, value, onChange, label='Cli
   placeholder?: string;
   emptyMessage?: string;
   disabled?: boolean;
+  allowEmpty?: boolean;
 }) {
   const id = useId();
   const details = useRef<HTMLDetailsElement>(null);
@@ -47,7 +48,7 @@ export default function CustomerSelector({customers, value, onChange, label='Cli
         <span id={`${id}-value`}>{selected?.company_name || placeholder}</span>
       </summary>
       <div className={styles.options} role="group" aria-labelledby={`${id}-label`}>
-        <button type="button" disabled={disabled} aria-pressed={!value} onClick={() => choose('')}>{placeholder}</button>
+        {allowEmpty?<button type="button" disabled={disabled} aria-pressed={!value} onClick={() => choose('')}>{placeholder}</button>:null}
         {customers.map(customer => <button key={customer.id} type="button" disabled={disabled} aria-pressed={value === customer.id} onClick={() => choose(customer.id)}>{customer.company_name}</button>)}
         {customers.length === 0 ? <p role="status">{emptyMessage}</p> : null}
       </div>
