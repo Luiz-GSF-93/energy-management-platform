@@ -38,7 +38,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/eva-invoice-dismissal.cjs && node test/eva-guided-review.cjs
+      - run: node test/eva-invoice-dismissal.cjs && node test/eva-guided-review.cjs && node test/documents-upload-routing.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
