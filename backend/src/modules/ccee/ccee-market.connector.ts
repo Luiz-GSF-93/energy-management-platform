@@ -23,8 +23,8 @@ export function fiveMinuteRows(xml:string,meter:string,day:string){
 }
 @Injectable()
 export class CceeMarketConnector{
- async fetch(config:CceeConfig,kind:'PROFILE'|'PLD_HOURLY'|'MEASUREMENTS_5M',payload:Buffer):Promise<string>{
-  const target={PROFILE:['/ws/v2/PerfilParticipanteMercadoBSv2','listarPerfilParticipanteMercado'],PLD_HOURLY:['/ws/prec/PLDBSv1','listarPLD'],MEASUREMENTS_5M:['/ws/v2/MedidaCincoMinutosBSv2','listarMedidaCincoMinutos']}[kind];
+ async fetch(config:CceeConfig,kind:'PROFILE'|'PLD_HOURLY'|'MEASUREMENTS_5M'|'PARTICIPANT',payload:Buffer):Promise<string>{
+  const target={PARTICIPANT:['/ws/v2/ParticipanteMercadoBSv2','listarParticipanteMercado'],PROFILE:['/ws/v2/PerfilParticipanteMercadoBSv2','listarPerfilParticipanteMercado'],PLD_HOURLY:['/ws/prec/PLDBSv1','listarPLD'],MEASUREMENTS_5M:['/ws/v2/MedidaCincoMinutosBSv2','listarMedidaCincoMinutos']}[kind];
   if(!target)throw new CceeReadingError('SERVICE_NOT_ALLOWED');
   return new Promise((resolve,reject)=>{let req:ReturnType<typeof request>|undefined,done=false;const finish=(e?:Error,value?:string)=>{if(done)return;done=true;clearTimeout(timer);e?reject(e):resolve(value!);};const timer=setTimeout(()=>{req?.destroy();finish(new CceeReadingError('TIMEOUT'));},25000);
    try{req=request({hostname:'servicos.ccee.org.br',port:443,path:target[0],method:'POST',agent:false,pfx:config.pfx,passphrase:config.passphrase,ca:config.ca,rejectUnauthorized:true,minVersion:'TLSv1.2',maxVersion:'TLSv1.2',headers:{'Content-Type':'text/xml; charset=utf-8',SOAPAction:target[1],'Content-Length':payload.length,Connection:'close'}},res=>{
