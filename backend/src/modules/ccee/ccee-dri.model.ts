@@ -72,7 +72,7 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
  });
  else for(const r of list(p.body?.resultados?.resultadoRelatorio)){
   if(id(r.relatorio?.id)!==s.reportId||list(r.relatorio?.quadros?.quadro).length!==1||id(list(r.relatorio?.quadros?.quadro)[0]?.id)!==s.frameId)throw new CceeReadingError('DRI_REPORT_MISMATCH');
-  const columns=driCells(r.cabecalho),taxColumns=columns.map((x,i)=>({x:x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(),i})).filter(x=>x.x==='CNPJ DO AGENTE'||s.reportId==='119'&&s.frameId==='469'&&x.x==='CNPJ AGENTE');
+  const columns=driCells(r.cabecalho),taxColumns=columns.map((x,i)=>({x:x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(),i})).filter(x=>x.x==='CNPJ DO AGENTE'||s.reportId==='119'&&['469','470'].includes(s.frameId??'')&&x.x==='CNPJ AGENTE');
   if(taxColumns.length!==1||!/^\d{14}$/.test(taxId)){const error=new CceeReadingError('DRI_PARTICIPANT_PROOF_REQUIRED');error.diagnostic=driHeaderDiagnostic(s.eventCode!,s.reportId!,s.frameId!,columns,p.hash);throw error;}
   for(const value of list(r.valores?.valor)){const cells=driCells(value);if(cells.length!==columns.length||!/^\d{14}$|^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(cells[taxColumns[0].i])||cells[taxColumns[0].i].replace(/\D/g,'')!==taxId)throw new CceeReadingError('DRI_PARTICIPANT_MISMATCH');rows.push({columns,cells,reportId:s.reportId,frameId:s.frameId,scope:'PARTICIPANT',financialState:'UNMAPPED_REVIEW_REQUIRED'});}
  }

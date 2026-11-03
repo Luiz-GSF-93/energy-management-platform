@@ -21,11 +21,13 @@ try{
  const budget=readFileSync('src/database/migrations/20261230_ccee_contract_operations.sql','utf8').split('CREATE FUNCTION public.ccee_operational_usage')[1].split('CREATE OR REPLACE FUNCTION public.ccee_communication_reserve')[0];
  await db.exec('CREATE FUNCTION public.ccee_operational_usage'+budget);
  await db.exec(readFileSync('src/database/migrations/20261259_ccee_customer_discovery.sql','utf8'));
+ await db.exec(readFileSync('src/database/migrations/20261260_ccee_discovery_shared_batch.sql','utf8'));
  ok(await q("SELECT count(*)::int result FROM ccee_customer_discovery")===1);
  ok(await q("SELECT ccee_customer_discovery_claim() result")===null);
  const read=(org='org_default',actor='admin',page=0)=>q('SELECT ccee_customer_discovery_read($1,$2,$3) result',[org,actor,page]);
  const policy=(enabled=true,actor='admin',id=randomUUID())=>q('SELECT ccee_customer_discovery_control($1,$2,$3,$4,$5) result',['org_default',actor,enabled,'Controlled test activation',id]);
  await deny(read('foreign'));await deny(read('org_default','external'));await deny(read('org_default','admin',-1));await deny(policy(true,'viewer'));
+ ok((await read()).policy.homologationLimit===24);
  const req=randomUUID();await policy(true,'admin',req);ok((await policy(true,'admin',req)).enabled);await deny(policy(false,'admin',req));
  const claim=()=>q('SELECT ccee_customer_discovery_claim() result'),reserve=j=>q('SELECT ccee_customer_discovery_reserve($1,$2) result',[j.id,j.lease_id]),finish=(j,r,e=null)=>q('SELECT ccee_customer_discovery_finish($1,$2,$3,$4) result',[j.id,j.lease_id,JSON.stringify(r),e]);
  let j=await claim();ok(j.customer_id==='c');ok(await claim()===null);await deny(reserve({...j,lease_id:randomUUID()}));ok((await reserve(j)).homologationUsed===1);
@@ -39,7 +41,7 @@ try{
  await policy(false);await deny(reserve(j));await policy(true);await reserve(j);await finish(j,{hashes:[],transactions:[],requests:1},'CUSTOMER_CNPJ_MISMATCH');ok((await read()).policy.enabled===false);ok((await read()).rows[0].state==='FAILED');
  await db.exec("INSERT INTO consumer_units(id,organization_id,customer_id,name,consumer_unit_number) VALUES('u2','org_default','c','Second unit','124')");await policy(true);j=await claim();ok(!!j);ok((await read()).rows[0].units.length===2);
  const job=randomUUID();await db.query("INSERT INTO ccee_integration_jobs VALUES($1,'org_default','DRI_RESULTS',now(),198)",[job]);await deny(reserve(j));await db.exec('DELETE FROM ccee_integration_jobs');await db.exec("INSERT INTO ccee_contract_receipts(organization_id,event) SELECT 'org_default','REQUEST_RESERVED' FROM generate_series(1,98)");await deny(reserve(j));await db.exec('DELETE FROM ccee_contract_receipts');
- await db.query("INSERT INTO ccee_integration_events(organization_id,event,details) SELECT 'org_default','CUSTOMER_DISCOVERY_REQUEST_RESERVED','{}' FROM generate_series(1,28)");await deny(reserve(j));
+ await db.query("INSERT INTO ccee_integration_events(organization_id,event,details) SELECT 'org_default','CUSTOMER_DISCOVERY_REQUEST_RESERVED','{}' FROM generate_series(1,22)");await deny(reserve(j));
  ok(!(await q("SELECT has_table_privilege('service_role','ccee_customer_discovery','SELECT') result")));ok(await q("SELECT relrowsecurity result FROM pg_class WHERE oid='ccee_customer_discovery'::regclass"));
  for(const role of ['anon','authenticated'])for(const fn of ['ccee_customer_discovery_claim()','ccee_customer_discovery_seed(text,text)','ccee_customer_discovery_read(text,text,integer)','ccee_customer_discovery_reserve(uuid,uuid)'])ok(!(await q('SELECT has_function_privilege($1,$2,\'EXECUTE\') result',[role,fn])));
  ok(!(await q("SELECT has_function_privilege('service_role','ccee_customer_discovery_assert(uuid,uuid)','EXECUTE') result")));
