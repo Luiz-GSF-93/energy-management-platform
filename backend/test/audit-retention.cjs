@@ -9,7 +9,7 @@ const bundle=prepareColdBundle('org_default','V1','2026-11',[item]);assert.deepE
 assert.throws(()=>verifyColdBundle(bundle.body,bundle.manifest,'other'));assert.throws(()=>prepareColdBundle('other','V1','2026-11',[item]));const corrupt=Buffer.from(bundle.body);corrupt[0]^=1;assert.throws(()=>verifyColdBundle(corrupt,bundle.manifest,'org_default'));assert.throws(()=>requireColdDestination());passed.push('Cold bundle local round trip, per-tenant integrity and no unconfigured export');
 const fixture=fs.readFileSync(path.join(__dirname,'audit-workspaces.cjs'),'utf8').match(/await db\.exec\(`(CREATE ROLE anon;[\s\S]+?)`\);/)[1];
 await db.exec(fixture);await db.exec("SET TIME ZONE 'UTC'");
-for(const f of ['20261218_audit_workspaces.sql','20261219_audit_historical_dates.sql','20261220_audit_actor_names.sql','20261221_audit_retention.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
+for(const f of ['20261218_audit_workspaces.sql','20261219_audit_historical_dates.sql','20261220_audit_actor_names.sql','20261221_audit_retention.sql','20261255_audit_session_author_names.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations',f),'utf8'));
 const manage='dbb580ca-d940-4e80-97fb-e9f9619a0006';
 for(const [id,org] of [[a,'org_default'],[b,'B'],[g,null]]){
  await db.query('INSERT INTO auth.users(id)VALUES($1)',[id]);
