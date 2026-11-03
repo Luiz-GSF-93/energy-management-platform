@@ -6,7 +6,7 @@ require.extensions['.css']=(m)=>m.exports={};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');let catalog,requests=[],autoEnabled=true;
 const original=Module._load,invoice={id:'invoice',customer_id:'customer',consumer_unit_id:'unit',reference_month:'2026-07-01',document_type:'INVOICE_DISTRIBUTOR',original_filename:'invoice.pdf'};
 Module._load=function(n,p,m){
- if(n==='@/app/components/EvaDismissedInvoices')return {__esModule:true,default:()=>React.createElement('button',null,'Avisos dispensados da EVA')};
+ if(n==='@/app/components/EvaInvoiceInbox')return {__esModule:true,default:({embedded})=>React.createElement('section',{'data-embedded-notices':String(embedded)},'Avisos de faturas da EVA')};
  if(n==='@/app/providers')return {useAuth:()=>({context:{scope:'organization',user:{id:'actor'},currentOrganization:{id:'org',role:'admin_org'}},hasPermission:()=>true})};
  if(n==='@/app/lib/api/client')return {apiRequest:async(url,o)=>{requests.push([url,o]);return {documents:[],customers:[{id:'customer',company_name:'Synthetic customer'}],units:[{id:'unit',customer_id:'customer',name:'Unit',consumer_unit_number:'123'}]}}};
  if(n==='./DocumentCatalog')return {__esModule:true,documentTags:[['DRAFT','Rascunho'],['REVIEWED','Revisado']],default:props=>{catalog=props;return React.createElement('button',{onClick:props.onNew},'+ Inserir novo')}};
@@ -18,7 +18,7 @@ Module._load=function(n,p,m){
 };
 const Page=require('../app/backoffice/documents/page.tsx').default,root=createRoot(document.getElementById('root'));
 (async()=>{try{
- await act(async()=>root.render(React.createElement(Page)));await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='+ Inserir novo').click());
+ await act(async()=>root.render(React.createElement(Page)));assert(document.querySelector('[data-embedded-notices="true"]'),'Document page exposes the notice center');await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='+ Inserir novo').click());
  assert(document.querySelector('input[type=month][name=referenceMonth]'),'Detailed competence remains available');assert(document.querySelector('select[name=customerId]'));assert(document.querySelector('select[name=consumerUnitId]'));assert(document.querySelector('select[name=catalogTag]'));
  const types=[...document.querySelectorAll('select[name=documentType] option')].map(o=>o.value);assert(types.includes('CONTRACT_ENERGY'));assert(types.includes('OTHER'));assert(types.includes('COMPLIANCE_REPORT'));assert(!types.includes('INVOICE_DISTRIBUTOR'));assert(!types.includes('INVOICE_SUPPLIER'));
  assert(catalog.types.some(([v])=>v==='INVOICE_DISTRIBUTOR'),'Catalog invoice filters remain intact');
