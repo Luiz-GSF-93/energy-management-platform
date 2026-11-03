@@ -1,3 +1,4 @@
+import {delegationPermissions} from './user-administration';
 import {WelcomeContext,welcomeContent} from './welcome-content';
 import {TenantContext} from '../../../../common/interfaces/tenant-context.interface';
 import {checkPortalInvite} from './portal-invite';
@@ -1170,6 +1171,7 @@ export class UsersService {
   }
 
   async assertAssignable(roleId:string,organizationId:string,actorPermissions:string[],platformOperation=false) {
+    actorPermissions=delegationPermissions(actorPermissions);
     const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope,permissions').eq('id',roleId).eq('organization_id',organizationId).eq('scope','organization');
     if(error) throw new InternalServerErrorException('Failed to check role assignment');
     if(data?.some((r: {name?: string})=>r.name==='admin_org') && !platformOperation) throw new BadRequestException('Somente o administrador da plataforma pode atribuir Administrador da organização.');
@@ -1177,6 +1179,7 @@ export class UsersService {
   }
 
   async availableRoles(organizationId: string,platformOperation=false,actorPermissions:string[]=[]) {
+    actorPermissions=delegationPermissions(actorPermissions);
     const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope,permissions').eq('organization_id',organizationId).eq('scope','organization');
     if(error || !Array.isArray(data) || data.some(r=>r.organization_id!==organizationId || r.scope!=='organization')) throw new InternalServerErrorException('Failed to load organization roles');
     return data.filter(r=>(platformOperation || r.name!=='admin_org') && Array.isArray(r.permissions) && r.permissions.every((p:string)=>actorPermissions.includes(p))).map(r=>({id:r.id,name:r.name}));

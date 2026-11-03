@@ -6,7 +6,7 @@ import { UserRecoveryService } from './user-recovery.service';
 import { UserRecoveryController, UserRecoveryRequestDto } from '../controllers/user-recovery.controller';
 
 describe('Organization user recovery', () => {
-  const tenant: any = { organizationId: 'org-a', userId: 'actor', permissions: [PERMISSIONS.ORGANIZATION_USERS_UPDATE] };
+  const tenant: any = { role:'admin_org', organizationId: 'org-a', userId: 'actor', permissions: [PERMISSIONS.ORGANIZATION_USERS_UPDATE] };
   let users: any, recovery: any, service: UserRecoveryService;
   beforeEach(() => {
     users = { findOne: jest.fn().mockResolvedValue({ userId: 'target', email: 'member@example.com', role: { id: 'role-a' }, membershipStatus: 'active' }), assertAssignable: jest.fn().mockResolvedValue(undefined) };
@@ -22,6 +22,11 @@ describe('Organization user recovery', () => {
   it('denies targets outside the organization', async () => {
     users.findOne.mockRejectedValue(new NotFoundException());
     await expect(service.request('other-org-user', tenant, 'ip')).rejects.toThrow(NotFoundException);
+    expect(recovery.requestManaged).not.toHaveBeenCalled();
+  });
+  it('denies managers with legacy permissions before resolving another account', async () => {
+    await expect(service.request('target', { ...tenant, role: 'gestor' }, 'ip')).rejects.toThrow(ForbiddenException);
+    expect(users.findOne).not.toHaveBeenCalled();
     expect(recovery.requestManaged).not.toHaveBeenCalled();
   });
   it('denies inactive memberships', async () => {

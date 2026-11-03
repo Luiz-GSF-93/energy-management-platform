@@ -1,3 +1,4 @@
+import {assertUserAdministrator} from '../admin/users/services/user-administration';
 import {UserRequestsService} from '../admin/users/services/user-requests.service';
 import {Body,Controller,ForbiddenException,Get,Header,Post,ServiceUnavailableException,BadRequestException} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
@@ -14,6 +15,7 @@ export class PortalCustomerAccessController {
   return {enabled:true,organizationId:s.organizationId,customerId:s.customerId,customers:s.customers,units:s.units};
  }
  private async manage(t:TenantContext,action:string,body:any){
+  assertUserAdministrator(t);
   if(!['admin_org','gestor'].includes(t.role)&&t.accessMode!=='platform_operation')throw new ForbiddenException('Exige administração dos acessos externos.');
   if(!t.permissions.includes('f60e405e-f120-4420-a563-691162504b15')||!t.permissions.includes('8c5673e4-115c-4ab7-bb11-3b410eddcad3'))throw new ForbiddenException('Sem permissão para consultar os vínculos do Portal.');
   if(!multiCustomerEnabled(t.organizationId))return {enabled:false};

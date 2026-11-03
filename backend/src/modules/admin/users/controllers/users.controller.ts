@@ -23,6 +23,7 @@ import { InviteUserDto } from '../dto/invite-user.dto';
 import { UpdateUserAffiliationDto } from '../dto/update-user-affiliation.dto';
 import { UpdateUserRoleDto } from '../dto/update-user-role.dto';
 import { UsersService } from '../services/users.service';
+import {assertUserAdministrator} from '../services/user-administration';
 import {UserRequestsService} from '../services/user-requests.service';
 
 @Controller('admin/users')
@@ -43,7 +44,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
-    await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions,tenant.accessMode==='platform_operation');
+    assertUserAdministrator(tenant);
     if(!this.requests)throw new ServiceUnavailableException('Fluxo de aprovação indisponível.');
     return this.requests.submitInvite(dto,tenant);
   }
@@ -51,6 +52,7 @@ export class UsersController {
   @Post(':userId/notification')
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_INVITE])
   async notification(@Param('userId') userId:string,@Tenant() tenant:TenantContext) {
+    assertUserAdministrator(tenant);
     return this.usersService.notifyExistingMember(userId,{organizationId:tenant.organizationId,actorPermissions:tenant.permissions,platformOperation:tenant.accessMode==='platform_operation'});
   }
 
@@ -68,6 +70,7 @@ export class UsersController {
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE])
   @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
   async details(@Param('userId') userId:string,@Body() dto:UpdateUserDetailsDto,@Tenant() tenant:TenantContext,@Req() req:Request) {
+    assertUserAdministrator(tenant);
     if(tenant.role!=='admin_org'&&tenant.accessMode!=='platform_operation'){
       const current=await this.usersService.findOne(userId,tenant.organizationId);
       if(current.affiliationType!==dto.affiliationType)throw new ForbiddenException('A alteração entre vínculo interno e externo exige administrador.');
@@ -88,6 +91,7 @@ export class UsersController {
   @RequirePermission([PERMISSIONS.ORGANIZATION_USERS_UPDATE, PERMISSIONS.ORGANIZATION_USERS_DELETE])
   @UsePipes(new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true}))
   async status(@Param('userId') userId: string, @Body() dto: UpdateMembershipStatusDto, @Tenant() tenant: TenantContext, @Req() request: Request) {
+    assertUserAdministrator(tenant);
     return this.usersService.setMembershipStatus(userId, dto.status, {
       actorUserId: tenant.userId, organizationId: tenant.organizationId,
       actorPermissions: tenant.permissions, platformOperation: tenant.accessMode === 'platform_operation',
@@ -102,6 +106,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
+    assertUserAdministrator(tenant);
     return this.usersService.deactivate(userId, {
       actorUserId: tenant.userId,
       actorPermissions: tenant.permissions,
@@ -121,6 +126,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
+    assertUserAdministrator(tenant);
     if(tenant.role!=='admin_org'&&tenant.accessMode!=='platform_operation')throw new ForbiddenException('Encaminhe a alteração de permissões ao administrador pela área Autorizações.');
     await this.usersService.assertAssignable(dto.roleId,tenant.organizationId,tenant.permissions,tenant.accessMode==='platform_operation');
     return this.usersService.updateRole(
@@ -144,6 +150,7 @@ export class UsersController {
     @Tenant() tenant: TenantContext,
     @Req() request: Request,
   ) {
+    assertUserAdministrator(tenant);
     if(tenant.role!=='admin_org'&&tenant.accessMode!=='platform_operation')throw new ForbiddenException('A alteração entre vínculo interno e externo exige administrador.');
     return this.usersService.updateAffiliation(userId, dto.affiliationType, {
       actorUserId: tenant.userId,
