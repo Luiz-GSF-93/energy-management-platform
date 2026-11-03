@@ -6,14 +6,15 @@ import {CceeConfig,soapRequest,xmlEscape} from './ccee-config';
 import {privateEnvelope,CceeReadingError} from './ccee-private.connector';
 export const DRI_SERVICES={DRI_EVENTS:{path:'/ws/v2/DivulgacaoEventoContabilBSv2',action:'listarDivulgacaoEventoContabil'},DRI_REPORTS:{path:'/ws/v2/RelatorioBSv2',action:'listarRelatorio'},DRI_RESULTS:{path:'/ws/v2/ResultadoRelatorioBSv2',action:'listarResultadoRelatorio'}} as const;
 export type DriKind=keyof typeof DRI_SERVICES;
-export type DriSelection={kind:DriKind;month:string;eventCode?:string;reportId?:string;frameId?:string;parentJobId?:string};
+export type DriSelection={kind:DriKind;month:string;eventCode?:string;reportId?:string;frameId?:string;parentJobId?:string;eventKey?:string};
 export const isDri=(kind:string):kind is DriKind=>Object.prototype.hasOwnProperty.call(DRI_SERVICES,kind);
 export function driEnabled(){if(process.env.CCEE_DRI_READ_ENABLED!=='true')throw new ServiceUnavailableException('Consultas DRI desligadas; aguardando homologação.');}
 export function driCommand(input:unknown){
- const b=cceeObject(input,['requestId','authorizationId','kind','month'],['parentJobId','eventCode','reportId','frameId']);cceeUuid(b.requestId);cceeUuid(b.authorizationId);cceeMonth(b.month);
+ const b=cceeObject(input,['requestId','authorizationId','kind','month'],['parentJobId','eventCode','reportId','frameId','eventKey']);cceeUuid(b.requestId);cceeUuid(b.authorizationId);cceeMonth(b.month);
  if(!isDri(b.kind))throw new BadRequestException('Escolha uma consulta DRI permitida.');
  const keys=b.kind==='DRI_EVENTS'?[]:b.kind==='DRI_REPORTS'?['parentJobId','eventCode']:['parentJobId','eventCode','reportId','frameId'];
  if(['parentJobId','eventCode','reportId','frameId'].some(k=>keys.includes(k)?typeof b[k]!=='string':b[k]!==undefined)||keys.some(k=>k!=='parentJobId'&&!/^\d{1,20}$/.test(b[k])))throw new BadRequestException('Selecione evento, relatório e quadro nas fontes anteriores.');
+ if(b.eventKey!==undefined&&(b.kind==='DRI_EVENTS'||typeof b.eventKey!=='string'||! /^[a-f0-9]{64}$/.test(b.eventKey)))throw new BadRequestException('Identidade da divulgação inválida.');
  if(b.parentJobId)cceeUuid(b.parentJobId);return b;
 }
 export function driSoap(config:CceeConfig,s:DriSelection,participant:string,parameters:string[],page:number){
@@ -57,9 +58,10 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
   const originals=list(p.body?.resultadoDivulgacaoEventoContabil?.divulgacaoEventoContabil),events=new Map<string,any>();providerRows=originals.length;
   for(const x of originals){
    const e=x.eventoContabil,code=id(e?.codigo);if(e?.periodoReferencia?.mesAno!==s.month)throw new CceeReadingError('DRI_PERIOD_MISMATCH');
-   const sourceIdentity=eventSourceIdentity(x),previous=events.get(code);
-   if(previous){if(previous.sourceIdentity!==sourceIdentity){const error=new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');error.diagnostic=driIdentityDiagnostic(code,eventSources.get(code),x);throw error;}previous.providerOccurrences++;}
-   else{const row={code,name:text(e.nome),month:s.month,sourceIdentity,providerOccurrences:1};events.set(code,row);eventSources.set(code,x);rows.push(row);}
+   const name=text(e.nome),eventKey=createHash('sha256').update(JSON.stringify([code,s.month,name])).digest('hex');
+   const sourceIdentity=eventSourceIdentity(x),previous=events.get(eventKey);
+   if(previous){if(previous.sourceIdentity!==sourceIdentity){const error=new CceeReadingError('DRI_EVENT_IDENTITY_CONFLICT');error.diagnostic=driIdentityDiagnostic(code,eventSources.get(eventKey),x);throw error;}previous.providerOccurrences++;}
+   else{const row={code,name,month:s.month,eventKey,sourceIdentity,providerOccurrences:1};events.set(eventKey,row);eventSources.set(eventKey,x);rows.push(row);}
   }
  }
  else if(s.kind==='DRI_REPORTS')rows=list(p.body?.relatorios?.relatorio).map(r=>{
@@ -76,7 +78,7 @@ export function driPage(xml:string,s:DriSelection,page:number,taxId:string){
  }
  if(s.kind!=='DRI_EVENTS')providerRows=rows.length;
  if(providerRows>1000||providerRows>total)throw new CceeReadingError('DRI_ROW_LIMIT');
- if(new Set(rows.map(r=>r.code??r.id??JSON.stringify(r))).size!==rows.length)throw new CceeReadingError('DRI_DUPLICATE_ROW');
+ if(new Set(rows.map(r=>r.eventKey??r.code??r.id??JSON.stringify(r))).size!==rows.length)throw new CceeReadingError('DRI_DUPLICATE_ROW');
  return{rows,providerRows,pages,total,hash:p.hash,transactionId:p.transactionId,eventSources};
 }
 export function driDigest(hashes:string[]){return createHash('sha256').update(hashes.join(':')).digest('hex');}
