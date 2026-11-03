@@ -12,6 +12,7 @@ const list=(v:any):any[]=>v==null||v===''?[]:Array.isArray(v)?v:[v];
 export class CceeReadingError extends Error{
  metrics?:{requests:number;bytes:number;durationMs:number;hashes:string[];transactions:string[];httpStatus:number|null;diagnostic?:DriDiagnostic};
  diagnostic?:DriDiagnostic;
+ providerCode?:string;
  responseBytes=0;
  constructor(public readonly code:string,public readonly httpStatus:number|null=null,public readonly transactionId:string|null=null){super(code);}
 }

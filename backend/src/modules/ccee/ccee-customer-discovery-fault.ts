@@ -25,3 +25,18 @@ export function participantNoData(xml:string,status:number){
   return value('errorCode')==='3001'&&value('uri')==='/ws/v2/ParticipanteMercadoBSv2';
  }catch{return false;}
 }
+
+/** Non-authoritative diagnostic metadata; never changes access or no-data classification. */
+export function participantFaultMetadata(xml:string){
+ if(Buffer.byteLength(xml)>2097152||/<!DOCTYPE|<!ENTITY/i.test(xml)||XMLValidator.validate(xml)!==true)return null;
+ try{
+  const p=new XMLParser({ignoreAttributes:false,parseTagValue:false,processEntities:false,trimValues:true}).parse(xml);
+  const keys=Object.keys(p).filter(k=>!k.startsWith('?'));if(keys.length!==1)return null;
+  const root=p[keys[0]],prefix=keys[0].split(':').length===2?keys[0].split(':')[0]:'';
+  if(keys[0].split(':').pop()!=='Envelope'||root[prefix?'@_xmlns:'+prefix:'@_xmlns']!==SOAP)return null;
+  const local=(o:any,n:string)=>{const ks=Object.keys(o??{}).filter(k=>!k.startsWith('@_')&&k.split(':').pop()===n);return ks.length===1?o[ks[0]]:null;};
+  const fault=local(local(root,'Body'),'Fault'),code=local(fault,'faultcode');if(typeof code!=='string'||!/^([A-Za-z_][\w.-]*:)?(?:Server|Client)\.[0-9]{4}$/.test(code))return null;
+  const header=local(root,'Header'),message=local(header,'messageHeader'),id=local(message,'transactionId');
+  return{code,transactionId:typeof id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)?id:null};
+ }catch{return null;}
+}
