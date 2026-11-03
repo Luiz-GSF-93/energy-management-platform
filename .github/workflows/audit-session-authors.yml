@@ -1,0 +1,23 @@
+name: Audit session author names
+on:
+  pull_request:
+    paths:
+      - 'backend/src/database/migrations/20261255_audit_session_author_names.sql'
+      - 'backend/test/audit-workspaces.cjs'
+      - 'backend/test/audit-retention.cjs'
+      - 'frontend/app/components/AuditWorkspace.tsx'
+      - '.github/workflows/audit-session-authors.yml'
+permissions:
+  contents: read
+jobs:
+  author-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: node test/audit-workspaces.cjs && node test/audit-retention.cjs
+        working-directory: backend
