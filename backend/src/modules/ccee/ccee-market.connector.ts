@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {participantNoData} from './ccee-customer-discovery-fault';
 import {Injectable} from '@nestjs/common';
 import {request} from 'node:https';
 import {CceeConfig,cceeConfig,soapRequest,xmlEscape} from './ccee-config';
@@ -28,8 +30,8 @@ export class CceeMarketConnector{
   if(!target)throw new CceeReadingError('SERVICE_NOT_ALLOWED');
   return new Promise((resolve,reject)=>{let req:ReturnType<typeof request>|undefined,done=false;const finish=(e?:Error,value?:string)=>{if(done)return;done=true;clearTimeout(timer);e?reject(e):resolve(value!);};const timer=setTimeout(()=>{req?.destroy();finish(new CceeReadingError('TIMEOUT'));},25000);
    try{req=request({hostname:'servicos.ccee.org.br',port:443,path:target[0],method:'POST',agent:false,pfx:config.pfx,passphrase:config.passphrase,ca:config.ca,rejectUnauthorized:true,minVersion:'TLSv1.2',maxVersion:'TLSv1.2',headers:{'Content-Type':'text/xml; charset=utf-8',SOAPAction:target[1],'Content-Length':payload.length,Connection:'close'}},res=>{
-    if(res.statusCode!==200||!/(?:text|application)\/xml/i.test(String(res.headers['content-type']??''))){res.destroy();finish(new CceeReadingError('PROVIDER_REJECTED',res.statusCode??null));return;}
-    let bytes=0;const chunks:Buffer[]=[];res.on('data',(b:Buffer)=>{bytes+=b.length;if(bytes>2097152){res.destroy();finish(new CceeReadingError('RESPONSE_LIMIT'));}else chunks.push(b);});res.on('aborted',()=>finish(new CceeReadingError('TRUNCATED_RESPONSE')));res.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));res.on('end',()=>finish(undefined,Buffer.concat(chunks).toString('utf8')));
+    if(res.statusCode!==200&&!(kind==='PARTICIPANT'&&res.statusCode===500)||!/(?:text|application)\/xml/i.test(String(res.headers['content-type']??''))){res.destroy();finish(new CceeReadingError('PROVIDER_REJECTED',res.statusCode??null));return;}
+    let bytes=0;const chunks:Buffer[]=[];res.on('data',(b:Buffer)=>{bytes+=b.length;if(bytes>2097152){res.destroy();finish(new CceeReadingError('RESPONSE_LIMIT'));}else chunks.push(b);});res.on('aborted',()=>finish(new CceeReadingError('TRUNCATED_RESPONSE')));res.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));res.on('end',()=>{const xml=Buffer.concat(chunks).toString('utf8');if(res.statusCode===500){const e=new CceeReadingError(participantNoData(xml,500)?'CUSTOMER_NOT_FOUND':'PROVIDER_REJECTED',500);e.metrics={requests:0,bytes,durationMs:0,hashes:[createHash('sha256').update(xml).digest('hex')],transactions:[],httpStatus:500};finish(e);}else finish(undefined,xml);});
    });req.on('error',()=>finish(new CceeReadingError('TRANSPORT_ERROR')));req.end(payload);}catch{finish(new CceeReadingError('TRANSPORT_ERROR'));}
   });
  }
