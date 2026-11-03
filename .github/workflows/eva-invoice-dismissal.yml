@@ -1,0 +1,44 @@
+name: EVA invoice notice dismissal
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/operations/eva-invoice-attention*'
+      - 'backend/src/modules/operations/operations.controller.ts'
+      - 'backend/src/database/migrations/20261253_eva_invoice_dismissal.sql'
+      - 'backend/test/database/eva-invoice-dismissal.test.mjs'
+      - 'frontend/app/components/EvaInvoiceInbox.tsx'
+      - 'frontend/app/components/EvaDismissedInvoices.tsx'
+      - 'frontend/app/backoffice/documents/page.tsx'
+      - 'frontend/test/eva-invoice-dismissal.cjs'
+      - '.github/workflows/eva-invoice-dismissal.yml'
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand --runTestsByPath src/modules/operations/eva-invoice-attention.spec.ts
+        working-directory: backend
+      - run: node test/database/eva-invoice-dismissal.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: node test/eva-invoice-dismissal.cjs && node test/eva-guided-review.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

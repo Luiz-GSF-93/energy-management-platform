@@ -10,7 +10,7 @@ import {resolutionId} from '../ocr/ocr-resolution-plan';
 export class InvoiceAttentionDto{
  @IsUUID() requestId!:string;
  @IsString() @Matches(/^[a-f0-9]{64}$/) sourceHash!:string;
- @IsIn(['OPENED','DEFERRED','SCHEDULED','PAUSED']) state!:string;
+ @IsIn(['OPENED','DEFERRED','SCHEDULED','PAUSED','DISMISSED','RESTORED']) state!:string;
  @IsString() @Length(3,500) note!:string;
  @IsOptional() @IsISO8601({strict:true}) dueAt?:string;
  @IsOptional() @IsString() @Length(1,100) responsibleId?:string;
@@ -29,13 +29,14 @@ export class EvaInvoiceAttentionService{
   if(['40001','23505'].includes(r.error?.code))throw new ConflictException('Fonte ou decisão mudou. Consulte a lista antes de continuar.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte a lista e a agenda antes de repetir.');
  }
- async list(t:TenantContext){await this.allowed(t);const r=await this.rpc('list',null,{},t);if(!Array.isArray(r.rows))throw new ServiceUnavailableException('Avisos de faturas indisponíveis.');return {...r,organizationId:t.organizationId,canSchedule:[P.OPERACAO_CALENDAR_VIEW,P.OPERACAO_CALENDAR_MANAGE].every(p=>t.permissions.includes(p))};}
+ async list(t:TenantContext,query:Record<string,string>={}){await this.allowed(t);const archive=query.view==='dismissed',page=Number(query.page??0);if(Object.keys(query).some(k=>!['view','page'].includes(k))||query.view!==undefined&&!archive||!Number.isInteger(page)||page<0||page>10000||!archive&&query.page!==undefined)throw new BadRequestException('Filtro de avisos inválido.');const r=await this.rpc(archive?'list-dismissed':'list',null,archive?{page}:{},t);if(!Array.isArray(r.rows))throw new ServiceUnavailableException('Avisos de faturas indisponíveis.');return {...r,organizationId:t.organizationId,canSchedule:[P.OPERACAO_CALENDAR_VIEW,P.OPERACAO_CALENDAR_MANAGE].every(p=>t.permissions.includes(p))};}
  async record(document:string,input:InvoiceAttentionDto,t:TenantContext){
   await this.allowed(t);if(!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(document))throw new BadRequestException('Fatura inválida.');
   const d=await validateWriteDto(InvoiceAttentionDto,input);
   if(d.state!=='SCHEDULED'&&(d.dueAt||d.responsibleId))throw new BadRequestException('Data e responsável são exclusivos do agendamento.');
   // Re-read the current authorized source. This never invokes OCR or financial preparation.
-  const current=(await this.list(t)).rows.find((r:any)=>r.documentId===document&&r.sourceHash===d.sourceHash);
+  const current=d.state==='RESTORED'?await this.rpc('inspect',document,{},t):(await this.list(t)).rows.find((r:any)=>r.documentId===document&&r.sourceHash===d.sourceHash);
+  if(current&&(current.documentId!==document||current.sourceHash!==d.sourceHash))throw new ConflictException('A fonte mudou. Atualize os avisos.');
   if(!current)throw new ConflictException('A origem mudou ou saiu desta lista. Consulte Documentos.');
   let agendaId=null;
   if(d.state==='SCHEDULED'){
