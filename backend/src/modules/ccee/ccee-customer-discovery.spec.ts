@@ -1,3 +1,5 @@
+import * as settings from './ccee-config';
+import {CceeReadingError} from './ccee-private.connector';
 import {participantRequest,participantPage,participantConclusion} from './ccee-customer-discovery.model';
 import {CceeCustomerDiscoveryService} from './ccee-customer-discovery.service';
 import {participantNoData,participantFaultMetadata} from './ccee-customer-discovery-fault';
@@ -17,5 +19,13 @@ describe('Customer CCEE discovery boundaries',()=>{
  it('rejects another branch CNPJ even if the prefix matches',()=>expect(()=>participantPage(xml(row('112642','64734221000257')),tax,1)).toThrow('CUSTOMER_CNPJ_MISMATCH'));
  it('rejects spoofed namespaces, entities and pagination',()=>{expect(()=>participantPage(xml().replace('http://xmlns.energia.org.br/BO/v2','https://evil.test'),tax,1)).toThrow();expect(()=>participantPage('<!DOCTYPE foo>'+xml(),tax,1)).toThrow();expect(()=>participantPage(xml(),tax,2)).toThrow();});
  it('does not accept non-adhered or expired registrations as active',()=>{const p=participantPage(xml(),tax,1).rows;expect(participantConclusion([{...p[0],statusCode:'4286'}],'2026-11-03').state).toBe('NOT_ADHERED');expect(participantConclusion([{...p[0],validTo:'2025-12-31T00:00:00-03:00'}],'2026-11-03').state).toBe('NOT_CURRENT');});
+ it('preserves failure proof without declaring absent CNPJ',async()=>{
+  process.env.CCEE_DATA_WORKSPACE_ENABLED='true';process.env.CCEE_SYNC_WORKER_ENABLED='true';process.env.CCEE_AUTOMATIC_READ_ENABLED='true';
+  const pfx=Buffer.from('synthetic'),cfg=jest.spyOn(settings,'cceeConfig').mockReturnValue({organizationId:'org_default',profile:'7',username:'8',password:'synthetic',pfx} as any),id='12345678-1234-1234-1234-123456789012';
+  const rpc=jest.fn(async(name:string,args?:any)=>({data:name==='ccee_customer_discovery_claim'?{id:'job',lease_id:'lease',organization_id:'org_default',tax_id:tax,as_of:'2026-11-03'}:{reserved:true}}));
+  const failure=new CceeReadingError('PROVIDER_REJECTED',500,id);failure.providerCode='Server.4001';failure.metrics={requests:0,bytes:700,durationMs:0,hashes:['a'.repeat(64)],transactions:[id],httpStatus:500};
+  const svc=new CceeCustomerDiscoveryService({getClient:()=>({rpc})} as any,{} as any,{fetch:jest.fn().mockRejectedValue(failure)} as any);
+  try{await svc.runOnce();const saved=rpc.mock.calls.find((c:any)=>c[0]==='ccee_customer_discovery_finish') as any;expect(saved[1]).toMatchObject({p_error:'PROVIDER_REJECTED',p_result:{hashes:['a'.repeat(64)],transactions:[id],diagnostic:{httpStatus:500,providerCode:'Server.4001',transactionId:id}}});expect(saved[1].p_result.state).not.toBe('NOT_FOUND');expect(pfx.every(v=>v===0)).toBe(true);}finally{cfg.mockRestore();}
+ });
  it('cannot start an external call when the database does not claim a job',async()=>{process.env.CCEE_DATA_WORKSPACE_ENABLED='true';process.env.CCEE_SYNC_WORKER_ENABLED='true';process.env.CCEE_AUTOMATIC_READ_ENABLED='true';const rpc=jest.fn().mockResolvedValue({data:null}),fetch=jest.fn(),s=new CceeCustomerDiscoveryService({getClient:()=>({rpc})} as any,{} as any,{fetch} as any);await s.runOnce();expect(rpc).toHaveBeenCalledWith('ccee_customer_discovery_claim');expect(fetch).not.toHaveBeenCalled();});
 });
