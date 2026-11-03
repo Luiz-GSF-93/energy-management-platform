@@ -1,0 +1,43 @@
+name: CCEE customer discovery
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ccee/**'
+      - 'backend/src/database/migrations/20261259_ccee_customer_discovery.sql'
+      - 'backend/test/database/ccee-customer-discovery.test.mjs'
+      - 'frontend/app/backoffice/ccee-data/**'
+      - 'frontend/test/ccee-customer-discovery.cjs'
+      - '.github/workflows/ccee-customer-discovery.yml'
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ccee/ccee-customer-discovery.spec.ts src/modules/ccee/ccee-market.connector.spec.ts
+        working-directory: backend
+      - run: node test/database/ccee-customer-discovery.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: node test/ccee-customer-discovery.cjs
+        working-directory: frontend
+      - run: node test/ccee-data.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend
