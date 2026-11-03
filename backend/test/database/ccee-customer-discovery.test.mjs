@@ -14,9 +14,12 @@ try{
  CREATE TABLE ccee_sync_schedules(id uuid,organization_id text,kind text);
  CREATE FUNCTION assert_ccee_data_actor(o text,a text,x text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF o<>'org_default' OR a NOT IN('admin','viewer') OR x<>'view' AND a<>'admin' THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION ccee_permanent_automation_actor(o text,a text) RETURNS void LANGUAGE plpgsql AS $$BEGIN PERFORM public.assert_ccee_data_actor(o,a,'manage');END$$;
- CREATE FUNCTION ccee_communication_reserve(p_id uuid,p_lease uuid,p_market boolean) RETURNS jsonb LANGUAGE plpgsql AS $$DECLARE org text:='org_default';day_start timestamptz:=now()-interval '1 day';total bigint;BEGIN WITH private_counts AS(SELECT 'PRIVATE'::text family,0::bigint requests),market_counts AS(SELECT 'PLD'::text family,0::bigint requests),counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts) SELECT sum(requests) INTO total FROM counts;RETURN jsonb_build_object('total',total);END$$;
+ CREATE TABLE ccee_contract_receipts(organization_id text,event text,recorded_at timestamptz DEFAULT now());
+ CREATE FUNCTION ccee_communication_reserve(p_id uuid,p_lease uuid,p_market boolean) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN RETURN public.ccee_operational_usage('org_default');END$$;
  INSERT INTO customers(id,organization_id,company_name,document) VALUES('c','org_default','Customer','64734221000176'),('f','foreign','Foreign','64734221000176');
  INSERT INTO consumer_units(id,organization_id,customer_id,name,consumer_unit_number) VALUES('u','org_default','c','Unit','123'),('f-u','foreign','f','Foreign unit','456');`);
+ const budget=readFileSync('src/database/migrations/20261230_ccee_contract_operations.sql','utf8').split('CREATE FUNCTION public.ccee_operational_usage')[1].split('CREATE OR REPLACE FUNCTION public.ccee_communication_reserve')[0];
+ await db.exec('CREATE FUNCTION public.ccee_operational_usage'+budget);
  await db.exec(readFileSync('src/database/migrations/20261259_ccee_customer_discovery.sql','utf8'));
  ok(await q("SELECT count(*)::int result FROM ccee_customer_discovery")===1);
  ok(await q("SELECT ccee_customer_discovery_claim() result")===null);
@@ -35,7 +38,7 @@ try{
  await db.exec("UPDATE customers SET document='64734221000176' WHERE id='c'");await deny(reserve(j));j=await claim();ok(j.tax_id==='64734221000176');
  await policy(false);await deny(reserve(j));await policy(true);await reserve(j);await finish(j,{hashes:[],transactions:[],requests:1},'CUSTOMER_CNPJ_MISMATCH');ok((await read()).policy.enabled===false);ok((await read()).rows[0].state==='FAILED');
  await db.exec("INSERT INTO consumer_units(id,organization_id,customer_id,name,consumer_unit_number) VALUES('u2','org_default','c','Second unit','124')");await policy(true);j=await claim();ok(!!j);ok((await read()).rows[0].units.length===2);
- const job=randomUUID();await db.query("INSERT INTO ccee_integration_jobs VALUES($1,'org_default','DRI_RESULTS',now(),198)",[job]);await deny(reserve(j));await db.exec('DELETE FROM ccee_integration_jobs');
+ const job=randomUUID();await db.query("INSERT INTO ccee_integration_jobs VALUES($1,'org_default','DRI_RESULTS',now(),198)",[job]);await deny(reserve(j));await db.exec('DELETE FROM ccee_integration_jobs');await db.exec("INSERT INTO ccee_contract_receipts(organization_id,event) SELECT 'org_default','REQUEST_RESERVED' FROM generate_series(1,98)");await deny(reserve(j));await db.exec('DELETE FROM ccee_contract_receipts');
  await db.query("INSERT INTO ccee_integration_events(organization_id,event,details) SELECT 'org_default','CUSTOMER_DISCOVERY_REQUEST_RESERVED','{}' FROM generate_series(1,28)");await deny(reserve(j));
  ok(!(await q("SELECT has_table_privilege('service_role','ccee_customer_discovery','SELECT') result")));ok(await q("SELECT relrowsecurity result FROM pg_class WHERE oid='ccee_customer_discovery'::regclass"));
  for(const role of ['anon','authenticated'])for(const fn of ['ccee_customer_discovery_claim()','ccee_customer_discovery_seed(text,text)','ccee_customer_discovery_read(text,text,integer)','ccee_customer_discovery_reserve(uuid,uuid)'])ok(!(await q('SELECT has_function_privilege($1,$2,\'EXECUTE\') result',[role,fn])));

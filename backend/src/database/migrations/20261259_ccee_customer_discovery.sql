@@ -89,18 +89,13 @@ BEGIN
  PERFORM public.ccee_permanent_automation_actor(j.organization_id,policy.actor_id);RETURN j;
 END$$;
 CREATE FUNCTION public.ccee_customer_discovery_reserve(p_id uuid,p_lease uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE j public.ccee_customer_discovery;total bigint;private_total bigint;used bigint;day_start timestamptz;
+DECLARE j public.ccee_customer_discovery;total bigint;private_total bigint;used bigint;usage jsonb;
 BEGIN
  j:=public.ccee_customer_discovery_assert(p_id,p_lease);
  PERFORM pg_advisory_xact_lock(hashtextextended('ccee-communication-budget:'||j.organization_id,0));
  SELECT count(*) INTO used FROM public.ccee_integration_events WHERE organization_id=j.organization_id AND event='CUSTOMER_DISCOVERY_REQUEST_RESERVED';
  IF used>=30 OR j.requests>=10 THEN RAISE EXCEPTION 'CUSTOMER_BUDGET_EXHAUSTED' USING ERRCODE='P0001';END IF;
- day_start:=date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo';
- WITH counts AS(
- SELECT CASE WHEN i.kind='PLD' THEN 'PLD' WHEN i.kind LIKE 'DRI_%' THEN 'DRI' ELSE 'PRIVATE' END family,greatest(CASE WHEN i.finished_at>=day_start THEN i.requests ELSE 0 END,(SELECT count(*) FROM public.ccee_integration_events e WHERE e.job_id=i.id AND e.organization_id=j.organization_id AND e.event='COMMUNICATION_REQUEST_RESERVED' AND e.recorded_at>=day_start)) requests FROM public.ccee_integration_jobs i WHERE i.organization_id=j.organization_id AND(i.finished_at>=day_start OR EXISTS(SELECT 1 FROM public.ccee_integration_events e WHERE e.job_id=i.id AND e.event='COMMUNICATION_REQUEST_RESERVED' AND e.recorded_at>=day_start))
- UNION ALL SELECT CASE WHEN s.kind='PLD_HOURLY' THEN 'PLD' ELSE 'PRIVATE' END,count(*) FROM public.ccee_integration_events e JOIN public.ccee_sync_schedules s ON s.id::text=e.details->>'scheduleId' AND s.organization_id=e.organization_id WHERE e.organization_id=j.organization_id AND e.event='MARKET_REQUEST_RESERVED' AND e.recorded_at>=day_start GROUP BY 1
- UNION ALL SELECT 'PRIVATE',count(*) FROM public.ccee_integration_events e WHERE e.organization_id=j.organization_id AND e.event='CUSTOMER_DISCOVERY_REQUEST_RESERVED' AND e.recorded_at>=day_start)
- SELECT coalesce(sum(requests),0),coalesce(sum(requests) FILTER(WHERE family='PRIVATE'),0) INTO total,private_total FROM counts;
+ usage:=public.ccee_operational_usage(j.organization_id);total:=(usage->>'total')::bigint;private_total:=(usage->>'PRIVATE')::bigint;
  IF total>=200 OR private_total>=100 THEN RAISE EXCEPTION 'CUSTOMER_DAILY_BUDGET_EXHAUSTED' USING ERRCODE='P0001';END IF;
  INSERT INTO public.ccee_integration_events(organization_id,actor_id,event,details)VALUES(j.organization_id,'system:ccee-cadastro','CUSTOMER_DISCOVERY_REQUEST_RESERVED',jsonb_build_object('discoveryId',j.id,'leaseId',p_lease));
  UPDATE public.ccee_customer_discovery SET requests=requests+1,updated_at=now() WHERE id=j.id;
@@ -124,11 +119,11 @@ BEGIN
  INSERT INTO public.ccee_integration_events(organization_id,actor_id,event,details)VALUES(j.organization_id,'system:ccee-cadastro','CUSTOMER_DISCOVERY_FINISHED',jsonb_build_object('discoveryId',j.id,'customerId',j.customer_id,'state',state_name,'result',p_result));
  RETURN jsonb_build_object('organizationId',j.organization_id,'id',j.id,'state',state_name);
 END$$;
--- Include discovery reservations in all existing communication budgets atomically.
-DO $$DECLARE source text;marker text:='counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts)';BEGIN
- source:=pg_get_functiondef('public.ccee_communication_reserve(uuid,uuid,boolean)'::regprocedure);
- IF position(marker IN source)=0 THEN RAISE EXCEPTION 'Communication budget definition changed';END IF;
- source:=replace(source,marker,'counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts UNION ALL SELECT ''PRIVATE'',count(*) FROM public.ccee_integration_events WHERE organization_id=org AND event=''CUSTOMER_DISCOVERY_REQUEST_RESERVED'' AND recorded_at>=day_start)');EXECUTE source;
+-- Extend the shared usage function used by readings, PLD and contract queries.
+DO $$DECLARE source text;pattern text:='UNION\s+ALL\s+SELECT\s+''PRIVATE'',count\(\*\)\s+FROM\s+public\.ccee_contract_receipts\s+e\s+CROSS\s+JOIN\s+usage_window\s+w\s+WHERE\s+e\.organization_id=p_org\s+AND\s+e\.event=''REQUEST_RESERVED''\s+AND\s+e\.recorded_at>=w\.start\s*\)';BEGIN
+ source:=pg_get_functiondef('public.ccee_operational_usage(text)'::regprocedure);
+ IF (SELECT count(*) FROM regexp_matches(source,pattern,'gi'))<>1 THEN RAISE EXCEPTION 'Operational budget definition changed';END IF;
+ source:=regexp_replace(source,pattern,'UNION ALL SELECT ''PRIVATE'',count(*) FROM public.ccee_contract_receipts e CROSS JOIN usage_window w WHERE e.organization_id=p_org AND e.event=''REQUEST_RESERVED'' AND e.recorded_at>=w.start UNION ALL SELECT ''PRIVATE'',count(*) FROM public.ccee_integration_events e CROSS JOIN usage_window w WHERE e.organization_id=p_org AND e.event=''CUSTOMER_DISCOVERY_REQUEST_RESERVED'' AND e.recorded_at>=w.start)','i');EXECUTE source;
 END$$;
 REVOKE ALL ON FUNCTION public.ccee_customer_discovery_seed(text,text),public.ccee_customer_discovery_trigger(),public.ccee_customer_discovery_assert(uuid,uuid),public.ccee_customer_discovery_control(text,text,boolean,text,uuid),public.ccee_customer_discovery_read(text,text,integer),public.ccee_customer_discovery_claim(),public.ccee_customer_discovery_reserve(uuid,uuid),public.ccee_customer_discovery_finish(uuid,uuid,jsonb,text) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.ccee_customer_discovery_control(text,text,boolean,text,uuid),public.ccee_customer_discovery_read(text,text,integer),public.ccee_customer_discovery_claim(),public.ccee_customer_discovery_reserve(uuid,uuid),public.ccee_customer_discovery_finish(uuid,uuid,jsonb,text) TO service_role;
