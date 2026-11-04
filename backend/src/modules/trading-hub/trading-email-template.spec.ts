@@ -1,7 +1,9 @@
 import {tradingEmailHtml} from './trading-email-template';
 import {sendTradingMail} from './trading-mail';
+import {approvalNoticeHtml} from './trading-workflow-delivery';
 
 describe('Trading transactional email',()=>{
+ it('renders the approval notice with a fixed authenticated Portal link and escaped deadline',()=>{const html=approvalNoticeHtml('Prazo <img src=x>');expect(html).toContain('https://app.expertenergy.com.br/portal#aprovacoes-trading');expect(html).toContain('&lt;img src=x&gt;');expect(html).toContain('vencimento não significa aprovação');expect(()=>tradingEmailHtml({title:'x',intro:'x',footer:'x',actionUrl:'https://app.expertenergy.com.br/portal#aprovacoes-trading?redirect=evil'})).toThrow();});
  const base={title:'Cotação',intro:'Solicitação de proposta',footer:'Convite individual.'};
  it('escapes opportunity and contact content in HTML',()=>{
   const html=tradingEmailHtml({...base,title:'<script>alert(1)</script>',facts:[['Unidade','A&B <img src=x>']]});
