@@ -1,9 +1,10 @@
 import {randomUUID} from 'crypto';
 import {fileBatch,workflowBody,TradingWorkflowService} from './trading-workflow.service';
 import * as mail from './trading-mail';
-import {sendWorkflowNotice} from './trading-workflow-delivery';
+import {sendWorkflowNotice,tradingApprovalDeliveryEnabled} from './trading-workflow-delivery';
 import {TradingSupplierFileAuthorization} from './trading-workflow.controller';
 describe('Trading approval identity, replay and file boundaries',()=>{
+ it('keeps Trading activation separate from the historical Portal queue',()=>{expect(tradingApprovalDeliveryEnabled({})).toBe(false);expect(tradingApprovalDeliveryEnabled({PORTAL_EXTERNAL_NOTIFICATIONS_ENABLED:'true'})).toBe(false);expect(tradingApprovalDeliveryEnabled({PORTAL_EXTERNAL_NOTIFICATIONS_ENABLED:'false',TRADING_APPROVAL_EXTERNAL_NOTIFICATIONS_ENABLED:'true'})).toBe(true);expect(tradingApprovalDeliveryEnabled({TRADING_APPROVAL_EXTERNAL_NOTIFICATIONS_ENABLED:'1'})).toBe(false);});
  it('rejects a revoked supplier session before multipart buffering starts',async()=>{const files=jest.fn().mockRejectedValue(new Error('Revoked')),handle=jest.fn();const guard=new TradingSupplierFileAuthorization({files} as any);await expect(guard.intercept({switchToHttp:()=>({getRequest:()=>({headers:{'x-trading-session':'invalid'}})})} as any,{handle} as any)).rejects.toThrow('Revoked');expect(handle).not.toHaveBeenCalled();expect(files).toHaveBeenCalledWith(null,null,'invalid','CONTEXT',null,{});});
  const id=randomUUID(),request=randomUUID(),input={action:'SEND_CLIENT',revision:1,requestId:request,reason:'Conferência da proposta',data:{recipientId:randomUUID(),hours:4,confirmed:true}};
  it('accepts 4/8 hours and denies unexpected fields, false confirmations and stale revisions',()=>{

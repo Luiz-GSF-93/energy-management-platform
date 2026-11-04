@@ -7,6 +7,7 @@ import {object,text,uuid} from './trading-validation';
 import {digest,otp,otpDigest,randomToken,sendTradingMail,tradingMailConfigured,tradingMailFailure} from './trading-mail';
 import {validateOriginalPdf} from '../ocr/eva-original-pdf.validator';
 import {validateTradingImage} from './trading-image.validator';
+import {tradingApprovalDeliveryEnabled} from './trading-workflow-delivery';
 import {portalDeliveryBudget} from '../portal-workspace/portal-notifications.worker';
 
 const LIMIT=20*1024*1024;
@@ -42,7 +43,7 @@ export class TradingWorkflowService{
  private async allowed(t:TenantContext,portal=false,write=false){if(t.organizationId!=='org_default')throw new ForbiddenException('Fluxo ainda não habilitado nesta organização.');if(portal){if(t.role!=='consulta'||t.accessMode)throw new ForbiddenException('Acesso exclusivo ao responsável do cliente.');}else await this.hub.allowed(t,write);}
  async read(t:TenantContext,portal=false,page=0,proposal?:string){if(t.organizationId!=='org_default')return{enabled:false,organizationId:t.organizationId,rows:[]};await this.allowed(t,portal);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');if(proposal)uuid(proposal);
   const result=await this.rpc('trading_workflow_read',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_portal:portal,p_customer:t.portalCustomerScope?.customerId??null,p_page:page,p_proposal:proposal??null});
-  if(!portal)result.communication={enabled:process.env.PORTAL_EXTERNAL_NOTIFICATIONS_ENABLED==='true',budgetConfigured:!!portalDeliveryBudget(),emailConfigured:tradingMailConfigured()};return result;}
+  if(!portal)result.communication={enabled:tradingApprovalDeliveryEnabled(),budgetConfigured:!!portalDeliveryBudget(),emailConfigured:tradingMailConfigured()};return result;}
  async tasks(t:TenantContext,portal=false){if(t.organizationId!=='org_default')return{organizationId:t.organizationId,count:0};await this.allowed(t,portal);return this.rpc('trading_workflow_tasks',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_portal:portal,p_customer:t.portalCustomerScope?.customerId??null});}
  async act(t:TenantContext,id:string,input:unknown,portal=false){await this.allowed(t,portal,true);uuid(id);const b=workflowBody(input,portal);let token:string|undefined;
   if(b.action==='NOTIFY_SUPPLIER'){if(!tradingMailConfigured())throw new ServiceUnavailableException('Configure o remetente de cotações antes de avisar o fornecedor.');token=randomToken();b.data.tokenHash=digest(token);}

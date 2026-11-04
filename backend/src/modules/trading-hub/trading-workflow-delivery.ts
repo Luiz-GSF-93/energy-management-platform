@@ -2,11 +2,14 @@ import {sendTradingMail,tradingMailConfigured,tradingMailFailure} from './tradin
 import {sendSms,smsReady} from '../sms-delivery/sms-delivery';
 import {customerTemplateName} from '../whatsapp-delivery/whatsapp-template-selection';
 import {TemplateSnapshot} from '../whatsapp-delivery/whatsapp-templates.service';
+import {tradingEmailHtml} from './trading-email-template';
+export function tradingApprovalDeliveryEnabled(env:NodeJS.ProcessEnv=process.env){return env.TRADING_APPROVAL_EXTERNAL_NOTIFICATIONS_ENABLED==='true';}
+export function approvalNoticeHtml(title:string){return tradingEmailHtml({title:'Sua decisão sobre a proposta de energia',intro:'Uma proposta já conferida pela equipe de gestão está disponível para sua avaliação no Portal do Cliente.',facts:[['Solicitação e prazo',title]],actionLabel:'Conferir e responder no Portal',actionUrl:'https://app.expertenergy.com.br/portal#aprovacoes-trading',footer:'Confira as condições e o prazo antes de aprovar ou recusar. O vencimento não significa aprovação. A decisão deve ser registrada com seu acesso autorizado; este e-mail não assina um contrato.'});}
 export async function sendWorkflowNotice(d:{id:string;channel:string;destination:string;title:string;href:string},templates?:TemplateSnapshot,transport:typeof fetch=fetch){
  const message=d.title+'. Consulte e registre sua decisão no Portal: https://app.expertenergy.com.br/portal#aprovacoes-trading';
  if(d.channel==='EMAIL'){
   if(!tradingMailConfigured())return{state:'FAILED',diagnostic:'TRADING_EMAIL_NOT_CONFIGURED'};
-  try{return{state:'ACCEPTED',providerId:await sendTradingMail(d.destination,'EnergyOS — '+d.title,message,'trading-approval/'+d.id)};}catch(e){const f=tradingMailFailure(e);return{state:f.state==='UNKNOWN'?'UNKNOWN':'FAILED',diagnostic:f.code};}
+  try{return{state:'ACCEPTED',providerId:await sendTradingMail(d.destination,'EnergyOS — '+d.title,message,'trading-approval/'+d.id,approvalNoticeHtml(d.title))};}catch(e){const f=tradingMailFailure(e);return{state:f.state==='UNKNOWN'?'UNKNOWN':'FAILED',diagnostic:f.code};}
  }
  if(d.channel==='SMS'){if(!smsReady())return{state:'FAILED',diagnostic:'SMS_NOT_CONFIGURED'};const r=await sendSms(d.id,d.destination,message.slice(0,320),transport);return{...r,diagnostic:r.reason};}
  const template=customerTemplateName('energyos_proposta_urgente');
