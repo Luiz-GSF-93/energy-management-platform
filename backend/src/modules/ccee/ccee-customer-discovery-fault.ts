@@ -30,7 +30,7 @@ export function participantNoData(xml:string,status:number){
 export function participantFaultMetadata(xml:string,secrets:readonly string[]=[]){
  if(Buffer.byteLength(xml)>2097152||/<!DOCTYPE|<!ENTITY/i.test(xml)||XMLValidator.validate(xml)!==true)return null;
  try{
-  const p=new XMLParser({ignoreAttributes:false,parseTagValue:false,processEntities:false,trimValues:true}).parse(xml);
+  const p=new XMLParser({ignoreAttributes:false,parseTagValue:false,processEntities:true,trimValues:true}).parse(xml);
   const keys=Object.keys(p).filter(k=>!k.startsWith('?'));if(keys.length!==1)return null;
   const root=p[keys[0]],prefix=keys[0].split(':').length===2?keys[0].split(':')[0]:'';
   if(keys[0].split(':').pop()!=='Envelope'||root[prefix?'@_xmlns:'+prefix:'@_xmlns']!==SOAP)return null;
