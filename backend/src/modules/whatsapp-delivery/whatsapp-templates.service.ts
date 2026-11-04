@@ -2,6 +2,7 @@ import {Injectable} from '@nestjs/common';
 import {customerTemplateName,hasNoRuntimeParameters} from './whatsapp-template-selection';
 
 export const customerTemplates = [
+ {name:'energyos_proposta_urgente',label:'Trading · proposta urgente (prazo no Portal)'},
  {name:'energyos_alerta_custos',label:'Alerta de custos'},
  {name:'energyos_relatorio_disponivel',label:'Relatório disponível'},
  {name:'energyos_solicitacao_cliente',label:'Solicitação ao cliente'},

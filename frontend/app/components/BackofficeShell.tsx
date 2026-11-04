@@ -1,4 +1,5 @@
 'use client';
+import TradingApprovalBell from './TradingApprovalBell';
 import AuditPresence from './AuditPresence';
 import AuditSecurityBell from './AuditSecurityBell';
 import { ReactNode, useState, useEffect } from 'react';
@@ -29,7 +30,7 @@ export default function BackofficeShell({
       <AuditPresence/><Sidebar collapsed={collapsed} onToggle={()=>setCollapsed(value=>!value)} />
 
       <main className="backoffice-main">
-        <div className="environment-topbar">{isOrganizationAuthContext(context)&&!context.accessMode&&['admin_org','gestor','operacional'].includes(context.currentOrganization.role)?<Link className="operation-bell" href="/backoffice/support">Atendimento Central</Link>:null}<AuditSecurityBell/><OperationNotificationBell /><UserIdentity /></div>
+        <div className="environment-topbar">{isOrganizationAuthContext(context)&&!context.accessMode&&['admin_org','gestor','operacional'].includes(context.currentOrganization.role)?<Link className="operation-bell" href="/backoffice/support">Atendimento Central</Link>:null}<AuditSecurityBell/><TradingApprovalBell/><OperationNotificationBell /><UserIdentity /></div>
         {children}
         <BotEnergyBackoffice />
       </main>

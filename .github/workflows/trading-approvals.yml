@@ -1,0 +1,49 @@
+name: Trading approval and formalization
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/trading-hub/**'
+      - 'backend/src/database/migrations/2026126*.sql'
+      - 'backend/src/database/migrations/20261270_trading_reminders_shared_budget.sql'
+      - 'backend/src/modules/client-portal-licenses/portal-route-module.ts'
+      - 'backend/src/modules/whatsapp-delivery/whatsapp-templates.service.ts'
+      - 'backend/test/database/trading-workflow.test.mjs'
+      - 'frontend/app/backoffice/trading-hub/**'
+      - 'frontend/app/cotacao/**'
+      - 'frontend/app/components/TradingApprovalBell.tsx'
+      - 'frontend/app/components/BackofficeShell.tsx'
+      - 'frontend/app/components/PortalWorkspace.tsx'
+      - 'frontend/app/components/ClientPortalContent.tsx'
+      - 'frontend/test/trading-approvals.cjs'
+      - '.github/workflows/trading-approvals.yml'
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand --runTestsByPath src/modules/trading-hub/trading-workflow.spec.ts src/modules/trading-hub/trading.spec.ts src/modules/trading-hub/trading-portal.spec.ts src/modules/trading-hub/trading-resend.spec.ts src/modules/trading-hub/trading-mail.spec.ts src/modules/trading-hub/trading-email-template.spec.ts
+        working-directory: backend
+      - run: node test/database/trading-workflow.test.mjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: node test/trading-approvals.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend
