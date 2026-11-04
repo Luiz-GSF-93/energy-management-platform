@@ -45,6 +45,7 @@ try{
  await db.exec(`DO $format$ DECLARE d text;BEGIN SELECT pg_get_functiondef('public.ccee_finish_dri_reading(uuid,uuid,jsonb,text)'::regprocedure) INTO d;EXECUTE regexp_replace(d,E'\\n[ ]+',E'\\n','g');END$format$;`);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261257_ccee_dri_header_diagnostic.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261258_ccee_vca469_participant_column.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261261_ccee_vca470_persistence.sql',import.meta.url),'utf8'));
  const draft=await action(author,'binding',null,{requestId:randomUUID(),customerId:'c1',unitId:'u1',profileCode:'222',principalProfileCode:null,measurementPoint:'P',meterCode:null,representationKind:'PARTIAL',serviceScope:['DRI_READ'],validFrom:'2021-01-01',validTo:'2099-12-31',measurementBasis:'UNKNOWN',evidenceReference:'Evidência sintética revisada',reason:'Teste isolado',driAgentCode:'111',driTaxId:'11111111000111'});
  await denied(action(author,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Não pode aprovar a própria preparação'}));
  const b=await action(reviewer,'approve_binding',draft.id,{requestId:randomUUID(),revision:draft.revision,reason:'Representação DRI conferida'});ok(b.dri_agent_code==='111');ok(b.service_scope.includes('DRI_READ'));
@@ -59,7 +60,7 @@ try{
  const catalog=await dri(author,'job',first.job.id);ok(catalog.job.state==='SUCCEEDED');ok((await db.query('SELECT count(*) n FROM ccee_dri_catalog_versions')).rows[0].n===1);
  await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_REPORTS',parentJobId:first.job.id,eventCode:'999'}));
  const reports=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_REPORTS',parentJobId:first.job.id,eventCode:'202609001000'});
- const rclaim=await query('SELECT ccee_claim_dri_reading() result');await finish(rclaim,[['8','2021-01-01','2099-12-31'],['9','2021-01-01',null],['10','2021-01-01','2026-08-31'],['11','2026-10-01',null],['12','2021-01-01',undefined],['119','2021-01-01',null]].map(([id,start,end])=>({id,name:'Relatório',period:{start,end},frames:[{id:id==='119'?'469':'31',parameters:['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL']}]})));
+ const rclaim=await query('SELECT ccee_claim_dri_reading() result');await finish(rclaim,[['8','2021-01-01','2099-12-31'],['9','2021-01-01',null],['10','2021-01-01','2026-08-31'],['11','2026-10-01',null],['12','2021-01-01',undefined],['119','2021-01-01',null]].map(([id,start,end])=>({id,name:'Relatório',period:{start,end},frames:(id==='119'?['469','470']:['31']).map(id=>({id,parameters:['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL']}))})));
  const results=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'8',frameId:'31'});
  await denied(dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'8',frameId:'99'}));
  const sclaim=await query('SELECT ccee_claim_dri_reading() result');ok(sclaim.dri_parameters.includes('CODIGO_AGENTE'));
@@ -117,8 +118,13 @@ try{
  const vr=(columns=['CNPJ AGENTE','VOTOS'],cells=['11111111000111','12'])=>[{columns,cells,reportId:'119',frameId:'469',financialState:'UNMAPPED_REVIEW_REQUIRED'}];
  for(const cells of [['22222222000122','12'],['x11111111000111','12']])await denied(finish(vc,vr(undefined,cells)));
  await denied(finish(vc,vr(['CNPJ AGENTE','CNPJ DO AGENTE'],['11111111000111','11111111000111'])));await denied(finish(vc,vr(['CNPJ AGENTE','CNPJ AGENTE'],['11111111000111','11111111000111'])));await finish(vc,vr());await denied(dri(foreign,'job',vj.job.id));ok((await db.query('SELECT count(*) n FROM ccee_dri_result_snapshots')).rows[0].n===2);
+ const v470=await dri(author,'enqueue',b.id,{...request,requestId:randomUUID(),kind:'DRI_RESULTS',parentJobId:reports.job.id,eventCode:'202609001000',reportId:'119',frameId:'470'}),claim470=await query('SELECT ccee_claim_dri_reading() result');ok(claim470.id===v470.job.id);
+ const rows470=(columns=['CNPJ AGENTE','CONTRIBUICAO MENSAL (R$)'],cells=['11111111000111','681.27000000'])=>[{columns,cells,reportId:'119',frameId:'470',financialState:'UNMAPPED_REVIEW_REQUIRED'}];
+ await denied(finish(claim470,rows470(undefined,['22222222000122','681.27'])));await denied(finish(claim470,rows470(['CNPJ AGENTE','CNPJ DO AGENTE'],['11111111000111','11111111000111'])));
+ await finish(claim470,rows470());const stored470=await dri(author,'job',v470.job.id);ok(stored470.job.state==='SUCCEEDED');ok(stored470.job.result.data.rows[0].cells[1]==='681.27000000');await denied(dri(foreign,'job',v470.job.id));
  // Migration is idempotent and preserves the existing private grants.
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261258_ccee_vca469_participant_column.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261261_ccee_vca470_persistence.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261257_ccee_dri_header_diagnostic.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261256_ccee_dri_disclosures_no_reports.sql',import.meta.url),'utf8'));
  ok(!(await db.query("SELECT has_function_privilege('authenticated','ccee_dri_action(text,text,text,uuid,jsonb)','EXECUTE') allowed")).rows[0].allowed);

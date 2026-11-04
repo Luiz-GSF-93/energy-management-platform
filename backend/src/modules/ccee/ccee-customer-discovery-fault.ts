@@ -26,17 +26,23 @@ export function participantNoData(xml:string,status:number){
  }catch{return false;}
 }
 
-/** Non-authoritative diagnostic metadata; never changes access or no-data classification. */
-export function participantFaultMetadata(xml:string){
+/** Informational metadata only; never changes authorization or no-data classification. */
+export function participantFaultMetadata(xml:string,secrets:readonly string[]=[]){
  if(Buffer.byteLength(xml)>2097152||/<!DOCTYPE|<!ENTITY/i.test(xml)||XMLValidator.validate(xml)!==true)return null;
  try{
-  const p=new XMLParser({ignoreAttributes:false,parseTagValue:false,processEntities:false,trimValues:true}).parse(xml);
+  const p=new XMLParser({ignoreAttributes:false,parseTagValue:false,processEntities:true,trimValues:true}).parse(xml);
   const keys=Object.keys(p).filter(k=>!k.startsWith('?'));if(keys.length!==1)return null;
   const root=p[keys[0]],prefix=keys[0].split(':').length===2?keys[0].split(':')[0]:'';
   if(keys[0].split(':').pop()!=='Envelope'||root[prefix?'@_xmlns:'+prefix:'@_xmlns']!==SOAP)return null;
   const local=(o:any,n:string)=>{const ks=Object.keys(o??{}).filter(k=>!k.startsWith('@_')&&k.split(':').pop()===n);return ks.length===1?o[ks[0]]:null;};
   const fault=local(local(root,'Body'),'Fault'),code=local(fault,'faultcode');if(typeof code!=='string'||!/^([A-Za-z_][\w.-]*:)?(?:Server|Client)\.[0-9]{4}$/.test(code))return null;
-  const header=local(root,'Header'),message=local(header,'messageHeader'),id=local(message,'transactionId');
-  return{code,transactionId:typeof id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)?id:null};
+  const detail=local(fault,'detail'),dk=Object.keys(detail??{}).filter(k=>!k.startsWith('@_'));const payload=dk.length===1?detail[dk[0]]:null;
+  const headerId=local(local(local(root,'Header'),'messageHeader'),'transactionId'),detailId=local(payload,'transactionId');
+  const ids=[headerId,detailId].filter((v):v is string=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(v));
+  const rawUri=local(payload,'uri'),rawMessage=local(payload,'message');let message=typeof rawMessage==='string'?rawMessage:'';
+  const escaped=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  for(const secret of [...secrets].filter(Boolean).sort((a,b)=>b.length-a.length))for(const variant of [secret,escaped(secret)])message=message.split(variant).join('[redacted]');
+  message=message.replace(/(?:Bearer\s+|\beyJ)[A-Za-z0-9_.-]+/gi,'[redacted]').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'[email]').replace(/\d{7,}/g,'[number]').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().slice(0,500);
+  return{code,transactionId:new Set(ids).size===1?ids[0]:null,uri:typeof rawUri==='string'&&/^\/ws\/[A-Za-z0-9/_-]{1,150}$/.test(rawUri)&&!secrets.filter(Boolean).some(s=>rawUri.includes(s))?rawUri:null,message:message||null};
  }catch{return null;}
 }
