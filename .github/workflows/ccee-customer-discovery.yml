@@ -7,10 +7,13 @@ on:
       - 'backend/src/database/migrations/20261260_ccee_discovery_shared_batch.sql'
       - 'backend/src/database/migrations/20261261_ccee_vca470_persistence.sql'
       - 'backend/src/database/migrations/20261262_ccee_discovery_remaining_budget.sql'
+      - 'backend/src/database/migrations/20261263_ccee_discovery_eligibility.sql'
+      - 'backend/src/database/migrations/20261264_ccee_reviewed_customer_retry.sql'
       - 'backend/test/database/ccee-dri.test.mjs'
       - 'backend/test/database/ccee-customer-discovery.test.mjs'
       - 'frontend/app/backoffice/ccee-data/**'
       - 'frontend/test/ccee-customer-discovery.cjs'
+      - 'frontend/test/ccee-customer-retry.cjs'
       - '.github/workflows/ccee-customer-discovery.yml'
 permissions:
   contents: read
@@ -40,6 +43,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+        working-directory: frontend
+      - run: node test/ccee-customer-retry.cjs
         working-directory: frontend
       - run: node test/ccee-customer-discovery.cjs
         working-directory: frontend

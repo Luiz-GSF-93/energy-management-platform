@@ -8,11 +8,15 @@ try{
  CREATE TABLE organizations(id text PRIMARY KEY);INSERT INTO organizations VALUES('org_default'),('foreign');
  CREATE TABLE customers(id text PRIMARY KEY,organization_id text,company_name text,document text,status text DEFAULT 'ACTIVE',deleted_at timestamptz);
  CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,name text,consumer_unit_number text,status text DEFAULT 'ACTIVE');
+ CREATE TABLE roles(id text,organization_id text,scope text,name text);
+ CREATE TABLE organization_members(organization_id text,user_id text,role_id text,status text);
+ INSERT INTO roles VALUES('admin-role','org_default','organization','admin_org'),('view-role','org_default','organization','consulta'),('operator-role','org_default','organization','operacional');
+ INSERT INTO organization_members VALUES('org_default','admin','admin-role','ACTIVE'),('org_default','viewer','view-role','ACTIVE'),('org_default','operator','operator-role','ACTIVE'),('org_default','admin2','admin-role','ACTIVE');
  CREATE TABLE ccee_unit_authorizations(id uuid,organization_id text,customer_id text,consumer_unit_id text,status text,revision integer,profile_code text,measurement_point text,valid_from date,valid_to date);
  CREATE TABLE ccee_integration_events(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id text,actor_id text,event text,request_id uuid UNIQUE,job_id uuid,details jsonb,recorded_at timestamptz DEFAULT clock_timestamp());
  CREATE TABLE ccee_integration_jobs(id uuid,organization_id text,kind text,finished_at timestamptz,requests integer);
  CREATE TABLE ccee_sync_schedules(id uuid,organization_id text,kind text);
- CREATE FUNCTION assert_ccee_data_actor(o text,a text,x text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF o<>'org_default' OR a NOT IN('admin','viewer') OR x<>'view' AND a<>'admin' THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;END$$;
+ CREATE FUNCTION assert_ccee_data_actor(o text,a text,x text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF o<>'org_default' OR a NOT IN('admin','viewer','operator','admin2') OR x<>'view' AND a NOT IN('admin','operator','admin2') THEN RAISE EXCEPTION 'Denied' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION ccee_permanent_automation_actor(o text,a text) RETURNS void LANGUAGE plpgsql AS $$BEGIN PERFORM public.assert_ccee_data_actor(o,a,'manage');END$$;
  CREATE TABLE ccee_contract_receipts(organization_id text,event text,recorded_at timestamptz DEFAULT now());
  CREATE FUNCTION ccee_communication_reserve(p_id uuid,p_lease uuid,p_market boolean) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN RETURN public.ccee_operational_usage('org_default');END$$;
@@ -23,12 +27,15 @@ try{
  await db.exec(readFileSync('src/database/migrations/20261259_ccee_customer_discovery.sql','utf8'));
  await db.exec(readFileSync('src/database/migrations/20261260_ccee_discovery_shared_batch.sql','utf8'));
  await db.exec(readFileSync('src/database/migrations/20261262_ccee_discovery_remaining_budget.sql','utf8'));
+ await db.exec(readFileSync('src/database/migrations/20261263_ccee_discovery_eligibility.sql','utf8'));
+ await db.exec(readFileSync('src/database/migrations/20261264_ccee_reviewed_customer_retry.sql','utf8'));
  ok(await q("SELECT count(*)::int result FROM ccee_customer_discovery")===1);
  ok(await q("SELECT ccee_customer_discovery_claim() result")===null);
  const read=(org='org_default',actor='admin',page=0)=>q('SELECT ccee_customer_discovery_read($1,$2,$3) result',[org,actor,page]);
  const policy=(enabled=true,actor='admin',id=randomUUID())=>q('SELECT ccee_customer_discovery_control($1,$2,$3,$4,$5) result',['org_default',actor,enabled,'Controlled test activation',id]);
  await deny(read('foreign'));await deny(read('org_default','external'));await deny(read('org_default','admin',-1));await deny(policy(true,'viewer'));
  ok((await read()).policy.homologationLimit===23);
+ ok((await read()).rows[0].customer_status==='ACTIVE');ok((await read()).rows[0].units[0].status==='ACTIVE');
  const req=randomUUID();await policy(true,'admin',req);ok((await policy(true,'admin',req)).enabled);await deny(policy(false,'admin',req));
  const claim=()=>q('SELECT ccee_customer_discovery_claim() result'),reserve=j=>q('SELECT ccee_customer_discovery_reserve($1,$2) result',[j.id,j.lease_id]),finish=(j,r,e=null)=>q('SELECT ccee_customer_discovery_finish($1,$2,$3,$4) result',[j.id,j.lease_id,JSON.stringify(r),e]);
  let j=await claim();ok(j.customer_id==='c');ok(await claim()===null);await deny(reserve({...j,lease_id:randomUUID()}));ok((await reserve(j)).homologationUsed===1);
@@ -43,8 +50,21 @@ try{
  await db.exec("INSERT INTO consumer_units(id,organization_id,customer_id,name,consumer_unit_number) VALUES('u2','org_default','c','Second unit','124')");await policy(true);j=await claim();ok(!!j);ok((await read()).rows[0].units.length===2);
  const job=randomUUID();await db.query("INSERT INTO ccee_integration_jobs VALUES($1,'org_default','DRI_RESULTS',now(),198)",[job]);await deny(reserve(j));await db.exec('DELETE FROM ccee_integration_jobs');await db.exec("INSERT INTO ccee_contract_receipts(organization_id,event) SELECT 'org_default','REQUEST_RESERVED' FROM generate_series(1,98)");await deny(reserve(j));await db.exec('DELETE FROM ccee_contract_receipts');
  await db.query("INSERT INTO ccee_integration_events(organization_id,event,details) SELECT 'org_default','CUSTOMER_DISCOVERY_REQUEST_RESERVED','{}' FROM generate_series(1,21)");await deny(reserve(j));
+ // Keep the quota boundary test above; remove only its synthetic fixture receipts for reviewed retry tests.
+ await db.exec("DELETE FROM ccee_integration_events WHERE event='CUSTOMER_DISCOVERY_REQUEST_RESERVED' AND details='{}'::jsonb");
+ await finish(j,{diagnostic:{code:'PROVIDER_REJECTED'},hashes:[],transactions:[],requests:0},'PROVIDER_REJECTED');
+ const retryId=randomUUID(),retryReason='Reviewed source identity and CCEE parameter rejection before a controlled retry.';
+ const retry=(id=j.id,actor='admin',org='org_default',request=retryId,reason=retryReason,confirmed=true)=>q('SELECT ccee_customer_discovery_retry($1,$2,$3,$4,$5,$6) result',[org,actor,id,reason,request,confirmed]);
+ await deny(retry(j.id,'viewer'));await deny(retry(j.id,'operator'));ok((await read()).canRetry===true);ok((await read('org_default','viewer')).canRetry===false);ok((await read('org_default','operator')).canRetry===false);await deny(retry(j.id,'admin','foreign'));await deny(retry(j.id,'admin','org_default',retryId,retryReason,false));await deny(retry(j.id,'admin','org_default',retryId,'short'));
+ const before=await q('SELECT count(*)::int result FROM ccee_customer_discovery'),queued=await retry();ok(queued.previousId===j.id&&queued.id!==j.id&&queued.state==='QUEUED');
+ ok((await retry()).id===queued.id);await deny(retry(j.id,'admin2'));ok(await q('SELECT count(*)::int result FROM ccee_customer_discovery')===before+1);
+ ok(await q("SELECT state='FAILED' AND result->'diagnostic'->>'code'='PROVIDER_REJECTED' result FROM ccee_customer_discovery WHERE id=$1",[j.id]));
+ ok((await read()).policy.enabled===false);ok(await q('SELECT count(*)::int result FROM ccee_unit_authorizations')===0);
+ await deny(retry(j.id,'admin','org_default',retryId,retryReason+' changed'));await deny(retry(j.id,'admin','org_default',randomUUID()));await deny(retry(queued.id,'admin','org_default',randomUUID()));
+ await db.exec("UPDATE customers SET document='57718819000106' WHERE id='c'");await deny(retry(queued.id,'admin','org_default',randomUUID()));
+ await db.exec(readFileSync('src/database/migrations/20261263_ccee_discovery_eligibility.sql','utf8'));await db.exec(readFileSync('src/database/migrations/20261264_ccee_reviewed_customer_retry.sql','utf8'));
  ok(!(await q("SELECT has_table_privilege('service_role','ccee_customer_discovery','SELECT') result")));ok(await q("SELECT relrowsecurity result FROM pg_class WHERE oid='ccee_customer_discovery'::regclass"));
- for(const role of ['anon','authenticated'])for(const fn of ['ccee_customer_discovery_claim()','ccee_customer_discovery_seed(text,text)','ccee_customer_discovery_read(text,text,integer)','ccee_customer_discovery_reserve(uuid,uuid)'])ok(!(await q('SELECT has_function_privilege($1,$2,\'EXECUTE\') result',[role,fn])));
+ for(const role of ['anon','authenticated'])for(const fn of ['ccee_customer_discovery_claim()','ccee_customer_discovery_seed(text,text)','ccee_customer_discovery_read(text,text,integer)','ccee_customer_discovery_reserve(uuid,uuid)','ccee_customer_discovery_retry(text,text,uuid,text,uuid,boolean)'])ok(!(await q('SELECT has_function_privilege($1,$2,\'EXECUTE\') result',[role,fn])));
  ok(!(await q("SELECT has_function_privilege('service_role','ccee_customer_discovery_assert(uuid,uuid)','EXECUTE') result")));
  console.log('Customer discovery database: '+checks+' assertions passed');
 }catch(e){console.error(e.message,e.where??'');process.exitCode=1;}finally{await db.close();}
