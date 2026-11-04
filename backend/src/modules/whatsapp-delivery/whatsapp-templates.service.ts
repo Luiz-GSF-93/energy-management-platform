@@ -2,13 +2,13 @@ import {Injectable} from '@nestjs/common';
 import {customerTemplateName,hasNoRuntimeParameters} from './whatsapp-template-selection';
 
 export const customerTemplates = [
- {name:'energyos_proposta_urgente',label:'Trading · proposta urgente (prazo no Portal)'},
  {name:'energyos_alerta_custos',label:'Alerta de custos'},
  {name:'energyos_relatorio_disponivel',label:'Relatório disponível'},
  {name:'energyos_solicitacao_cliente',label:'Solicitação ao cliente'},
  {name:'energyos_lembrete_prazo',label:'Lembrete de prazo'},
  {name:'energyos_adesao_atualizada',label:'Atualização da Adesão ACL'},
  {name:'energyos_portal_atualizado',label:'Atualização do Portal do cliente'},
+ {name:'energyos_proposta_urgente',label:'Trading · proposta urgente (prazo no Portal)'},
 ] as const;
 type TemplateState='APPROVED'|'PENDING'|'REJECTED'|'PAUSED'|'DISABLED'|'IN_APPEAL'|'PENDING_DELETION'|'DELETED'|'UNKNOWN'|'MISSING'|'UNAVAILABLE';
 export type TemplateSnapshot={configured:boolean;checkedAt:string;manageUrl:string|null;rows:{name:string;label:string;status:TemplateState;parameterless?:boolean}[]};
