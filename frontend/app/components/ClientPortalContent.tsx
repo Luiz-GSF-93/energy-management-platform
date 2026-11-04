@@ -1,4 +1,5 @@
 'use client';
+import TradingApprovals from '@/app/backoffice/trading-hub/TradingApprovals';
 import PortalUnitScope from './PortalUnitScope';
 import PortalUsageChart from './PortalUsageChart';
 import PortalInvoices from './PortalInvoices';
@@ -27,6 +28,7 @@ export default function ClientPortalContent({entitlement,invoices=false}:{entitl
  const key=JSON.stringify([context.user.id,context.currentOrganization.id,context.currentOrganization.permissions]);
  if(invoices)return workspace&&allowed('documents')?<PortalUnitScope organizationId={context.currentOrganization.id}><PortalInvoices/><PortalInvoiceEva enabled={!!allowed('bot')}/></PortalUnitScope>:<Alert>Minhas faturas não está disponível nesta licença.</Alert>;
  const content=<>{license.enabled?<p>Licença do Portal: {license.starts} a {license.ends}. Os resultados exibidos são publicados e pertencem à empresa vinculada ao seu usuário.</p>:null}
+ {allowed('trading')?<TradingApprovals key={'trading:'+key} portal/>:null}
  {allowed('acl')?<div id="adesao"><AclAdmissionStatus key={'acl:'+key}/></div>:null}
  {allowed('documents')&&!workspace?<div id="documentos"><ClientEvidenceInbox key={'documents:'+key}/></div>:null}
 

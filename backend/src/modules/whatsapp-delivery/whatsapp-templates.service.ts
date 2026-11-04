@@ -8,6 +8,7 @@ export const customerTemplates = [
  {name:'energyos_lembrete_prazo',label:'Lembrete de prazo'},
  {name:'energyos_adesao_atualizada',label:'Atualização da Adesão ACL'},
  {name:'energyos_portal_atualizado',label:'Atualização do Portal do cliente'},
+ {name:'energyos_proposta_urgente',label:'Trading · proposta urgente (prazo no Portal)'},
 ] as const;
 type TemplateState='APPROVED'|'PENDING'|'REJECTED'|'PAUSED'|'DISABLED'|'IN_APPEAL'|'PENDING_DELETION'|'DELETED'|'UNKNOWN'|'MISSING'|'UNAVAILABLE';
 export type TemplateSnapshot={configured:boolean;checkedAt:string;manageUrl:string|null;rows:{name:string;label:string;status:TemplateState;parameterless?:boolean}[]};

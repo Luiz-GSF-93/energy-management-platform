@@ -2,6 +2,7 @@ export type PortalModule='reports'|'forecasts'|'energy_prices'|'acl'|'documents'
 const uuid='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 export function portalRouteModule(path:string,method:string):PortalModule|null {
  const route=path.replace(/^\/api\/v1(?=\/)/,'').replace(/\/$/,'');
+ if(method==='GET'&&['/portal/trading-approvals','/portal/trading-approvals/tasks'].includes(route)||method==='POST'&&new RegExp('^/portal/trading-approvals/'+uuid+'/action$').test(route))return 'trading';
  // Same Documents license and exclusive customer binding; internal review routes stay blocked.
  if(['GET','POST'].includes(method)&&route==='/portal/workspace/automatic-intakes')return 'documents';
  if(method==='GET'&&route==='/portal/workspace/presentation/usage')return 'reports';
