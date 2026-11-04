@@ -1,4 +1,4 @@
-import {Body,Controller,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Post,Query} from '@nestjs/common';
+import {BadRequestException,Body,Controller,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Param,Post,Query} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {SupabaseService} from '../../services/supabase.service';
@@ -13,8 +13,9 @@ export class CceeCustomerDiscoveryService implements OnModuleInit,OnModuleDestro
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(CceeCustomerDiscoveryService.name);
  constructor(private db:SupabaseService,private data:CceeDataService,private transport:CceeMarketConnector){}
  private enabled(){return process.env.CCEE_DATA_WORKSPACE_ENABLED==='true'&&process.env.CCEE_SYNC_WORKER_ENABLED==='true'&&process.env.CCEE_AUTOMATIC_READ_ENABLED==='true';}
- async list(t:TenantContext,page=0){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');const ws=await this.data.workspace(t);return{...await this.data.rpc('ccee_customer_discovery_read',{p_org:t.organizationId,p_actor:t.userId,p_page:page}),canManage:ws.canManage};}
+ async list(t:TenantContext,page=0){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');const ws=await this.data.workspace(t);const result=await this.data.rpc('ccee_customer_discovery_read',{p_org:t.organizationId,p_actor:t.userId,p_page:page});return{...result,canManage:ws.canManage,canRetry:ws.canManage&&result.canRetry===true};}
  async control(t:TenantContext,input:unknown){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.data.workspace(t);const b=cceeObject(input,['enabled','reason','requestId']);cceeText(b.reason,500,10);cceeUuid(b.requestId);if(typeof b.enabled!=='boolean')throw new CceeReadingError('INVALID_CUSTOMER_POLICY');return this.data.rpc('ccee_customer_discovery_control',{p_org:t.organizationId,p_actor:t.userId,p_enabled:b.enabled,p_reason:b.reason,p_request:b.requestId});}
+ async retry(t:TenantContext,id:string,input:unknown){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.data.workspace(t);cceeUuid(id);const b=cceeObject(input,['reason','requestId','confirmed']);cceeText(b.reason,500,30);cceeUuid(b.requestId);if(b.confirmed!==true)throw new BadRequestException('Confirme a revisão antes de reconsultar o mesmo CNPJ.');return this.data.rpc('ccee_customer_discovery_retry',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_reason:b.reason,p_request:b.requestId,p_confirmed:true});}
  onModuleInit(){if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.log.warn('CCEE_CUSTOMER_DISCOVERY_UNCONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
@@ -45,5 +46,6 @@ export class CceeCustomerDiscoveryService implements OnModuleInit,OnModuleDestro
 export class CceeCustomerDiscoveryController{
  constructor(private service:CceeCustomerDiscoveryService){}
  @Get() @Header('Cache-Control','private, no-store') list(@Tenant()t:TenantContext,@Query('page')p?:string){return this.service.list(t,Number(p??0));}
+ @Post(':id/retry') retry(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.service.retry(t,id,b);}
  @Post('policy') control(@Tenant()t:TenantContext,@Body()b:unknown){return this.service.control(t,b);}
 }
