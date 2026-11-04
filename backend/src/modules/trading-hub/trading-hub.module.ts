@@ -10,9 +10,9 @@ import {TradingHubController} from './trading-hub.controller';
 import {TradingPortalService} from './trading-portal.service';
 import {TradingInvitationsController,TradingPortalController} from './trading-portal.controller';
 import {TradingWorkflowService} from './trading-workflow.service';
-import {TradingWorkflowController,TradingClientApprovalController,TradingFormalizationController} from './trading-workflow.controller';
+import {TradingWorkflowController,TradingClientApprovalController,TradingFormalizationController,TradingSupplierFileAuthorization} from './trading-workflow.controller';
 import {TradingWorkflowWorker} from './trading-workflow.worker';
 import {WhatsappTemplatesService} from '../whatsapp-delivery/whatsapp-templates.service';
-@Module({imports:[CommonModule,LicensesModule],providers:[TradingHubService,TradingPortalService,TradingWorkflowService,TradingWorkflowWorker,WhatsappTemplatesService],controllers:[TradingHubController,TradingInvitationsController,TradingPortalController,TradingWorkflowController,TradingClientApprovalController,TradingFormalizationController]})
+@Module({imports:[CommonModule,LicensesModule],providers:[TradingHubService,TradingPortalService,TradingWorkflowService,TradingWorkflowWorker,TradingSupplierFileAuthorization,WhatsappTemplatesService],controllers:[TradingHubController,TradingInvitationsController,TradingPortalController,TradingWorkflowController,TradingClientApprovalController,TradingFormalizationController]})
 export class TradingHubModule {}
 

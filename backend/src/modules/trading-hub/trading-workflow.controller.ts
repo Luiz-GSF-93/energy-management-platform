@@ -1,4 +1,4 @@
-import {Body,Controller,Get,Header,Headers,Param,Post,Query,Res,UploadedFiles,UseInterceptors} from '@nestjs/common';
+import {Body,CallHandler,Controller,ExecutionContext,Get,Header,Headers,Injectable,NestInterceptor,Param,Post,Query,Res,UploadedFiles,UseInterceptors} from '@nestjs/common';
 import {FilesInterceptor} from '@nestjs/platform-express';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {Public} from '../../common/decorators/public.decorator';
@@ -6,6 +6,11 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {TradingWorkflowService} from './trading-workflow.service';
 import {TradingUploadLimit} from './trading-upload-limit';
 const limits={fileSize:20971520,files:20,fields:1,parts:21};
+@Injectable()
+export class TradingSupplierFileAuthorization implements NestInterceptor{
+ constructor(private s:TradingWorkflowService){}
+ async intercept(context:ExecutionContext,next:CallHandler){await this.s.files(null,null,context.switchToHttp().getRequest().headers['x-trading-session'],'CONTEXT',null,{});return next.handle();}
+}
 function fileResponse(res:any,f:any){res.set({'Cache-Control':'no-store, private','Pragma':'no-cache','X-Content-Type-Options':'nosniff','Content-Type':f.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(f.name)});res.send(f.bytes);}
 @Controller('trading-approvals')
 export class TradingWorkflowController{
@@ -31,6 +36,6 @@ export class TradingFormalizationController{
  @Public() @Post('verify') @Header('Cache-Control','no-store') verify(@Headers('x-trading-token') token:string,@Body() b:unknown){return this.s.verify(token,b);}
  @Public() @Get() @Header('Cache-Control','no-store') view(@Headers('x-trading-session') session:string){return this.s.supplierView(session);}
  @Public() @Post('accept') @Header('Cache-Control','no-store') accept(@Headers('x-trading-session') session:string,@Body() b:unknown){return this.s.supplierAccept(session,b);}
- @Public() @Post('files') @UseInterceptors(TradingUploadLimit,FilesInterceptor('files',20,{limits})) @Header('Cache-Control','no-store') upload(@Headers('x-trading-session') session:string,@UploadedFiles() f:any[],@Body('batchId') batch:string){return this.s.upload(null,null,session,f,batch);}
+ @Public() @Post('files') @UseInterceptors(TradingSupplierFileAuthorization,TradingUploadLimit,FilesInterceptor('files',20,{limits})) @Header('Cache-Control','no-store') upload(@Headers('x-trading-session') session:string,@UploadedFiles() f:any[],@Body('batchId') batch:string){return this.s.upload(null,null,session,f,batch);}
  @Public() @Get('files/:id') async download(@Headers('x-trading-session') session:string,@Param('id') id:string,@Res() res:any){fileResponse(res,await this.s.download(null,null,session,id));}
 }
