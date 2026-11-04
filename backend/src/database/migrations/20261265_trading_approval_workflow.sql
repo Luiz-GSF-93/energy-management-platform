@@ -2,7 +2,7 @@ BEGIN;
 SET LOCAL lock_timeout='5s';SET LOCAL statement_timeout='60s';
 DO $install_20261265$ BEGIN
  IF to_regclass('public.trading_approval_workflows') IS NOT NULL THEN
-  IF obj_description(to_regclass('public.trading_approval_workflows'),'pg_class') IS DISTINCT FROM 'trading-workflow:20261265:5229c04db1b5343c8ae2d42ed4f15ba0e4b2a06f79bf33f8c385ff7c943f5356' THEN RAISE EXCEPTION 'Review existing Trading workflow schema before migration';END IF;RETURN;
+  IF obj_description(to_regclass('public.trading_approval_workflows'),'pg_class') IS DISTINCT FROM 'trading-workflow:20261265:08bf0c81239b824f5fbaa40a4121b1c2d6e42e9eb6c1400f1e8aea2d57c47840' THEN RAISE EXCEPTION 'Review existing Trading workflow schema before migration';END IF;RETURN;
  END IF;
  EXECUTE $schema_20261265$
 CREATE TABLE public.trading_approval_workflows(
@@ -81,7 +81,7 @@ BEGIN
  'title',o.data->>'title','supplier',s.data->>'tradeName','state',w.state,'revision',w.revision,'proposalRevision',w.proposal_revision,'proposal',w.proposal_data,'deadline',w.deadline,'recipientId',w.recipient_id,'documentRequest',w.document_request,
  'expired',w.state='CLIENT_PENDING' AND w.deadline<=now(),'sourceChanged',p.data IS DISTINCT FROM w.proposal_data OR p.revision<>w.proposal_revision,
  'events',CASE WHEN p_portal THEN '[]'::jsonb ELSE(SELECT coalesce(jsonb_agg(jsonb_build_object('actor',e.actor_id,'action',e.action,'reason',e.reason,'at',e.created_at) ORDER BY e.created_at),'[]') FROM public.trading_approval_events e WHERE e.organization_id=p_org AND e.workflow_id=w.id) END,
- 'files',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',f.id,'name',f.filename,'size',f.size_bytes,'state',f.state,'shared',f.shared,'origin',f.origin,'batchId',f.batch_id,'uploadedBy',f.uploaded_by)),'[]') FROM public.trading_formalization_files f WHERE f.organization_id=p_org AND f.workflow_id=w.id AND(NOT p_portal OR f.state='ARCHIVED')),
+ 'files',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',f.id,'name',f.filename,'size',f.size_bytes,'state',f.state,'shared',f.shared,'origin',f.origin,'batchId',f.batch_id,'uploadedBy',f.uploaded_by)),'[]') FROM public.trading_formalization_files f WHERE f.organization_id=p_org AND f.workflow_id=w.id AND(NOT p_portal OR(f.state='ARCHIVED' AND f.shared))),
  'supplierContacts',CASE WHEN p_portal THEN '[]'::jsonb ELSE(SELECT coalesce(jsonb_agg(DISTINCT i.email),'[]') FROM public.trading_invitations i WHERE i.organization_id=p_org AND i.proposal_id=w.proposal_id AND i.state='RESPONDED' AND i.kind='SUPPLIER') END,
  'deliveries',CASE WHEN p_portal THEN '[]'::jsonb ELSE(SELECT coalesce(jsonb_agg(jsonb_build_object('channel',d.channel,'state',d.state,'diagnostic',d.diagnostic,'at',d.created_at)),'[]') FROM public.trading_approval_deliveries d WHERE d.organization_id=p_org AND d.workflow_id=w.id) END,
  'recipients',CASE WHEN p_portal OR w.state NOT IN('INTERNAL_APPROVED','CLIENT_PENDING') THEN '[]'::jsonb ELSE(SELECT coalesce(jsonb_agg(jsonb_build_object('id',m.user_id,'name',coalesce(m.display_name,a.email),'email',a.email)),'[]') FROM public.organization_members m JOIN auth.users a ON a.id=m.user_id WHERE m.organization_id=p_org AND a.email_confirmed_at IS NOT NULL AND public.trading_workflow_portal_allowed(p_org,m.user_id::text,m.role_id::text,w.customer_id,w.unit_id)) END) body
@@ -167,7 +167,7 @@ DO $$DECLARE f record;BEGIN FOR f IN SELECT oid::regprocedure AS name FROM pg_pr
 END LOOP;END$$;
 NOTIFY pgrst,'reload schema';
 
-COMMENT ON TABLE public.trading_approval_workflows IS 'trading-workflow:20261265:5229c04db1b5343c8ae2d42ed4f15ba0e4b2a06f79bf33f8c385ff7c943f5356';
+COMMENT ON TABLE public.trading_approval_workflows IS 'trading-workflow:20261265:08bf0c81239b824f5fbaa40a4121b1c2d6e42e9eb6c1400f1e8aea2d57c47840';
 $schema_20261265$;
 END $install_20261265$;
 COMMIT;
