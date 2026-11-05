@@ -1,0 +1,48 @@
+ENERGYOS — FASE 0 — DETALHAMENTO E ORIENTAÇÃO DA AUDITORIA
+Data: 05/11/2026 — America/Sao_Paulo
+Estado: proposta para validação. Nenhum código, permissão ou histórico alterado.
+
+1. DIAGNÓSTICO
+O componente compartilhado AuditWorkspace apresenta operações, sessões, alertas, consumos e retenção nos dois escopos. Os alertas mostram kind, state, evidence_count, first_at, last_at e protocolo; não oferecem explicação orientada nem lista de autores/evidências. Operações já têm nome atual e perfil registrado. O backend usa energy_audit_read e energy_audit_decide, com escopo e permissões existentes. HTTP 403 é classificado como DENIED, 401 como AUTH_FAILURE e 5xx como CRITICAL na captura técnica: esses resultados não provam causa ou ataque.
+
+2. ARQUITETURA E MÓDULOS
+Ampliar o componente compartilhado da Auditoria da organização e Auditoria Global com resumo legível e painel “Entender este registro”. Reutilizar fontes existentes e acrescentar consulta paginada de evidências vinculadas ao alerta quando houver vínculo comprovável. Aplicar explicações de campos/ações também nas visões Sessões, Consumos, Cobertura e Retenção, sem mudar cálculos.
+
+3. INFORMAÇÕES EXIBIDAS
+- Descrição da ação, módulo/recurso, resultado e significado em português; preservar código técnico consultável.
+- Tipo de alerta, estado traduzido, quantidade de evidências e critério de agrupamento comprovado.
+- Autor: nome atual, perfil registrado, identificador em detalhe; vários autores listados separadamente. Não atribuir alerta agregado ao último usuário por suposição. Autor ausente: “Não registrado”.
+- Risco: categoria (autenticação, autorização, acesso a documentos, falha técnica ou integridade) e prioridade de triagem com fundamento explícito. Exibir severidade registrada separadamente da orientação; não inventar escore numérico nem gravar classificação retroativa.
+- Evidências: eventos de origem, data/hora, ação, rota sanitizada, resultado/status e correlação, conforme disponibilidade e autorização. Evidência não vinculada de forma inequívoca será indicada como indisponível; mera coincidência temporal não será tratada como prova.
+- Ação recomendada: próximos passos específicos, responsável sugerido e condições para resolver ou registrar falso positivo; sem execução automática.
+- Histórico do tratamento com nome quando comprovável, decisão, justificativa e data.
+- IP apenas para perfil já autorizado, com origem/confiabilidade; IP de conexão/proxy não será apresentado como IP comprovado do usuário.
+- Todas as datas exibidas em America/Sao_Paulo.
+
+4. EXEMPLOS DE ORIENTAÇÃO
+DENIED: “Acesso recusado pelo controle de autorização”. Verificar usuário, licença, permissão efetiva e recurso; não liberar permissões automaticamente. Repetição é sinal de triagem, não prova de invasão.
+AUTH_FAILURE: “Autenticação não aceita”. Conferir contexto e repetição; não expor e-mail/senha tentados nem atribuir autoria sem sessão comprovada.
+CRITICAL/5xx: “Falha técnica do servidor”. Conferir protocolo e saúde do serviço; não classificar automaticamente como ataque.
+DOWNLOAD: diferenciar autorização de link de transferência efetivamente comprovada.
+OPEN/ANALYSIS/RESOLVED/FALSE_POSITIVE: Aberto/Em análise/Resolvido/Falso positivo, com explicação da decisão e preservação do histórico.
+Eventos desconhecidos terão descrição genérica e “classificação não disponível”, sem motivo inventado.
+
+5. MODELO DE DADOS, INTEGRAÇÃO E MIGRAÇÃO
+Reutilizar eventos, alertas, decisões e cadastro de autores existentes. Projeção aditiva de leitura, sem novas tabelas previstas. Até uma migração aditiva de função/índices se a leitura detalhada exigir, com limites de página e ordenação estável. Não alterar assinatura incompatível, captura, agrupamento, limiares, retenção, severidade original ou eventos históricos. Novos campos opcionais para manter compatibilidade com clientes anteriores.
+
+6. PERMISSÕES E FLUXO
+Manter licença e permissões atuais: consulta, IP restrito e tratamento separados. Organização definida no servidor; evidência, autor e decisões filtrados pelo mesmo escopo. Auditoria Global somente para perfil global autorizado. Abrir detalhe é consulta; registrar tratamento continua exigindo permissão e justificativa atuais. Nenhuma concessão de acesso, bloqueio/desbloqueio ou mensagem externa.
+
+7. DEPENDÊNCIAS
+Funções privadas de auditoria e fontes existentes; componente compartilhado e cadastro de autores. Sem API externa, IA paga, SOAP, novo provedor, leitura de documentos privados adicionais ou varredura de segurança em produção.
+
+8. TESTES E PUBLICAÇÃO
+Verificar traduções, tipos desconhecidos, nomes ausentes/múltiplos, distinção causa observada versus hipótese, paginação e evidência sem vínculo. Testar isolamento entre organizações, escopo global, IP restrito, referência a alerta de outro tenant e compatibilidade da resposta antiga. Verificar layout responsivo, expansão, horários e estados de indisponibilidade. Publicar após checks e conferir a tela real sem tratar alertas reais ou mudar permissões durante testes.
+
+9. RISCOS E LIMITES
+Históricos podem não conter motivo detalhado, perfil ou vínculo de evidência. Mostrar lacunas expressamente. Evitar consultas amplas, carga excessiva e exposição de tokens, corpos, URLs assinadas ou dados alheios. Recomendações são regras explicativas determinísticas, não diagnóstico conclusivo nem orientação para contornar autorização. Não altera cobranças, fechamentos ou autenticação.
+
+10. VALIDAÇÃO
+A seção 48 do prompt mestre exige apresentar arquitetura, dados, módulos, permissões, fluxos, dependências, integração, migração, testes e riscos antes do código, e determina “Ao finalizar, aguarde validação”. Solicita-se aprovação para implementação, testes e publicação desta ampliação de leitura e interpretação; fase 0 concluída neste documento.
+
+Aprovado pelo usuário em 05/11/2026 para implementação, testes e publicação.

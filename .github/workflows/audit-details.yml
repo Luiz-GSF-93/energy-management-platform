@@ -1,0 +1,29 @@
+name: Audit explanations and evidence
+on:
+  pull_request:
+    paths:
+      - 'frontend/app/components/Audit*'
+      - 'frontend/app/components/audit-explanations.ts'
+      - 'frontend/test/audit-*'
+      - 'backend/src/modules/audit/**'
+      - 'backend/src/database/migrations/20261271_audit_alert_evidence.sql'
+      - 'backend/test/audit-alert-evidence.cjs'
+      - '.github/workflows/audit-details.yml'
+permissions:
+  contents: read
+jobs:
+  audit-details:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: node test/audit-alert-evidence.cjs && node test/audit-workspaces.cjs
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: node test/audit-explanations.cjs && node test/audit-alert-details.cjs && node test/audit-workspaces.cjs
+        working-directory: frontend
