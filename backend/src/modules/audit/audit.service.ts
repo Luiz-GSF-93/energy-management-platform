@@ -26,6 +26,8 @@ export class AuditWorkspaceService{
  const s=this.session(r);if(!s)return {observed:false};return this.rpc('energy_audit_presence',{p_org:t.scope==='global'?null:(t as any).organizationId,p_actor:t.userId,p_session:s.id,p_expires:s.expires,p_module:b.module,p_stop:b.stop===true,p_visit:b.visit===true});}
  async capture(r:RequestWithTenant,status:number,duration:number){
  const t=r.accessContext??r.tenantContext;const route=String(r.route?.path??'');if(route.includes('audit')||r.method==='OPTIONS')return;
+ // Routine playback ticks are compacted into the private progress row. Failed requests remain auditable.
+ if(status<400&&route.endsWith('/training/ccee/progress')&&r.body?.action==='TICK')return;
  const authPath=/\/auth\/(login|refresh|accept-invite)$/.test(route);if(!t&&!authPath&&status<400)return;
  const sourceIp=r.socket?.remoteAddress??null; // Connection address only. Never trust arbitrary forwarding headers.
  const key=this.config.get<string>('SUPABASE_SERVICE_KEY');const origin=sourceIp&&key?createHmac('sha256',key).update('audit-origin:'+sourceIp).digest('hex'):null;
