@@ -1,0 +1,40 @@
+name: Sales policies and prospect journey
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/sales-intake/**'
+      - 'backend/src/database/migrations/2026127*_platform_sales_*.sql'
+      - 'backend/test/sales-journey-sql.cjs'
+      - 'frontend/app/backoffice/platform-sales/**'
+      - 'frontend/test/commercial-decimals.cjs'
+      - 'frontend/test/sales-policy-form.cjs'
+      - '.github/workflows/sales-journey.yml'
+permissions:
+  contents: read
+jobs:
+  sales-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npx jest sales-journey.spec --runInBand
+        working-directory: backend
+      - run: node test/sales-journey-sql.cjs && node test/sales-commercial-sql.cjs && node test/sales-composition-sql.cjs
+        working-directory: backend
+  sales-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: npx tsc --noEmit && node test/commercial-decimals.cjs && node test/sales-policy-form.cjs
+        working-directory: frontend
