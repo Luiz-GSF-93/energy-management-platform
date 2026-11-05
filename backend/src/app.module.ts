@@ -1,3 +1,4 @@
+import {TrainingModule} from './modules/training/training.module';
 import {AuditModule} from './modules/audit/audit.module';
 import {AuditCaptureMiddleware} from './modules/audit/audit.middleware';
 import {PortalWorkspaceModule} from './modules/portal-workspace/portal-workspace.module';
@@ -46,7 +47,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
 @Module({
-  imports: [AuditModule,PortalWorkspaceModule,
+  imports: [TrainingModule,AuditModule,PortalWorkspaceModule,
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
     OrganizationBrandingModule,
