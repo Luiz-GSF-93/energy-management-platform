@@ -19,7 +19,7 @@ export function officialCalendarLink(html:string,year:number){
 }
 export async function calendarLanding(transport:typeof fetch=fetch){
  const response=await transport('https://www.ccee.org.br/calendario',{redirect:'error',signal:AbortSignal.timeout(15000)});
- if(!response.ok||!response.body)throw Error('CALENDAR_INDEX_UNAVAILABLE');const reader=response.body.getReader();const parts:Uint8Array[]=[];let size=0;
+ if(!response.ok)throw Error('CALENDAR_INDEX_HTTP_'+response.status);if(!response.body)throw Error('CALENDAR_INDEX_EMPTY_BODY');const reader=response.body.getReader();const parts:Uint8Array[]=[];let size=0;
  try{for(;;){const r=await reader.read();if(r.done)break;size+=r.value.length;if(size>2097152){await reader.cancel();throw Error('CALENDAR_INDEX_SIZE');}parts.push(r.value);}}finally{reader.releaseLock();}
  return Buffer.concat(parts).toString('utf8');
 }
@@ -47,7 +47,7 @@ export class CceeCalendarSyncService implements OnModuleInit,OnModuleDestroy{
      stage='preservação da nova versão';const saved=await this.data.ownerCalendar(job.actor_id,'create',null,{requestId:randomUUID(),sourceUrl:source,sourceHash:hash,normalizedHash,year:job.year,mapping,coverage:parsed.coverage,issues:parsed.issues,items:parsed.items,reason:'Coleta diária do calendário público oficial CCEE; fonte preservada para revisão independente.'});version=saved.id;
     }
    }finally{bytes.fill(0);}
-  }catch(e){error='Coleta não concluída na etapa de '+stage+'. Confira a fonte do ano '+job.year+'; a versão anterior foi preservada.';this.log.warn('CCEE_CALENDAR_SOURCE_REQUIRES_REVIEW');}
+  }catch(e){const diagnostic=e instanceof Error&&/^CALENDAR_(?:INDEX_(?:HTTP_[0-9]{3}|EMPTY_BODY|SIZE)|SOURCE_NOT_UNIQUE|XLSX_REQUIRED|ORGANIZATION)$/.test(e.message)?' Código '+e.message+'.':'';error='Coleta não concluída na etapa de '+stage+'.'+diagnostic+' Confira a fonte do ano '+job.year+'; a versão anterior foi preservada.';this.log.warn('CCEE_CALENDAR_SOURCE_REQUIRES_REVIEW');}
   await this.data.rpc('ccee_calendar_sync_finish',{...args,p_source:source,p_hash:hash,p_version:version,p_error:error});
  }finally{this.busy=false;}}
 }
