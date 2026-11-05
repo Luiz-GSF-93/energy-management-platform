@@ -5,7 +5,7 @@ import {SalesCommercialService,commercialInput} from './sales-commercial.service
 import {advisePlan} from './sales-advisor.engine';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const uuid=/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-export function publicSalesSuggestion(s:any){const v=s.snapshot;return {id:s.id,createdAt:s.createdAt,snapshot:{planName:v.planName,planVersion:v.planVersion,policyVersion:v.policyVersion,units:v.units,users:v.users,cycle:v.cycle,monthlyBaseCents:v.monthlyBaseCents,monthlyRecurringCents:v.monthlyRecurringCents,annualRecurringCents:v.annualRecurringCents,initialTotalCents:v.initialTotalCents,oneTimeCents:v.oneTimeCents,modules:v.modules,documentsLimit:v.documentsLimit,taxTerms:v.policy.taxTerms,annualDiscountBps:v.policy.annualDiscountBps}};}
+export function publicSalesSuggestion(s:any){const v=s.snapshot;return {id:s.id,createdAt:s.createdAt,snapshot:{planName:v.planName,priceBasis:v.policy.basis,referencePriceCents:v.policy.monthlyCents,planVersion:v.planVersion,policyVersion:v.policyVersion,units:v.units,users:v.users,cycle:v.cycle,monthlyBaseCents:v.monthlyBaseCents,monthlyRecurringCents:v.monthlyRecurringCents,annualRecurringCents:v.annualRecurringCents,initialTotalCents:v.initialTotalCents,oneTimeCents:v.oneTimeCents,modules:v.modules,documentsLimit:v.documentsLimit,taxTerms:v.policy.taxTerms,annualDiscountBps:v.policy.annualDiscountBps}};}
 @Injectable()
 export class SalesJourneyService{
  constructor(private readonly db:SupabaseService,private readonly commercial:SalesCommercialService){}
