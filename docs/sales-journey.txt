@@ -1,0 +1,20 @@
+ENERGYOS — COMMERCIAL JOURNEY / 2026-11-05
+
+Monthly prices in the UI use reais and centavos; persisted API values remain integer cents. Annual discount UI uses percent; API uses integer basis points. Example: R$ 265,00 => 26500; 12% => 1200. Extra prices follow the same exact decimal parser. Existing policies are never reinterpreted.
+
+Policy edit uses the latest revision; proposal generation uses the highest revision whose dates cover the current Sao Paulo date AND whose catalog version is current. Future revisions do not replace the currently effective revision early. Historical proposals and licenses remain immutable.
+
+Public API compatibility: legacy POST public/sales/leads remains supported. New clients send a cryptographically random 32-byte X-Sales-Access capability. With SALES_JOURNEY_ENABLED=true the receipt and capability hash are bound in the same transaction. The capability is kept only in sessionStorage, never in URLs, browser persistent storage or logs. Access lasts seven days. Unknown, expired, revoked or erased receipts return a generic access error. Each capability is limited to 240 database boundary calls per hour. Lead rate limits remain unchanged (5/hour, 20/day per requester hash).
+
+POST public/sales/journey/{state,recommend,challenge,verify,accept} has an exact origin allowlist and no credentialed CORS. Direct RPC access is denied to anon/authenticated. Public projection strips all internal justifications and actor identifiers. Recommendation preserves the existing smallest-sufficient-capacity rule and does not invent prices when an effective policy is missing. Solar exceptions require review.
+
+Contact verification: six-digit email code, ten-minute validity, five attempts, at most five deliveries per receipt with a five-minute interval. Both the capability and code are stored as hashes. A delivery retry uses the same challenge and Resend idempotency key. Provider acceptance is not proof of delivery. No OTP or provider response bodies are logged.
+SALES_JOURNEY_CONTACT_EMAIL_ENABLED is OFF by default. Real verification messages require separate channel homologation, a confirmed SALES_JOURNEY_EMAIL_FROM and the existing RESEND_API_KEY. Do not replace other modules' keys. This release does not enable external signature or billing.
+
+Accepting an immutable suggestion requires verified contact, the exact suggestion ID and explicit sales-suggestion-v1 agreement. Owner worklist highlights pending acceptances. The Owner approval transaction rechecks the exact snapshot and creates/conferences/approves one internal proposal. Material policy/catalog changes require renewed prospect acceptance. No contracts, invoices, payment, organization or access grants are created by this action.
+
+The approved proposal reuses OfferTerms -> ProposalDocument -> ContractDrafts. The existing Clicksign sandbox and Asaas sandbox commands retain their own party/document/review/confirmation gates. Signature, payment and provisioning remain independent evidence-based steps. Missing signatories, contract terms, models or provider configuration appear as pending steps; they are not inferred from the lead form. Production activation and actual external dispatch remain separately reviewed.
+
+Four new private tables: platform_sales_access, platform_sales_suggestions, platform_sales_journey_events, platform_sales_journey_outbox. Authorized 90-day lead erasure cascades the contact-bound access, suggestions and email queue; non-PII journey events and existing commercial records remain preserved. No automatic new erasure job is introduced.
+
+Migrations: 20261272 then 20261273, both tested twice in disposable PostgreSQL-compatible PGlite. Deployment should apply additive migrations before exposing the journey flag. No bulk change to licenses.

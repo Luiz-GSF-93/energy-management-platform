@@ -11,7 +11,7 @@ import {SalesAdvisorService} from './sales-advisor.service';
 export class PublicSalesController{
  constructor(private readonly sales:SalesIntakeService){}
  @Post('leads') @Public() @HttpCode(201) @Header('Cache-Control','no-store')
- submit(@Body() body:unknown,@Headers('origin') origin:string|undefined,@Req() req:Request){return this.sales.submit(body,origin,process.env.SALES_INTAKE_ENABLED==='true'?salesRequesterIp(req):undefined);}
+ submit(@Body() body:unknown,@Headers('origin') origin:string|undefined,@Req() req:Request,@Headers('x-sales-access') access:string|undefined){return this.sales.submit(body,origin,process.env.SALES_INTAKE_ENABLED==='true'?salesRequesterIp(req):undefined,access);}
 }
 @Controller('admin/sales') @PlatformScope()
 export class AdminSalesController{
