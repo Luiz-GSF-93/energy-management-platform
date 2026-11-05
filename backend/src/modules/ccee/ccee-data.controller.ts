@@ -24,7 +24,8 @@ export class CceeDataController{
  @Post('jobs/:id/cancel') cancel(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.data.cancel(t,id,b);}
  @Get('jobs/:id/preparation') @Header('Cache-Control','private, no-store') preparation(@Tenant()t:TenantContext,@Param('id')id:string){return this.data.preparation(t,id);}
  @Post('jobs/:id/preparation') apply(@Tenant()t:TenantContext,@Param('id')id:string,@Body()b:unknown){return this.data.applyPreparation(t,id,b);}
- @Get('calendar') @Header('Cache-Control','private, no-store') calendar(@Tenant()t:TenantContext,@Query('versionId')v?:string,@Query('page')page?:string){return this.data.calendar(t,v,page===undefined?0:Number(page));}
+ @Get('calendar') @Header('Cache-Control','private, no-store') calendar(@Tenant()t:TenantContext,@Query('versionId')v?:string,@Query('page')page?:string,@Query('year')year?:string,@Query('month')month?:string){return this.data.calendar(t,v,page===undefined?0:Number(page),year===undefined?undefined:Number(year),month);}
+ @Post('calendar/assign-batch') assignBatch(@Tenant()t:TenantContext,@Body()b:unknown){return this.data.applyCalendarBatch(t,b);}
  @Post('calendar/assign') assign(@Tenant()t:TenantContext,@Body()b:unknown){return this.data.applyCalendar(t,b);}
 }
 @Controller('admin/integrations/ccee-data/calendar') @PlatformScope()

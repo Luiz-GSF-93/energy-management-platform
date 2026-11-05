@@ -3,6 +3,12 @@ on:
   pull_request:
     paths:
       - 'backend/src/modules/ccee/**'
+      - 'backend/src/database/migrations/20261274_ccee_operational_workspace.sql'
+      - 'backend/src/database/migrations/20261275_ccee_calendar_sync.sql'
+      - 'backend/test/database/ccee-operational-workspace.test.mjs'
+      - 'frontend/app/components/CceeScopeBar.tsx'
+      - 'frontend/app/components/CceeCalendarSyncControl.tsx'
+      - 'frontend/test/ccee-calendar-workspace.cjs'
       - 'backend/src/database/migrations/20261259_ccee_customer_discovery.sql'
       - 'backend/src/database/migrations/20261260_ccee_discovery_shared_batch.sql'
       - 'backend/src/database/migrations/20261261_ccee_vca470_persistence.sql'
@@ -27,9 +33,11 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand --runTestsByPath src/modules/ccee/ccee-customer-discovery.spec.ts src/modules/ccee/ccee-market.connector.spec.ts src/modules/ccee/ccee-dri-cost.spec.ts src/modules/ccee/ccee-financial-candidate.spec.ts src/modules/ccee/ccee-vca-participant.spec.ts
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ccee/ccee-customer-discovery.spec.ts src/modules/ccee/ccee-market.connector.spec.ts src/modules/ccee/ccee-dri-cost.spec.ts src/modules/ccee/ccee-financial-candidate.spec.ts src/modules/ccee/ccee-vca-participant.spec.ts src/modules/ccee/ccee-calendar-sync.spec.ts
         working-directory: backend
       - run: node test/database/ccee-customer-discovery.test.mjs
+        working-directory: backend
+      - run: node test/database/ccee-operational-workspace.test.mjs
         working-directory: backend
       - run: node test/database/ccee-dri.test.mjs
         working-directory: backend
@@ -49,6 +57,10 @@ jobs:
       - run: node test/ccee-customer-discovery.cjs
         working-directory: frontend
       - run: node test/ccee-data.cjs
+        working-directory: frontend
+      - run: node test/ccee-calendar-workspace.cjs
+        working-directory: frontend
+      - run: node test/ccee-registration.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

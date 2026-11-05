@@ -79,16 +79,22 @@ export class CceeDataService{
   // The existing monthly service creates only a draft and rejects conflicting/duplicate drafts.
   return this.rpc('ccee_prepare_data_monthly',{p_org:t.organizationId,p_actor:t.userId,p_job:id,p_request:b.requestId,p_reason:b.reason});
  }
- async calendar(t:TenantContext,versionId:string|undefined,page=0){
+ async calendar(t:TenantContext,versionId:string|undefined,page=0,year?:number,month?:string){
   cceeDataEnabled('CCEE_OFFICIAL_CALENDAR_ENABLED');cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.allowed(t);
   if(versionId)cceeUuid(versionId);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');
-  return this.action(t,'calendar',null,{page,...(versionId?{versionId}:{})});
+  const y=year??Number(new Intl.DateTimeFormat('en',{timeZone:'America/Sao_Paulo',year:'numeric'}).format(new Date()));if(!Number.isInteger(y)||y<2021||y>2099)throw new BadRequestException('Ano inválido.');if(month)cceeMonth(month,false);const r=await this.rpc('ccee_calendar_workspace',{p_org:t.organizationId,p_actor:t.userId,p_year:y,p_version:versionId??null,p_page:page,p_month:month?month+'-01':null});return {...r,sync:{...r.sync,serverEnabled:process.env.CCEE_CALENDAR_AUTO_ENABLED==='true'&&process.env.CCEE_SYNC_WORKER_ENABLED==='true'}};
  }
  async applyCalendar(t:TenantContext,input:unknown){
   await this.allowed(t,'manage');const b=cceeObject(input,['versionId','itemId','bindingId','responsibleId','reason']);cceeUuid(b.itemId);cceeUuid(b.bindingId);cceeText(b.responsibleId,100,1);cceeText(b.reason);
   // Authoritative read checks the exact item, active version and private binding again.
   cceeDataEnabled('CCEE_OFFICIAL_CALENDAR_ENABLED');cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');
   return this.rpc('ccee_apply_calendar',{p_org:t.organizationId,p_actor:t.userId,p_version:cceeUuid(b.versionId),p_item:b.itemId,p_binding:b.bindingId,p_responsible:b.responsibleId,p_reason:b.reason});
+ }
+ async applyCalendarBatch(t:TenantContext,input:unknown){
+  await this.allowed(t,'manage');cceeDataEnabled('CCEE_OFFICIAL_CALENDAR_ENABLED');cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');
+  const b=cceeObject(input,['versionId','itemId','bindingIds','responsibleId','reason','confirmed']);cceeUuid(b.versionId);cceeUuid(b.itemId);cceeText(b.responsibleId,100,1);cceeText(b.reason);
+  if(b.confirmed!==true||!Array.isArray(b.bindingIds)||!b.bindingIds.length||b.bindingIds.length>20||new Set(b.bindingIds).size!==b.bindingIds.length)throw new BadRequestException('Confira até 20 unidades distintas.');b.bindingIds.forEach(cceeUuid);
+  return this.rpc('ccee_calendar_assign_batch',{p_org:t.organizationId,p_actor:t.userId,p_version:b.versionId,p_item:b.itemId,p_bindings:b.bindingIds,p_responsible:b.responsibleId,p_reason:b.reason});
  }
  async ownerCalendar(actor:string,action:string,id:string|null,body:unknown){
   if(action==='list'&&process.env.CCEE_OFFICIAL_CALENDAR_ENABLED!=='true')return{enabled:false,versions:[],items:[]};
