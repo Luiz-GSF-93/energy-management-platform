@@ -15,6 +15,8 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
  let d=await read('A',a);assert.equal(d.total,30);assert.equal(d.rows.length,25);assert.equal(d.rows[0].actorName,'Ana Interna');assert.ok(!('ip' in d.rows[0]));assert.ok(!JSON.stringify(d).includes('private-ip'));assert.equal((await read('A',a,false,1)).rows.length,5);
  await assert.rejects(read('B',b));await assert.rejects(read('A',b));await assert.rejects(read(null,a,true));await assert.rejects(read('A',a,false,-1));assert.equal((await read(null,g,true)).total,30);
  await db.query("UPDATE roles SET permissions=permissions||'[\"dbb580ca-d940-4e80-97fb-e9f9619a0002\"]'::jsonb WHERE id=$1",[a]);d=await read('A',a);assert.equal(d.rows[0].ip,'private-ip');
+ await db.query("INSERT INTO energy_audit_alert_decisions(alert_id,actor_id,state,reason) VALUES($1,$2,'ANALYSIS','Investigação de teste isolado')",[alert,a]);
+ const overview=(await db.query("SELECT energy_audit_read($1,$2,false,$3) d",['A',a,{from:new Date(Date.now()-86400000).toISOString(),to:new Date(Date.now()+86400000).toISOString(),size:25,page:0}])).rows[0].d;assert.equal(overview.decisions[0].actor_name_current,'Ana Interna');assert.equal(overview.decisions[0].actor_id,a);
  await db.query("UPDATE organization_members SET permission_limit='[]' WHERE user_id=$1",[a]);await assert.rejects(read('A',a));
  console.log('Audit alert evidence: migration, tenant/global isolation, restricted IP, membership ceiling, author names and stable pagination passed.');
  }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

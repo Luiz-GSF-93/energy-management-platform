@@ -23,5 +23,14 @@ BEGIN
 END$$;
 REVOKE ALL ON FUNCTION public.energy_audit_alert_evidence(text,uuid,boolean,uuid,integer) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.energy_audit_alert_evidence(text,uuid,boolean,uuid,integer) TO service_role;
+
+-- Preserve the existing authorized read and add current names only to its decision page.
+DO $names$
+DECLARE body text;needle text:='jsonb_agg(to_jsonb(d))';replacement text:=$projection$jsonb_agg(to_jsonb(d)||jsonb_build_object('actor_name_current',(SELECT coalesce(nullif(btrim(concat_ws(' ',to_jsonb(p)->>'first_name',to_jsonb(p)->>'last_name')),''),nullif(btrim(to_jsonb(p)->>'full_name'),''),nullif(btrim(to_jsonb(p)->>'display_name'),''),nullif(btrim(to_jsonb(p)->>'name'),'')) FROM public.user_profiles p WHERE p.user_id::text=d.actor_id LIMIT 1)))$projection$;
+BEGIN
+ body:=pg_get_functiondef('public.energy_audit_read(text,uuid,boolean,jsonb)'::regprocedure);
+ IF (length(body)-length(replace(body,needle,'')))/length(needle)<>1 THEN RAISE EXCEPTION 'Audit decision projection changed; inspect compatibility';END IF;
+ EXECUTE replace(body,needle,replacement);
+END $names$;
 NOTIFY pgrst,'reload schema';
 COMMIT;
