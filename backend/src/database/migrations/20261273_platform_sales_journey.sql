@@ -62,7 +62,7 @@ BEGIN
  PERFORM public.assert_platform_sales_access(p_receipt,p_token);
  SELECT payload-'email'-'name'-'cnpj'-'company'-'phone'-'jobTitle' INTO lead FROM public.platform_sales_leads WHERE receipt=p_receipt;
  SELECT coalesce(jsonb_agg(to_jsonb(c)),'[]') INTO plans FROM public.plan_catalog c WHERE active;
- SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]') INTO policies FROM (SELECT DISTINCT ON(s.plan_id) s.* FROM public.platform_sales_policies s JOIN public.plan_catalog c ON c.id=s.plan_id AND c.version=s.plan_version AND c.active WHERE ((now() AT TIME ZONE 'America/Sao_Paulo')::date) BETWEEN (definition->>'starts')::date AND (definition->>'ends')::date ORDER BY s.plan_id,s.version DESC) q;
+ SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]') INTO policies FROM (SELECT DISTINCT ON(s.plan_id) s.* FROM public.platform_sales_policies s JOIN public.plan_catalog c ON c.id=s.plan_id AND c.version=s.plan_version AND c.active WHERE ((now() AT TIME ZONE 'America/Sao_Paulo')::date)>=(definition->>'starts')::date ORDER BY s.plan_id,s.version DESC) q WHERE (q.definition->>'ends')::date>=((now() AT TIME ZONE 'America/Sao_Paulo')::date);
  RETURN jsonb_build_object('profile',lead,'plans',plans,'policies',policies);
 END $$;
 CREATE OR REPLACE FUNCTION public.preserve_sales_suggestion(p_id uuid,p_receipt uuid,p_token text,p_plan uuid,p_policy integer,p_cycle text)

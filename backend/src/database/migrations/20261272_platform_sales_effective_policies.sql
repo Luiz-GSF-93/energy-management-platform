@@ -11,8 +11,8 @@ BEGIN
  SELECT * INTO plan FROM public.plan_catalog WHERE id=p_plan AND active FOR SHARE;
  IF NOT FOUND THEN RAISE EXCEPTION 'Active plan missing' USING ERRCODE='P3610'; END IF;
  SELECT * INTO policy FROM public.platform_sales_policies WHERE plan_id=p_plan AND plan_version=plan.version
- AND ((now() AT TIME ZONE 'America/Sao_Paulo')::date) BETWEEN (definition->>'starts')::date AND (definition->>'ends')::date ORDER BY version DESC LIMIT 1;
- IF NOT FOUND OR policy.version IS DISTINCT FROM p_policy_version THEN RAISE EXCEPTION 'Effective policy changed' USING ERRCODE='P3611'; END IF;
+ AND ((now() AT TIME ZONE 'America/Sao_Paulo')::date)>=(definition->>'starts')::date ORDER BY version DESC LIMIT 1;
+ IF NOT FOUND OR (policy.definition->>'ends')::date<((now() AT TIME ZONE 'America/Sao_Paulo')::date) OR policy.version IS DISTINCT FROM p_policy_version THEN RAISE EXCEPTION 'Effective policy changed' USING ERRCODE='P3611'; END IF;
  units:=(lead.payload->>'units')::integer; users:=(lead.payload->>'users')::integer;
  IF units IS NULL OR users IS NULL OR units NOT BETWEEN (policy.definition->>'minUnits')::integer AND (policy.definition->>'maxUnits')::integer OR users NOT BETWEEN 1 AND (policy.definition->>'maxUsers')::integer OR ((now() AT TIME ZONE 'America/Sao_Paulo')::date) NOT BETWEEN (policy.definition->>'starts')::date AND (policy.definition->>'ends')::date THEN RAISE EXCEPTION 'Profile outside policy' USING ERRCODE='22023'; END IF;
  required:=ARRAY[]::text[];
@@ -85,7 +85,7 @@ BEGIN
  SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.plan_id,p.version DESC),'[]'::jsonb) INTO policies FROM (SELECT DISTINCT ON(plan_id) * FROM public.platform_sales_policies ORDER BY plan_id,version DESC) p;
  SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'name',name,'version',version,'maxUnits',max_consumer_units,'maxUsers',max_users,'documentsLimit',CASE WHEN coalesce((to_jsonb(plan_catalog)->>'documents_unlimited')::boolean,false) THEN NULL ELSE (to_jsonb(plan_catalog)->>'documents_limit')::integer END) ORDER BY name),'[]'::jsonb) INTO plans FROM public.plan_catalog WHERE active;
  SELECT coalesce(jsonb_agg(to_jsonb(p)||jsonb_build_object('events',(SELECT jsonb_agg(to_jsonb(e) ORDER BY version) FROM public.platform_sales_proposal_events e WHERE e.proposal_id=p.id)) ORDER BY p.created_at DESC),'[]'::jsonb) INTO proposals FROM (SELECT * FROM public.platform_sales_proposals WHERE receipt=p_receipt ORDER BY created_at DESC LIMIT 50) p;
- RETURN jsonb_build_object('plans',plans,'policies',policies,'proposals',proposals,'effectivePolicies',(SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]'::jsonb) FROM (SELECT DISTINCT ON(s.plan_id) s.* FROM public.platform_sales_policies s JOIN public.plan_catalog c ON c.id=s.plan_id AND c.version=s.plan_version AND c.active WHERE ((now() AT TIME ZONE 'America/Sao_Paulo')::date) BETWEEN (s.definition->>'starts')::date AND (s.definition->>'ends')::date ORDER BY s.plan_id,s.version DESC) q));
+ RETURN jsonb_build_object('plans',plans,'policies',policies,'proposals',proposals,'effectivePolicies',(SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]'::jsonb) FROM (SELECT DISTINCT ON(s.plan_id) s.* FROM public.platform_sales_policies s JOIN public.plan_catalog c ON c.id=s.plan_id AND c.version=s.plan_version AND c.active WHERE ((now() AT TIME ZONE 'America/Sao_Paulo')::date)>=(s.definition->>'starts')::date ORDER BY s.plan_id,s.version DESC) q WHERE (q.definition->>'ends')::date>=((now() AT TIME ZONE 'America/Sao_Paulo')::date)));
 END $$;
 
 COMMIT;
