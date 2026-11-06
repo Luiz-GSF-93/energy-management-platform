@@ -44,6 +44,32 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  ok((await call('decide',id(32),{...decision,decision:'REJECT'},id(24),'manager')).state==='REJECTED');
  sources=await call('capture',null,{});ok((await call('reserve',id(33),{...b,basis:'e'.repeat(64),sources})).acquired);ok((await call('finish',id(33),{})).state==='READY_FOR_REVIEW');
  await deny(()=>call('history',null,{page:0},id(20),'operator','other'));
+
+ await db.exec('CREATE TABLE unit_demand_periods(id uuid,organization_id text,customer_id text,consumer_unit_id text,document_id text,document_hash text);CREATE TABLE unit_demand_approvals(period_id uuid,organization_id text,consumer_unit_id text)');
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261280_eva_unit_closing_scope.sql'),'utf8'));
+ await db.exec(`INSERT INTO consumer_units VALUES('${id(3)}','org','customer','ACTIVE')`);
+ const scoped=(action,u,rid,body,scope='UNIT',actor=id(20),role='operator',org='org')=>db.query('SELECT eva_scoped_closing_action($1,$2,$3,false,$4,$5,$6,$7,$8,$9,$10,false) data',[org,actor,role,action,u,'2026-08',rid,JSON.stringify(body),scope,'BASE']).then(r=>r.rows[0].data);
+ sources=await scoped('capture',id(1),null,{});
+ const ub={...b,basis:'1'.repeat(64),sources,report:{...report,scope:{kind:'UNIT',unitIds:[id(1)]}}};
+ ok((await scoped('reserve',id(1),id(41),ub)).acquired);
+ ok((await scoped('finish',id(1),id(41),{})).state==='READY_FOR_REVIEW');
+ ok((await scoped('history',id(1),null,{page:0})).total===1);
+ ok((await scoped('history',id(3),null,{page:0})).total===0);
+ await deny(()=>scoped('reserve',id(1),id(42),{...ub,report:{...ub.report,scope:{kind:'UNIT',unitIds:[id(3)]}}}));
+ await deny(()=>scoped('finish',id(3),id(41),{}));
+ await deny(()=>scoped('history',id(1),null,{page:0},'UNIT',id(20),'operator','other'));
+ ok((await call('history',null,{page:0})).total===3);
+ ok((await scoped('decide',id(1),id(41),{...decision,hash:ub.hash},'UNIT',id(24),'manager')).state==='APPROVED');
+ ok((await db.query("SELECT current_setting('energyos.eva_closing_scope',true) scope")).rows[0].scope==='');
+ sources=await call('capture',null,{});
+ const customerReport={...report,unitIds:[id(1),id(3)],units:[{id:id(1),...financial},{id:id(3),...financial}],financial:{...financial,...Object.fromEntries(Object.entries(financial).filter(([k])=>k!=='status').map(([k,v])=>[k,(Number(v)*2).toFixed(2)]))}};
+ const next=await call('reserve',id(43),{...b,basis:'2'.repeat(64),sources,report:customerReport});ok(next.acquired&&next.row.version>4);
+
+ await db.exec(`CREATE OR REPLACE FUNCTION capture_financial_sources(text,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('tables',jsonb_build_object('consumer_units',(SELECT jsonb_agg(to_jsonb(u)) FROM public.consumer_units u WHERE organization_id=$1 AND customer_id=$2),'management_contracts',jsonb_build_array(jsonb_build_object('savings_percentage',8))))$$;`);
+ const sharedSources=await scoped('capture',id(1),null,{}),sharedBody={...ub,basis:'3'.repeat(64),sources:sharedSources};
+ await scoped('reserve',id(1),id(44),sharedBody);await scoped('finish',id(1),id(44),{});
+ await deny(()=>scoped('decide',id(1),id(44),{...decision,hash:sharedBody.hash},'UNIT',id(24),'manager'));
+ ok((await scoped('history',id(1),null,{page:0})).rows[0].state==='READY_FOR_REVIEW');
  console.log('Assisted closing SQL:',checks,'checks passed');
  }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
 

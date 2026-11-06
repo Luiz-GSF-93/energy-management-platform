@@ -1,0 +1,13 @@
+import {closingDemandContext} from './closing-demand-context';
+import {closingCceeLocal} from './closing-ccee-local';
+const unit={id:'unit',organization_id:'org',customer_id:'client',contracted_demand:0};
+const scope={organizationId:'org',userId:'actor',permissions:['f5364101-4486-42c2-a90f-807937ac3011']};
+describe('closing source scope',()=>{
+ const p={id:'period',organization_id:'org',customer_id:'client',consumer_unit_id:'unit',start_date:'2026-01-01',end_date:'2026-01-31',modality:'GREEN',single_kw:'150',document_id:'doc',document_hash:'a'.repeat(64)};
+ const tables=()=>({unit_demand_periods:[p],unit_demand_approvals:[{period_id:'period',organization_id:'org',customer_id:'client',consumer_unit_id:'unit'}],documents:[{id:'doc',organization_id:'org',customer_id:'client',consumer_unit_id:'unit',file_verified:true,file_hash:p.document_hash}]});
+ it('uses approved full-period CUSD evidence without editing the registered unit',()=>{const c={unit};expect(closingDemandContext(c,tables(),'2026-01')).toMatchObject({unit:{contracted_demand:'150'},closingDemandSource:{id:'period'}});expect(unit.contracted_demand).toBe(0)});
+ it.each(['foreign','unapproved','changed','partial','zero','ambiguous'])('does not infer demand from %s evidence',kind=>{const t=tables();if(kind==='foreign')t.documents[0].customer_id='other';if(kind==='unapproved')t.unit_demand_approvals=[];if(kind==='changed')t.documents[0].file_hash='b'.repeat(64);if(kind==='partial')t.unit_demand_periods=[{...p,start_date:'2026-01-02'}];if(kind==='zero')t.unit_demand_periods=[{...p,single_kw:'0'}];if(kind==='ambiguous'){t.unit_demand_periods=[p,{...p,id:'second'}];t.unit_demand_approvals.push({...t.unit_demand_approvals[0],period_id:'second'});}const c={unit};expect(closingDemandContext(c,t,'2026-01')).toBe(c)});
+ it('does not make any CCEE request without permission',async()=>{const db={rpc:jest.fn()};expect((await closingCceeLocal(db,{...scope,permissions:[]},unit,'2026-01')).state).toBe('NO_ACCESS');expect(db.rpc).not.toHaveBeenCalled()});
+ it('reports missing binding without enqueuing SOAP',async()=>{const db={rpc:jest.fn(async()=>({data:{bindings:[],jobs:[]},error:null}))};expect((await closingCceeLocal(db,scope,unit,'2026-01')).state).toBe('NO_BINDING');expect(db.rpc).toHaveBeenCalledTimes(1);expect((db.rpc.mock.calls as any)[0][1].p_action).toBe('list')});
+ it('does not use a later binding for January',async()=>{const db={rpc:jest.fn(async()=>({data:{bindings:[{...unit,id:'b',consumer_unit_id:unit.id,status:'APPROVED',revision:1,valid_from:'2026-02-01',service_scope:['DRI_READ']}],jobs:[]},error:null}))};expect((await closingCceeLocal(db,scope,unit,'2026-01')).state).toBe('NO_BINDING')});
+});

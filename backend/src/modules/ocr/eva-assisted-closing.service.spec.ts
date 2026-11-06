@@ -47,7 +47,7 @@ describe('Approved publication activation',()=>{
  it('requires disclosure and routes approval to the atomic function only when both flags are enabled',async()=>{
   process.env.EVA_APPROVED_PUBLICATIONS_ENABLED='true';process.env.EVA_APPROVED_PORTAL_ENABLED='true';
   const rpc=jest.fn(async(..._args:any[])=>({data:{state:'APPROVED'}})),s=new EvaAssistedClosingService({getClient:()=>({rpc})} as any,{get:()=> 'true'} as any,{} as any),body={consumerUnitId:unit,month:b.month,id,decision:'APPROVE',hash:'a'.repeat(64),note:'Fontes e divulgação conferidas pelo usuário.',acknowledge:true};
-  await expect(s.decide(body,t)).rejects.toThrow('disponibilização');expect(rpc).not.toHaveBeenCalled();await s.decide({...body,disclose:true},t);expect(rpc).toHaveBeenCalledWith('decide_eva_with_publication',expect.objectContaining({p_body:expect.objectContaining({disclose:true})}));expect(rpc.mock.calls[0][1]).not.toHaveProperty('p_action');
+  await expect(s.decide(body,t)).rejects.toThrow('disponibilização');expect(rpc).not.toHaveBeenCalled();await s.decide({...body,disclose:true},t);expect(rpc).toHaveBeenCalledWith('eva_scoped_closing_action',expect.objectContaining({p_scope:'CUSTOMER',p_mode:'BASE',p_disclose:true,p_body:expect.objectContaining({disclose:true})}));expect(rpc.mock.calls[0][1]).toHaveProperty('p_action','decide');
  });
 });
 
@@ -58,7 +58,7 @@ describe('isolated contract-memory capture path',()=>{
   const rpc=jest.fn(async()=>({data:{rows:[]}}));
   const s=new EvaAssistedClosingService({getClient:()=>({rpc})} as any,{get:()=> 'true'} as any,{} as any);
   await s.history({consumerUnitId:unit,month:b.month},t);
-  expect(rpc).toHaveBeenCalledWith('eva_contract_closing_action',expect.objectContaining({p_action:'history',p_disclose:false,p_org:'org',p_actor:'actor'}));
+  expect(rpc).toHaveBeenCalledWith('eva_scoped_closing_action',expect.objectContaining({p_scope:'CUSTOMER',p_mode:'CONTRACT',p_action:'history',p_disclose:false,p_org:'org',p_actor:'actor'}));
  });
  it('rejects a memory not present in the captured tenant/unit snapshot before reservation',async()=>{
   process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED='true';const x=setup();
@@ -73,9 +73,10 @@ it('activates V3 only through its dedicated flag, preserving legacy comparison t
 describe('shared invoice completion',()=>{
  const document='00000000-0000-4000-8000-000000000009',hash='a'.repeat(64),q={consumerUnitId:unit,month:b.month};
  const snapshot=()=>({available:true,canPrepare:true,documentId:document,sourceHash:hash,unitId:unit,month:b.month,basis:'b'.repeat(64)});
- function shared(){const inspect=jest.fn(async()=>snapshot()),s=new EvaAssistedClosingService({} as any,{get:()=> 'true'} as any,{inspect} as any),prepare=jest.spyOn(s,'prepare').mockResolvedValue({row:{organization_id:'org',month:b.month,report:{units:[{id:unit,documentId:document,sourceHash:hash}]}}} as any);return {s,inspect,prepare};}
+ function shared(){const inspect=jest.fn(async()=>snapshot()),s=new EvaAssistedClosingService({} as any,{get:()=> 'true'} as any,{inspect} as any),prepare=jest.spyOn(s,'prepare').mockResolvedValue({row:{organization_id:'org',month:b.month,report:{units:[{id:unit,documentId:document,sourceHash:hash}]}}} as any);const capture=jest.spyOn(s as any,'rpc').mockResolvedValue({unit:{id:unit},revision:1});return {s,inspect,prepare,capture};}
  it('uses the same source key in Documents and the delegated portal; new sources make a new version',async()=>{const x=shared();await x.s.prepareInvoice(document,hash,q,t);await x.s.prepareInvoice(document,hash,q,{...t,userId:'delegated'});expect(x.prepare.mock.calls[0][0].requestId).toBe(x.prepare.mock.calls[1][0].requestId);x.inspect.mockResolvedValue({...snapshot(),basis:'c'.repeat(64)});await x.s.prepareInvoice(document,hash,q,t);expect(x.prepare.mock.calls[2][0].requestId).not.toBe(x.prepare.mock.calls[0][0].requestId);});
- it.each(['documentId','sourceHash','unitId','month','basis'])('rejects changed or foreign source %s before writing',async key=>{const x=shared();x.inspect.mockResolvedValue({...snapshot(),[key]:'foreign'});await expect(x.s.prepareInvoice(document,hash,q,t)).rejects.toThrow();expect(x.prepare).not.toHaveBeenCalled();});
+ it('refreshes the proposal when financial sources change without another OCR',async()=>{const x=shared();await x.s.prepareInvoice(document,hash,q,t);x.capture.mockResolvedValue({unit:{id:unit},revision:2});await x.s.prepareInvoice(document,hash,q,t);expect(x.prepare.mock.calls[1][0].requestId).not.toBe(x.prepare.mock.calls[0][0].requestId);expect(x.inspect).toHaveBeenCalledTimes(2);});
+it.each(['documentId','sourceHash','unitId','month','basis'])('rejects changed or foreign source %s before writing',async key=>{const x=shared();x.inspect.mockResolvedValue({...snapshot(),[key]:'foreign'});await expect(x.s.prepareInvoice(document,hash,q,t)).rejects.toThrow();expect(x.prepare).not.toHaveBeenCalled();});
  it('preserves draft access checks and rejects a foreign returned version',async()=>{const x=shared();await expect(x.s.prepareInvoice(document,hash,q,{...t,permissions:[]})).rejects.toThrow();expect(x.inspect).not.toHaveBeenCalled();x.prepare.mockResolvedValue({row:{organization_id:'other',month:b.month,report:{units:[{id:unit,documentId:document,sourceHash:hash}]}}} as any);await expect(x.s.prepareInvoice(document,hash,q,t)).rejects.toThrow('fora da fonte');expect(x.prepare).toHaveBeenCalledTimes(1);});
 });
 

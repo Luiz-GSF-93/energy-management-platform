@@ -46,5 +46,14 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
   await deny(()=>db.query('UPDATE '+table+' SET organization_id=organization_id'));
   for(const role of ['anon','authenticated','service_role'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) p',[role,table,privilege])).rows[0].p);
  }
+
+ await db.exec('CREATE TABLE unit_demand_periods(id uuid,organization_id text,customer_id text,consumer_unit_id text,document_id text,document_hash text);CREATE TABLE unit_demand_approvals(period_id uuid,organization_id text,consumer_unit_id text)');
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261280_eva_unit_closing_scope.sql'),'utf8'));
+ await db.exec(`INSERT INTO consumer_units VALUES('${id(3)}','org','customer','ACTIVE')`);
+ const scoped=(action,unit,key,value,disclose=false)=>db.query('SELECT eva_scoped_closing_action($1,$2,$3,false,$4,$5,$6,$7,$8,$9,$10,$11) data',['org',id(['reserve','finish'].includes(action)?20:24),['reserve','finish'].includes(action)?'operator':'manager',action,unit,'2026-08',key,JSON.stringify(value),'UNIT','BASE',disclose]).then(r=>r.rows[0].data);
+ for(const n of [1,3]){const unit=id(n),key=id(100+n),source=await scoped('capture',unit,null,{}),unitReport={...report,scope:{kind:'UNIT',unitIds:[unit]},unitIds:[unit],units:[{...report.units[0],id:unit}]};await scoped('reserve',unit,key,{basis:String(n).repeat(64),hash:'c'.repeat(64),sources:source,report:unitReport});await scoped('finish',unit,key,{});await deny(()=>scoped('publish',unit,key,{hash:'c'.repeat(64),note:'Ainda sem aprovação humana da proposta.'}));const decision=await scoped('decide',unit,key,body,true);ok(decision.state==='APPROVED'&&decision.publication.state==='PUBLISHED');}
+ await deny(()=>scoped('publish',id(3),id(101),{hash:'c'.repeat(64),note:'Tentativa de publicar por unidade diferente.'}));
+ ok((await scoped('publish',id(1),id(101),{hash:'c'.repeat(64),note:'Reconsulta idempotente após publicar outra unidade.'})).state==='PUBLISHED');
+ const scopedPublications=(await read(true,'customer')).filter(p=>[id(101),id(103)].includes(p.closingId));ok(scopedPublications.length===2);ok(scopedPublications.every(p=>p.projection.financial.units.length===1));ok(!JSON.stringify(scopedPublications).includes('PRIVATE OCR'));
  console.log('Approved publication SQL:',checks,'checks passed');
  }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

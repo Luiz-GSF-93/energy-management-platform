@@ -1,0 +1,10 @@
+'use client';
+import {useState} from 'react';
+import {apiRequest} from '@/app/lib/api/client';
+import {Button} from '@/app/components/ui';
+export default function CceeLocalSources({source,month,onSaved}:{source:any;month:string;onSaved:()=>void}){
+ const [reason,setReason]=useState(''),[ack,setAck]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ if(!source)return null;
+ async function prepare(c:any){if(busy||!ack||reason.trim().length<30)return;setBusy(true);setMessage('');try{await apiRequest('/api/v1/ccee-data/dri/costs/'+encodeURIComponent(c.jobId),{method:'POST',body:{month,effect:c.suggestedEffect,sourceHash:c.sourceHash,reason:reason.trim(),confirmed:true}});setMessage('Referência preparada em custos mensais. Confira os demais custos e a validação antes de reavaliar a proposta.');onSaved();}catch(e){setMessage(e instanceof Error?e.message:'Consulta não confirmada. Confira custos mensais antes de repetir.');}finally{setBusy(false)}}
+ return <section aria-label='Referências CCEE da unidade'><h4>CCEE · referências da unidade e competência</h4><p>{source.notice}</p>{source.candidates?.map((c:any)=><article key={c.jobId}><strong>{c.label??c.rubric} · {c.suggestedEffect==='CREDIT'?'Crédito':'Custo'} R$ {c.amount}</strong><p>{c.notice}</p><p>Evento {c.eventCode} · relatório {c.reportId}/quadro {c.frameId} · {c.accountingMonth}</p><small>Fonte SHA-256: {c.sourceHash}</small><Button disabled={busy||!ack||reason.trim().length<30} onClick={()=>void prepare(c)}>Preparar referência em custos mensais</Button></article>)}{source.candidates?.length?<><label>Justificativa da alocação nesta unidade e competência<textarea maxLength={700} value={reason} onChange={e=>setReason(e.target.value)}/></label><label><input type='checkbox' checked={ack} onChange={e=>setAck(e.target.checked)}/>Conferi unidade, competência, natureza e ausência de duplicidade. Garantias permanecem separadas de despesas.</label></>:null}{message?<p role='status'>{message}</p>:null}</section>;
+}
