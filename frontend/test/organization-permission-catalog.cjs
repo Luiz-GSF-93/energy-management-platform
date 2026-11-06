@@ -48,6 +48,27 @@ const click=async(el)=>act(async()=>el.click());
  assert(posts[0][0].endsWith('/roles/'+roleId));assert.equal(posts[0][1].body.revision,'a'.repeat(32));assert(!('organizationId'in posts[0][1].body));assert(!('userId'in posts[0][1].body));
  assert.deepEqual(posts[0][1].body.permissionIds.sort(),[id('documents.documents.view'),id('documents.documents.upload')].sort());
  await act(async()=>release());assert.equal(refreshed,1);
+ // Legacy role defaults may still contain administration actions that are no
+ // longer delegable. Diagnose them without silently dropping or granting access.
+ const legacy=[id('documents.documents.view'),id('documents.documents.upload'),id('organization.users.invite'),id('organization.users.view')];
+ const legacyCatalog={...catalog,roles:[{...catalog.roles[0],defaultPermissions:legacy}]};
+ await act(async()=>root.render(React.createElement(RoleSettings,{key:'legacy',catalog:legacyCatalog,onChanged:async()=>{}})));
+ await click([...document.querySelectorAll('button')].find(b=>b.textContent==='Operador'));
+ const saveButton=()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Salvar padrão da função');
+ assert(saveButton().disabled,'Incompatible inherited defaults cannot be submitted');
+ const issuePanel=document.querySelector('[aria-label="Ações que impedem salvar"]');
+ assert(issuePanel.textContent.includes(policy.find(p=>p.code==='organization.users.invite').name));
+ assert(issuePanel.textContent.includes('Ação incompatível com esta função.'));
+ const beforePosts=calls.filter(c=>c[1]?.method==='POST').length;
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(calls.filter(c=>c[1]?.method==='POST').length,beforePosts,'Direct submit also stops before sending an invalid scope');
+ await click([...document.querySelectorAll('button')].find(b=>b.textContent==='Retirar ações incompatíveis da seleção'));
+ assert(!saveButton().disabled,'Explicit cleanup enables review and saving of compatible rights');
+ assert(!document.querySelector('[aria-label="Ações que impedem salvar"]'));
+ assert(!document.body.textContent.includes('O padrão ainda contém ações incompatíveis.'));
+ assert.deepEqual([...document.querySelectorAll('input[type=hidden][name=permissionId]')].map(i=>i.value).sort(),[id('documents.documents.view'),id('documents.documents.upload')].sort(),'Cleanup preserves unrelated compatible permissions');
+ assert.deepEqual(legacyCatalog.roles[0].defaultPermissions,legacy,'Catalog and existing access are never mutated by preview');
+ assert.equal(calls.filter(c=>c[1]?.method==='POST').length,beforePosts,'Cleanup never writes permissions or sends an invitation');
  profile='gestor';calls=[];const Page=require('../app/backoffice/users/page.tsx').default;await act(async()=>root.render(React.createElement(Page)));
  assert(![...document.querySelectorAll('button')].some(b=>b.textContent==='Inserir'),'Legacy manager UUIDs never display user creation');
  assert(!document.body.textContent.includes('Configurar padrão das funções'));

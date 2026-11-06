@@ -1,15 +1,28 @@
 'use client';
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
+import {Button} from '@/app/components/ui';
 import type {AccessCatalog,PermissionOption,PermissionRole} from './permission-types';
 
 const normalize=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-type Props={catalog:AccessCatalog;roleId:string;selected?:string[]|null;disabled?:boolean;mode?:'individual'|'template'};
+type Props={catalog:AccessCatalog;roleId:string;selected?:string[]|null;disabled?:boolean;mode?:'individual'|'template';onValidityChange?:(valid:boolean)=>void};
+export function permissionSelectionIssues(catalog:AccessCatalog,roleId:string,selection:string[],mode:'individual'|'template'='individual'){
+ const role=catalog.roles.find(r=>r.id===roleId);
+ return selection.flatMap(id=>{
+  const p=catalog.permissions.find(p=>p.id===id);
+  if(!p)return ['Ação sem definição no catálogo atual. Atualize as permissões antes de salvar.'];
+  const can=catalog.metadataVersion===2?!!p.availability?.[roleId]?.[mode==='template'?'configurable':'assignable']:!!role?.permissions.includes(id);
+  const prefix=p.module+' · '+(p.name||p.code)+': ';
+  if(!can)return [prefix+(p.availability?.[roleId]?.reason||'Ação não autorizada para esta função.')];
+  const missing=(p.dependencies??[]).filter(dep=>!selection.includes(dep));
+  return missing.length?[prefix+'requer '+missing.map(dep=>catalog.permissions.find(p=>p.id===dep)?.name||'ação vinculada').join(', ')+'.']:[];
+ });
+}
 export default function PermissionOptions(props:Props){
  const role=props.catalog.roles.find(r=>r.id===props.roleId);
  if(!role)return <p>Selecione uma função para visualizar as liberações.</p>;
  return <Options key={props.roleId+JSON.stringify(props.selected??null)+(role.revision??'')+(props.mode??'individual')} {...props} role={role}/>;
 }
-function Options({catalog,role,selected,disabled=false,mode='individual'}:Props&{role:PermissionRole}){
+function Options({catalog,role,selected,disabled=false,mode='individual',onValidityChange}:Props&{role:PermissionRole}){
  const modern=catalog.metadataVersion===2;
  const options=modern?catalog.permissions:catalog.permissions.filter(p=>role.permissions.includes(p.id));
  const initial=selected===undefined?(role.defaultPermissions??role.permissions):selected===null?role.permissions:selected;
@@ -31,13 +44,28 @@ function Options({catalog,role,selected,disabled=false,mode='individual'}:Props&
   setChecked(next);
  }
  const invalid=options.filter(p=>checked.has(p.id)&&!allowed(p));
+ const issues=permissionSelectionIssues(catalog,role.id,Array.from(checked),mode),valid=issues.length===0;
+ useEffect(()=>{onValidityChange?.(valid);},[valid,onValidityChange]);
+ function removeUnavailable(){
+  const next=new Set(checked);
+  for(const p of invalid)next.delete(p.id);
+  let changed=true;
+  while(changed){changed=false;for(const p of options)if(next.has(p.id)&&(p.dependencies??[]).some(id=>!next.has(id))){next.delete(p.id);changed=true;}}
+  const removed=checked.size-next.size;setChecked(next);
+  setNotice(removed+' ação(ões) retirada(s) apenas desta seleção. Os acessos já cadastrados não foram alterados. Confira o resumo antes de salvar.');
+ }
  return <fieldset disabled={disabled} style={{minWidth:0,padding:16,borderRadius:12}}>
   <legend>{mode==='template'?'Padrão de liberações da função':'Liberações deste usuário'}</legend>
   <p>Selecione por módulo e ação. Cadastrar clientes é separado de cadastrar unidades. Enviar arquivo à EVA é separado de solicitar sua leitura.</p>
   <label style={{display:'grid',gap:6}}>Pesquisar módulo ou ação<input className="ds-input" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ex.: clientes, fornecedor, enviar, EVA"/></label>
   <p role="status">{checked.size} liberações selecionadas · {visible.length} ações no filtro.</p>
   {notice?<p role="alert">{notice}</p>:null}
-  {invalid.length?<p role="alert">Há liberações indisponíveis na seleção. Desmarque-as ou ajuste a função/licença antes de salvar.</p>:null}
+  {issues.length?<section aria-label="Ações que impedem salvar" role="alert" style={{padding:12,border:'1px solid var(--color-border, #70869d)',borderRadius:8}}>
+   <strong>Confira estas {issues.length} ação(ões) antes de salvar:</strong>
+   <ul>{issues.map((issue,i)=><li key={i}>{issue}</li>)}</ul>
+   <Button type="button" variant="secondary" onClick={removeUnavailable}>Retirar ações incompatíveis da seleção</Button>
+   <p>A retirada só ajusta este formulário. A licença e as permissões dos usuários existentes serão preservadas.</p>
+  </section>:null}
   {/* Persist selected values even when search or a collapsed group hides its checkbox. */}
   {Array.from(checked).sort().map(id=><input key={id} type="hidden" name="permissionId" value={id}/>)}
   {groups.map(group=>{const items=visible.filter(p=>p.module===group);if(!items.length)return null;return <details key={group} open={!!search||['Clientes e unidades','Documentos e EVA','Trading Hub'].includes(group)} style={{marginBlock:10,border:'1px solid var(--color-border, #70869d)',borderRadius:8,padding:10}}>
