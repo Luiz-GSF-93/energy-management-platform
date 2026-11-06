@@ -25,7 +25,7 @@ export class AutomaticIntakeService{
   const external=t.role==='consulta'&&!t.accessMode;
   const selection=external?{...query,queueOnly:'true'}:query;
   const present=(result:any)=>external?{...result,completed:[]}:result;
-  const administer=async(result:any)=>{if(external)return result;const admin=await this.action(t,'list',null,{},true);return {...result,dismissed:admin.dismissed??[],rows:(result.rows??[]).map((r:any)=>(admin.dismissible??[]).includes(r.id)?{...r,status:{...r.status,canDismiss:true}}:r)};};
+  const administer=async(result:any)=>{if(external)return result;const admin=await this.action(t,'list',null,{},true);const ids=(result.rows??[]).filter((r:any)=>r.state==='REVIEW_REQUIRED').map((r:any)=>r.id);const items=ids.length?(await this.identityAction(t,'list',null,{ids:ids.slice(0,25)})).items:[];const diagnostics=new Map((items??[]).map((v:any)=>[v.id,v]));return {...result,dismissed:admin.dismissed??[],rows:(result.rows??[]).map((r:any)=>{const d:any=diagnostics.get(r.id);if(!d&&!(admin.dismissible??[]).includes(r.id))return r;return {...r,...(d?{identityReview:d}:{}),status:{...r.status,...((admin.dismissible??[]).includes(r.id)?{canDismiss:true}:{}),...(d?.diagnostic?.read&&!r.status?.read?{read:true,percent:45}:{})}};})};};
   const data=present(await this.action(t,'list',null,selection));
   const candidates=[...(data.rows??[]),...(data.completed??[])].filter((r:any)=>r.documentId&&r.documentType==='INVOICE_DISTRIBUTOR'&&r.state==='UNKNOWN');
   const ids=[...new Set<string>(candidates.map((r:any)=>r.id))];if(!ids.length)return administer({enabled:true,...data});
@@ -40,6 +40,21 @@ export class AutomaticIntakeService{
  async retry(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Retomada inválida.');
   return this.action(t,'retry',id,{});
+ }
+ private async identityAction(t:TenantContext,action:string,id:string|null,body:any){
+  if(!this.enabled(t.organizationId))throw new ServiceUnavailableException('Recebimento automático indisponível.');
+  const r=await this.db.getClient().rpc('eva_intake_identity_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});
+  if(r.error?.code==='42501')throw new ForbiddenException('A decisão de identidade exige acesso interno autorizado.');
+  if(r.error)throw new ConflictException('A conferência mudou ou não foi confirmada. Atualize o andamento antes de repetir.');return r.data;
+ }
+ async identityDecision(t:TenantContext,id:string,body:any){
+  if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='decision,fingerprint,reason'||!['CONTINUE','STOP'].includes(body.decision)||!/^[a-f0-9]{64}$/.test(body.fingerprint)||typeof body.reason!=='string'||body.reason.trim().length<20||body.reason.length>1000)throw new BadRequestException('Confirme a decisão e justifique com 20 a 1000 caracteres.');
+  return this.identityAction(t,'decide',id,{...body,reason:body.reason.trim()});
+ }
+ async identityJustifications(t:TenantContext,query:any){
+  if(!query||Object.keys(query).join(',')!=='refs'||typeof query.refs!=='string')throw new BadRequestException('Referências inválidas.');
+  const refs=query.refs.split(',');if(refs.length>100||refs.some((v:string)=>!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v)))throw new BadRequestException('Referências inválidas.');
+  return this.identityAction(t,'justifications',null,{refs});
  }
  async dismiss(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='reason'||typeof body.reason!=='string'||body.reason.trim().length<15||body.reason.length>1000)throw new BadRequestException('Informe o motivo do envio incorreto, com 15 a 1000 caracteres.');

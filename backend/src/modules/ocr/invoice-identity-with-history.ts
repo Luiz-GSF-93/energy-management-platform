@@ -15,10 +15,11 @@ export async function invoiceIdentityWithHistory(db:any,bytes:Buffer,mime:string
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const result=await db.rpc('ocr_identity_native_lineage',{p_org:scope.org,p_customer:scope.customer,p_unit:scope.unit,p_document:scope.document,p_hash:fileHash});
    const lineage=result.data;
-   if(result.error||!lineage||!['codes','editIds','aliasIds'].every(k=>Array.isArray(lineage[k])&&lineage[k].length<=200&&lineage[k].every((v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=64)))throw new ServiceUnavailableException('Não foi possível conferir a correspondência histórica da unidade.');
-   if(lineage.editIds.length||lineage.aliasIds.length){
+   if(lineage&&lineage.reviewIds===undefined)lineage.reviewIds=[];
+   if(result.error||!lineage||!['codes','editIds','aliasIds','reviewIds'].every(k=>Array.isArray(lineage[k])&&lineage[k].length<=200&&lineage[k].every((v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=64)))throw new ServiceUnavailableException('Não foi possível conferir a correspondência histórica da unidade.');
+   if(lineage.editIds.length||lineage.aliasIds.length||lineage.reviewIds.length){
     const audited=await invoiceIdentityPreflight(bytes,mime,{...clean,auditedUnitNumbers:lineage.codes},fileHash,timeoutMs,once);
-    if(audited.state==='MATCH')return {...audited,...(lineage.editIds.length?{registrationEditIds:lineage.editIds}:{}),...(lineage.aliasIds.length?{registrationAliasIds:lineage.aliasIds}:{})};
+    if(audited.state==='MATCH')return {...audited,...(lineage.editIds.length?{registrationEditIds:lineage.editIds}:{}),...(lineage.aliasIds.length?{registrationAliasIds:lineage.aliasIds}:{}),...(lineage.reviewIds.length?{registrationReviewIds:lineage.reviewIds}:{})};
     // Persist an unresolved original check under its ordinary registration.
     // Audited aliases never attest the remaining CNPJ, address or period.
     return proof;

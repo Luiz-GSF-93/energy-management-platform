@@ -12,6 +12,7 @@ import {EvaAssistedClosingService} from '../ocr/eva-assisted-closing.service';
 import {BackofficeAiService,assistantAiEvidence} from '../ocr/backoffice-ai.service';
 import {OcrMachineDraftService} from '../ocr/ocr-machine-draft.service';
 import {automaticIntakeContext,automaticOcrIdentityConfidence} from './automatic-intake-context';
+import {intakeIdentityDiagnostic} from './automatic-intake-triage';
 import {intakeOrganizations,intakePath} from './automatic-intake.service';
 import {DOCUMENT_BUCKET} from '../documents/services/document-file';
 import {portalInvoiceKind} from './portal-invoice-kind';
@@ -92,14 +93,21 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
       if(i.external&&portalInvoiceKind(pages.map(p=>p.text).join('\n'))!=='DISTRIBUTOR'){
        await transition('review',{note:'O portal aceita somente fatura de energia da distribuidora. Selecione a fatura correta; este arquivo não será arquivado como fatura nem usado no fechamento.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
       }
-      const matches:any[]=[];
+      const matches:any[]=[];let identityDiagnostic:any=null;let identityReview:any=null;
       for(const customer of ctx.customers){
-       if(!pages.map(p=>p.text).join('').replace(/[^A-Z0-9]/gi,'').includes(String(customer.document??'').replace(/[^A-Z0-9]/gi,'')))continue;
        const units=ctx.units.filter((u:any)=>u.customer_id===customer.id);
        for(const unit of units){const r=await this.rpc('eva_intake_unit_aliases',{p_id:job.id,p_token:job.token,p_unit:unit.id});unit.aliases=r.codes;}
-       const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))))matches.push(proof);
+       const selected=units.find((u:any)=>u.id===i.hints?.unitId);
+       if(customer.id===i.customer_id&&selected&&i.hints?.month){
+        identityDiagnostic=intakeIdentityDiagnostic(pages,customer,selected,i.file_hash,i.hints.month,raw);
+        if(identityDiagnostic){identityReview=await this.rpc('eva_intake_identity_work',{p_id:job.id,p_token:job.token,p_diagnostic:identityDiagnostic});if(identityReview.rejected)return;
+         if(identityReview.accepted&&identityReview.unitCode)selected.aliases=[...new Set([...selected.aliases,identityReview.unitCode])];
+         if(identityReview.accepted&&identityReview.address)selected.auditedAddresses=[identityReview.address];
+        }
+       }
+       const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))||identityReview?.accepted&&proof.unitId===selected?.id&&identityDiagnostic?.action==='CONTINUE_JUSTIFIED'))matches.push(proof);
       }
-      if(matches.length!==1){await transition('review',{note:'A leitura está disponível, mas o vínculo ainda não foi comprovado. Confira código atual/histórico da instalação, CNPJ, endereço e competência. Suas respostas anteriores foram preservadas.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});return;}
+      if(matches.length!==1){const fields=identityDiagnostic?.fields?.filter((f:any)=>f.status!=='MATCH');await transition('review',{note:fields?.length?'Confira '+fields.map((f:any)=>f.label+': '+(f.status==='MISMATCH'?'diferente do cadastro':'não comprovado')).join('; ')+'. A leitura e suas respostas foram preservadas.':'A leitura está disponível. Selecione o cliente, a unidade e a competência para conferir os campos do original.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});return;}
       if(i.external&&matches[0].documentType!=='INVOICE_DISTRIBUTOR'){
        await transition('review',{note:'O portal aceita somente fatura da distribuidora. A nota do fornecedor deve ser conferida pela equipe do backoffice.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
       }
@@ -126,6 +134,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     if(i.signature===signature){await transition('wait',{note:i.note});return;}
     // A failed read-only identity check has no uncertain financial writes.
     await this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id);
+    const reviewed=await this.rpc('eva_intake_identity_refs',{p_org:i.organization_id,p_sources:[{id:i.unit_id,documentId:i.document_id,sourceHash:i.file_hash}]});
     stage='DRAFT_PREPARATION';await transition('begin_prepare');preparing=true;
     const drafts=await this.assistant.prepareAutomatic(i.document_id,t);
     if(drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED'))throw Error('UNCONFIRMED_DRAFT_WRITE');
@@ -135,7 +144,8 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     const report=result.row.report,complete=report.preparation?.percent===100||report.approvalEligible===true;
     // One optional, budgeted explanation per original. Persist intent before
     // inference; a timeout or restart must never cause another paid call.
-    if(!i.ai_attempted){
+    // A resumed identity review reuses evidence without a new paid explanation.
+    if(!i.ai_attempted&&!reviewed.length){
      await transition('begin_interpret');
      try{const plan=drafts.current??await this.assistant.inspect(i.document_id,t);const review=await this.ai.interpret(t,'Explique os preenchimentos da proposta e somente as confirmações restantes, sem inventar fontes ou valores.',assistantAiEvidence(plan),i.document_id);if(this.drafts&&review.state==='READY')await this.drafts.fill(t,plan,review);}catch{/* Source-backed proposal remains available if interpretation fails. */}
     }

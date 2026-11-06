@@ -1,4 +1,9 @@
 const normalized=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+/** Same bounded recipient block for native DANFE parsing and unit identification. */
+export function supplierRecipientText(text:string){
+ const t=normalized(text),recipient=t.split(/DESTINAT.RIO\s*\/\s*REMETENTE/),reverse=t.split(/PROTOCOLO DE AUTORIZACAO DE USO/);
+ return recipient.length===2?recipient[1].split(/FATURA\s*\/\s*DUPLICATAS?|(?:^|\n)\s*FATURA\b|CALCULO DO IMPOSTO|DADOS DO PRODUTO/)[0]:reverse.length===2?reverse[1].split(/CALCULO DO IMPOSTO/)[0]:'';
+}
 export function supplierDocumentKind(text:string):'INVOICE'|'CONTRACT'|'UNKNOWN'{
  const t=normalized(text).replace(/DADOS DOS PRODUTOS\s*\/\s*SERVICOS/g,'DADOS DO PRODUTO / SERVICO');
  if(/\bDANFE\b/.test(t)&&/DADOS DO PRODUTO\s*\/\s*SERVI.O/.test(t)&&/CNPJ/.test(t))return 'INVOICE';

@@ -92,7 +92,9 @@ export class EvaAssistedClosingService{
   if(contractClosingDraftEnabled())for(const e of entries){const memory=e.plan?.contractDraft?.memory;if(memory&&!(sources.contractMemories??[]).some((m:any)=>m.id===memory.id&&m.organization_id===t.organizationId&&m.customer_id===primary.customer_id&&m.consumer_unit_id===e.unitId&&autofillHash(m)===memory.hash))throw new ConflictException('A memória contratual mudou durante a captura. Reconfira as fontes antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const group=e.context?.contractDraft?.source;if(!group?.invoiceSetHash)continue;if(!supplierInvoiceSetCaptureMatches(group,sources.documentedSupplierDocuments??[],{organizationId:t.organizationId,customerId:primary.customer_id,unitId:e.unitId,month:q.month}))throw new ConflictException('Uma das notas do conjunto mudou durante a captura. Reconfira todas as fontes antes de preparar.');}
-  const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries),hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
+  const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries);
+  if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){const refs=await this.db.getClient().rpc('eva_intake_identity_refs',{p_org:t.organizationId,p_sources:report.units.flatMap((u:any)=>{const d=u.sources?.contractDraft?.source,p=u.sources?.supplierInvoiceProposal;return [{id:u.id,documentId:u.documentId,sourceHash:u.sourceHash},...[d,p,...(d?.documents??[]),...(d?.invoices??[]),...(p?.invoices??[])].filter(v=>v?.documentId&&v?.fileHash).map(v=>({id:u.id,documentId:v.documentId,sourceHash:v.fileHash}))];})});if(refs.error)throw new ServiceUnavailableException('Justificativas de identidade indisponíveis; fontes preservadas.');if(refs.data?.length)(report as any).operatorJustificationRefs=refs.data;}
+  const hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   // A read/recheck without a changed proposal must not create another version.
   // Financial decisions still perform their existing fresh-source checks.
   const latest=rights.rows[0];
@@ -105,11 +107,6 @@ export class EvaAssistedClosingService{
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento assistido desligado.');
   if(!b||!['acknowledge,consumerUnitId,decision,hash,id,month,note','acknowledge,consumerUnitId,decision,disclose,hash,id,month,note'].includes(Object.keys(b).sort().join(','))||!uuid(b.id)||typeof b.hash!=='string'||!/^[a-f0-9]{64}$/.test(b.hash)||!['APPROVE','REJECT'].includes(b.decision)||b.acknowledge!==true||typeof b.note!=='string'||b.note.trim().length<20||b.note.length>2000)throw new BadRequestException('Confirme a decisão e sua justificativa.');
   if(b.disclose!==undefined&&typeof b.disclose!=='boolean'||b.decision==='APPROVE'&&this.publicationEnabled()&&b.disclose!==true)throw new BadRequestException('Atualize o relatório e confirme a disponibilização ao cliente.');
-  if(b.decision==='APPROVE'&&typeof this.autofill.assertOfficialFlagReferences==='function'){
-   const history=await this.rpc('history',{consumerUnitId:b.consumerUnitId,month:b.month},t,null,{page:0});const row=history.rows?.find((x:any)=>x.id===b.id&&x.payload_hash===b.hash);
-   if(!row)throw new ConflictException('Atualize a versão antes de aprovar.');
-   await this.autofill.assertOfficialFlagReferences?.(row.report,t);
-  }
   return {row:await this.rpc('decide',this.scope({consumerUnitId:b.consumerUnitId,month:b.month}),t,b.id,{hash:b.hash,decision:b.decision,note:b.note.trim(),acknowledge:true,...(b.decision==='APPROVE'&&this.publicationEnabled()?{disclose:true}:{})})};
  }
  async publication(b:any,t:TenantContext){
