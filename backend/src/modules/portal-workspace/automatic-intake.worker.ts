@@ -121,6 +121,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     }
     if(i.state==='WAITING_OCR'){
      let status=await this.ocr.status(i.organization_id,i.document_id);
+     if(status.job?.state==='FAILED'&&status.job.errorCode==='PROVIDER_REJECTED'&&i.raw_result){const recovered=await this.rpc('eva_intake_recover_preserved_ocr',{p_id:job.id,p_token:job.token});if(recovered){await transition('wait',{note:'Reutilizando a leitura concluída preservada, sem nova consulta ao provedor ou desconto de documento.'});return;}}
      if(['FAILED','SUBMISSION_UNKNOWN'].includes(status.job?.state??'')){await transition('review',{note:'A leitura requer conferência no histórico; não será repetida automaticamente.'});return;}
      if(status.job?.state!=='SUCCEEDED'){
       if(!status.job)await this.ocr.enqueue(i.organization_id,i.document_id,t.userId);
