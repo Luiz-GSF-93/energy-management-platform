@@ -40,6 +40,7 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
  useEffect(()=>{setCceeReview(null);setPublicationAction('');setChoice('');setAck(false);setNote('');setCommercial({});},[row?.id,row?.payload_hash,row?.state]);
  useEffect(()=>{if(row?.state!=='PREPARING')return;const timer=setInterval(()=>setClock(Date.now()),1000);return()=>clearInterval(timer)},[row?.state]);
  const query=new URLSearchParams({consumerUnitId:unitId,month,scopeKind}).toString();
+ const commercialQuery=new URLSearchParams({consumerUnitId:unitId,month}).toString();
  const valid=(r:Row)=>r&&r.customer_id===customerId&&r.month===month&&r.report?.organizationId===organizationId&&r.report?.unitIds?.includes(unitId)&&r.report?.customerId===customerId&&r.report?.month===month;
  useEffect(()=>{live.current=true;return()=>{live.current=false}},[]);
  useEffect(()=>{let active=true;void request<History>('/api/v1/eva-assisted-closing?'+query+'&page='+page).then(data=>{if(!active)return;enabled.current(data.enabled);if(!data.enabled){setH(data);return}if(data.unitId!==unitId||data.month!==month||!data.rows.every(valid))throw Error('Histórico fora da seleção.');setH(data);setRow(data.rows[0]??null);setError('');}).catch(e=>{if(active)setError(e.message||'Histórico indisponível.');});return()=>{active=false}},[query,page]);
@@ -65,7 +66,7 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
  }
  async function inspectCommercial(){
   if(working.current)return;working.current=true;setBusy(true);setError('');
-  try{const data=await request<any>('/api/v1/calculation-autofill/history?'+query+'&page=0');if(!live.current)return;
+  try{const data=await request<any>('/api/v1/calculation-autofill/history?'+commercialQuery+'&page=0');if(!live.current)return;
    if(!Array.isArray(data.rows)||data.rows.some((r:any)=>r.consumer_unit_id!==unitId||r.month!==month||r.customer_id!==customerId||r.organization_id!==organizationId))throw Error('Histórico comercial fora da seleção.');
    setCommercialHistory(data.rows.map((r:any)=>({id:r.id,state:r.state,originalState:r.events?.at(-1)?.state??r.state,createdAt:r.created_at,basis:r.source_basis,sourceHash:r.source_hash,manual:r.plan?.manualOverrides??{}})));
    const attempt=commercialAttempt.current,matched=attempt?data.rows.find((r:any)=>r.id===attempt.id||r.source_basis===attempt.basis&&r.source_hash===attempt.sourceHash):data.rows[0];
@@ -78,7 +79,7 @@ function Scope({unitId,month,customerId,organizationId,onEnabled,onCorrect}:{uni
   if(working.current||!reconciliationAck||reconciliationNote.trim().length<30)return;
   working.current=true;setBusy(true);setError('');
   try{
-   const candidate=await request<any>('/api/v1/calculation-autofill?'+query);
+   const candidate=await request<any>('/api/v1/calculation-autofill?'+commercialQuery);
    if(!candidate.available||candidate.unitId!==unitId||candidate.month!==month||candidate.sourceHash!==r.sourceHash)throw Error('Confira a origem antes de reconciliar.');
    const result=await request<any>('/api/v1/calculation-autofill/reconcile',{method:'POST',body:{consumerUnitId:unitId,month,runId:r.id,basis:r.basis,sourceHash:r.sourceHash,token:candidate.token,note:reconciliationNote.trim(),acknowledge:true}});
    if(result.id!==r.id||result.state!=='PARTIAL')throw Error('Consulte o histórico antes de repetir.');
