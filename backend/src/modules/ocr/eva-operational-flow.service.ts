@@ -2,6 +2,7 @@ import {BadRequestException,ConflictException,Body,Controller,ForbiddenException
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {Tenant} from '../../common/decorators/tenant.decorator';
+import {CalculationAutofillService} from './calculation-autofill.service';
 import {EvaAssistedClosingService} from './eva-assisted-closing.service';
 import {CceeDataService} from '../ccee/ccee-data.service';
 import {CceeDriCostService} from '../ccee/ccee-dri-cost.service';
@@ -13,19 +14,30 @@ import {operationalBindingState,operationalReviewReceipt} from './eva-operationa
 @Injectable()
 export class EvaOperationalFlowService implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(EvaOperationalFlowService.name);
- constructor(private db:SupabaseService,private closing:EvaAssistedClosingService,private ccee:CceeDataService,private costs:CceeDriCostService){}
+ constructor(private db:SupabaseService,private closing:EvaAssistedClosingService,private ccee:CceeDataService,private costs:CceeDriCostService,private autofill:CalculationAutofillService){}
  enabled(){return process.env.EVA_CCEE_ORCHESTRATION_ENABLED==='true';}
  async action(t:TenantContext,action:string,b:any={}){
   if(!this.enabled()||t.organizationId!=='org_default')return{enabled:false,rows:[]};
   if(!t.organizationId||!t.userId||t.portalCustomerScope||t.accessMode==='platform_operation'||!['admin_org','gestor','operacional'].includes(t.role))throw new ForbiddenException('Fluxo exclusivo do backoffice da organização.');
-  if(!b||typeof b!=='object'||Array.isArray(b)||!['read','configure','status','submit','return','ack_costs'].includes(action))throw new BadRequestException('Ação operacional inválida.');
+  if(!b||typeof b!=='object'||Array.isArray(b)||!['read','configure','status','submit','return','ack_costs','reconcile'].includes(action))throw new BadRequestException('Ação operacional inválida.');
   const {consumerUnitId=null,month=null,...body}=b;
   const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
-  const keys:Record<string,string[]>={read:[],status:[],configure:['requestId','reason','enabled','revision','calendarRules','financialRules','discoverBindings','prepareSources'],submit:['requestId','closingId','hash','reason','confirmed'],return:['requestId','closingId','hash','reason','confirmed'],ack_costs:['requestId','costId','revision','reason','confirmed']};
-  if(Object.keys(body).some(k=>!keys[action].includes(k))||['status','submit','return','ack_costs'].includes(action)&&(!uuid(consumerUnitId)||typeof month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)))throw new BadRequestException('Confira unidade, competência e campos da ação.');
+  const keys:Record<string,string[]>={read:[],status:[],configure:['requestId','reason','enabled','revision','calendarRules','financialRules','discoverBindings','prepareSources'],submit:['requestId','closingId','hash','reason','confirmed'],return:['requestId','closingId','hash','reason','confirmed'],ack_costs:['requestId','costId','revision','reason','confirmed'],reconcile:['requestId','flowId','reason','confirmed']};
+  if(Object.keys(body).some(k=>!keys[action].includes(k))||['status','submit','return','ack_costs','reconcile'].includes(action)&&(!uuid(consumerUnitId)||typeof month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)))throw new BadRequestException('Confira unidade, competência e campos da ação.');
   if(!['read','status'].includes(action)&&(!uuid(body.requestId)||typeof body.reason!=='string'||body.reason.trim().length<20||body.reason.length>(action==='ack_costs'?2000:1000)))throw new BadRequestException('Registre a justificativa e o protocolo desta ação.');
   if(['submit','return'].includes(action)&&(!uuid(body.closingId)||!/^[a-f0-9]{64}$/.test(body.hash??'')||body.confirmed!==true)||action==='ack_costs'&&(!uuid(body.costId)||!Number.isInteger(body.revision)||body.revision<1||body.confirmed!==true))throw new BadRequestException('Confirme a versão e os valores conferidos.');
   if(action==='configure'&&t.role!=='admin_org')throw new ForbiddenException('Somente o administrador configura a automação.');
+  if(action==='reconcile'){
+   if(t.role!=='admin_org')throw new ForbiddenException('Retomada auditada restrita ao administrador.');
+   if(!uuid(body.flowId)||body.confirmed!==true)throw new BadRequestException('Confirme o protocolo que será reconferido.');
+   const listed=await this.rpc('eva_flow_action',{p_org:t.organizationId,p_actor:t.userId,p_action:'read'}),run=listed.runs?.find((r:any)=>r.id===body.flowId&&r.consumer_unit_id===consumerUnitId&&r.month===month&&r.state==='UNKNOWN'&&r.kind==='CLOSING');
+   if(!run)throw new BadRequestException('Protocolo interrompido indisponível neste recorte.');
+   const history=await this.autofill.history({consumerUnitId,month,page:'0'},t),prior=history.rows?.[0];
+   if(!prior||prior.state!=='RUNNING')throw new BadRequestException('O histórico da origem exige revisão específica; nenhuma gravação foi repetida.');
+   const current=await this.autofill.closingSnapshot({consumerUnitId,month},t);
+   if(!current.available||current.basis!==prior.source_basis||current.sourceHash!==prior.source_hash)throw new BadRequestException('A origem mudou; é necessária revisão das fontes antes da retomada.');
+   return{enabled:true,...await this.rpc('eva_flow_reconcile_interrupted',{p_org:t.organizationId,p_actor:t.userId,p_run:run.id,p_preparation:prior.id,p_body:{requestId:body.requestId,reason:body.reason.trim(),confirmed:true,currentBasis:current.basis,sourceHash:current.sourceHash}})};
+  }
   // Refresh the proposal through the established preparation protocol before
   // submission. A changed result must be shown to the operator, never submitted unseen.
   if(action==='submit'){
@@ -103,5 +115,6 @@ export class EvaOperationalFlowController{
  @Post('policy') configure(@Tenant()t:TenantContext,@Body()b:any){return this.flow.action(t,'configure',b);}
  @Post('submit') submit(@Tenant()t:TenantContext,@Body()b:any){return this.flow.action(t,'submit',b);}
  @Post('return') return(@Tenant()t:TenantContext,@Body()b:any){return this.flow.action(t,'return',b);}
+ @Post('reconcile') reconcile(@Tenant()t:TenantContext,@Body()b:any){return this.flow.action(t,'reconcile',b);}
  @Post('costs') costs(@Tenant()t:TenantContext,@Body()b:any){return this.flow.action(t,'ack_costs',b);}
 }
