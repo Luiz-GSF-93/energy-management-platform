@@ -137,6 +137,7 @@ export class UsersController {
         organizationId: tenant.organizationId,
         ipAddress: request.ip,
         userAgent: request.get('user-agent'),
+        ...(tenant.accessMode==='platform_operation'?{platformOperation:true}:{}),
       },
     );
   }
