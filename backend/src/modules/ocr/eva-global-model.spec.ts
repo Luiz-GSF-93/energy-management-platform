@@ -13,6 +13,15 @@ function fixture(){
  return {raw,layout,field,op};
 }
 describe('Global model quality V2',()=>{
+ it.each(['Uso Sist Distr Ultr [kW] JAN/26','Uso Sist. Distr. Ultr [kW] JAN/26'])('separates the documented excess charge %s without changing OCR evidence',label=>{
+  const prior=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;
+  try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const x=fixture();x.layout.layoutId='cpfl-paulista-a';x.layout.fields.find((f:any)=>f.name==='reference').value=x.field('JAN/2026');
+   const row:any={source:'excess',component:'DEMAND_BILLED',role:'CHARGE',issues:['DEMAND_MEASURED_UNUSED_SPLIT_REQUIRES_CONTEXT'],fields:{description:x.field(label,0.66),unit:x.field('kW'),quantity:x.field('20'),amount:x.field('400.00')}};x.layout.operations.push(row);const before=JSON.stringify({raw:x.raw,row});
+   expect(globalModelLayout(x.raw).operations.at(-1)).toMatchObject({component:'DEMAND_EXCESS',fields:{quantity:{decimal:'20'},amount:{decimal:'400.00'},description:{confidence:0.66}}});expect(JSON.stringify({raw:x.raw,row})).toBe(before);
+   row.fields.description=x.field('Uso Sist Distr Ultr [kW] FEV/26');expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('DEMAND_BILLED');
+   row.fields.description=x.field(label);row.fields.quantity.issues=['UNVERIFIED_SOURCE'];expect(globalModelLayout(x.raw).operations.at(-1)?.component).toBe('DEMAND_BILLED');
+  }finally{if(prior===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=prior;}
+ });
  it('allows a section below 90 when the global score and coverage are sufficient',()=>{const x=fixture();x.layout.fields[3].value.confidence=0.8;const result=globalModelConfidence(x.raw);expect(result.score).toBeGreaterThan(0.9);expect(result.sections[1].score).toBe(0.8);expect(result).toMatchObject({state:'READY_FOR_REVIEW',complete:true,version:2})});
  it('derives confidence from completely verified words without altering native evidence',()=>{const x=fixture(),f=x.field('1234',null);expect(globalFieldEvidence(x.raw,f)).toMatchObject({method:'VERIFIED_WORDS_WEIGHTED',confidence:0.98,filled:true});expect(f.confidence).toBeNull()});
  it('does not turn a missing value into zero or a high-confidence result',()=>{const x=fixture();x.op.fields.quantity=null;const result=globalModelConfidence(x.raw);expect(result.complete).toBe(false);expect(result.state).toBe('NEEDS_REVISION')});

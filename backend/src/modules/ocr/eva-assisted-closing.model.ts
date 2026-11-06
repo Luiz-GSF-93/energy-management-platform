@@ -5,6 +5,7 @@ import {sourcePreparationEnabled} from './source-preparation-v3';
 import type {InvoiceComparison} from './eva-tariff-workbench.model';
 import {feeMoney,allocateFee} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
+import {clientPublishedInsight} from '../portal-insights/portal-insights.model';
 export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;comparative?:InvoiceComparison;unavailable?:string};
 const money=(value:unknown)=>{const v=typeof value==='number'&&Number.isFinite(value)?String(value):value;if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const scale=(v:unknown,p=6)=>{if(typeof v!=='string'||!new RegExp('^-?(0|[1-9][0-9]{0,11})(\\.\\d{1,'+p+'})?$').test(v))throw Error('Decimal sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*10n**BigInt(p)+BigInt(f.padEnd(p,'0')))*(v.startsWith('-')?-1n:1n);};
@@ -57,6 +58,9 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   }
   if(!field(p,'fee:fixed'))ownMissing.push('Honorários: não há valor fixo com fonte vigente nesta competência. Confira o contrato de gestão; não foi presumido zero.');
   const row:any={id:e.unitId,name:e.name,documentId:c?.document?.id??null,sourceHash:c?.document?.file_hash??null,fields:p?.fields??[],sources:{...(c?.closingDemandSource?{demand:c.closingDemandSource}:{}),...(p?.sourcePreparation?{sourcePreparation:p.sourcePreparation}:{}),...(draft?{contractDraft:draft}:{}),library:p?.library??null,reference:p?.reference??null},acr:null,aclBeforeFees:null,fixedFee:null,feePercentage:field(p,'fee:percentage')?.value??null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,comparison:null,prepared:{ccee:p?.cceeEstimate??null,invoice:o?.invoice??null,supplier:o?.supplier??null,acr:o?.acr??null,fixedFee:o?.fixedFee??null},missing:ownMissing};units.push(row);
+  // Share the portal's existing classification. Indicators are a presentation
+  // of charges already in the invoice, never another input to financial sums.
+  row.wasteIndicators=clientPublishedInsight({financial:{},retained:e.comparative?.retained??[]}).indicators;
   if(p?.cceeEstimate?.state==='ESTIMATED'){estimated=true;const message='CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.';ownMissing.push(message);estimateReviews.add(e.name+': '+message);pendingActions.push({code:'CCEE_ESTIMATE_REVIEW',unitId:e.unitId,section:'costs',message});row.sources.cceeEstimate=p.cceeEstimate;}
   if(p?.supplierInvoiceProposal){row.sources.supplierInvoiceProposal=p.supplierInvoiceProposal;add('Fornecedor: NF integral proposta, volume comprado preservado separadamente da medição. Conferir composição tributária.');}
   if(sourcePreparationEnabled()&&!draft){
@@ -106,7 +110,18 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
     const confirmedInvoiceExtra=draft?.format==='supplier-invoice-evidence-1'&&draft.state==='COMPLETE'&&item.category==='SUPPLIER_EXTRA_ENERGY'&&draft.confirmedExtraCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item));
     if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)&&!confirmedInvoiceExtra){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
     const confirmedFinal=documentedTax&&(draft.confirmedFinalCostSources??[]).some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item));
-    if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!confirmedFinal&&!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte ou tratamento final demonstrado.');continue;}
+    if(!item.source?.trim()||!['COST','CREDIT'].includes(item.effect)||!['ACL','ACR'].includes(item.scenario)){ownMissing.push('Custo adicional sem fonte, natureza ou cenário demonstrado.');continue;}
+    // An explicit monthly amount is usable in the assisted comparative proposal.
+    // Missing tax metadata is a disclosed reservation, never inferred exemption,
+    // zero tax or permission to gross up the operator's documented amount.
+    const nominalReservation=!confirmedFinal&&['UNSPECIFIED','EXCLUDED'].includes(item.taxTreatment);
+    if(!confirmedFinal&&!nominalReservation&&!['INCLUDED','NOT_APPLICABLE'].includes(item.taxTreatment)){ownMissing.push('Custo adicional com tratamento tributário inválido.');continue;}
+    if(nominalReservation){
+     estimated=true;
+     const reservation={id:item.id,label:item.label||item.category,category:item.category,amount:item.amount,effect:item.effect,scenario:item.scenario,source:item.source,taxTreatment:item.taxTreatment,method:'PRESERVED_DECLARED_AMOUNT_NO_TAX_INFERENCE'};
+     row.sources.costReservations=[...(row.sources.costReservations??[]),reservation];
+     add(e.name+': '+(item.label||item.category||'Custo adicional')+' incluído pelo valor informado de R$ '+item.amount+' ('+item.source+'), com ressalva tributária '+item.taxTreatment+'. Nenhum tributo adicional foi presumido ou recalculado; a ressalva não impede a preparação para decisão do responsável.');
+    }
     const amount=money(item.amount);if(amount<0n)throw Error();if(confirmedInvoiceExtra)supplierExtras+=amount;if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
    }
    if(p?.cceeEstimate?.state==='ESTIMATED'){if((costs?.items??[]).some((i:any)=>i.category==='CCEE'&&i.scenario==='ACL'))ownMissing.push('CCEE: registro atual e estimativa concorrentes; reconferir fontes.');else extraAcl+=money(p.cceeEstimate.total);}
