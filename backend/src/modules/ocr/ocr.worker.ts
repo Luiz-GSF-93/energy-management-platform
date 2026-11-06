@@ -31,8 +31,13 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
    try{await this.licenses.requireEntitlement(job.organization_id,'document_management');}
    catch{await this.change(job,'FAIL',{p_error:'LICENSE_UNAVAILABLE'});return;}
    if(job.state==='POLLING'){
-    let polled;
-    try{polled=await this.connector.poll(job.operation_url);}
+    let polled;let preserved:any=null;
+    if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
+     const stored=await this.db.getClient().rpc('eva_intake_preserved_ocr',{p_job:job.id,p_token:job.lease_token});
+     if(stored.error)throw Error('OCR_PRESERVED_READ_UNAVAILABLE');
+     if(stored.data?.result)preserved=stored.data;
+    }
+    try{polled=preserved?{status:'succeeded' as const,result:preserved.result}:await this.connector.poll(job.operation_url);}
     catch(e){
      const code=e instanceof OcrProviderError?e.code:'PROVIDER_UNAVAILABLE';
      const retry=['RATE_LIMITED','PROVIDER_UNAVAILABLE'].includes(code);
@@ -42,7 +47,7 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
     if(polled.status==='failed'){await this.change(job,'FAIL',{p_error:'ANALYSIS_FAILED'});return;}
     // Completion + evidence are atomic; a failed acknowledgement is safe to resume by GET.
     const assessment=await captureInvoiceAssessment(this.db.getClient(),job,polled.result);
-    await this.change(job,'COMPLETE',{p_result:polled.result,p_evidence:{...extractInvoiceEvidence(polled.result),gd:extractGdEvidence(polled.result),assessment}});return;
+    await this.change(job,'COMPLETE',{p_result:polled.result,p_evidence:{...extractInvoiceEvidence(polled.result),gd:extractGdEvidence(polled.result),assessment,...(preserved?{preservedRead:{intakeId:preserved.intakeId,fileHash:preserved.fileHash}}:{})}});return;
    }
    const {data:doc,error:docError}=await this.db.getClient().from('documents').select('*').eq('id',job.document_id).eq('organization_id',job.organization_id).maybeSingle();
    if(docError)throw new Error('OCR_SOURCE_LOOKUP_PENDING');

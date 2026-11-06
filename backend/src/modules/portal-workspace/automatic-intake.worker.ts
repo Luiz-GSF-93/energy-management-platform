@@ -95,6 +95,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
       }
       const matches:any[]=[];let identityDiagnostic:any=null;let identityReview:any=null;
       for(const customer of ctx.customers){
+       if(customer.id!==i.customer_id&&!pages.map(p=>p.text).join('').toUpperCase().replace(/[^A-Z0-9]/g,'').includes(String(customer.document??'').toUpperCase().replace(/[^A-Z0-9]/g,'')))continue;
        const units=ctx.units.filter((u:any)=>u.customer_id===customer.id);
        for(const unit of units){const r=await this.rpc('eva_intake_unit_aliases',{p_id:job.id,p_token:job.token,p_unit:unit.id});unit.aliases=r.codes;}
        const selected=units.find((u:any)=>u.id===i.hints?.unitId);
@@ -120,6 +121,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     }
     if(i.state==='WAITING_OCR'){
      let status=await this.ocr.status(i.organization_id,i.document_id);
+     if(status.job?.state==='FAILED'&&status.job.errorCode==='PROVIDER_REJECTED'&&i.raw_result){const recovered=await this.rpc('eva_intake_recover_preserved_ocr',{p_id:job.id,p_token:job.token});if(recovered){await transition('wait',{note:'Reutilizando a leitura concluída preservada, sem nova consulta ao provedor ou desconto de documento.'});return;}}
      if(['FAILED','SUBMISSION_UNKNOWN'].includes(status.job?.state??'')){await transition('review',{note:'A leitura requer conferência no histórico; não será repetida automaticamente.'});return;}
      if(status.job?.state!=='SUCCEEDED'){
       if(!status.job)await this.ocr.enqueue(i.organization_id,i.document_id,t.userId);

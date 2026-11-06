@@ -39,5 +39,7 @@ const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,
  assert(!button('Retomar com as respostas salvas'));
  await act(async()=>button('Continuar com justificativa').click());
  const decisionRequest=requests.find(([url])=>url.endsWith('/identity-decision'));assert(decisionRequest);assert.equal(decisionRequest[1].body.decision,'CONTINUE');assert.equal(decisionRequest[1].body.fingerprint,'a'.repeat(64));assert(!document.querySelector('[role="dialog"]'));
+
+ serverRows=[{id:'revoked-triage',filename:'private-invoice.pdf',state:'REVIEW_REQUIRED',identityReview:{fingerprint:'b'.repeat(64),diagnostic:{action:'REVIEW',fields:[]}}}];await act(async()=>root.render(React.createElement(Component,{key:'revoked-triage'})));assert(document.querySelector('[role="dialog"]'));serverError=Object.assign(new Error('Revoked'),{status:403});await act(async()=>button('Atualizar andamento').click());assert(!document.querySelector('[role="dialog"]'));assert(!document.body.textContent.includes('private-invoice.pdf'));
  console.log('Automatic intake UI: upload without context fields, stable focus, guided identity-only review and read-only navigation passed');
 }finally{await act(async()=>root.unmount());Module._load=original;}})().catch(e=>{console.error(e);process.exitCode=1});
