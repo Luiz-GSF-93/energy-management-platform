@@ -1,0 +1,26 @@
+name: Membership effective delegation
+on:
+  pull_request:
+    paths:
+      - 'backend/src/database/migrations/20261283_membership_effective_delegation.sql'
+      - 'backend/test/database/membership-effective-delegation.test.mjs'
+      - '.github/workflows/membership-effective-delegation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  membership-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node --test test/database/membership-effective-delegation.test.mjs
+      - run: node test/database/verify-membership-status.mjs
+      - run: npm test -- --runInBand --runTestsByPath src/modules/admin/users/services/users.service.deactivation.spec.ts src/modules/admin/users/controllers/users.controller.deactivation.spec.ts src/modules/admin/users/services/operational-permissions.spec.ts

@@ -1,0 +1,44 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite();let checks=0;
+const ok=(v)=>{assert.ok(v);checks++},denied=async(p,code='42501')=>{await assert.rejects(p,e=>e.code===code);checks++};
+const actor='11111111-1111-4111-8111-111111111111',target='22222222-2222-4222-8222-222222222222';
+const del='4c53c778-69c6-4994-b12f-c74a6867ca63',update='5f91d918-8def-4bc1-b6c7-37e1ff2d14e2',trading='beb6ec90-8ba8-40ce-a156-aeef6cc75cce',supplier='f1c2d3a4-7c53-4b05-8ed3-f32b88f32131';
+const change=(status='inactive',org='a',role='operator',who=actor,user=target,expected=status==='active'?'inactive':'active')=>db.query('SELECT set_organization_member_status($1,$2,$3,$4,$5,$6,null,null) result',[org,user,who,status,expected,role]);
+try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
+ CREATE TABLE roles(id text PRIMARY KEY,name text,scope text,permissions jsonb,organization_id text);
+ CREATE TABLE organization_members(id text PRIMARY KEY,user_id uuid,organization_id text,status text,role_id text,permission_limit jsonb);
+ CREATE TABLE user_roles(user_id text,role_id text);
+ CREATE TABLE audit_logs(id text,organization_id text,user_id uuid,action text,resource_type text,resource_id text,changes jsonb,status text,ip_address text,user_agent text);`);
+ await db.query("INSERT INTO roles VALUES('admin','admin_org','organization',$1,'a'),('operator','operacional','organization',$2,'a'),('other','operacional','organization',$2,'b')",[JSON.stringify([del,update,trading]),JSON.stringify([supplier])]);
+ await db.query("INSERT INTO organization_members VALUES('actor',$1,'a','active','admin',null),('target',$2,'a','active','operator',null),('other',$2,'b','active','other',null)",[actor,target]);
+ const sql=readFileSync(new URL('../../src/database/migrations/20261283_membership_effective_delegation.sql',import.meta.url),'utf8');await db.exec(sql);await db.exec(sql);
+ await change();ok((await db.query("SELECT status FROM organization_members WHERE id='target'")).rows[0].status==='inactive');
+ ok((await db.query("SELECT status FROM organization_members WHERE id='other'")).rows[0].status==='active');
+ ok((await db.query('SELECT count(*)::int n FROM organization_members')).rows[0].n===3);
+ const audit=(await db.query('SELECT changes FROM audit_logs')).rows[0].changes;ok(audit.before.status==='active'&&audit.after.status==='inactive');
+ assert.deepEqual((await db.query("SELECT permissions FROM roles WHERE id='admin'")).rows[0].permissions,[del,update,trading]);checks++;
+ ok((await db.query("SELECT permission_limit FROM organization_members WHERE id='actor'")).rows[0].permission_limit===null);
+ await change('active');ok(true);
+ await db.query("UPDATE organization_members SET permission_limit=$1 WHERE id='actor'",[JSON.stringify([trading,update])]);await denied(change());
+ await db.query("UPDATE organization_members SET permission_limit=$1 WHERE id='actor'",[JSON.stringify([del,update])]);await denied(change());
+ await db.exec("UPDATE organization_members SET permission_limit='{}' WHERE id='actor'");await denied(change());
+ await db.exec("UPDATE organization_members SET permission_limit=null WHERE id='actor';UPDATE roles SET name='gestor' WHERE id='admin'");await denied(change());
+ await db.exec("UPDATE roles SET name='admin_org' WHERE id='admin';UPDATE organization_members SET status='inactive' WHERE id='actor'");await denied(change());
+ await db.exec("UPDATE organization_members SET status='active' WHERE id='actor'");
+ await denied(change('inactive','b','other'));await denied(change('inactive','missing','other'), 'P3230');
+ await denied(change('inactive','a','operator',actor,actor));
+ await denied(change('inactive','a','old-role'),'P3231');
+ await denied(change('inactive','a','operator',actor,target,'inactive'),'22023');
+ await db.exec("UPDATE roles SET name='admin_org' WHERE id='operator'");await denied(change());await db.exec("UPDATE roles SET name='operacional' WHERE id='operator'");
+ await db.query("UPDATE roles SET permissions=$1 WHERE id='admin'",[JSON.stringify([del,update])]);await denied(change());
+ await db.query("UPDATE roles SET permissions=$1 WHERE id='admin'",[JSON.stringify([del,update,supplier])]);
+ await change();ok(true);await change('active');
+ await db.exec("CREATE FUNCTION fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'audit failure';END$$;CREATE TRIGGER fail_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_audit()");
+ await assert.rejects(change());checks++;ok((await db.query("SELECT status FROM organization_members WHERE id='target'")).rows[0].status==='active');await db.exec('DROP TRIGGER fail_audit ON audit_logs');
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await denied(change());await db.exec('RESET ROLE');}
+ await db.exec('SET ROLE service_role');await change();await db.exec('RESET ROLE');ok(true);
+ console.log('PASS',checks,'effective membership delegation checks: implied supplier authority, admin-only, individual limits, isolation, stale decisions and atomic audit');
+}finally{await db.close()}
