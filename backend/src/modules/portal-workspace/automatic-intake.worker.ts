@@ -95,6 +95,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
       }
       const matches:any[]=[];let identityDiagnostic:any=null;let identityReview:any=null;
       for(const customer of ctx.customers){
+       if(customer.id!==i.customer_id&&!pages.map(p=>p.text).join('').toUpperCase().replace(/[^A-Z0-9]/g,'').includes(String(customer.document??'').toUpperCase().replace(/[^A-Z0-9]/g,'')))continue;
        const units=ctx.units.filter((u:any)=>u.customer_id===customer.id);
        for(const unit of units){const r=await this.rpc('eva_intake_unit_aliases',{p_id:job.id,p_token:job.token,p_unit:unit.id});unit.aliases=r.codes;}
        const selected=units.find((u:any)=>u.id===i.hints?.unitId);
