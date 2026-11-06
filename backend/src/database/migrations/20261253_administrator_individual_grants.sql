@@ -158,6 +158,11 @@ DO $$DECLARE r public.roles;m public.organization_members;all_org jsonb;added js
   SELECT coalesce(jsonb_agg(x ORDER BY x),'[]'::jsonb) INTO added FROM jsonb_array_elements_text(all_org) x WHERE NOT r.permissions ? x;
   UPDATE public.roles SET permissions=permissions||added WHERE id=r.id AND organization_id=r.organization_id;
   INSERT INTO public.role_permissions(role_id,permission_id) SELECT r.id,x FROM jsonb_array_elements_text(added) x ON CONFLICT DO NOTHING;
+  IF jsonb_array_length(added)>0 THEN
+   INSERT INTO public.audit_logs(id,organization_id,user_id,action,resource_type,resource_id,changes,status)
+   SELECT gen_random_uuid()::text,r.organization_id,m.user_id,'UPDATE','organization_admin_authority',r.id,jsonb_build_object('before',r.permissions,'after',r.permissions||added,'reason','Autoridade integral do Administrador sobre permissões organizacionais; licença e escopo preservados.'),'success'
+   FROM public.organization_members m WHERE m.organization_id=r.organization_id AND m.role_id=r.id AND m.affiliation_type='internal' ORDER BY m.user_id LIMIT 1;
+  END IF;
   FOR m IN SELECT * FROM public.organization_members WHERE organization_id=r.organization_id AND role_id=r.id AND affiliation_type='internal' AND permission_limit IS NOT NULL FOR UPDATE LOOP
    UPDATE public.organization_members SET permission_limit=NULL WHERE id=m.id AND organization_id=r.organization_id;
    INSERT INTO public.audit_logs(id,organization_id,user_id,action,resource_type,resource_id,changes,status) VALUES(gen_random_uuid()::text,r.organization_id,m.user_id,'UPDATE','organization_member_permissions',m.user_id::text,jsonb_build_object('before',jsonb_build_object('permissionLimit',m.permission_limit),'after',jsonb_build_object('permissionLimit',null),'reason','Administrador da organização possui autoridade integral sobre permissões organizacionais; licença e escopo preservados.'),'success');
