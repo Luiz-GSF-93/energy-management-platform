@@ -1,4 +1,6 @@
+import {companyTaxIdentity} from './eva-preparation-policy';
 const normalized=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+export type SupplierUnitIdentity={unitNumber:string;address:string;aliases?:string[];auditedAddresses?:string[]};
 /** Same bounded recipient block for native DANFE parsing and unit identification. */
 export function supplierRecipientText(text:string){
  const t=normalized(text),recipient=t.split(/DESTINAT.RIO\s*\/\s*REMETENTE/),reverse=t.split(/PROTOCOLO DE AUTORIZACAO DE USO/);
@@ -17,7 +19,7 @@ export function supplierDocumentKind(text:string):'INVOICE'|'CONTRACT'|'UNKNOWN'
  return 'UNKNOWN';
 }
 /** Local DANFE evidence. It never attests payment, monthly allocation or tax exemption. */
-export function supplierInvoiceProposal(text:string,month:string,taxId:string,source:{documentId:string;fileHash:string}){
+export function supplierInvoiceProposal(text:string,month:string,taxId:string,source:{documentId:string;fileHash:string},unitIdentity?:SupplierUnitIdentity){
  const t=normalized(text).replace(/DADOS DOS PRODUTOS\s*\/\s*SERVICOS/g,'DADOS DO PRODUTO / SERVICO'),digits=(s:string)=>s.replace(/\D/g,'');
  if(!/^[a-f0-9]{64}$/.test(source.fileHash)||digits(taxId).length!==14)return null;
  const recipient=t.split(/DESTINAT.RIO\s*\/\s*REMETENTE/);
@@ -29,7 +31,13 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  // phone/time/IE into 14 bare digits; those are not a second formatted CNPJ.
  const formattedIds=Array.from(recipientSection.matchAll(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g));
  const recipientIds=formattedIds.length?formattedIds:Array.from(recipientSection.matchAll(/\b\d{14}\b/g));
- if(recipientIds.length!==1||digits(recipientIds[0][0])!==digits(taxId))return null;
+ if(recipientIds.length!==1)return null;
+ const compact=(s:string)=>normalized(s).replace(/[^A-Z0-9]/g,'');
+ const codes=[...recipientSection.matchAll(/(?:UC|INSTALACAO)\s*[:.]?\s*([0-9][0-9.-]{4,25})/g)].map(m=>compact(m[1]));
+ const acceptedCodes=[unitIdentity?.unitNumber,...unitIdentity?.aliases??[]].filter((s):s is string=>typeof s==='string').map(compact);
+ const addressMatch=!!unitIdentity&&[unitIdentity.address,...unitIdentity.auditedAddresses??[]].some(a=>compact(a).length>=12&&compact(recipientSection).includes(compact(a)));
+ const taxIdentity=companyTaxIdentity(taxId,[recipientIds[0][0]],{unit:!!unitIdentity&&codes.every(c=>acceptedCodes.includes(c)),address:addressMatch,period:true});
+ if(digits(recipientIds[0][0])!==digits(taxId)&&!taxIdentity.accepted)return null;
  const product=t.split(/DADOS DO PRODUTO\s*\/\s*SERVI.O/);
  if(product.length!==2)return null;
  // The native PDF stream may serialize the product table before its heading.
@@ -100,5 +108,5 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  const validKeys=[...new Set(accessKeys.filter(k=>{let sum=0,weight=2;for(let i=42;i>=0;i--){sum+=Number(k[i])*weight;weight=weight===9?2:weight+1;}const v=11-sum%11;return Number(k[43])===(v>=10?0:v)&&['55','65'].includes(k.slice(20,22));}))];
  const fiscalIdentity=validKeys.length===1?{kind:'NFE_ACCESS_KEY',key:validKeys[0]}:null;
  if(/\b(?:NF-?E|NOTA FISCAL)\s+CANCELADA\b|\bNOTA FISCAL (?:DE )?(?:DEVOLUCAO|CREDITO)\b|\bNF-?E DE AJUSTE\b/.test(t))return null;
- return {format:'supplier-invoice-proposal-1',month,quantityMwh,pricePerMwh,amount,...source,nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment,fiscalIdentity,taxEvidence:taxEvidence??(destinationIcms?{kind:'DESTINATION_ICMS',source:'Informações complementares da NF: recolhimento do ICMS atribuído ao destinatário; zeros impressos não representam isenção.'}:originStatement?{kind:'ORIGIN_NON_INCIDENCE_REVIEW',source:'A NF declara não incidência de ICMS conforme art. terceiro da LC 87/96. O tratamento tributário final da unidade ainda exige revisão; não foi declarada isenção no destino.'}:null),observations:['Valores faturados da NF propostos para conferência; não comprovam pagamento ou cobertura integral por si só. Volume comprado preservado separadamente do consumo medido.']};
+ return {format:'supplier-invoice-proposal-1',month,quantityMwh,pricePerMwh,amount,...source,...(taxIdentity.relation==='SAME_ROOT'?{taxIdentity}:{}),nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment,fiscalIdentity,taxEvidence:taxEvidence??(destinationIcms?{kind:'DESTINATION_ICMS',source:'Informações complementares da NF: recolhimento do ICMS atribuído ao destinatário; zeros impressos não representam isenção.'}:originStatement?{kind:'ORIGIN_NON_INCIDENCE_REVIEW',source:'A NF declara não incidência de ICMS conforme art. terceiro da LC 87/96. O tratamento tributário final da unidade ainda exige revisão; não foi declarada isenção no destino.'}:null),observations:['Valores faturados da NF propostos para conferência; não comprovam pagamento ou cobertura integral por si só. Volume comprado preservado separadamente do consumo medido.',...(taxIdentity.relation==='SAME_ROOT'?[taxIdentity.reason]:[])]};
 }

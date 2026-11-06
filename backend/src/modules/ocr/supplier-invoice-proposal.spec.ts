@@ -10,6 +10,13 @@ ENERGIA ELETRICA (Incentivada) fornecida no mês de maio/2026
 DADOS ADICIONAIS`;
 const run=(t=text,month='2026-05',tax='11222333000181')=>supplierInvoiceProposal(t,month,tax,source);
 describe('Supplier NF proposal',()=>{
+ it('accepts a same-root recipient only with a matching scoped unit address, preserving the full CNPJ and reservation',()=>{
+  const bill=text.replace('11.222.333/0001-81','11.222.333/0002-62\nRUA DA UNIDADE 100 CENTRO'),unit={unitNumber:'12345678',address:'RUA DA UNIDADE 100 CENTRO'};
+  expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source,unit)).toMatchObject({amount:'300.00',taxIdentity:{relation:'SAME_ROOT',found:['11222333000262']}});
+  expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source)).toBeNull();
+  expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source,{...unit,address:'RUA ERRADA 900 CENTRO'})).toBeNull();
+  expect(supplierInvoiceProposal(bill.replace('RUA DA','UC: 99999999\nRUA DA'),'2026-05','11222333000181',source,unit)).toBeNull();
+ });
  const wrapped=`DANFE CNPJ DESTINATARIO/REMETENTE
  Empresa sintetica 11.222.333/0001-81
  FATURA

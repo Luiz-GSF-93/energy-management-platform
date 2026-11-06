@@ -83,7 +83,7 @@ export class SourcePreparationService{
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const stored=await this.db.getClient().rpc('eva_intake_supplier_text',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
    if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura preservada da nota.');
-   if(typeof stored.data==='string'&&stored.data.length<=2097152)return {kind:supplierDocumentKind(stored.data),proposal:supplierInvoiceProposal(stored.data,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash})};
+   if(typeof stored.data==='string'&&stored.data.length<=2097152)return {kind:supplierDocumentKind(stored.data),proposal:supplierInvoiceProposal(stored.data,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},{unitNumber:c.unit.consumer_unit_number,address:c.unit.address})};
   }
   const key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
   // Metadata and the verified-bytes check above still run on every request.
@@ -92,11 +92,11 @@ export class SourcePreparationService{
   if(!cached||cached.until<=Date.now()){if(this.extracted.size>=8)this.extracted.delete(this.extracted.keys().next().value!);this.extracted.set(key,{until:Date.now()+60000,value:extracted});}
   if(extracted.ocrRequired)return {kind:'UNKNOWN' as const,proposal:null};
   const text=extracted.sections.map(s=>s.text).join('\n');
-  return {kind:supplierDocumentKind(text),proposal:supplierInvoiceProposal(text,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash})};
+  return {kind:supplierDocumentKind(text),proposal:supplierInvoiceProposal(text,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},{unitNumber:c.unit.consumer_unit_number,address:c.unit.address})};
  }
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;
-  const invoiceIdentity=c.originalIdentity?{state:c.originalIdentity.state,checks:c.originalIdentity.checks,fileHash:c.originalIdentity.fileHash,sourcePages:c.originalIdentity.sourcePages??[],nativeCorrections:c.layout?.nativeCorrections??[]}:null;
+  const invoiceIdentity=c.originalIdentity?{state:c.originalIdentity.state,checks:c.originalIdentity.checks,reservations:c.originalIdentity.reservations??[],taxIdentity:c.originalIdentity.taxIdentity??null,fileHash:c.originalIdentity.fileHash,sourcePages:c.originalIdentity.sourcePages??[],nativeCorrections:c.layout?.nativeCorrections??[]}:null;
   if(structuredSpotMonth(c)||documentedSettlementEnabled()&&c.manualOverrides?.supplierSettlement?.mode==='SPOT')return {version:3,invoiceIdentity,state:'REVIEW',documents:[],observations:['Compra avulsa estruturada nesta competência. A fonte mensal do fornecedor deve ser conciliada; preço, reajuste e flexibilidade do anexo regular não são aplicados.'],automaticFinancialApproval:false};
   const org=c.unit.organization_id,customer=c.unit.customer_id,unit=c.unit.id;
   const contracts=(c.captured.contracts??[]).filter((r:any)=>r.organization_id===org&&r.customer_id===customer&&r.consumer_unit_id===unit&&r.contract_type==='ENERGY_PURCHASE'&&['ACTIVE','APPROVED'].includes(r.status)&&String(r.start_date).slice(0,10)<=c.period.start&&String(r.end_date??'9999-12-31').slice(0,10)>=c.period.end);

@@ -1,3 +1,4 @@
+import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
 import {createHash} from 'node:crypto';
 import {invoiceIdentityText} from '../ocr/invoice-identity-preflight';
 import {supplierDocumentKind,supplierRecipientText} from '../ocr/supplier-invoice-proposal';
@@ -27,10 +28,11 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  const codes=[...t.matchAll(/(?:NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|UNIDADE\s+CONSUMIDORA|\bUC\b|\bINSTALACAO)\s*(?:N[º°.]?|:)?\s*([0-9][0-9.-]{4,30})\b/g)].map(m=>compact(m[1]));
  const uc=[...new Set(codes)],accepted=new Set([u.consumer_unit_number,...u.aliases??[]].map(compact)),unknown=uc.filter(v=>!accepted.has(v));
  const months=intakeMonthCandidates(text),proof=invoiceIdentityText(text,{customerName:c.company_name,taxId:c.document,unitNumber:u.consumer_unit_number,address:u.address,month,auditedUnitNumbers:u.aliases});
+ const taxIdentity=companyTaxIdentity(c.document,taxes,{unit:uc.length>0&&unknown.length===0,address:addressMatch,period:months.length===1&&months[0]===month});
  const foundPages=(values:string[])=>pages.filter(p=>values.some(v=>compact(p.text).includes(compact(v)))).map(p=>p.page);
  const field=(key:string,label:string,expected:string,found:string[],status:Field['status'],reason:string):Field=>({key,label,expected,found:found.slice(0,8),status,pages:foundPages(found),reason});
  const fields:Field[]=[
-  field('taxId','CNPJ do destinatário',c.document,taxes,taxes.length===1?(taxes[0]===tax?'MATCH':'MISMATCH'):'INCONCLUSIVE',taxes.length===1?'CNPJ localizado no bloco do destinatário.':'CNPJ do destinatário ausente ou ambíguo; emitente não é destinatário.'),
+  field('taxId','CNPJ do destinatário',c.document,taxes,taxes.length===1?(taxes[0]===tax||taxIdentity.relation==='SAME_ROOT'?'MATCH':'MISMATCH'):'INCONCLUSIVE',taxIdentity.relation==='SAME_ROOT'?taxIdentity.reason:taxes.length===1?'CNPJ localizado no bloco do destinatário.':'CNPJ do destinatário ausente ou ambíguo; emitente não é destinatário.'),
   field('address','Endereço da unidade',u.address,addresses,addressMatch?'MATCH':addresses.length===1?'MISMATCH':'INCONCLUSIVE',addressMatch?'Conteúdo do endereço preservado, ignorando pontuação e espaços.':'Confira logradouro, número/km e complemento no destinatário.'),
   field('unit','UC / instalação',u.consumer_unit_number,uc,uc.length?(unknown.length?'MISMATCH':'MATCH'):proof.checks.unit==='MATCH'?'MATCH':'INCONCLUSIVE',unknown.length?'Código impresso diferente do cadastro e do histórico autorizado.':'Usar apenas código explícito, nunca medidor ou código de barras.'),
   field('period','Competência de fornecimento',month,months,months.length===1?(months[0]===month?'MATCH':'MISMATCH'):'INCONCLUSIVE','Emissão e vencimento não substituem competência.')
@@ -40,6 +42,6 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  const reject=identity.every(f=>f.status==='MISMATCH'&&f.found.length===1&&confident(f.found[0]));
  const eligible=fields[0].status==='MATCH'&&fields[1].status==='MATCH'&&fields[2].status==='MISMATCH'&&unknown.length===1&&fields[3].status==='MATCH';
  fields[3].pages=[...new Set(pages.filter(p=>intakeMonthCandidates(p.text).includes(month)).map(p=>p.page))];
- const registration=identityRegistration(c,u,month),sourcePages=[...new Set(pages.map(p=>p.page))],result={version:'intake-identity-triage-1',fileHash:hash,registration,fields,sourcePages,read:true,documentType:supplier?'INVOICE_SUPPLIER':'INVOICE_DISTRIBUTOR',action:reject?'REJECT':eligible?'CONTINUE_JUSTIFIED':'REVIEW',unitCode:eligible?unknown[0]:null};
+ const registration=identityRegistration(c,u,month),sourcePages=[...new Set(pages.map(p=>p.page))],result={version:'intake-identity-triage-1',fileHash:hash,registration,fields,sourcePages,read:true,...(taxIdentity.relation==='SAME_ROOT'?{taxIdentity}:{}),documentType:supplier?'INVOICE_SUPPLIER':'INVOICE_DISTRIBUTOR',action:reject?'REJECT':eligible?'CONTINUE_JUSTIFIED':'REVIEW',unitCode:eligible?unknown[0]:null};
  return {...result,fingerprint:createHash('sha256').update(JSON.stringify(result)).digest('hex')};
 }
