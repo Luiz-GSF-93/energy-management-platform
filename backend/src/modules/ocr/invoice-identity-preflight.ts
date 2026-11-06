@@ -1,3 +1,4 @@
+import {companyTaxIdentity} from './eva-preparation-policy';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractPdfText} from './eva-pdf-text.extractor';
 import type {ExtractionResult} from './eva-extraction.model';
@@ -8,6 +9,7 @@ const monthNames=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','N
 export function invoiceIdentityText(text:string,r:InvoiceRegistration){
  const t=norm(text),all=compact(text),checks:Record<string,string>={};
  const tax=compact(r.taxId),taxes=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].map(m=>compact(m[0]));
+ let recipientTaxes=taxes;
  checks.taxId=!tax?'REVIEW':taxes.includes(tax)?'MATCH':taxes.length?'MISMATCH':'REVIEW';
  const uc=compact(r.unitNumber),accepted=new Set([uc,...(r.auditedUnitNumbers??[]).map(compact)].filter(Boolean)),units=[...t.matchAll(/(?:UNIDADE\s+CONSUMIDORA|NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|INSTALACAO|SEU\s+CODIGO|\bUC\b)\s*(?:N[º°.]?|:)?\s*([0-9][0-9 .-]{4,30}[0-9])/g)].map(m=>compact(m[1]));
  checks.unit=!uc||!units.length?'REVIEW':units.every(n=>accepted.has(n))?'MATCH':'MISMATCH';
@@ -25,8 +27,10 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
   checks.unit=!uc||!explicit.length?'REVIEW':explicit.every(n=>accepted.has(n))?'MATCH':'MISMATCH';
   const streets=(v:string)=>{const n=norm(v),found:string[]=[];for(const m of n.matchAll(/\b(?:RUA|R\.?|AVENIDA|AV\.?)\s+([A-Z][A-Z .'-]{1,80}?)(?:,\s*|\s+)(\d+)\b/g)){const zip=/\b(\d{5})[- ](\d{3})\b/.exec(n.slice(m.index!+m[0].length,m.index!+m[0].length+180));if(zip)found.push(compact(m[1])+'|'+m[2]+'|'+zip[1]+zip[2]);}return found;};
   const registeredStreet=streets(r.address??'');if(registeredStreet.length===1&&streets(text).includes(registeredStreet[0]))checks.address='MATCH';
-  const name=compact(r.customerName);
-  const customerTax=taxes.filter(id=>{const match=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].find(m=>compact(m[0])===id&&compact(t.slice(Math.max(0,m.index!-220),m.index)).includes(name));return Boolean(name.length>=8&&match);});
+  const name=compact(r.customerName),groupName=compact(norm(r.customerName??'').replace(/\b(?:MATRIZ|FILIAL)\b.*$/,''));
+  const nameMatches=(part:string)=>name.length>=8&&(compact(part).includes(name)||groupName.length>=8&&compact(part).includes(groupName));
+  const customerTax=taxes.filter(id=>{const match=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].find(m=>compact(m[0])===id&&nameMatches(t.slice(Math.max(0,m.index!-220),m.index)));return Boolean(name.length>=8&&match);});
+  recipientTaxes=customerTax;
   checks.taxId=!tax?'REVIEW':customerTax.includes(tax)?'MATCH':customerTax.length?'MISMATCH':'REVIEW';
   // CPFL's customer strip may print its labels as a background image. The native
   // text retains the explicit customer CNPJ immediately followed by installation
@@ -42,12 +46,14 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
    }
 
    const blocks=[...t.matchAll(/\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\s*\/\s*\d{4}-?\d{2})\s+([0-9][0-9.-]{4,25})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/\s*(20\d{2})\b/g)]
-    .filter(m=>compact(m[1])===tax&&name.length>=8&&compact(t.slice(Math.max(0,m.index!-350),m.index)).includes(name));
-   if(blocks.length){checks.taxId='MATCH';checks.unit=uc&&blocks.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';checks.period=r.month&&blocks.every(m=>m[4]+'-'+String(monthNames.indexOf(m[3])+1).padStart(2,'0')===r.month)?'MATCH':'MISMATCH';}
+    .filter(m=>(compact(m[1])===tax||companyTaxIdentity(tax,[compact(m[1])],{unit:true,address:true,period:true}).relation==='SAME_ROOT')&&name.length>=8&&nameMatches(t.slice(Math.max(0,m.index!-350),m.index)));
+   if(blocks.length){recipientTaxes=blocks.map(m=>compact(m[1]));checks.taxId=recipientTaxes.every(v=>v===tax)?'MATCH':'MISMATCH';checks.unit=uc&&blocks.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';checks.period=r.month&&blocks.every(m=>m[4]+'-'+String(monthNames.indexOf(m[3])+1).padStart(2,'0')===r.month)?'MATCH':'MISMATCH';}
   }
 
  }
- return {state:Object.values(checks).includes('MISMATCH')?'MISMATCH':Object.values(checks).every(s=>s==='MATCH')?'MATCH':'REVIEW',checks} as {state:'MATCH'|'MISMATCH'|'REVIEW';checks:Record<string,string>};
+ const taxIdentity=companyTaxIdentity(tax,recipientTaxes,{unit:checks.unit==='MATCH',address:checks.address==='MATCH',period:checks.period==='MATCH'});
+ if(taxIdentity.relation==='SAME_ROOT')checks.taxId='MATCH';
+ return {state:Object.values(checks).includes('MISMATCH')?'MISMATCH':Object.values(checks).every(s=>s==='MATCH')?'MATCH':'REVIEW',checks,...(taxIdentity.relation==='SAME_ROOT'?{taxIdentity,reservations:[taxIdentity.reason]}:{})} as {state:'MATCH'|'MISMATCH'|'REVIEW';checks:Record<string,string>;taxIdentity?:ReturnType<typeof companyTaxIdentity>;reservations?:string[]};
 }
 /** Local bounded text extraction only. Images/scans need one initial OCR to identify;
  * that initial OCR is never permission to import, draft, approve or publish. */

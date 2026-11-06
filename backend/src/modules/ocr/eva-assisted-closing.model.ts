@@ -6,6 +6,7 @@ import type {InvoiceComparison} from './eva-tariff-workbench.model';
 import {feeMoney,allocateFee} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import {clientPublishedInsight} from '../portal-insights/portal-insights.model';
+import {canContinueWithReservation,isPreparationReservation,preparationPolicy} from './eva-preparation-policy';
 export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;comparative?:InvoiceComparison;unavailable?:string};
 const money=(value:unknown)=>{const v=typeof value==='number'&&Number.isFinite(value)?String(value):value;if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const scale=(v:unknown,p=6)=>{if(typeof v!=='string'||!new RegExp('^-?(0|[1-9][0-9]{0,11})(\\.\\d{1,'+p+'})?$').test(v))throw Error('Decimal sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*10n**BigInt(p)+BigInt(f.padEnd(p,'0')))*(v.startsWith('-')?-1n:1n);};
@@ -44,7 +45,7 @@ export function historicalDifference(label:string,current:unknown,previous:unkno
 /** Private financial candidate, never a published settlement or a human attestation. */
 export function assistedClosingReport(org:string,customer:string,month:string,entries:ClosingEntry[]){
  const observations:string[]=[],recommendations:string[]=[],units:any[]=[],missing:string[]=[],pendingActions:any[]=[];
- const estimateReviews=new Set<string>();
+ const estimateReviews=new Set<string>(),policyReservations:any[]=[];
  const add=(s:string)=>{if(!observations.includes(s))observations.push(s);};
  let estimated=false;
  for(const e of entries){
@@ -61,6 +62,8 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   // Share the portal's existing classification. Indicators are a presentation
   // of charges already in the invoice, never another input to financial sums.
   row.wasteIndicators=clientPublishedInsight({financial:{},retained:e.comparative?.retained??[]}).indicators;
+  row.sources.identityState=c?.originalIdentity?.state??null;
+  if(c?.originalIdentity?.reservations?.length){row.sources.identityReservations=c.originalIdentity.reservations;for(const reason of c.originalIdentity.reservations){add(reason);policyReservations.push({unitId:e.unitId,code:'SAME_CNPJ_ROOT',message:reason});}}
   if(p?.cceeEstimate?.state==='ESTIMATED'){estimated=true;const message='CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.';ownMissing.push(message);estimateReviews.add(e.name+': '+message);pendingActions.push({code:'CCEE_ESTIMATE_REVIEW',unitId:e.unitId,section:'costs',message});row.sources.cceeEstimate=p.cceeEstimate;}
   if(p?.supplierInvoiceProposal){row.sources.supplierInvoiceProposal=p.supplierInvoiceProposal;add('Fornecedor: NF integral proposta, volume comprado preservado separadamente da medição. Conferir composição tributária.');}
   if(sourcePreparationEnabled()&&!draft){
@@ -161,6 +164,10 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    for(const d of row.comparison.metrics.filter((d:any)=>d.comparable&&scale(d.difference)!==0n))add(e.name+': '+d.label+' variou de '+d.previous+' para '+d.current+' '+d.basis+'. Diferença observada; nenhuma causa não comprovada foi atribuída.');
    if(!row.comparison.consecutive)add('A referência de '+e.name+' é '+prior.month+'; não é o mês imediatamente anterior.');
   }else add('Não há fechamento anterior íntegro e elegível para comparar '+e.name+'.');
+  if(canContinueWithReservation(row,e)){
+   const reviews=[...(draft?.requirements??[]),...(p?.cceeEstimate?.state==='ESTIMATED'?[{code:'CCEE_ESTIMATE_REVIEW',message:'CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.'}]:[])].filter(r=>isPreparationReservation(r.code));
+   for(const review of reviews){const index=ownMissing.indexOf(review.message);if(index<0)continue;ownMissing.splice(index,1);estimated=true;policyReservations.push({...review,unitId:e.unitId});add(e.name+': '+review.message+' Ressalva registrada automaticamente; valores comprovados preparados para decisão humana.');for(let i=pendingActions.length-1;i>=0;i--)if(pendingActions[i].unitId===e.unitId&&pendingActions[i].code===review.code)pendingActions.splice(i,1);}
+  }
   for(const note of p.observations??[])add(note);
   if(p.referenceUsed)recommendations.push('Atualize o cadastro e mantenha o contrato/preço vigente para as próximas competências.');
  }
@@ -189,5 +196,6 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   for(const key of Object.keys(financial))financial[key]=key==='status'?'INCOMPLETE':null;
  }
  const completeness=missing.length?'INCOMPLETE':estimated?'ESTIMATED':'COMPLETE';
- return {...(proposalFinancial?{proposalFinancial,preparation:{state:'COMPLETE_REVIEW_REQUIRED',percent:100}}:{}),formatVersion:'eva-assisted-closing-1.0',methodology:entries.find(e=>e.comparative)?.comparative?.method??'SOURCE_BILLING_V1',organizationId:org,customerId:customer,month,unitIds:entries.map(e=>e.unitId).sort(),completeness,approvalEligible:!missing.length,financial,units,missing:[...new Set(missing)],pendingActions,observations:[...new Set(observations)],recommendations:[...new Set(recommendations)],justification:proposalFinancial?'Preenchimento da proposta concluído pela EVA. Cobertura da nota, tratamento tributário proposto, valores estimados e totais provisórios aguardam revisão do backoffice antes da aprovação.':missing.length?'A EVA preencheu as fontes disponíveis. O fechamento permanece incompleto pelas evidências relacionadas no resumo; nenhum total parcial foi convertido em resultado final.':estimated?'Fechamento preparado com referências identificadas e memória preservada. Confira as condições e diferenças antes da decisão.':'Fechamento preparado com fontes da competência e cálculos preservados para decisão.',publicationAllowed:false,automaticApproval:false};
+ const policy=preparationPolicy({units,missing,financial},[...policyReservations,...units.flatMap(u=>(u.sources.costReservations??[]).map((r:any)=>({unitId:u.id,code:'COST_TAX_RESERVATION',message:'Custo nominal preservado com ressalva tributária: '+r.label,source:r.source})))]);
+ return {preparationPolicy:policy,...(proposalFinancial?{proposalFinancial,preparation:{state:'COMPLETE_REVIEW_REQUIRED',percent:100}}:{}),formatVersion:'eva-assisted-closing-1.0',methodology:entries.find(e=>e.comparative)?.comparative?.method??'SOURCE_BILLING_V1',organizationId:org,customerId:customer,month,unitIds:entries.map(e=>e.unitId).sort(),completeness,approvalEligible:!missing.length,financial,units,missing:[...new Set(missing)],pendingActions,observations:[...new Set(observations)],recommendations:[...new Set(recommendations)],justification:proposalFinancial?'Preenchimento da proposta concluído pela EVA. Cobertura da nota, tratamento tributário proposto, valores estimados e totais provisórios aguardam revisão do backoffice antes da aprovação.':missing.length?'A EVA preencheu as fontes disponíveis. O fechamento permanece incompleto pelas evidências relacionadas no resumo; nenhum total parcial foi convertido em resultado final.':estimated?'Fechamento preparado com referências identificadas e memória preservada. Confira as condições e diferenças antes da decisão.':'Fechamento preparado com fontes da competência e cálculos preservados para decisão.',publicationAllowed:false,automaticApproval:false};
 }

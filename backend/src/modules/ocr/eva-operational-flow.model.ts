@@ -1,3 +1,4 @@
+import {canContinueWithReservation} from './eva-preparation-policy';
 /** Pure scope checks, shared by orchestration and its regression tests. */
 export function operationalBindingState(b:any,discovery:any,run:any,unit:any){
  const from=run.month+'-01',end=new Date(Date.UTC(Number(run.month.slice(0,4)),Number(run.month.slice(5)),0)).toISOString().slice(0,10);
@@ -21,6 +22,11 @@ export function applyOperationalCceeReview(report:any,sources:any){
   const current=sources.operationalFlow.costRows?.find((r:any)=>r.unitId===unit.id&&r.id===cost.id);
   if(!staleApi&&ack?.costId===cost.id&&(ack?.revision===cost.revision||/^[a-f0-9]{64}$/.test(ack?.costHash??'')&&ack.costHash===current?.costHash))continue;
   const message='CCEE: confira a cobertura integral dos encargos desta competência; as rubricas importadas não comprovam custos ausentes, ERCAP ou cotas nucleares.';
+  if(!staleApi&&report.preparationPolicy&&canContinueWithReservation(unit,{context:{originalIdentity:{state:unit.sources?.identityState,fileHash:unit.sourceHash},document:{id:unit.documentId,file_hash:unit.sourceHash}},comparative:unit.methodology,plan:{operational:{invoice:unit.prepared?.invoice}}})){
+   report.preparationPolicy.reservations.push({unitId:unit.id,code:'CCEE_COVERAGE',message});
+   if(!report.observations.includes(message))report.observations.push(message+' Valores importados preservados na proposta, sem presumir ausência dos demais custos.');
+   report.completeness='ESTIMATED';continue;
+  }
   if(!unit.missing.includes(message))unit.missing.push(message);
   if(!report.missing.includes(unit.name+': '+message))report.missing.push(unit.name+': '+message);
   if(!report.pendingActions.some((p:any)=>p.unitId===unit.id&&p.code==='CCEE_COVERAGE'))report.pendingActions.push({code:'CCEE_COVERAGE',unitId:unit.id,section:'costs',message});

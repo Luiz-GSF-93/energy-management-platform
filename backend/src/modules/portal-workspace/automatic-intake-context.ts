@@ -26,17 +26,17 @@ export function automaticIntakeContext(pages:IntakePage[],customer:IntakeCustome
  if(kind==='CONTRACT')return review('O arquivo contém um contrato. Confira seu tipo e vigência; ele não será tratado como fatura.');
  for(const month of months)for(const unit of units){
   if(kind==='INVOICE'){
-   const proposal=supplierInvoiceProposal(text,month,customer.document,{documentId:'pending-intake',fileHash:hash});
+   const proposal=supplierInvoiceProposal(text,month,customer.document,{documentId:'pending-intake',fileHash:hash},{unitNumber:unit.consumer_unit_number,address:unit.address,aliases:unit.aliases,auditedAddresses:unit.auditedAddresses});
    if(!proposal)continue;
    // A single authorized unit is unambiguous. With multiple units, require its
    // recipient address or explicit UC, never issuer address or upload filename.
    const recipient=supplierRecipientText(text);
    const addresses=[unit.address,...(unit.auditedAddresses??[])].map(compact),uc=compact(unit.consumer_unit_number??'');
    if(units.length!==1&&!addresses.some(address=>address.length>=12&&compact(recipient).includes(address))&&!(uc.length>=5&&new RegExp('(?:UC|INSTALA[ÇC][ÃA]O)\\s*[:.]?\\s*'+unit.consumer_unit_number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(recipient)))continue;
-   matches.push({unitId:unit.id,month,documentType:'INVOICE_SUPPLIER',checks:{taxId:'MATCH',unit:'MATCH',period:'MATCH'},sourcePages:pages.map(p=>p.page)});
+   matches.push({unitId:unit.id,month,documentType:'INVOICE_SUPPLIER',checks:{taxId:'MATCH',unit:'MATCH',period:'MATCH'},...(proposal.taxIdentity?{taxIdentity:proposal.taxIdentity,reservations:[proposal.taxIdentity.reason]}:{}),sourcePages:pages.map(p=>p.page)});
   }else{
    const proof=invoiceIdentityText(text,{customerName:customer.company_name,taxId:customer.document,unitNumber:unit.consumer_unit_number,address:unit.address,month,auditedUnitNumbers:unit.aliases??[]});
-   if(proof.state==='MATCH')matches.push({unitId:unit.id,month,documentType:'INVOICE_DISTRIBUTOR',checks:proof.checks,sourcePages:pages.map(p=>p.page)});
+   if(proof.state==='MATCH')matches.push({unitId:unit.id,month,documentType:'INVOICE_DISTRIBUTOR',checks:proof.checks,...(proof.taxIdentity?{taxIdentity:proof.taxIdentity,reservations:proof.reservations}:{}),sourcePages:pages.map(p=>p.page)});
   }
  }
  const selected=matches.filter(m=>(!hints.unitId||m.unitId===hints.unitId)&&(!hints.month||m.month===hints.month));
@@ -54,10 +54,10 @@ export function automaticOcrIdentityConfidence(raw:any,proof:any,customer:Intake
  let text='';const offsets:{start:number;end:number;confidence:number}[]=[];
  for(const w of words){const value=compact(w.content);if(!value)continue;offsets.push({start:text.length,end:text.length+value.length,confidence:w.confidence});text+=value;}
  const proven=(value:string)=>{const needle=compact(value);if(needle.length<4)return false;let at=text.indexOf(needle),found=false;while(at>=0){found=true;let lo=0,hi=offsets.length;while(lo<hi){const mid=(lo+hi)>>>1;if(offsets[mid].end<=at)lo=mid+1;else hi=mid;}for(let n=lo;n<offsets.length&&offsets[n].start<at+needle.length;n++)if(!Number.isFinite(offsets[n].confidence)||offsets[n].confidence<=0.85)return false;at=text.indexOf(needle,at+needle.length);}return found;};
- if(!proven(customer.document))return false;
+ if(!proven(proof.taxIdentity?.accepted&&proof.taxIdentity.found?.length===1?proof.taxIdentity.found[0]:customer.document))return false;
  const [year,month]=proof.month.split('-'),fullNames=['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
  if(![month+year,names[Number(month)-1]+year,fullNames[Number(month)-1]+year].some(proven))return false;
  if(proof.documentType==='INVOICE_DISTRIBUTOR')return [unit.consumer_unit_number,...(unit.aliases??[])].some(proven)&&proven(unit.address);
- const proposal=supplierInvoiceProposal(raw.content,proof.month,customer.document,{documentId:'pending-intake',fileHash:proof.fileHash});
+ const proposal=supplierInvoiceProposal(raw.content,proof.month,customer.document,{documentId:'pending-intake',fileHash:proof.fileHash},{unitNumber:unit.consumer_unit_number,address:unit.address,aliases:unit.aliases,auditedAddresses:unit.auditedAddresses});
  return !!proposal&&[proposal.quantityMwh,proposal.pricePerMwh,proposal.amount].every(proven);
 }

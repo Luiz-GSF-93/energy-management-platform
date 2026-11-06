@@ -1,0 +1,43 @@
+EVA — regra geral de preparação e identidade corporativa
+
+Política versionada: eva-preparation-policy-1.
+
+Continuar com justificativa:
+- CNPJ destinatário válido da mesma raiz de oito posições, com identificação
+  independente da unidade, endereço e competência. O estabelecimento completo
+  lido e o cadastrado ficam preservados na evidência e na justificativa automática.
+- Ressalvas complementares de cobertura/tributos da NF e estimativas CCEE, apenas
+  quando os valores já foram calculados com a fonte exata e a identidade da
+  fatura está comprovada. Nenhum valor ausente vira zero ou tributo inventado.
+- Custos nominais com ressalva e desperdícios mantêm a política anterior.
+
+Decidir sobre a identidade:
+- Divergências de UC, endereço, competência ou destinatário continuam no fluxo
+  auditado de continuar e justificar ou descontinuar e rejeitar.
+- UC histórica somente pelo cadastro/histórico autorizado ou decisão específica;
+  a raiz de CNPJ não cria um novo alias de UC e não altera o cadastro.
+- CNPJ com dígito verificador inválido não é filial. Os quatro caracteres após
+  a barra identificam o estabelecimento; os últimos dois são verificadores.
+- CNPJ do emitente, vários destinatários ou raiz diferente não comprovam vínculo.
+
+Preenchimento e cálculo:
+- A EVA mantém os campos e fontes disponíveis enquanto identifica pendências.
+  O relatório distingue ressalvas das informações essenciais ainda necessárias.
+- Falta real de quantidade, tarifa, valor, fonte, conciliação, rateio válido ou
+  resultado confirmado não pode produzir um total completo ou aprovação falsa.
+- Não há nova autorização de coleta CCEE, mudança de autenticação/permissões,
+  aprovação financeira automática, sobrescrita de histórico ou nova chamada paga.
+- O portal recebe somente resultados aprovados/publicados no escopo já autorizado.
+
+Implementação:
+Regra compartilhada pela identificação prévia do original, reconhecimento
+automático, nota do fornecedor, triagem e relatório do fechamento. Justificativas
+ficam na prova da fonte, no histórico de reconhecimento e na nova versão do
+relatório. As decisões existentes e seus vínculos documentais são preservados.
+Sem migração de banco. Usar nova preparação para aplicar a regra a uma fonte
+existente; versões anteriores não são reescritas.
+
+Validação:
+Testes de matriz/filial, raiz diferente, dígito inválido, endereço/UC/competência
+divergentes, destinatário ambíguo, confiança OCR preservada, escopo autorizado,
+fontes alteradas, ressalvas monetárias e apresentação do relatório.

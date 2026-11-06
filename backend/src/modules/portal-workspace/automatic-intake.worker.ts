@@ -1,3 +1,4 @@
+import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
 import {AneelTariffFlagsService} from '../ocr/aneel-tariff-flags.service';
 import {supplementalTariffFlagReference} from '../ocr/supplemental-tariff-flag-reference';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit,Optional} from '@nestjs/common';
@@ -95,7 +96,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
       }
       const matches:any[]=[];let identityDiagnostic:any=null;let identityReview:any=null;
       for(const customer of ctx.customers){
-       if(customer.id!==i.customer_id&&!pages.map(p=>p.text).join('').toUpperCase().replace(/[^A-Z0-9]/g,'').includes(String(customer.document??'').toUpperCase().replace(/[^A-Z0-9]/g,'')))continue;
+       const identityText=pages.map(p=>p.text).join('\n').toUpperCase();
+       const related=[...identityText.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].some(m=>companyTaxIdentity(customer.document,[m[0]],{unit:false,address:false,period:false}).relation==='SAME_ROOT');
+       if(customer.id!==i.customer_id&&!identityText.replace(/[^A-Z0-9]/g,'').includes(String(customer.document??'').toUpperCase().replace(/[^A-Z0-9]/g,''))&&!related)continue;
        const units=ctx.units.filter((u:any)=>u.customer_id===customer.id);
        for(const unit of units){const r=await this.rpc('eva_intake_unit_aliases',{p_id:job.id,p_token:job.token,p_unit:unit.id});unit.aliases=r.codes;}
        const selected=units.find((u:any)=>u.id===i.hints?.unitId);

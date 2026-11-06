@@ -12,6 +12,15 @@ ENERGIA ELETRICA fornecida no mês de maio/2026
 DADOS ADICIONAIS`;
 const run=(text=invoice,units:IntakeUnit[]=[unit],hints={})=>automaticIntakeContext([{page:1,text}],customer,units,'a'.repeat(64),hints);
 describe('Automatic intake recognition',()=>{
+ it('recognizes another valid establishment of the same company without overriding unit identity or OCR confidence',()=>{
+  const bill=invoice.replace('11.222.333/0001-81','11.222.333/0002-62'),proof=run(bill);
+  expect(proof).toMatchObject({state:'MATCH',taxIdentity:{relation:'SAME_ROOT',accepted:true},unitId:'unit'});
+  expect(automaticOcrIdentityConfidence({pages:[{words:bill.split(/\s/).map(content=>({content,confidence:.99}))}]},proof,customer,unit)).toBe(true);
+  expect(automaticOcrIdentityConfidence({pages:[{words:bill.split(/\s/).map(content=>({content,confidence:.5}))}]},proof,customer,unit)).toBe(false);
+  expect(run(bill.replace('Rua Exemplo 123','Rua Outra 456')).state).toBe('REVIEW_REQUIRED');
+  expect(run(bill.replace('1234567','9999999')).state).toBe('REVIEW_REQUIRED');
+  expect(run(nf.replace('11.222.333/0001-81','11.222.333/0002-62'))).toMatchObject({state:'MATCH',documentType:'INVOICE_SUPPLIER',taxIdentity:{relation:'SAME_ROOT'}});
+ });
  it('discovers supply month and unit without any selected competence',()=>expect(run()).toMatchObject({state:'MATCH',month:'2026-07',unitId:'unit',documentType:'INVOICE_DISTRIBUTOR'}));
  it('does not substitute issue or due date for supply month',()=>{expect(intakeMonthCandidates('Emissão 02/08/2026 Vencimento 10/08/2026')).toEqual([]);expect(run(invoice.replace('Referência JUL/2026','Emissão 02/08/2026')).state).toBe('REVIEW_REQUIRED');});
  it.each(['month','unit','recipient','address'])('requires a specific review for conflicting %s',kind=>{const t=kind==='recipient'?invoice.replace('11.222.333/0001-81','22.333.444/0001-82'):kind==='address'?invoice.replace('Rua Exemplo 123','Rua Outra 321'):invoice;const hints=kind==='month'?{month:'2026-08'}:kind==='unit'?{unitId:'other'}:{};expect(run(t,[unit],hints).state).toBe('REVIEW_REQUIRED');});

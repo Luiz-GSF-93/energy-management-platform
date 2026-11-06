@@ -3,6 +3,14 @@ import {invoiceIdentityText,invoiceIdentityPreflight,auditedUnitCodeHistory} fro
 const registration={customerName:'Empresa Exemplo LTDA',taxId:'12.345.678/0001-90',unitNumber:'0012345678',address:'Rua Exemplo 123 Centro',month:'2026-04'};
 const text='EMPRESA EXEMPLO LTDA CNPJ 12.345.678/0001-90\nUC: 0012345678\nRUA EXEMPLO 123 CENTRO\nReferência ABR/2026';
 describe('Invoice identity before paid extraction',()=>{
+ it('continues a valid same-root branch with an automatic justification only when installation, address and month match',()=>{
+  const r={...registration,taxId:'11222333000181'},bill=text.replace('12.345.678/0001-90','11.222.333/0002-62');
+  expect(invoiceIdentityText(bill,r)).toMatchObject({state:'MATCH',taxIdentity:{relation:'SAME_ROOT',accepted:true}});expect(invoiceIdentityText(bill,r).reservations?.[0]).toContain('continuar com justificativa');
+  for(const bad of [bill.replace('0012345678','9999999999'),bill.replace('123 CENTRO','124 CENTRO'),bill.replace('ABR/2026','MAI/2026'),bill.replace('0002-62','0002-63')])expect(invoiceIdentityText(bad,r).state).not.toBe('MATCH');
+ });
+ it('uses the shared company name when the registration says matriz and the recipient says filial, preserving the other checks',()=>{
+  const old=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';const r={...registration,customerName:'Empresa Exemplo LTDA MATRIZ',taxId:'11222333000181'},bill=text.replace('EMPRESA EXEMPLO LTDA','EMPRESA EXEMPLO LTDA FILIAL').replace('12.345.678/0001-90','11.222.333/0002-62');expect(invoiceIdentityText(bill,r)).toMatchObject({state:'MATCH',taxIdentity:{accepted:true}});expect(invoiceIdentityText(bill.replace('0012345678','9999999999'),r).state).not.toBe('MATCH');}finally{if(old===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=old;}
+ });
  it('matches explicit unit, customer CNPJ, street number and reference',()=>expect(invoiceIdentityText(text,registration).state).toBe('MATCH'));
  it.each([['UC: 0012345678','UC: 0012345679'],['12.345.678/0001-90','22.345.678/0001-90'],['ABR/2026','MAI/2026']])('rejects an explicit mismatched identity %s',(a,b)=>expect(invoiceIdentityText(text.replace(a,b),registration).state).toBe('MISMATCH'));
  it('does not match a street without its number, a barcode UC or missing registration',()=>{
