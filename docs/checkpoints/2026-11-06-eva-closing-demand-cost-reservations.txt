@@ -1,0 +1,42 @@
+EVA closing: demand-excess classification and nominal monthly costs
+
+Problem
+The derived CPFL interpretation treated the explicit "Uso Sist Distr Ultr"
+charge as a second ordinary demand row. The V3 comparison consequently tried
+to split regular demand and excess into used/unused shares and stopped.
+Separately, a sourced monthly cost with UNSPECIFIED tax metadata prevented
+all closing totals even though its amount, effect and scenario were known.
+
+Behavior
+An exactly source-verified CPFL demand-excess label for the invoice month is
+classified as DEMAND_EXCESS in the derived model. Its billed amount is retained
+once; it is excluded from the ordinary demand quantity. OCR text, spans, native
+confidence, the original invoice and the registered demand are unchanged.
+Unknown labels and actual ambiguous used/unused partitions keep their checks.
+
+The assisted closing preserves explicit nominal additional costs and credits
+with UNSPECIFIED or EXCLUDED tax treatment without inventing tax values. Their
+source, amount, nature, scenario and original treatment are recorded under
+unit.sources.costReservations and described in the report. The comparison is
+ESTIMATED and requires the existing human decision. This does not validate the
+monthly cost record, infer exemption, gross up an unknown tax, approve or publish.
+Supplier invoice/extra-energy deduplication and reconciliation remain mandatory.
+Missing amounts, sources, nature or scenario still cannot produce a false total.
+
+Waste presentation
+The backoffice closing explicitly displays reactive excess and demand excess as
+waste indicators using the same classification already used by the client portal.
+They remain part of the original invoice and are never added to costs again.
+The portal continues to consume only the approved published projection, scoped
+to its authorized customer/unit, preserving the existing recommendations.
+
+Scope
+Existing backend and closing view, feature flags and interfaces. No database migration,
+permission grant, new provider call or automatic financial decision. Immutable
+previous versions remain intact. Preparing again creates the usual new version.
+
+Validation
+Regression coverage: source-bound label/month/field verification, OCR immutability,
+preserved costs and credits, explicit tax reservations, no fractional cents,
+no ungrounded amount, supplier reconciliation, V2/V3 taxes, identity and scope.
+Private original-source reproduction is kept outside the repository.

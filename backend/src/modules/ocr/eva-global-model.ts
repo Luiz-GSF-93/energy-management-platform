@@ -36,6 +36,14 @@ export function globalModelLayout(raw:any){
  const operations=layout.operations.map(row=>{
   const label=String(row.fields.description?.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
   const amount=row.fields.amount?.decimal;
+  // "Uso Sist Distr Ultr" is the separately billed demand-excess charge,
+  // not a second used/unused demand share. Preserve its original amount and
+  // transcription confidence; only the derived financial classification changes.
+  const excess=/^USO\s+SIST\.?\s+DISTR\.?\s+ULTR(?:APASSAGEM)?(?:\s+\[KW\])?\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{2}|20\d{2})$/.exec(label);
+  if(sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1&&excess&&row.component==='DEMAND_BILLED'&&row.role==='CHARGE'&&normalize(row.fields.unit?.text)==='KW'&&typeof amount==='string'&&/^\d+(?:\.\d{1,2})?$/.test(amount)&&[row.fields.description,row.fields.quantity,row.fields.amount].every(f=>globalFieldEvidence(raw,f).filled)){
+   const month=(excess[2].length===2?'20':'')+excess[2]+'-'+String(['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'].indexOf(excess[1])+1).padStart(2,'0');
+   if(month===references[0])return {...row,component:'DEMAND_EXCESS',issues:[...row.issues.filter(i=>i!=='DEMAND_MEASURED_UNUSED_SPLIT_REQUIRES_CONTEXT'),'DOCUMENTED_DEMAND_EXCESS']};
+  }
   const adjustment=/^COMPL(?:EMENTO)?(?:\.\s*|\s+)(?:DE\s+)?TUSD\s+(?:MES\s+)?(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/?\s*(\d{2}|20\d{2})$/.exec(label);
   if(sourceEnabled&&layout.layoutId==='cpfl-paulista-a'&&references.length===1&&adjustment&&row.component==='TUSD_ENERGY'&&row.role==='CHARGE'&&typeof amount==='string'&&/^\d+(?:\.\d{1,2})?$/.test(amount)&&globalFieldEvidence(raw,row.fields.description).filled&&globalFieldEvidence(raw,row.fields.amount).filled){
    const month=(adjustment[2].length===2?'20':'')+adjustment[2]+'-'+String(['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'].indexOf(adjustment[1])+1).padStart(2,'0');
