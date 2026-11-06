@@ -23,7 +23,7 @@ type Row=AuditAuthorFields & {id:string;consumer_unit_id:string;month:string;ver
 type Event={id:string;revision:number;action:string;recorded_at:string;snapshot:Row};
 type Editor={id?:string;revision?:number;previousId:string|null;costs:Costs;sourceReference:string;notes:string;correctionReason:string};
 const blank=():Costs=>({noCosts:false,items:[]});
-export default function MonthlyCosts({customerId,units,onDirty,initialContext,autofill:acceptedAutofill,focusCategory,onSaved}:{onSaved?:()=>Promise<void>;focusCategory?:'CCEE';autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
+export default function MonthlyCosts({customerId,units,onDirty,initialContext,autofill:acceptedAutofill,focusCategory,onSaved}:{onSaved?:(row?:Row)=>Promise<void>;focusCategory?:'CCEE';autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
  const [absenceDirty,setAbsenceDirty]=useState(false);
  const {hasPermission}=useAuth();const [unitId,setUnit]=useState(initialContext?.unitId||''),[year,setYear]=useState(initialContext?.month.slice(0,4)||''),[month,setMonth]=useState(initialContext?.month.slice(5,7)||'');
  const [rows,setRows]=useState<Row[]|null>(null),[canValidate,setValidate]=useState(false),[busy,setBusy]=useState(!!initialContext&&initialContext.customerId===customerId&&units.some(u=>u.id===initialContext.unitId&&u.customer_id===customerId)),[error,setError]=useState(''),[message,setMessage]=useState(''),[editor,setEditor]=useState<Editor|null>(null),[discard,setDiscard]=useState(false),[confirm,setConfirm]=useState<Row|null>(null),[history,setHistory]=useState<{id:string;events:Event[]}|null>(null);
@@ -53,16 +53,17 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext,au
    const result=await apiRequest<{rows:Row[];canValidate:boolean}>('/api/v1/calculation-monthly-costs?consumerUnitId='+encodeURIComponent(unitId)+'&month='+period);setRows(result.rows);setValidate(result.canValidate);setConfirm(null);setHistory(null);setMessage('Ajustes da fatura preparados no histórico. Revise a versão mais recente e confirme os custos. Repetir a integração não duplica lançamentos.');
   }catch(e){setError(e instanceof Error?e.message:'Não foi possível integrar os ajustes.');}finally{setBusy(false);}
  }
+ const lastSavedCost=useRef<Row|null>(null);
  async function persist(next:Editor,keepOpen=false){
   if((autofill||focusCategory==='CCEE')&&!checkedOcr)throw Error('Confira os custos e marque OK antes de salvar.');
   if(writing.current)throw Error('Aguarde a gravação atual.');writing.current=true;setBusy(true);setError('');setMessage('');
   try{const row=await apiRequest<Row>('/api/v1/calculation-monthly-costs'+(next.id?'/'+next.id:''),{method:next.id?'PUT':'POST',body:{consumerUnitId:unitId,month:period,costs:next.costs,sourceReference:next.sourceReference,notes:next.notes,correctionReason:next.correctionReason,previousId:next.previousId,...(next.id?{revision:next.revision}:{})}});
-   setRows(old=>[row,...(old||[]).filter(r=>r.id!==row.id)].sort((a,b)=>b.version-a.version));
+   lastSavedCost.current=row;setRows(old=>[row,...(old||[]).filter(r=>r.id!==row.id)].sort((a,b)=>b.version-a.version));
    if(keepOpen){setEditor({...next,id:row.id,revision:row.revision});onDirty(false);}else close();
    const result='Rascunho salvo · revisão '+row.revision+'. Validação permanece pendente.';setMessage(result);return result;
   }finally{writing.current=false;setBusy(false);}
  }
- async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;try{await persist(autofill&&focusCategory!=='CCEE'?{...editor,notes:ocrReviewNote(editor.notes,autofill)}:editor);if(focusCategory==='CCEE')await onSaved?.();}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}}
+ async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;try{await persist(autofill&&focusCategory!=='CCEE'?{...editor,notes:ocrReviewNote(editor.notes,autofill)}:editor);if(focusCategory==='CCEE')await onSaved?.(lastSavedCost.current??undefined);}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}}
 
  async function review(row:Row){
   if(busy||absenceDirty)return;setBusy(true);setError('');setMessage('');setConfirm(null);setHistory(null);

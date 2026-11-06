@@ -1,3 +1,4 @@
+import {applyOperationalCceeReview} from './eva-operational-flow.model';
 import {closingCceeLocal} from './closing-ccee-local';
 import {closingDemandContext} from './closing-demand-context';
 import {supplierInvoiceSetCaptureMatches} from './supplier-invoice-set';
@@ -102,6 +103,7 @@ export class EvaAssistedClosingService{
   if(q.scopeKind==='UNIT'){(report as any).scope={kind:'UNIT',unitIds:[q.consumerUnitId]};const unitReport=report.units.find((u:any)=>u.id===q.consumerUnitId);if(unitReport)unitReport.sources.cceeLocal=await closingCceeLocal(this.db.getClient(),t,primary,q.month);}
 
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){const refs=await this.db.getClient().rpc('eva_intake_identity_refs',{p_org:t.organizationId,p_sources:report.units.flatMap((u:any)=>{const d=u.sources?.contractDraft?.source,p=u.sources?.supplierInvoiceProposal;return [{id:u.id,documentId:u.documentId,sourceHash:u.sourceHash},...[d,p,...(d?.documents??[]),...(d?.invoices??[]),...(p?.invoices??[])].filter(v=>v?.documentId&&v?.fileHash).map(v=>({id:u.id,documentId:v.documentId,sourceHash:v.fileHash}))];})});if(refs.error)throw new ServiceUnavailableException('Justificativas de identidade indisponíveis; fontes preservadas.');if(refs.data?.length)(report as any).operatorJustificationRefs=refs.data;}
+  applyOperationalCceeReview(report,sources);
   const hash=autofillHash(report),basis=autofillHash({version:1,report,sources});
   // A read/recheck without a changed proposal must not create another version.
   // Financial decisions still perform their existing fresh-source checks.

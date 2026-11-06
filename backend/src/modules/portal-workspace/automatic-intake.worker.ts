@@ -33,7 +33,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
   if(flagReference)rows.push(['supplementalTariffFlagReference',flagReference]);
   rows.push(['referenceVersions',await this.rpc('eva_intake_reference_signature',{p_id:job.id,p_token:job.token})]);
   for(const [table,id] of [['consumer_units',i.unit_id],['customers',i.customer_id]]){const r=await this.db.getClient().from(table).select('*').eq('organization_id',i.organization_id).eq('id',id).limit(2);if(r.error||!Array.isArray(r.data)||r.data.length!==1)throw Error('SOURCE_REGISTRATION_UNAVAILABLE');rows.push([table,r.data]);}
-  const tables=['documents','energy_contracts','calculation_parameters','calculation_monthly_inputs','calculation_monthly_costs','supplier_billing_rules','supplier_spot_reconciliations','calculation_cost_absences','management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions'];
+  const tables=['documents','energy_contracts','calculation_parameters','calculation_monthly_inputs','calculation_monthly_costs','supplier_billing_rules','supplier_spot_reconciliations','calculation_cost_absences','management_contracts','management_fee_allocations','commercial_fee_adjustments','unit_demand_periods','unit_demand_approvals','tariff_library_versions'];
   // Independent read-only captures share at most four DB requests. Preserve
   // deterministic ordering and fail closed before preparation on any error.
   for(let start=0;start<tables.length;start+=4){
@@ -129,7 +129,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      }
      if(status.job?.state!=='SUCCEEDED'){await transition('wait',{note:'Leitura automática em andamento; sem novo envio.'});return;}
     }
-    const history:any=await this.closing.history({consumerUnitId:i.unit_id,month:i.month,page:'0'},t);
+    const history:any=await this.closing.history({consumerUnitId:i.unit_id,month:i.month,scopeKind:'UNIT',page:'0'},t);
     const approved=history.rows?.find((r:any)=>r.state==='APPROVED'&&(r.id===i.closing_id||r.report?.units?.some((u:any)=>u.id===i.unit_id&&u.documentId===i.document_id&&u.sourceHash===i.file_hash)));
     if(approved){await transition('published',{closingId:approved.id,note:'Fechamento aprovado. Históricos preservados.'});return;}
     const signature=await this.signature(i,job);
