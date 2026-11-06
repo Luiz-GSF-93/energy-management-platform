@@ -46,7 +46,8 @@ export function invoiceComponentTaxV3(c:any,p:any,libraries:any[]):InvoiceCompar
    let used=ds.filter(row=>!explicitUnused.includes(row)),unused=explicitUnused;
    if(!unused.length&&ds.length===2){
     const taxed=ds.filter(row=>row.fields.icmsAmount?.decimal&&dec(row.fields.icmsAmount.decimal)>0n),contract=c.unit[band==='PEAK'?'contracted_demand_peak':band==='OFF_PEAK'?'contracted_demand_off_peak':'contracted_demand'];
-    if(taxed.length!==1||contract==null||ds.reduce((n,row)=>n+dec(row.fields.quantity.decimal),0n)!==dec(String(contract)))throw Error('Conferir a partição da demanda faturada contra a demanda contratada: '+band);
+    if(contract==null||!Number.isFinite(Number(contract))||Number(contract)<=0)throw Error('Demanda contratada '+band+': cadastro sem valor positivo e nenhum período documental aprovado cobre a competência. Informe/confira o CUSD; biblioteca tarifária não precisa ser recadastrada.');
+    if(taxed.length!==1||ds.reduce((n,row)=>n+dec(row.fields.quantity.decimal),0n)!==dec(String(contract)))throw Error('Conferir a partição da demanda faturada contra a demanda contratada: '+band);
     used=taxed;unused=ds.filter(row=>row!==taxed[0]);
     if(dec(unused[0].fields.quantity.decimal)!==dec(String(contract))-dec(used[0].fields.quantity.decimal))throw Error('Demanda não utilizada diverge de contratada menos utilizada.');
    }

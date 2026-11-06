@@ -1,3 +1,4 @@
+import {portalPublicationUnits} from './portal-publication-units';
 import {InternalServerErrorException} from '@nestjs/common';
 import {cents,aggregate,publishedFinancialSummary} from './published-financial-summary';
 import {feeMoney} from './management-fee';
@@ -22,13 +23,10 @@ export function evaPublication(row:any,org:string,period:{from:string;to:string;
 }
 export function latestPublications(publications:any[]){
  const selected=new Map<string,any>();
- for(const p of publications){
-  const key=p.meta.customerId+'|'+p.meta.month,old=selected.get(key),time=Date.parse(p.meta.publishedAt),oldTime=old&&Date.parse(old.meta.publishedAt);
-  if(!Number.isFinite(time))fail();
-  if(old&&time===oldTime&&p.meta.id!==old.meta.id)fail();
-  if(!old||time>oldTime)selected.set(key,p);
- }
- return [...selected.values()].filter(p=>p.meta.status!=='WITHDRAWN');
+ for(const p of publications){const time=Date.parse(p.meta.publishedAt);if(!Number.isFinite(time))fail();
+  for(const u of p.financial.units){const key=p.meta.customerId+'|'+p.meta.month+'|'+u.id,old=selected.get(key),oldTime=old&&Date.parse(old.meta.publishedAt);if(old&&time===oldTime&&p.meta.id!==old.meta.id)fail();if(!old||time>oldTime)selected.set(key,p);}}
+ const groups=new Map<any,string[]>();for(const [key,p] of selected){if(p.meta.status==='WITHDRAWN')continue;const unit=key.slice(key.lastIndexOf('|')+1);groups.set(p,[...(groups.get(p)??[]),unit]);}
+ return [...groups].map(([p,ids])=>ids.length===p.financial.units.length?p:portalPublicationUnits(p,ids));
 }
 export function publicFinancialCharts(data:any){
  let cumulative:any[]=[];
