@@ -1,6 +1,6 @@
 import {PGlite} from '@electric-sql/pglite';
 import {readFileSync} from 'node:fs';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 const db=new PGlite();let checks=0;const ok=v=>{assert.ok(v);checks++},deny=async p=>{await assert.rejects(p);checks++};
 const q=async(sql,args=[])=>{const r=await db.query(sql,args);return r.rows[0]?.result};
@@ -21,7 +21,7 @@ try{
  UPDATE roles SET permissions='["92e1b670-ab10-483a-b825-c6e16799496d","beb6ec90-8ba8-40ce-a156-aeef6cc75cce","fd8a932f-87c0-4f86-8389-9f30c50e95b7"]';
  CREATE FUNCTION ccee_permanent_automation_actor(text,text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF NOT EXISTS(SELECT 1 FROM public.organization_members WHERE organization_id=$1 AND user_id=$2 AND status='ACTIVE' AND affiliation_type='internal') THEN RAISE EXCEPTION 'Revoked' USING ERRCODE='42501';END IF;END$$;
  CREATE FUNCTION eva_scoped_closing_action(text,text,text,boolean,text,text,text,uuid,jsonb,text,text,boolean) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('canPrepare',true,'canManage',$3 IN('admin','manager'))$$;
- CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,reference_month date,document_type text,file_verified boolean,file_hash text,catalog_previous_id text,created_at timestamptz DEFAULT now());
+ CREATE TABLE documents(id text PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,reference_month date,document_type text,file_verified boolean,file_hash text,catalog_previous_id text,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
  CREATE TABLE eva_automatic_intakes(organization_id text,unit_id text,customer_id text,month text,state text,lease_until timestamptz);
  CREATE TABLE document_ocr_jobs(organization_id text,document_id text,file_hash text,state text);
  CREATE TABLE ccee_integration_jobs(organization_id text,authorization_id uuid,state text,month date,kind text,result jsonb);
@@ -38,8 +38,10 @@ try{
  CREATE FUNCTION assert_ccee_data_actor(text,text,text) RETURNS void LANGUAGE plpgsql AS $$BEGIN RETURN;END$$;
  CREATE FUNCTION assert_ccee_data_binding(text,uuid,date,text) RETURNS jsonb LANGUAGE sql AS $$SELECT '{}'::jsonb$$;
  `);
- for(const name of ['calculation_monthly_inputs','unit_demand_periods','unit_demand_approvals','management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions','energy_contracts','calculation_parameters'])await db.exec(`CREATE TABLE ${name}(id text,organization_id text,customer_id text,consumer_unit_id text,month text,updated_at timestamptz)`);
- await db.exec(readFileSync(new URL('../../src/database/migrations/20261281_eva_operational_closing_flow.sql',import.meta.url),'utf8'));
+ for(const name of ['calculation_monthly_inputs','unit_demand_periods','unit_demand_approvals','management_contracts','management_fee_allocations','commercial_fee_adjustments','tariff_library_versions','energy_contracts','calculation_parameters'])await db.exec(`CREATE TABLE ${name}(id text,organization_id text,customer_id text,consumer_unit_id text,month text,updated_at timestamptz,created_at timestamptz DEFAULT now())`);
+ await db.exec(`CREATE TABLE calculation_preparation_runs(id uuid PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,month text,created_at timestamptz DEFAULT now(),actor_id text DEFAULT 'admin',document_id text,source_basis text,source_hash text,plan jsonb DEFAULT '{}');CREATE TABLE calculation_preparation_run_events(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),run_id uuid,organization_id text,sequence int,state text,receipts jsonb,actor_id text DEFAULT 'admin',created_at timestamptz DEFAULT now());CREATE TABLE calculation_preparation_reconciliations(run_id uuid PRIMARY KEY,organization_id text,consumer_unit_id text,month text,source_hash text,original_state text,effective_state text,proof jsonb)`);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261281_eva_operational_closing_flow.sql',import.meta.url),'utf8').replace(/\r?\n/g,'\r\n'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261282_eva_flow_exact_recovery.sql',import.meta.url),'utf8'));
  const policy={enabled:true,reason:'Synthetic policy approved for regression testing',requestId:randomUUID()};
  await deny(action('configure',policy,'operator'));await deny(action('configure',policy,'manager'));await deny(action('configure',policy,'external'));await deny(action('read',{},'unknown'));await deny(action('status',{},'operator','foreign-unit','2026-01'));await deny(action('status',{},'external','unit','2026-01'));
  const configured=await action('configure',policy);ok(configured.enabled);ok((await action('configure',policy)).revision===1);
@@ -74,6 +76,43 @@ try{
  await db.query(`UPDATE calculation_monthly_costs SET costs=jsonb_set(costs,'{items,0,amount}','"1357.96"') WHERE id=$1`,[costId]);captured=await capture();ok(captured.costRows[0].costHash!==acknowledged.cost_ack.costHash);
  const beforeCcee=(await capture()).cceeSourcesHash,bindingId=randomUUID();await db.query(`INSERT INTO ccee_unit_authorizations VALUES($1,'org_default','customer','unit',1,'APPROVED')`,[bindingId]);await db.query(`INSERT INTO ccee_integration_jobs VALUES('org_default',$1,'SUCCEEDED','2026-01-01','DRI_RESULTS',$2)`,[bindingId,JSON.stringify({complete:true,data:{sourceHash:'f'.repeat(64)}})]);ok((await capture()).cceeSourcesHash!==beforeCcee);
  const oldId=randomUUID();await db.query(`INSERT INTO eva_assisted_closing_versions VALUES($1,'org_default','customer','unit','2026-01',0,$2,$3)`,[oldId,'e'.repeat(64),JSON.stringify(report)]);await db.query(`INSERT INTO eva_assisted_closing_events VALUES($1,'org_default','INCOMPLETE',1)`,[oldId]);ok((await action('status',{},'operator','unit','2026-01')).review.closing_id===closingId);
+ // Deployment interruption: only an exact persisted receipt or an existing
+ // administrator reconciliation may unblock the operational run.
+ ok((await q('SELECT eva_flow_recover_receipts() result'))===0);
+ const receiptHash=createHash('sha256').update(JSON.stringify(['bot-resolution-1','eva-flow-unit-1','org_default',r.id,String(r.claimed_generation)])).digest('hex');
+ const receiptId=receiptHash.slice(0,8)+'-'+receiptHash.slice(8,12)+'-5'+receiptHash.slice(13,16)+'-8'+receiptHash.slice(17,20)+'-'+receiptHash.slice(20,32);
+ const receiptReport={...report,units:[{id:'unit',documentId:'invoice',sourceHash:'b'.repeat(64)}]};
+ await db.query('INSERT INTO eva_assisted_closing_versions VALUES($1,$2,$3,$4,$5,9,$6,$7)',[receiptId,'org_default','customer','unit','2026-01','f'.repeat(64),JSON.stringify(receiptReport)]);
+ await db.query('INSERT INTO eva_assisted_closing_events VALUES($1,$2,$3,1)',[receiptId,'org_default','INCOMPLETE']);
+ await db.exec("UPDATE documents SET file_hash=repeat('c',64) WHERE id='invoice'");ok((await q('SELECT eva_flow_recover_receipts() result'))===0);
+ await db.exec("UPDATE documents SET file_hash=repeat('b',64) WHERE id='invoice'");ok((await q('SELECT eva_flow_recover_receipts() result'))===1);ok((await q('SELECT result FROM eva_operational_runs WHERE id=$1',[r.id])).reconciledExactReceipt===true);ok((await q('SELECT eva_flow_recover_receipts() result'))===0);
+ await db.query("UPDATE eva_operational_runs SET state='UNKNOWN',last_error='WRITE_ACKNOWLEDGEMENT_PENDING',claimed_generation=2 WHERE id=$1",[r.id]);ok((await q('SELECT eva_flow_recover_receipts() result'))===0);
+ const prepId=randomUUID(),proofId=prepId;await db.query('INSERT INTO calculation_preparation_runs(id,organization_id,customer_id,consumer_unit_id,month,created_at) VALUES($1,$2,$3,$4,$5,now())',[prepId,'org_default','customer','unit','2026-01']);
+ await db.query('INSERT INTO calculation_preparation_reconciliations VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[prepId,'org_default','unit','2026-01','b'.repeat(64),'UNKNOWN','PARTIAL',JSON.stringify({method:'UNPROVEN'})]);ok((await q('SELECT eva_flow_recover_receipts() result'))===0);
+ await db.query("UPDATE calculation_preparation_reconciliations SET proof=$1 WHERE run_id=$2",[JSON.stringify({method:'NO_FINANCIAL_WRITES_AFTER_RESERVATION'}),proofId]);ok((await q('SELECT eva_flow_recover_receipts() result'))===1);ok((await q('SELECT result FROM eva_operational_runs WHERE id=$1',[r.id])).reconciliationId===proofId);ok((await q('SELECT eva_flow_recover_receipts() result'))===0);
+ await db.query("UPDATE eva_operational_runs SET state='UNKNOWN',last_error='WRITE_ACKNOWLEDGEMENT_PENDING',claimed_generation=3 WHERE id=$1",[r.id]);await db.exec("DELETE FROM calculation_preparation_reconciliations");
+ await db.query('INSERT INTO calculation_preparation_run_events(id,run_id,organization_id,sequence,state,receipts) VALUES($1,$2,$3,2,$4,$5)',[randomUUID(),prepId,'org_default','PARTIAL',JSON.stringify([{kind:'ADMIN_INTERRUPTED',sourceHash:'b'.repeat(64)}])]);
+ ok((await q('SELECT eva_flow_recover_receipts() result'))===0,'A missing financial timestamp cannot prove no changes');
+ await db.exec("ALTER TABLE calculation_monthly_costs ADD COLUMN updated_at timestamptz;ALTER TABLE calculation_monthly_costs ADD COLUMN created_at timestamptz;UPDATE calculation_monthly_costs SET updated_at='2025-01-01',created_at='2025-01-01'");
+ ok((await q('SELECT eva_flow_recover_receipts() result'))===1);
+ await db.query("UPDATE eva_operational_runs SET state='UNKNOWN',last_error='WRITE_ACKNOWLEDGEMENT_PENDING',claimed_generation=4 WHERE id=$1",[r.id]);await db.exec('UPDATE calculation_monthly_costs SET updated_at=now()');ok((await q('SELECT eva_flow_recover_receipts() result'))===0,'A later financial change requires separate review');
+ ok(!(await q("SELECT has_function_privilege('authenticated','eva_flow_recover_receipts()','EXECUTE') result")));
+ // A manual settlement may be retained only by an explicit administrator
+ // decision with identical original sources and no financial writes.
+ await db.query(`INSERT INTO documents VALUES('feb-invoice','org_default','customer','unit','2026-02-01','INVOICE_DISTRIBUTOR',true,$1,null,now()-interval '1 day',now()-interval '1 day')`,['f'.repeat(64)]);
+ const interrupted=await q("SELECT to_jsonb(z) result FROM eva_operational_runs z WHERE consumer_unit_id='unit' AND month='2026-02' AND kind='CLOSING'");
+ await db.query("UPDATE eva_operational_runs SET state='UNKNOWN',last_error='WRITE_ACKNOWLEDGEMENT_PENDING',claimed_generation=1,write_started=true,created_at=now()-interval '40 minutes' WHERE id=$1",[interrupted.id]);
+ const manualRun=randomUUID(),manualSnapshot={supplierSettlement:{documentId:'synthetic-nf',volumeMwh:'1.000'}};
+ await db.query("INSERT INTO calculation_preparation_runs(id,organization_id,customer_id,consumer_unit_id,month,created_at,actor_id,document_id,source_basis,source_hash,plan) VALUES($1,'org_default','customer','unit','2026-02',now()-interval '35 minutes','admin','feb-invoice',$2,$3,$4)",[manualRun,'a'.repeat(64),'f'.repeat(64),JSON.stringify({manualOverrides:manualSnapshot})]);
+ await db.query("INSERT INTO calculation_preparation_run_events(id,run_id,organization_id,sequence,state,receipts,actor_id) VALUES($1,$2,'org_default',1,'RUNNING','[]','admin')",[randomUUID(),manualRun]);
+ const manualBody={requestId:randomUUID(),reason:'Administrator verified unchanged original source and interrupted process',confirmed:true,currentBasis:'a'.repeat(64),sourceHash:'f'.repeat(64)};
+ const reconcile=(actor='admin',body=manualBody)=>q('SELECT eva_flow_reconcile_interrupted($1,$2,$3,$4,$5) result',['org_default',actor,interrupted.id,manualRun,JSON.stringify(body)]);
+ await deny(reconcile('operator'));await deny(reconcile('admin',{...manualBody,currentBasis:'b'.repeat(64)}));
+ await db.exec("INSERT INTO calculation_monthly_inputs VALUES('changed','org_default','customer','unit','2026-02','2025-01-01')");await deny(reconcile());await db.exec("DELETE FROM calculation_monthly_inputs WHERE id='changed'");
+ const resolved=await reconcile();ok(resolved.manualSnapshotPreserved&&resolved.financialApproval===false);ok((await reconcile()).preparationId===manualRun);
+ assert.deepEqual(await q("SELECT receipts#>'{0,manualSnapshot}' result FROM calculation_preparation_run_events WHERE run_id=$1 AND sequence=2",[manualRun]),manualSnapshot);checks++;
+ ok((await q('SELECT eva_flow_recover_receipts() result'))===1);ok((await q('SELECT state result FROM eva_operational_runs WHERE id=$1',[interrupted.id]))==='QUEUED');
+ ok(!(await q("SELECT has_function_privilege('authenticated','eva_flow_reconcile_interrupted(text,text,uuid,uuid,jsonb)','EXECUTE') result")));
  await db.exec("UPDATE organization_members SET permission_limit='[]' WHERE user_id='operator'");ok((await action('status',{},'operator','unit','2026-01')).canPrepare===false);await deny(action('submit',{...submit,requestId:randomUUID()},'operator','unit','2026-01'));
  await db.exec(`UPDATE organization_members SET status='REVOKED' WHERE user_id='admin';UPDATE eva_operational_runs SET state='QUEUED',next_run_at=now(),write_started=false`);ok(await worker('claim')===null);
  for(const role of ['anon','authenticated'])for(const table of ['eva_operational_policies','eva_operational_runs','eva_operational_reviews'])ok(!(await q(`SELECT has_table_privilege($1,$2,'SELECT') result`,[role,table])));
