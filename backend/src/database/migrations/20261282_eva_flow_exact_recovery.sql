@@ -34,7 +34,7 @@ BEGIN
   -- through its existing no-financial-writes proof. Reuse that immutable proof.
   proof_id:=NULL;proof_run:=NULL;
   IF (SELECT count(*) FROM public.calculation_preparation_runs p WHERE p.organization_id=r.organization_id AND p.customer_id=r.customer_id AND p.consumer_unit_id=r.consumer_unit_id AND p.month=r.month AND p.created_at>=r.created_at)=1 THEN
-   SELECT a.id,a.run_id INTO proof_id,proof_run FROM public.calculation_preparation_reconciliations a JOIN public.calculation_preparation_runs p ON p.id=a.run_id AND p.organization_id=a.organization_id
+   SELECT a.run_id,a.run_id INTO proof_id,proof_run FROM public.calculation_preparation_reconciliations a JOIN public.calculation_preparation_runs p ON p.id=a.run_id AND p.organization_id=a.organization_id
     WHERE p.organization_id=r.organization_id AND p.customer_id=r.customer_id AND p.consumer_unit_id=r.consumer_unit_id AND p.month=r.month AND p.created_at>=r.created_at
     AND a.organization_id=r.organization_id AND a.consumer_unit_id=r.consumer_unit_id AND a.month=r.month AND a.source_hash=d.file_hash AND a.original_state='UNKNOWN' AND a.effective_state='PARTIAL' AND a.proof->>'method'='NO_FINANCIAL_WRITES_AFTER_RESERVATION';
   END IF;
