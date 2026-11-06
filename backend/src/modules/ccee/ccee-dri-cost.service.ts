@@ -42,7 +42,7 @@ export class CceeDriCostService{
   if(c.rubric==='MCP'&&old.some((i:any)=>i.category==='CCEE'&&!/CCEE DRI ·/.test(i.source??'')))throw new ConflictException('Já existe custo CCEE manual ou agregado. Concilie os componentes para evitar duplicidade.');
   if(c.rubric!=='MCP'&&old.some((i:any)=>i.category==='CCEE'&&(!/CCEE DRI ·/.test(i.source??'')||String(i.source).includes(c.mapVersion))))throw new ConflictException('Já existe custo CCEE manual, agregado ou desta rubrica. Concilie os componentes existentes para evitar duplicidade.');
   const costs={noCosts:false,items:[...old,{id:itemId,label:c.label+' · evento '+c.eventCode,category:'CCEE',scenario:'ACL',effect:b.effect,amount:c.amount,source:provenance,taxTreatment:c.rubric==='GUARANTEE'?'NOT_APPLICABLE':'INCLUDED'}]};
-  const body:any={...query,costs,sourceReference:provenance,notes:'Fonte CCEE com alocação confirmada pelo operador. Demais custos preservados. Não comprova quitação nem cobertura de todos os encargos.',correctionReason:b.reason,...(latest?.status!=='DRAFT'&&latest?{previousId:latest.id}:{})};
+  const body:any={...query,costs,sourceReference:provenance,notes:'Fonte CCEE com alocação confirmada na justificativa auditada. Demais custos preservados. Não comprova quitação nem cobertura de todos os encargos.',correctionReason:b.reason,...(latest?.status!=='DRAFT'&&latest?{previousId:latest.id}:{})};
   const saved=latest?.status==='DRAFT'?await this.costs.update(latest.id,{...body,previousId:latest.previous_id??null,revision:latest.revision},t):await this.costs.create(body,t);
   return{organizationId:t.organizationId,cost:saved,reused:false,notice:'Custo preparado em rascunho para a EVA. Nenhum fechamento aprovado foi substituído.'};
  }

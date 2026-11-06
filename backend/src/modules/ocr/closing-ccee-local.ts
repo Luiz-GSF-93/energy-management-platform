@@ -17,8 +17,10 @@ export async function closingCceeLocal(db:any,t:any,unit:any,month:string){
   }
  }
  if(!complete)return {state:'UNAVAILABLE',notice:bindingsComplete?'Histórico CCEE extenso; consulte Dados CCEE para conferir a referência completa.':'Catálogo de vínculos CCEE extenso; consulte Dados CCEE para conferir a representação desta unidade.',candidates:[]};
+ const current=new Map<string,any>();for(const b of bindings.filter(b=>b.organization_id===t.organizationId).sort((a,b)=>a.revision-b.revision))current.set(b.consumer_unit_id,b);
+ const allocationAmbiguous=[...current.values()].filter(b=>b.status==='APPROVED'&&b.dri_tax_id&&b.dri_tax_id===latest.dri_tax_id&&b.valid_from<=start&&(!b.valid_to||b.valid_to>=end)&&b.service_scope?.includes('DRI_READ')).length>1;
  const candidates:any[]=[];const eligible=jobs.filter(j=>j.authorization_id===latest.id&&j.kind==='DRI_RESULTS'&&j.state==='SUCCEEDED'&&String(j.month).slice(0,7)===month);
  if(eligible.length>6)return {state:'UNAVAILABLE',notice:'Há várias referências CCEE; confira as rubricas e duplicidades em Dados CCEE.',candidates:[]};
  for(const j of eligible){const r=await db.rpc('ccee_data_action',{p_org:t.organizationId,p_actor:t.userId,p_action:'job',p_id:j.id,p_body:{}});if(r.error)continue;try{const c=driCostCandidate(r.data);if(c.unitId===unit.id&&c.customerId===unit.customer_id&&c.accountingMonth===month)candidates.push(c);}catch{/* unmapped rows never become costs */}}
- return {state:candidates.length?'CANDIDATES':'NO_ELIGIBLE_COST',notice:candidates.length?'Referências locais homologadas para conferir alocação e competência; não comprovam todos os encargos nem pagamento.':'Nenhuma rubrica financeira homologada local desta unidade/competência. Informe fonte documental ou confira a integração.',candidates};
+ return {allocationAmbiguous,state:candidates.length?'CANDIDATES':'NO_ELIGIBLE_COST',notice:candidates.length?'Referências locais homologadas para conferir alocação e competência; não comprovam todos os encargos nem pagamento.':'Nenhuma rubrica financeira homologada local desta unidade/competência. Informe fonte documental ou confira a integração.',candidates};
 }
