@@ -24,6 +24,8 @@ class PortalWorkspaceController {
  @Post('automatic-intakes/:id/retry') automaticRetry(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.retry(t,id,b);}
  @Post('automatic-intakes/:id/dismiss') automaticDismiss(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.dismiss(t,id,b);}
  @Post('automatic-intakes/:id/resolve') automaticResolve(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.resolve(t,id,b);}
+ @Post('automatic-intakes/:id/identity-decision') automaticIdentityDecision(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.identityDecision(t,id,b);}
+ @Get('automatic-intake-justifications') @Header('Cache-Control','private, no-store') automaticJustifications(@Tenant() t:TenantContext,@Query() q:any){return this.automatic.identityJustifications(t,q);}
  @Get('automatic-intakes/:id/content') @Header('Cache-Control','private, no-store') @Header('X-Content-Type-Options','nosniff') automaticContent(@Tenant() t:TenantContext,@Param('id') id:string){return this.automatic.content(t,id);}
  @Get('presentation/identity') @Header('Cache-Control','no-store') identity(@Tenant() t:TenantContext){return this.presentation.action(t,'identity');}
  @Get('presentation/usage') @Header('Cache-Control','no-store') usage(@Tenant() t:TenantContext,@Query() q:Record<string,string>){return this.presentation.usage(t,q);}

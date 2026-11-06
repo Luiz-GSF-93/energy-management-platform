@@ -1,0 +1,20 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('assert/strict');
+require.extensions['.ts']=(m,n)=>m._compile(ts.transpileModule(fs.readFileSync(n,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,n);
+process.env.EVA_SOURCE_PREPARATION_ENABLED='true';
+const {intakeIdentityDiagnostic:d}=require('../src/modules/portal-workspace/automatic-intake-triage.ts');
+const c={id:'client',company_name:'EMPRESA EXEMPLO LTDA',document:'12.345.678/0001-90'},u={id:'unit',customer_id:'client',consumer_unit_number:'123456789010',address:'RDV ESTRADA DE EXEMPLO, S/N1 TP RURAL'},hash='a'.repeat(64);
+const text=`CPFL PAULISTA\nEMPRESA EXEMPLO LTDA\nCNPJ: 12.345.678/0001-90\nRDV ESTRADA DE EXEMPLO, S/N1 TP RURAL CIDADE\nInstalação 9988776655\nReferência JAN/2026\nNOTA FISCAL N 1`;
+const read=t=>d([{page:1,text:t}],c,u,hash,'2026-01');
+assert.equal(read(text).action,'CONTINUE_JUSTIFIED');
+assert.equal(read(text).unitCode,'9988776655');
+assert.equal(read(text.replace('12.345.678/0001-90','98.765.432/0001-10').replace(u.address,'RODOVIA OUTRA, 500')).action,'REJECT');
+assert.equal(read(text.replace('12.345.678/0001-90','ilegível')).action,'REVIEW');
+assert.equal(read(text.replace(u.address,'RODOVIA OUTRA, 500')).action,'REVIEW');
+assert.equal(read(text.replace('JAN/2026','FEV/2026')).action,'REVIEW');
+assert.equal(d([{page:1,text}],c,{...u,customer_id:'foreign'},hash,'2026-01'),null);
+assert.equal(read(text.replace('9988776655',u.consumer_unit_number)).action,'REVIEW');
+assert.equal(read(text).fingerprint,read(text).fingerprint);
+assert.notEqual(read(text).fingerprint,d([{page:1,text}],c,u,'b'.repeat(64),'2026-01').fingerprint); // fingerprint may bind only fields/pages, hash binds source
+assert.equal(read('CPFL CNPJ 12.345.678/0001-90\n'+text.replace('12.345.678/0001-90','98.765.432/0001-10')).fields[0].status,'MISMATCH');
+assert.equal(d([{page:1,text:text.replace('12.345.678/0001-90','98.765.432/0001-10').replace(u.address,'RODOVIA OUTRA, 500')}],c,u,hash,'2026-01',{pages:[{words:[{content:'98.765.432/0001-10',confidence:.2}]}]}).action,'REVIEW');
+console.log('Identity triage field tests passed');

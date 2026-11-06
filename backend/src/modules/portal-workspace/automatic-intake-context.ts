@@ -1,7 +1,7 @@
 import {invoiceIdentityText} from '../ocr/invoice-identity-preflight';
-import {supplierDocumentKind,supplierInvoiceProposal} from '../ocr/supplier-invoice-proposal';
+import {supplierDocumentKind,supplierInvoiceProposal,supplierRecipientText} from '../ocr/supplier-invoice-proposal';
 
-export type IntakeUnit={id:string;customer_id:string;consumer_unit_number:string;address:string;aliases?:string[]};
+export type IntakeUnit={id:string;customer_id:string;consumer_unit_number:string;address:string;aliases?:string[];auditedAddresses?:string[]};
 export type IntakeCustomer={id:string;document:string;company_name:string};
 export type IntakePage={page:number;text:string};
 const compact=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -30,9 +30,9 @@ export function automaticIntakeContext(pages:IntakePage[],customer:IntakeCustome
    if(!proposal)continue;
    // A single authorized unit is unambiguous. With multiple units, require its
    // recipient address or explicit UC, never issuer address or upload filename.
-   const recipient=text.split(/DESTINAT.RIO\s*\/\s*REMETENTE/i)[1]?.split(/CALCULO DO IMPOSTO|DADOS DO PRODUTO|FATURA\s*\/\s*DUPLICATA/i)[0]??'';
-   const address=compact(unit.address??''),uc=compact(unit.consumer_unit_number??'');
-   if(units.length!==1&&!(address.length>=12&&compact(recipient).includes(address))&&!(uc.length>=5&&new RegExp('(?:UC|INSTALA[ÇC][ÃA]O)\\s*[:.]?\\s*'+unit.consumer_unit_number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(recipient)))continue;
+   const recipient=supplierRecipientText(text);
+   const addresses=[unit.address,...(unit.auditedAddresses??[])].map(compact),uc=compact(unit.consumer_unit_number??'');
+   if(units.length!==1&&!addresses.some(address=>address.length>=12&&compact(recipient).includes(address))&&!(uc.length>=5&&new RegExp('(?:UC|INSTALA[ÇC][ÃA]O)\\s*[:.]?\\s*'+unit.consumer_unit_number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(recipient)))continue;
    matches.push({unitId:unit.id,month,documentType:'INVOICE_SUPPLIER',checks:{taxId:'MATCH',unit:'MATCH',period:'MATCH'},sourcePages:pages.map(p=>p.page)});
   }else{
    const proof=invoiceIdentityText(text,{customerName:customer.company_name,taxId:customer.document,unitNumber:unit.consumer_unit_number,address:unit.address,month,auditedUnitNumbers:unit.aliases??[]});
