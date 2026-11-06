@@ -1,0 +1,30 @@
+Administrador da organização — concessões individuais
+
+A plataforma habilita a licença e os módulos contratados. O Administrador da
+organização controla as ações dos seus usuários dentro desses módulos.
+
+Retira o teto do padrão da função na seleção individual e as incompatibilidades
+estáticas de perfil na política de delegação do Administrador. As dependências
+de leitura são incluídas pela interface e verificadas no banco. Configuração
+comercial de licenças permanece exclusiva da plataforma. O catálogo homologado
+não inclui privilégios globais ou ações desconhecidas.
+
+Concessões individuais ampliam somente a capacidade técnica da função, mantendo
+o padrão para novos convites e congelando a herança anterior dos demais vínculos.
+A lista individual escolhida passa a determinar o acesso efetivo do usuário;
+lista vazia não concede acesso. São preservados licença, escopo de organização,
+unidades do portal, fontes de auditoria e decisões de aprovação dos módulos.
+
+O perfil Administrador conserva autoridade organizacional integral e pode
+atribuir esse perfil a outro vínculo interno. Para limitar acesso, escolher
+outro perfil. A alteração do próprio perfil e a remoção do último administrador
+permanecem protegidas contra perda de acesso à organização.
+
+Migração: 20261253_administrator_individual_grants.sql. Não apaga dados, não
+altera licenças e não envia mensagens/convites. Normaliza as permissões dos
+administradores existentes. Outros usuários não recebem concessões coletivas.
+Novos convites com permissões fora do padrão são validados novamente na decisão.
+
+Validação: regressões de usuários, testes de banco com concessão antes de
+configurar o perfil, preservação de pares/defaults, fontes de licença, isolamento,
+concorrência, convite, administração integral e interface da seleção direta.

@@ -629,6 +629,7 @@ export class UsersService {
       organizationId: string;
       ipAddress?: string;
       userAgent?: string;
+      platformOperation?: boolean;
     },
   ): Promise<{
     userId: string;
@@ -766,7 +767,15 @@ export class UsersService {
         );
       }
 
-      if(dto.permissionIds!==undefined&&(!Array.isArray(dto.permissionIds)||dto.permissionIds.some(p=>!Array.isArray(role.permissions)||!role.permissions.includes(p))))throw new BadRequestException('Permissões individuais fora da função.');
+      if(role.name==='admin_org'&&dto.affiliationType!=='internal')throw new BadRequestException('Administrador exige vínculo interno com a organização.');
+      if(dto.permissionIds!==undefined){
+        if(!Array.isArray(dto.permissionIds))throw new BadRequestException('Permissões individuais inválidas.');
+        if(dto.permissionIds.some(p=>!Array.isArray(role.permissions)||!role.permissions.includes(p))){
+          const prepared=await client.rpc('prepare_organization_invite_permissions',{o:auditContext.organizationId,a:auditContext.actorUserId,platform:auditContext.platformOperation===true,roleid:dto.roleId,selected:dto.permissionIds});
+          if(prepared.error||!Array.isArray(prepared.data?.permissions))throw new BadRequestException('Não foi possível validar as permissões individuais aprovadas.');
+          role.permissions=prepared.data.role.permissions;
+        }
+      }
       // Profile-first lookup is the preferred identity resolution path.
       await checkPortalInvite(client,dto,role,auditContext.organizationId);
 
