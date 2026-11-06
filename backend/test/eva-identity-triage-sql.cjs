@@ -92,5 +92,12 @@ await db.query("UPDATE document_ocr_jobs SET lease_token=$2,lease_until=clock_ti
 const stored=await db.query('SELECT eva_intake_preserved_ocr($1,$2) data',[job,token]);ok(stored.rows[0].data.intakeId===intake);
 await db.query("UPDATE document_ocr_jobs SET file_hash=$2 WHERE id=$1",[job,'0'.repeat(64)]);ok((await db.query('SELECT eva_intake_preserved_ocr($1,$2) data',[job,token])).rows[0].data===null);
 const already=await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'list',NULL,$2) data",[actor,JSON.stringify({ids:[intake]})]);ok(already.rows[0].data.items.length===0);
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261279_eva_identity_justification_alias.sql','utf8'));
+const reviewIds=await db.query("SELECT id FROM eva_intake_identity_reviews WHERE kind IN('CONTINUE','ADDRESS') AND organization_id='org'");
+await db.query('INSERT INTO auth.users VALUES($1,$2,$3)',[actor,JSON.stringify({full_name:'Operador de teste'}),'operator@example.test']);
+const comments=await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'justifications',NULL,$2) data",[actor,JSON.stringify({refs:reviewIds.rows.map(r=>r.id)})]);
+ok(comments.rows[0].data.rows.length===2);ok(comments.rows[0].data.rows.some(r=>r.actor==='Operador de teste'&&r.reason===body.reason));
+await deny(()=>db.query("SELECT eva_intake_identity_action('org',$1,'external',false,'justifications',NULL,$2)",[id(70),JSON.stringify({refs:reviewIds.rows.map(r=>r.id)})]));
+const foreignComments=await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'justifications',NULL,$2) data",[actor,JSON.stringify({refs:[id(999)]})]);ok(foreignComments.rows[0].data.rows.length===0);
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});
