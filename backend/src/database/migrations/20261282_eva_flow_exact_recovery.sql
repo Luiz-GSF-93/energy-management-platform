@@ -57,7 +57,10 @@ REVOKE ALL ON FUNCTION public.eva_flow_recover_receipts() FROM PUBLIC,anon,authe
 DO $patch$ DECLARE source text;anchor text:='SELECT q.* INTO r FROM public.eva_operational_runs q JOIN public.eva_operational_policies a';BEGIN
  SELECT pg_get_functiondef('public.eva_flow_worker(text,uuid,uuid,jsonb)'::regprocedure) INTO source;
  IF length(source)-length(replace(source,anchor,''))<>length(anchor) THEN RAISE EXCEPTION 'Operational claim baseline changed';END IF;
- EXECUTE replace(source,anchor,'PERFORM public.eva_flow_recover_receipts();'||chr(10)||'  '||anchor);
+ source:=replace(source,anchor,'PERFORM public.eva_flow_recover_receipts();'||chr(10)||'  '||anchor);
+ anchor:='SELECT * INTO p FROM public.eva_operational_policies WHERE organization_id=r.organization_id AND enabled;'||chr(10)||'  BEGIN';
+ IF length(source)-length(replace(source,anchor,''))<>length(anchor) THEN RAISE EXCEPTION 'Operational policy baseline changed';END IF;
+ EXECUTE replace(source,anchor,'SELECT * INTO p FROM public.eva_operational_policies WHERE organization_id=r.organization_id AND enabled;'||chr(10)||'  IF NOT FOUND THEN RETURN NULL;END IF;'||chr(10)||'  BEGIN');
 END $patch$;
 NOTIFY pgrst,'reload schema';
 COMMIT;
