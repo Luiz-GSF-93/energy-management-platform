@@ -416,6 +416,7 @@ export class UsersService {
       organizationId: string;
       ipAddress?: string;
       userAgent?: string;
+      platformOperation?: boolean;
     },
   ): Promise<{
     userId: string;
@@ -426,7 +427,7 @@ export class UsersService {
     const { data: memberships, error: membershipError } = await client
       .from('organization_members')
       .select(
-        'id, user_id, organization_id, role_id, status, roles(id, name, organization_id, scope)',
+        'id, user_id, organization_id, role_id, status, affiliation_type, permission_limit, roles(id, name, organization_id, scope)',
       )
       .eq('user_id', targetUserId)
       .eq('organization_id', auditContext.organizationId)
@@ -525,6 +526,12 @@ export class UsersService {
       throw new BadRequestException(
         'Destination role is not valid for the active organization',
       );
+    }
+
+    if(currentRole.name==='admin_org'||destinationRole.name==='admin_org'){
+      const result=await client.rpc('set_member_permission_limit',{o:auditContext.organizationId,a:auditContext.actorUserId,platform:auditContext.platformOperation===true,u:targetUserId,roleid:requestedRoleId,selected:null,reason:'Alteração de perfil confirmada pelo Administrador da organização.',expected:{roleId:membership.role_id,permissionLimit:membership.permission_limit??null}});
+      if(result.error)throw new BadRequestException('Não foi possível alterar o perfil administrativo. Confira o vínculo interno e mantenha um administrador ativo.');
+      return {userId:targetUserId,role:{id:destinationRole.id,name:destinationRole.name}};
     }
 
     const beforeRoleId = membership.role_id;
@@ -629,6 +636,7 @@ export class UsersService {
       organizationId: string;
       ipAddress?: string;
       userAgent?: string;
+      platformOperation?: boolean;
     },
   ): Promise<{
     userId: string;
@@ -766,7 +774,15 @@ export class UsersService {
         );
       }
 
-      if(dto.permissionIds!==undefined&&(!Array.isArray(dto.permissionIds)||dto.permissionIds.some(p=>!Array.isArray(role.permissions)||!role.permissions.includes(p))))throw new BadRequestException('Permissões individuais fora da função.');
+      if(role.name==='admin_org'&&dto.affiliationType!=='internal')throw new BadRequestException('Administrador exige vínculo interno com a organização.');
+      if(dto.permissionIds!==undefined){
+        if(!Array.isArray(dto.permissionIds))throw new BadRequestException('Permissões individuais inválidas.');
+        if(dto.permissionIds.some(p=>!Array.isArray(role.permissions)||!role.permissions.includes(p))){
+          const prepared=await client.rpc('prepare_organization_invite_permissions',{o:auditContext.organizationId,a:auditContext.actorUserId,platform:auditContext.platformOperation===true,roleid:dto.roleId,selected:dto.permissionIds});
+          if(prepared.error||!Array.isArray(prepared.data?.permissions))throw new BadRequestException('Não foi possível validar as permissões individuais aprovadas.');
+          role.permissions=prepared.data.role.permissions;
+        }
+      }
       // Profile-first lookup is the preferred identity resolution path.
       await checkPortalInvite(client,dto,role,auditContext.organizationId);
 
@@ -1015,7 +1031,7 @@ export class UsersService {
             user_id: targetUserId,
             organization_id: auditContext.organizationId,
             role_id: dto.roleId,
-            ...(dto.permissionIds!==undefined?{permission_limit:dto.permissionIds}:{}),
+            ...(role.name==='admin_org'?{permission_limit:null}:dto.permissionIds!==undefined?{permission_limit:dto.permissionIds}:{}),
             ...(dto.portalUnitIds?{portal_scope_managed:true}:{}),
             affiliation_type: dto.affiliationType,
             display_name: normalizedName,
@@ -1174,7 +1190,6 @@ export class UsersService {
     actorPermissions=delegationPermissions(actorPermissions);
     const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope,permissions').eq('id',roleId).eq('organization_id',organizationId).eq('scope','organization');
     if(error) throw new InternalServerErrorException('Failed to check role assignment');
-    if(data?.some((r: {name?: string})=>r.name==='admin_org') && !platformOperation) throw new BadRequestException('Somente o administrador da plataforma pode atribuir Administrador da organização.');
     if(!data || data.length!==1 || !Array.isArray(data[0].permissions) || data[0].permissions.some((p:string)=>!actorPermissions.includes(p))) throw new BadRequestException('Você não pode atribuir uma função com permissões superiores às suas.');
   }
 
@@ -1182,7 +1197,7 @@ export class UsersService {
     actorPermissions=delegationPermissions(actorPermissions);
     const {data,error}=await this.supabaseService.getClient().from('roles').select('id,name,organization_id,scope,permissions').eq('organization_id',organizationId).eq('scope','organization');
     if(error || !Array.isArray(data) || data.some(r=>r.organization_id!==organizationId || r.scope!=='organization')) throw new InternalServerErrorException('Failed to load organization roles');
-    return data.filter(r=>(platformOperation || r.name!=='admin_org') && Array.isArray(r.permissions) && r.permissions.every((p:string)=>actorPermissions.includes(p))).map(r=>({id:r.id,name:r.name}));
+    return data.filter(r=>Array.isArray(r.permissions) && r.permissions.every((p:string)=>actorPermissions.includes(p))).map(r=>({id:r.id,name:r.name}));
   }
 
   async updateAffiliation(targetUserId: string, affiliationType: UserAffiliationType, auditContext: {actorUserId:string;organizationId:string;ipAddress?:string;userAgent?:string}) {

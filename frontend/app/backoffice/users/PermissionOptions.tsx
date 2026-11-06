@@ -20,6 +20,7 @@ export function permissionSelectionIssues(catalog:AccessCatalog,roleId:string,se
 export default function PermissionOptions(props:Props){
  const role=props.catalog.roles.find(r=>r.id===props.roleId);
  if(!role)return <p>Selecione uma função para visualizar as liberações.</p>;
+ if(role.name==='admin_org'&&props.mode!=='template')return <fieldset disabled={props.disabled}><legend>Administrador da organização</legend><p>Este perfil possui autoridade integral sobre os módulos contratados e as permissões da organização. Para limitar o acesso, selecione outro perfil.</p>{role.permissions.map(id=><input key={id} type="hidden" name="permissionId" value={id}/>)}</fieldset>;
  return <Options key={props.roleId+JSON.stringify(props.selected??null)+(role.revision??'')+(props.mode??'individual')} {...props} role={role}/>;
 }
 function Options({catalog,role,selected,disabled=false,mode='individual',onValidityChange}:Props&{role:PermissionRole}){
@@ -56,7 +57,7 @@ function Options({catalog,role,selected,disabled=false,mode='individual',onValid
  }
  return <fieldset disabled={disabled} style={{minWidth:0,padding:16,borderRadius:12}}>
   <legend>{mode==='template'?'Padrão de liberações da função':'Liberações deste usuário'}</legend>
-  <p>Selecione por módulo e ação. Cadastrar clientes é separado de cadastrar unidades. Enviar arquivo à EVA é separado de solicitar sua leitura.</p>
+  <p>O Administrador pode liberar as ações dos módulos contratados diretamente para este usuário, sem habilitá-las antes no padrão da função. Os demais usuários mantêm seus acessos.</p>
   <label style={{display:'grid',gap:6}}>Pesquisar módulo ou ação<input className="ds-input" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Ex.: clientes, fornecedor, enviar, EVA"/></label>
   <p role="status">{checked.size} liberações selecionadas · {visible.length} ações no filtro.</p>
   {notice?<p role="alert">{notice}</p>:null}

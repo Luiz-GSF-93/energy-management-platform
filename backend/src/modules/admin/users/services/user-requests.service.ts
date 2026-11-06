@@ -49,6 +49,7 @@ export class UserRequestsService{
  }
  async submitInvite(dto:any,t:TenantContext){
   this.allowed(t,true);const {permissions,role}=await this.role(t,dto.roleId,dto.permissionIds);
+  if(role.name==='admin_org'&&dto.affiliationType!=='internal')throw new BadRequestException('Administrador exige vínculo interno com a organização.');
   if(dto.customerId&&role.name!=='consulta'||dto.portalUnitIds&&!dto.customerId)throw new BadRequestException('O Portal exige função Consulta, cliente e unidades autorizadas.');
   if(dto.customerId)await this.portalUnits(dto,t);
   const {requestId,permissionIds,...invite}=dto;const id=requestId??randomUUID();if(!uuid(id))throw new BadRequestException('Identificador inválido.');
@@ -61,7 +62,7 @@ export class UserRequestsService{
   if(!Array.isArray(rows)||rows.length!==dto.portalUnitIds.length)throw new ForbiddenException('Unidades fora do cliente ou da organização.');
  }
  async submitPermissions(input:any,t:TenantContext){
-  this.allowed(t,true);if(!input||Object.keys(input).sort().join(',')!=='permissionIds,reason,requestId,roleId,userId'||!uuid(input.userId)||!uuid(input.requestId)||!uuid(input.roleId)||typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.length>1000||input.userId===t.userId)throw new BadRequestException('Informe usuário, função, permissões e justificativa. Alteração do próprio acesso exige outro administrador.');
+  this.allowed(t,true);if(!input||Object.keys(input).sort().join(',')!=='permissionIds,reason,requestId,roleId,userId'||!uuid(input.userId)||!uuid(input.requestId)||!uuid(input.roleId)||typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.length>1000)throw new BadRequestException('Informe usuário, função, permissões e justificativa.');
   const {permissions}=await this.role(t,input.roleId,input.permissionIds);
   const target=this.fail(await this.db.getClient().from('organization_members').select('user_id,role_id,permission_limit,affiliation_type').eq('organization_id',t.organizationId).eq('user_id',input.userId).ilike('status','active').single());
   return {pendingApproval:true,request:await this.action(t,'submit',input.requestId,{kind:'PERMISSIONS',body:{userId:input.userId,roleId:input.roleId,permissionIds:permissions,reason:input.reason.trim(),expected:{roleId:target.role_id,permissionLimit:target.permission_limit}}})};
@@ -91,7 +92,7 @@ export class UserRequestsService{
    let result:any;
    if(source.kind==='INVITE'){
     if(source.body.customerId)await this.portalUnits(source.body,t);
-    result=await this.users.invite(source.body,{actorUserId:t.userId,organizationId:t.organizationId});
+    result=await this.users.invite(source.body,{actorUserId:t.userId,organizationId:t.organizationId,platformOperation:t.accessMode==='platform_operation'});
     if(source.body.customerId){
      const grant={requestId:id,userId:result.userId,customerId:source.body.customerId,unitIds:source.body.portalUnitIds,active:true,revision:0,reason:b.reason.trim()};
      this.fail(await this.db.getClient().rpc('manage_portal_customer_access',{p_org:t.organizationId,p_actor:t.userId,p_platform:t.accessMode==='platform_operation',p_action:'save',p_body:grant}));
