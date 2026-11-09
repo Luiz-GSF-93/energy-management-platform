@@ -155,5 +155,31 @@ await db.query("UPDATE eva_assisted_closing_events SET state='INCOMPLETE' WHERE 
 ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
 ok((await db.query("SELECT body->>'repeatOcr' value FROM eva_automatic_intake_events WHERE intake_id=$1 AND event='PREPARATION_RECONCILED'",[id(10)])).rows[0].value==='false');
 for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_intake_administration(text,text,text,boolean,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
+
+// A known closing saved before optional AI must be recoverable without treating
+// a model attempt as evidence that the underlying financial writes completed.
+await db.exec("ALTER TABLE eva_assisted_closing_versions ADD COLUMN version integer NOT NULL DEFAULT 1;ALTER TABLE eva_assisted_closing_versions ADD COLUMN created_at timestamptz NOT NULL DEFAULT now();ALTER TABLE eva_assisted_closing_events ADD COLUMN organization_id text DEFAULT 'org';");
+for(const migration of ['20261289_eva_non_retryable_conflicts.sql','20261290_eva_reconcile_before_explanation.sql'])await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/'+migration,'utf8'));
+const resetRecovery=()=>db.query("UPDATE eva_automatic_intakes SET state='UNKNOWN',ai_attempted=false,lease_token=NULL,lease_until=NULL WHERE id=$1",[id(10)]);
+const originalReport=(await db.query('SELECT report FROM eva_assisted_closing_versions WHERE id=$1',[id(50)])).rows[0].report;
+const versionsBefore=(await db.query('SELECT count(*) n FROM eva_assisted_closing_versions')).rows[0].n;
+await resetRecovery();ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
+ok((await db.query('SELECT ai_attempted FROM eva_automatic_intakes WHERE id=$1',[id(10)])).rows[0].ai_attempted===false);
+ok((await db.query('SELECT count(*) n FROM eva_assisted_closing_versions')).rows[0].n===versionsBefore);
+await resetRecovery();await db.query("UPDATE eva_assisted_closing_versions SET report=jsonb_set(report,'{units,0,sourceHash}',to_jsonb($2::text)) WHERE id=$1",[id(50),'b'.repeat(64)]);await deny(()=>admin('reconcile_preparation',id(10),reason));
+await db.query('UPDATE eva_assisted_closing_versions SET report=$2 WHERE id=$1',[id(50),JSON.stringify(originalReport)]);
+for(const state of ['PREPARING','APPROVED']){await db.query('UPDATE eva_assisted_closing_events SET state=$2 WHERE closing_id=$1',[id(50),state]);await deny(()=>admin('reconcile_preparation',id(10),reason));}
+await db.query("UPDATE eva_assisted_closing_events SET state='INCOMPLETE' WHERE closing_id=$1",[id(50)]);
+await db.query("UPDATE calculation_preparation_run_events SET state='UNKNOWN' WHERE run_id=$1",[id(91)]);await deny(()=>admin('reconcile_preparation',id(10),reason));
+await db.query("UPDATE calculation_preparation_run_events SET state='PARTIAL' WHERE run_id=$1",[id(91)]);
+// An older exact closing cannot mask a newer overlapping version with another source.
+await db.query('INSERT INTO eva_assisted_closing_versions(id,organization_id,customer_id,month,report,version) VALUES($1,\'org\',\'client\',\'2026-07\',$2,2)',[id(51),JSON.stringify({...originalReport,units:[{id:id(1),documentId:'other',sourceHash:'b'.repeat(64)}]})]);
+await deny(()=>admin('reconcile_preparation',id(10),reason));
+await db.query('UPDATE eva_assisted_closing_versions SET report=$2 WHERE id=$1',[id(51),JSON.stringify(originalReport)]);
+await db.query("INSERT INTO eva_assisted_closing_events(closing_id,state,sequence,organization_id) VALUES($1,'READY_FOR_REVIEW',1,'org')",[id(51)]);
+await deny(()=>admin('reconcile_preparation',id(10),reason,id(70),'external'));
+await deny(()=>admin('reconcile_preparation',id(10),reason,id(71),'manager','other'));
+ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261290_eva_reconcile_before_explanation.sql','utf8'));
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
