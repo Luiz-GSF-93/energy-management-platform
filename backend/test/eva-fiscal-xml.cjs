@@ -22,7 +22,7 @@ CREATE TABLE eva_assisted_closing_versions(id uuid PRIMARY KEY,organization_id t
 CREATE TABLE eva_assisted_closing_events(closing_id uuid,state text,sequence int DEFAULT 1);
 CREATE FUNCTION preserve_operation_history() RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$BEGIN RAISE EXCEPTION 'Immutable';END$$;
 CREATE FUNCTION organization_resource_usage(text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('documents',(SELECT count(*) FROM public.documents WHERE organization_id=$1),'users',1,'units',1)$$;
-CREATE FUNCTION portal_workspace_actor(o text,a text,r text,p boolean,m text) RETURNS jsonb LANGUAGE plpgsql SET search_path=public AS $$DECLARE x organization_members;BEGIN SELECT * INTO x FROM organization_members WHERE organization_id=o AND user_id=a AND role_id=r AND status='ACTIVE';IF NOT FOUND THEN RAISE EXCEPTION 'Denied';END IF;RETURN jsonb_build_object('external',x.affiliation_type='external','customerId',x.exclusive_customer_id);END$$;
+CREATE FUNCTION portal_workspace_actor(o text,a text,r text,p boolean,m text) RETURNS jsonb LANGUAGE plpgsql SET search_path=public AS $$DECLARE x organization_members;BEGIN SELECT * INTO x FROM organization_members WHERE organization_id=o AND user_id=a AND role_id=r AND status='ACTIVE' FOR SHARE;IF NOT FOUND THEN RAISE EXCEPTION 'Denied';END IF;RETURN jsonb_build_object('external',x.affiliation_type='external','customerId',x.exclusive_customer_id);END$$;
 CREATE FUNCTION assert_invoice_month_ocr(text,text) RETURNS void LANGUAGE plpgsql SET search_path=public AS $$BEGIN RETURN;END$$;
 CREATE FUNCTION ocr_identity_unit_lineage(o text,c text,u text,n text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('codes',jsonb_build_array(n),'editIds','[]'::jsonb)$$;
 CREATE FUNCTION quota_check() RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$DECLARE n int;BEGIN n:=(organization_resource_usage(NEW.organization_id)->>'documents')::int;IF n>=(SELECT documents_limit FROM licenses WHERE organization_id=NEW.organization_id) THEN RAISE EXCEPTION 'quota';END IF;RETURN NEW;END$$;
@@ -72,6 +72,18 @@ await rpc('eva_intake_xml_complete',JSON.stringify(assessment));await rpc('eva_i
 ok((await db.query("SELECT * FROM document_ocr_jobs WHERE state='SUCCEEDED' AND source_kind='XML' AND operation_url IS NULL")).rows.length===1);
 ok((await db.query("SELECT * FROM document_ocr_results WHERE provider='DETERMINISTIC_XML'")).rows.length===1);
 await deny(()=>rpc('eva_intake_xml_complete',JSON.stringify({...assessment,source:{...assessment.source,organizationId:'other'}})));
+// Reproduce PostgREST's transaction choice from function volatility. Actor
+// authorization retains its FOR SHARE lock; a STABLE entry point fails here.
+await db.exec('BEGIN READ ONLY');
+let readonlyCode;try{await rpc('eva_intake_source_fingerprint')}catch(e){readonlyCode=e.code}finally{await db.exec('ROLLBACK')}
+ok(readonlyCode==='25006');
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261291_eva_source_rpc_transaction_mode.sql','utf8'));
+for(const name of ['eva_intake_source_fingerprint','eva_intake_alias_catalog']){
+ const mode=await scalar("SELECT provolatile v FROM pg_proc WHERE oid=($1||'(uuid,uuid)')::regprocedure",[name]);ok(mode==='v');
+ await db.exec(mode==='v'?'BEGIN READ WRITE':'BEGIN READ ONLY');
+ try{const result=await rpc(name);ok(name==='eva_intake_source_fingerprint'?/^[a-f0-9]{64}$/.test(result):result[unit].includes('1234567'));}finally{await db.exec('ROLLBACK')}
+}
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261291_eva_source_rpc_transaction_mode.sql','utf8'));
 const fingerprint=await rpc('eva_intake_source_fingerprint');ok(/^[a-f0-9]{64}$/.test(fingerprint));
 await db.exec("INSERT INTO calculation_monthly_costs VALUES('new','org','client','"+unit+"')");ok(await rpc('eva_intake_source_fingerprint')!==fingerprint);
 ok((await rpc('eva_intake_alias_catalog'))[unit].includes('1234567'));
