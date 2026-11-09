@@ -7,6 +7,8 @@ on:
       - 'backend/src/modules/ocr/fiscal-xml*'
       - 'backend/src/database/migrations/2026128[6789]*'
       - 'backend/test/eva-fiscal-xml.cjs'
+      - 'backend/test/eva-automatic-intake.cjs'
+      - 'backend/src/database/migrations/20261290_eva_reconcile_before_explanation.sql'
       - 'frontend/app/components/AutomaticInvoiceIntake.tsx'
       - '.github/workflows/eva-intake-performance.yml'
 permissions:

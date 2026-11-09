@@ -25,3 +25,7 @@ O incidente mostrou milhões de transações de configuração, poucos pedidos H
 A migração 20261289 troca somente o código dos conflitos explícitos do recebimento EVA por `PT409`, mantendo condições, mensagens, permissões e rejeição da solicitação alterada. Falhas reais do motor mantêm sua semântica. Não introduzir `40001` como erro de negócio em novos fluxos. Os módulos legados fora do recebimento ainda exigem revisão própria antes de qualquer normalização abrangente.
 
 Sessões já presas precisam ser identificadas por PID nos logs e conferidas em `pg_stat_activity` antes de encerramento pontual. Não reiniciar o projeto nem encerrar conexões indiscriminadamente. Medir CPU e variação de contadores após a correção; o banner pode refletir uma janela anterior.
+
+## Retomada anterior à explicação opcional
+
+A migração 20261290 permite reconciliar um resultado UNKNOWN com `ai_attempted=false` somente quando o último fechamento que inclui a unidade contém o documento e hash exatos e está INCOMPLETE ou READY_FOR_REVIEW. Todos os controles anteriores de vínculo/licença/permissão, lease, OCR concluído, cadastro ativo, rascunhos reconhecidos como PREPARED/PARTIAL, fonte única e ausência de aprovação continuam vigentes. Não repetir uma gravação UNKNOWN/RUNNING e não usar um fechamento antigo para encobrir uma versão mais recente com outra fonte.
