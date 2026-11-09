@@ -35,7 +35,7 @@ BEGIN
  c:=public.portal_intake_work_context_scoped(p_id,p_token);
  SELECT * INTO STRICT i FROM public.eva_automatic_intakes WHERE id=p_id AND lease_token=p_token AND lease_until>clock_timestamp() FOR UPDATE;
  IF i.mime<>'application/xml' OR i.state NOT IN('RECOGNIZING','LINKING') OR i.operation_url IS NOT NULL OR p_raw#>>'{xml,version}' IS DISTINCT FROM 'fiscal-xml-1' OR p_raw#>>'{xml,sourceHash}' IS DISTINCT FROM i.file_hash OR p_raw->>'contentUnit' IS DISTINCT FROM 'XML_FIELDS' OR octet_length(p_raw::text)>4194304 THEN RAISE EXCEPTION 'XML source scope mismatch' USING ERRCODE='42501';END IF;
- IF i.raw_result IS NOT NULL AND i.raw_result IS DISTINCT FROM p_raw THEN RAISE EXCEPTION 'XML source changed' USING ERRCODE='40001';END IF;
+ IF i.raw_result IS NOT NULL AND i.raw_result IS DISTINCT FROM p_raw THEN RAISE EXCEPTION 'XML source changed' USING ERRCODE='PT409';END IF;
  IF i.raw_result IS NULL THEN UPDATE public.eva_automatic_intakes SET raw_result=p_raw WHERE id=i.id;PERFORM public.eva_intake_event(i.id,'XML_FIELDS_READ',jsonb_build_object('sourceHash',i.file_hash,'providerRequest',false),c#>>'{delegate,userId}');END IF;
  RETURN true;
 END$$;
@@ -50,7 +50,7 @@ BEGIN
  PERFORM public.assert_invoice_month_ocr(i.organization_id,i.document_id);
  SELECT * INTO j FROM public.document_ocr_jobs WHERE organization_id=i.organization_id AND document_id=i.document_id FOR UPDATE;
  IF FOUND THEN
-  IF j.source_kind<>'XML' OR j.state<>'SUCCEEDED' OR j.file_hash<>i.file_hash OR NOT EXISTS(SELECT 1 FROM public.document_ocr_results WHERE job_id=j.id AND provider='DETERMINISTIC_XML' AND file_hash=i.file_hash) THEN RAISE EXCEPTION 'Existing extraction requires reconciliation' USING ERRCODE='40001';END IF;
+  IF j.source_kind<>'XML' OR j.state<>'SUCCEEDED' OR j.file_hash<>i.file_hash OR NOT EXISTS(SELECT 1 FROM public.document_ocr_results WHERE job_id=j.id AND provider='DETERMINISTIC_XML' AND file_hash=i.file_hash) THEN RAISE EXCEPTION 'Existing extraction requires reconciliation' USING ERRCODE='PT409';END IF;
   RETURN true;
  END IF;
  INSERT INTO public.document_ocr_jobs(organization_id,document_id,file_hash,requested_by,state,source_kind) VALUES(i.organization_id,i.document_id,i.file_hash,c#>>'{delegate,userId}','SUCCEEDED','XML') RETURNING * INTO j;

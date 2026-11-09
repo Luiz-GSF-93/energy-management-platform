@@ -20,7 +20,7 @@ BEGIN
  SELECT m.user_id::text AS id,r.id::text AS role_id,r.name,r.permissions INTO delegate FROM public.organization_members m JOIN public.roles r ON r.organization_id=m.organization_id AND r.id=m.role_id AND r.scope='organization'
  WHERE m.organization_id=i.organization_id AND m.user_id::text=policy.body->>'automationActor' AND upper(m.status)='ACTIVE' AND m.affiliation_type='internal' AND m.exclusive_customer_id IS NULL AND r.name IN('admin_org','gestor');
  IF NOT FOUND OR NOT coalesce(delegate.permissions @> '["8f105b02-4443-49de-b188-847e0284e7ed","92e1b670-ab10-483a-b825-c6e16799496d","60f9690a-145b-4dba-b23f-9f945baca296","beb6ec90-8ba8-40ce-a156-aeef6cc75cce"]'::jsonb,false) THEN RAISE EXCEPTION 'Delegated actor revoked' USING ERRCODE='42501';END IF;
- IF i.closing_id IS DISTINCT FROM j.closing_id OR i.state NOT IN('AWAITING_SOURCES','PROPOSAL_READY') OR NOT EXISTS(SELECT 1 FROM public.eva_assisted_closing_versions v WHERE v.organization_id=i.organization_id AND v.id=j.closing_id AND v.customer_id=i.customer_id AND v.month=i.month AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.report->'units')u WHERE u->>'id'=i.unit_id AND u->>'documentId'=i.document_id AND u->>'sourceHash'=i.file_hash)) THEN RAISE EXCEPTION 'Prepared source changed' USING ERRCODE='40001';END IF;
+ IF i.closing_id IS DISTINCT FROM j.closing_id OR i.state NOT IN('AWAITING_SOURCES','PROPOSAL_READY') OR NOT EXISTS(SELECT 1 FROM public.eva_assisted_closing_versions v WHERE v.organization_id=i.organization_id AND v.id=j.closing_id AND v.customer_id=i.customer_id AND v.month=i.month AND EXISTS(SELECT 1 FROM jsonb_array_elements(v.report->'units')u WHERE u->>'id'=i.unit_id AND u->>'documentId'=i.document_id AND u->>'sourceHash'=i.file_hash)) THEN RAISE EXCEPTION 'Prepared source changed' USING ERRCODE='PT409';END IF;
  RETURN jsonb_build_object('organizationId',i.organization_id,'documentId',i.document_id,'sourceHash',i.file_hash,'delegate',jsonb_build_object('userId',delegate.id,'roleId',delegate.role_id,'role',delegate.name,'permissions',delegate.permissions));
 END$$;
 CREATE FUNCTION public.eva_intake_explanation_task(p_action text,p_id uuid DEFAULT NULL,p_lease uuid DEFAULT NULL,p_orgs text[] DEFAULT NULL,p_error text DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -34,7 +34,7 @@ BEGIN
   IF NOT FOUND THEN RETURN NULL;END IF;
   UPDATE public.eva_intake_explanations SET state='RUNNING',lease_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '3 minutes',started_at=clock_timestamp() WHERE id=j.id RETURNING * INTO j;
   BEGIN ctx:=public.eva_intake_explanation_context(j.id,j.lease_id);
-  EXCEPTION WHEN SQLSTATE '42501' OR SQLSTATE '40001' THEN UPDATE public.eva_intake_explanations SET state='FAILED',finished_at=clock_timestamp(),error_code='SOURCE_OR_ACCESS_CHANGED' WHERE id=j.id;RETURN NULL;END;
+  EXCEPTION WHEN SQLSTATE '42501' OR SQLSTATE '40001' OR SQLSTATE 'PT409' THEN UPDATE public.eva_intake_explanations SET state='FAILED',finished_at=clock_timestamp(),error_code='SOURCE_OR_ACCESS_CHANGED' WHERE id=j.id;RETURN NULL;END;
   UPDATE public.eva_automatic_intakes SET ai_attempted=true WHERE id=j.intake_id;
   RETURN jsonb_build_object('id',j.id,'leaseId',j.lease_id,'context',ctx);
  END IF;

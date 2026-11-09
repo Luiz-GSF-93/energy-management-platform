@@ -12,8 +12,16 @@ O worker não baixa o original a cada GET de polling ainda em andamento. Um fing
 
 Resultados incertos usam o procedimento administrativo existente de reconciliação. O botão reconfere efeitos, fonte e autorizações; não repete OCR, aprova ou publica valores. Revogação de licença, vínculo ou delegação continua bloqueando o trabalho.
 
-Aplicar migrações 20261286, 20261287 e 20261288 antes do backend novo. São aditivas, sem reprocessar publicações financeiras. Para rollback de aplicação, reverter frontend/backend; preservar originais, leituras e auditoria. Não enviar XML durante rollback para um worker anterior, que desconhece esse formato.
+Aplicar migrações 20261286, 20261287, 20261288 e 20261289 antes do backend novo. São aditivas, sem reprocessar publicações financeiras. Para rollback de aplicação, reverter frontend/backend; preservar originais, leituras e auditoria. Não enviar XML durante rollback para um worker anterior, que desconhece esse formato.
 
 Validação: testes de parser hostil/identidade, worker, serviço e PGlite com isolamento, lease inválido, idempotência, revogação, fingerprint e tarefa opcional. O alerta de CPU exige acompanhamento de métricas reais; reduzir viagens HTTP não comprova, sozinho, queda de CPU ou SLA de produção. A implantação não altera plano pago, RLS, credenciais ou aprovação financeira.
 
 Leiaute NF3e: [MOC oficial da SEFAZ-SP](https://portal.fazenda.sp.gov.br/servicos/nf3e/Paginas/Downloads.aspx). As políticas existentes de desperdício reativo/ultrapassagem de demanda e publicação ao cliente não são substituídas por esta mudança.
+
+## CPU e conflitos não repetíveis
+
+O incidente mostrou milhões de transações de configuração, poucos pedidos HTTP e erros repetidos `Original request changed` com SQLSTATE `40001`. A [base oficial do Supabase](https://supabase.com/kb/troubleshooting/high-cpu-and-infinite-transaction-retries-when-using-custom-error-codes-in-rpc-functions-77326b) documenta tentativas infinitas no PostgREST 14 quando um conflito de negócio usa esse código.
+
+A migração 20261289 troca somente o código dos conflitos explícitos do recebimento EVA por `PT409`, mantendo condições, mensagens, permissões e rejeição da solicitação alterada. Falhas reais do motor mantêm sua semântica. Não introduzir `40001` como erro de negócio em novos fluxos. Os módulos legados fora do recebimento ainda exigem revisão própria antes de qualquer normalização abrangente.
+
+Sessões já presas precisam ser identificadas por PID nos logs e conferidas em `pg_stat_activity` antes de encerramento pontual. Não reiniciar o projeto nem encerrar conexões indiscriminadamente. Medir CPU e variação de contadores após a correção; o banner pode refletir uma janela anterior.

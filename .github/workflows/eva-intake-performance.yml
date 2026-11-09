@@ -5,7 +5,7 @@ on:
       - 'backend/src/modules/portal-workspace/automatic-*'
       - 'backend/src/modules/portal-workspace/xml-intake-context*'
       - 'backend/src/modules/ocr/fiscal-xml*'
-      - 'backend/src/database/migrations/2026128[678]*'
+      - 'backend/src/database/migrations/2026128[6789]*'
       - 'backend/test/eva-fiscal-xml.cjs'
       - 'frontend/app/components/AutomaticInvoiceIntake.tsx'
       - '.github/workflows/eva-intake-performance.yml'
@@ -35,6 +35,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+        working-directory: frontend
+      - run: node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

@@ -91,5 +91,11 @@ await db.exec("UPDATE portal_service_routing SET body=body||'{\"automationEnable
 await explain('finish',task.id,task.leaseId);ok(await explain('claim')===null);
 ok((await db.query("SELECT * FROM eva_assisted_closing_events WHERE state='APPROVED'")).rows.length===0);
 for(const role of ['anon','authenticated'])for(const name of ['eva_intake_xml_source(uuid,uuid,jsonb)','eva_intake_xml_complete(uuid,uuid,jsonb)','eva_intake_source_fingerprint(uuid,uuid)'])ok(!await scalar('SELECT has_function_privilege($1,$2,\'EXECUTE\') v',[role,name]));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261289_eva_non_retryable_conflicts.sql','utf8'));
+// Emulate an HTTP runner: only a real 40001 would trigger another transaction.
+let retries=0,errorCode;
+for(let attempt=0;attempt<5;attempt++)try{retries++;await action('reserve',{requestId:id(100),customerId:'client',hash,filename:'source.xml',mime:'application/xml',size:500,consent:true,hints:{unitId:unit,month:'2026-08'}});break;}catch(e){errorCode=e.code;if(e.code!=='40001')break;}
+ok(errorCode==='PT409');ok(retries===1);ok((await db.query('SELECT count(*) n FROM eva_automatic_intakes')).rows[0].n===1);
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261289_eva_non_retryable_conflicts.sql','utf8'));
 console.log('XML intake and fingerprint SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
