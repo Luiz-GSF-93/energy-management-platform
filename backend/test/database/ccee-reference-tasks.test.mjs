@@ -24,7 +24,8 @@ try{
  CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,free_market_management boolean);
  INSERT INTO licenses VALUES('org_default',true,'ACTIVE',CURRENT_DATE-30,NULL,true);
  CREATE FUNCTION assert_ccee_data_actor(o text,a text,mode text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF NOT EXISTS(SELECT 1 FROM public.actors WHERE id=a AND organization_id=o AND manage) THEN RAISE EXCEPTION 'denied' USING ERRCODE='42501';END IF;END$$;
- CREATE FUNCTION ccee_communication_reserve(p_id uuid,p_lease uuid,p_market boolean DEFAULT false) RETURNS jsonb LANGUAGE plpgsql AS $$DECLARE org text:='org_default';day_start timestamptz:=date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo';total bigint;BEGIN WITH private_counts AS(SELECT 'PRIVATE'::text family,0::bigint requests),market_counts AS(SELECT 'PLD'::text family,0::bigint requests),counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts) SELECT sum(requests) INTO total FROM counts;RETURN jsonb_build_object('total',total);END$$;
+ CREATE FUNCTION ccee_operational_usage(p_org text) RETURNS jsonb LANGUAGE sql AS $$WITH usage_window AS(SELECT date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo' start),counts AS(SELECT 'PRIVATE'::text family,0::bigint requests UNION ALL SELECT 'PRIVATE',count(*) FROM public.ccee_integration_events e CROSS JOIN usage_window w WHERE e.organization_id=p_org AND e.event='CUSTOMER_DISCOVERY_REQUEST_RESERVED' AND e.recorded_at>=w.start) SELECT jsonb_build_object('total',coalesce(sum(requests),0),'PLD',coalesce(sum(requests) FILTER(WHERE family='PLD'),0),'PRIVATE',coalesce(sum(requests) FILTER(WHERE family='PRIVATE'),0)) FROM counts$$;
+ CREATE FUNCTION ccee_communication_reserve(p_id uuid,p_lease uuid,p_market boolean DEFAULT false) RETURNS jsonb LANGUAGE sql AS $$SELECT public.ccee_operational_usage('org_default')$$;
  INSERT INTO customers VALUES('customer','org_default','Synthetic customer','11.222.333/0001-81',NULL);
  INSERT INTO consumer_units VALUES('${unit}','org_default','customer','Synthetic unit','123456','Synthetic address','ACTIVE');
  INSERT INTO ccee_sync_schedules(organization_id,created_by,kind,state,enabled,homologated) VALUES('org_default','admin','PLD_HOURLY','SUCCEEDED',true,true);`);
@@ -39,6 +40,9 @@ try{
  await deny(action('reserve',task.id,randomUUID()));
  await action('reserve',task.id,task.lease_id);
  ok((await scalar('SELECT ccee_communication_reserve(NULL,NULL,false) value')).total===1,'Existing consumers count new reservations');
+ await db.query('UPDATE ccee_reference_tasks SET requests=0 WHERE id=$1',[task.id]);
+ ok((await scalar('SELECT ccee_communication_reserve(NULL,NULL,false) value')).total===1,'Budget receipts survive task counter reset or retry');
+ await db.query('UPDATE ccee_reference_tasks SET requests=1 WHERE id=$1',[task.id]);
  const result={profiles:[{code:'123',agentCode:'987',name:'Synthetic profile'}],points:[{code:'POINT_1',profileCode:'123',name:'Synthetic point'}],hashes:['a'.repeat(64)]};
  await deny(action('finish',task.id,task.lease_id,{result:{...result,profiles:[{code:'123',agentCode:'999'}]}}));
  await deny(action('finish',task.id,task.lease_id,{result:{...result,hashes:[]}}));

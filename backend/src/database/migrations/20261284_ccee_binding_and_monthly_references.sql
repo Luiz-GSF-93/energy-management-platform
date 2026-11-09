@@ -33,16 +33,10 @@ END$$;
 
 -- Uses the same organization/day lock as all existing SOAP consumers.
 CREATE FUNCTION public.ccee_reference_usage(p_org text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE day_start timestamptz; total bigint; family bigint; private_total bigint;
+DECLARE usage jsonb;
 BEGIN
- day_start:=date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo';
- WITH private_counts AS(
-  SELECT CASE WHEN j.kind='PLD' THEN 'PLD' WHEN j.kind LIKE 'DRI_%' THEN 'DRI' ELSE 'PRIVATE' END AS family,greatest(CASE WHEN j.finished_at>=day_start THEN j.requests ELSE 0 END,(SELECT count(*) FROM public.ccee_integration_events e WHERE e.job_id=j.id AND e.organization_id=p_org AND e.event='COMMUNICATION_REQUEST_RESERVED' AND e.recorded_at>=day_start)) AS requests
-  FROM public.ccee_integration_jobs j WHERE j.organization_id=p_org AND(j.finished_at>=day_start OR EXISTS(SELECT 1 FROM public.ccee_integration_events e WHERE e.job_id=j.id AND e.event='COMMUNICATION_REQUEST_RESERVED' AND e.recorded_at>=day_start))),
- market_counts AS(SELECT CASE WHEN s.kind='PLD_HOURLY' THEN 'PLD' ELSE 'PRIVATE' END AS family,count(*) AS requests FROM public.ccee_integration_events e JOIN public.ccee_sync_schedules s ON s.id::text=e.details->>'scheduleId' AND s.organization_id=e.organization_id WHERE e.organization_id=p_org AND e.event='MARKET_REQUEST_RESERVED' AND e.recorded_at>=day_start GROUP BY 1),
- counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts UNION ALL SELECT CASE WHEN kind='PLD_MONTHLY' THEN 'PLD' ELSE 'PRIVATE' END,sum(requests) FROM public.ccee_reference_tasks WHERE organization_id=p_org AND created_at>=day_start GROUP BY kind)
- SELECT coalesce(sum(requests),0),coalesce(sum(requests) FILTER(WHERE counts.family='PLD'),0),coalesce(sum(requests) FILTER(WHERE counts.family='PRIVATE'),0) INTO total,family,private_total FROM counts;
- RETURN jsonb_build_object('total',total,'pld',family,'private',private_total);
+ usage:=public.ccee_operational_usage(p_org);
+ RETURN jsonb_build_object('total',usage->'total','pld',usage->'PLD','private',usage->'PRIVATE');
 END$$;
 
 CREATE FUNCTION public.ccee_reference_task(p_org text,p_actor text,p_action text,p_id uuid,p_lease uuid,p_body jsonb) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -76,6 +70,7 @@ BEGIN
   usage:=public.ccee_reference_usage(p_org);
   IF (usage->>'total')::bigint>=200 OR task.requests>=(CASE WHEN task.kind='PLD_MONTHLY' THEN 12 ELSE 6 END) OR task.kind='PLD_MONTHLY' AND (usage->>'pld')::bigint>=60 OR task.kind='BINDING_LOOKUP' AND (usage->>'private')::bigint>=100 OR task.kind='BINDING_LOOKUP' AND (SELECT coalesce(sum(requests),0) FROM public.ccee_reference_tasks WHERE organization_id=p_org AND kind='BINDING_LOOKUP' AND created_at>=date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')>=20 THEN RAISE EXCEPTION 'REFERENCE_REQUEST_BUDGET_EXHAUSTED' USING ERRCODE='P0001'; END IF;
   UPDATE public.ccee_reference_tasks SET requests=requests+1 WHERE id=task.id RETURNING * INTO task;
+  INSERT INTO public.ccee_integration_events(organization_id,actor_id,event,details) VALUES(p_org,p_actor,'REFERENCE_REQUEST_RESERVED',jsonb_build_object('taskId',task.id,'family',CASE WHEN task.kind='PLD_MONTHLY' THEN 'PLD' ELSE 'PRIVATE' END));
   RETURN jsonb_build_object('reserved',true,'requests',task.requests);
  END IF;
  IF p_action<>'finish' OR jsonb_typeof(p_body) IS DISTINCT FROM 'object' OR octet_length(p_body::text)>64000 THEN RAISE EXCEPTION 'Invalid reference result' USING ERRCODE='22023'; END IF;
@@ -129,9 +124,9 @@ END$$;
 
 -- Make the existing consumers account for these reservations as well.
 DO $$DECLARE source text;marker text;replacement text;BEGIN
- source:=pg_get_functiondef('public.ccee_communication_reserve(uuid,uuid,boolean)'::regprocedure);
- marker:='counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts)';
- replacement:='counts AS(SELECT * FROM private_counts UNION ALL SELECT * FROM market_counts UNION ALL SELECT CASE WHEN kind=''PLD_MONTHLY'' THEN ''PLD'' ELSE ''PRIVATE'' END,sum(requests) FROM public.ccee_reference_tasks WHERE organization_id=org AND created_at>=day_start GROUP BY kind)';
+ source:=pg_get_functiondef('public.ccee_operational_usage(text)'::regprocedure);
+ marker:='AND e.event=''CUSTOMER_DISCOVERY_REQUEST_RESERVED'' AND e.recorded_at>=w.start)';
+ replacement:='AND e.event=''CUSTOMER_DISCOVERY_REQUEST_RESERVED'' AND e.recorded_at>=w.start UNION ALL SELECT e.details->>''family'',count(*) FROM public.ccee_integration_events e CROSS JOIN usage_window w WHERE e.organization_id=p_org AND e.event=''REFERENCE_REQUEST_RESERVED'' AND e.recorded_at>=w.start GROUP BY e.details->>''family'')';
  IF position(marker in source)=0 THEN RAISE EXCEPTION 'Shared budget source changed'; END IF;
  EXECUTE replace(source,marker,replacement);
 END$$;
