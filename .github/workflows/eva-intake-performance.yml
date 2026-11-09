@@ -10,6 +10,12 @@ on:
       - 'backend/test/eva-automatic-intake.cjs'
       - 'backend/src/database/migrations/20261290_eva_reconcile_before_explanation.sql'
       - 'backend/src/database/migrations/20261291_eva_source_rpc_transaction_mode.sql'
+      - 'backend/src/database/migrations/20261292_eva_operations_global_rollout.sql'
+      - 'backend/src/database/migrations/20261293_eva_operations_publication_proof.sql'
+      - 'backend/src/modules/portal-workspace/automatic-rollout.spec.ts'
+      - 'backend/src/modules/portal-workspace/portal-workspace.module.ts'
+      - 'frontend/app/backoffice/documents/**'
+      - 'frontend/test/eva-operations.cjs'
       - 'frontend/app/components/AutomaticInvoiceIntake.tsx'
       - '.github/workflows/eva-intake-performance.yml'
 permissions:
@@ -24,7 +30,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/portal-workspace/automatic-rollout.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
         working-directory: backend
       - run: node test/eva-fiscal-xml.cjs && node test/eva-automatic-intake.cjs
         working-directory: backend
@@ -39,7 +45,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
+      - run: node test/eva-operations.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

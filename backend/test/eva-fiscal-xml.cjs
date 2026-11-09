@@ -109,5 +109,48 @@ let retries=0,errorCode;
 for(let attempt=0;attempt<5;attempt++)try{retries++;await action('reserve',{requestId:id(100),customerId:'client',hash,filename:'source.xml',mime:'application/xml',size:500,consent:true,hints:{unitId:unit,month:'2026-08'}});break;}catch(e){errorCode=e.code;if(e.code!=='40001')break;}
 ok(errorCode==='PT409');ok(retries===1);ok((await db.query('SELECT count(*) n FROM eva_automatic_intakes')).rows[0].n===1);
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261289_eva_non_retryable_conflicts.sql','utf8'));
+// Global discovery and operational projection use the same licensed tenant gates.
+await db.exec("ALTER TABLE consumer_units ADD COLUMN name text;ALTER TABLE eva_intake_identity_reviews ADD COLUMN created_at timestamptz DEFAULT now();");
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261292_eva_operations_global_rollout.sql','utf8'));
+const dashboard=(o='org',a=actor,r='manager',group='ALL',offset=0)=>scalar('SELECT eva_intake_operational_dashboard($1,$2,$3,false,$4,$5) v',[o,a,r,group,offset]);
+let operational=await dashboard();ok(operational.total===1);ok(operational.rows[0].group==='SOURCES');ok(operational.summary.sources===1);
+ok(!('raw_result' in operational.rows[0]));ok(!('fileHash' in operational.rows[0]));
+await deny(()=>dashboard('other'));await deny(()=>dashboard('org',id(70),'external'));await deny(()=>dashboard('org',actor,'manager','INVALID'));await deny(()=>dashboard('org',actor,'manager','ALL',1));
+await db.exec("UPDATE eva_automatic_intakes SET next_attempt_at=now(),lease_until=NULL,lease_token=NULL WHERE id='"+receipt+"'");
+ok((await scalar("SELECT eva_intake_worker_organizations('INTAKE') v")).includes('org'));
+await db.exec("UPDATE licenses SET document_management=false WHERE organization_id='org'");await deny(()=>dashboard());ok(!(await scalar("SELECT eva_intake_worker_organizations('INTAKE') v")).includes('org'));
+await db.exec("UPDATE licenses SET document_management=true WHERE organization_id='org'");
+await db.exec("UPDATE portal_service_routing SET body=body||'{\"automationEnabled\":false}'::jsonb WHERE organization_id='org'");ok(!(await scalar("SELECT eva_intake_worker_organizations('INTAKE') v")).includes('org'));ok(!(await dashboard()).automationConfigured);
+await db.exec("UPDATE portal_service_routing SET body=body||'{\"automationEnabled\":true}'::jsonb WHERE organization_id='org'");
+// A tenant inserted after the migration inherits the processor without a code/env edit.
+await db.exec("INSERT INTO organizations VALUES('future');INSERT INTO licenses SELECT 'future-license','future',active,status,start_date,end_date,document_management,documents_unlimited,documents_limit,plan_id FROM licenses WHERE organization_id='org';INSERT INTO portal_service_routing SELECT '"+id(88)+"','future',kind,owner_user_id,revision,body FROM portal_service_routing WHERE organization_id='org';");
+await db.exec("INSERT INTO eva_automatic_intakes(id,organization_id,actor_id,role_id,platform,external,request_id,file_hash,filename,mime,size_bytes,consent,stored,state,next_attempt_at) VALUES('"+id(86)+"','future','"+actor+"','manager',false,false,'"+id(85)+"','"+'b'.repeat(64)+"','future.pdf','application/pdf',100,true,true,'OCR_QUEUED',now()-interval '1 hour')");
+await db.exec("INSERT INTO roles SELECT 'future-manager','future',scope,name,permissions FROM roles WHERE id='manager';INSERT INTO organization_members VALUES('future','"+actor+"','future-manager','ACTIVE','internal',NULL);UPDATE eva_automatic_intakes SET role_id='future-manager' WHERE organization_id='future';");
+const discovered=await scalar("SELECT eva_intake_worker_organizations('INTAKE') v");ok(discovered[0]==='future');ok(discovered.includes('org'));
+const futureClaim=await scalar("SELECT claim_eva_automatic_intake(ARRAY['future']) v");ok(futureClaim.context.intake.organization_id==='future');
+operational=await dashboard();ok(operational.total===1);ok(!JSON.stringify(operational).includes('future.pdf'));
+await db.query("UPDATE eva_automatic_intakes SET state='UNKNOWN' WHERE id=$1",[receipt]);ok((await dashboard()).summary.technical===1);ok((await dashboard('org',actor,'manager','HUMAN')).rows.length===0);
+await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE id=$1",[receipt]);ok((await dashboard()).summary.human===1);
+for(const role of ['anon','authenticated'])for(const name of ['eva_intake_worker_organizations(text)','eva_intake_operational_dashboard(text,text,text,boolean,text,integer)'])ok(!await scalar('SELECT has_function_privilege($1,$2,\'EXECUTE\') v',[role,name]));
+await deny(()=>scalar("SELECT eva_intake_worker_organizations('INVALID') v"));
+// A receipt error cannot mask an exact approved publication. Use the real proof function.
+await db.exec(`ALTER TABLE eva_assisted_closing_versions ADD COLUMN version int DEFAULT 1;
+ALTER TABLE eva_assisted_closing_events ADD COLUMN id uuid DEFAULT gen_random_uuid();
+CREATE TABLE eva_closing_publications(id uuid,organization_id text,customer_id text,closing_id uuid,source_hash text,approval_event_id uuid,created_at timestamptz DEFAULT now());
+ALTER TABLE eva_closing_publication_events ADD COLUMN state text;`);
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261239_eva_intake_completion_projection.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261293_eva_operations_publication_proof.sql','utf8'));
+const approval=id(83),publication=id(82),publishedHash='c'.repeat(64);
+await db.query("UPDATE eva_automatic_intakes SET state='UNKNOWN',lease_token=NULL,lease_until=NULL WHERE id=$1",[receipt]);
+await db.query('UPDATE eva_assisted_closing_versions SET payload_hash=$2 WHERE id=$1',[closing,publishedHash]);
+await db.query("INSERT INTO eva_assisted_closing_events(closing_id,state,sequence,organization_id,id) VALUES($1,'APPROVED',99,'org',$2)",[closing,approval]);
+await db.query("INSERT INTO eva_closing_publications(id,organization_id,customer_id,closing_id,source_hash,approval_event_id) VALUES($1,'org','client',$2,$3,$4)",[publication,closing,publishedHash,approval]);
+await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,1,'PUBLISHED')",[publication]);
+let confirmed=await dashboard();ok(confirmed.summary.technical===0);ok(confirmed.rows[0].state==='PUBLISHED');ok(confirmed.rows[0].group==='DONE');
+ok((await db.query('SELECT state FROM eva_automatic_intakes WHERE id=$1',[receipt])).rows[0].state==='UNKNOWN');
+await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,2,'WITHDRAWN')",[publication]);ok((await dashboard()).summary.technical===1);
+await db.query("UPDATE eva_closing_publication_events SET state='PUBLISHED' WHERE sequence=2");
+await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[receipt,'d'.repeat(64)]);ok((await dashboard()).summary.technical===1);
+await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[receipt,hash]);ok((await dashboard()).summary.technical===0);
 console.log('XML intake and fingerprint SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

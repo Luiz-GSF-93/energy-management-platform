@@ -2,7 +2,7 @@ import {AutomaticExplanationWorker} from './automatic-explanation.worker';
 describe('Optional explanation isolation',()=>{
  const before={...process.env};afterEach(()=>{process.env=before;});
  function fixture(){
-  process.env={...before,EVA_AUTOMATIC_INTAKE_ENABLED:'true',EVA_AUTOMATIC_INTAKE_ORGANIZATIONS:'org'};
+  process.env={...before,EVA_AUTOMATIC_INTAKE_ENABLED:'true',EVA_AUTOMATIC_INTAKE_ROLLOUT:'ALLOWLIST',EVA_AUTOMATIC_INTAKE_ORGANIZATIONS:'org'};
   const context={organizationId:'org',documentId:'doc',delegate:{userId:'actor',roleId:'role',role:'gestor'}};
   const rpc=jest.fn(async(_n,b)=>({data:b.p_action==='claim'?{id:'job',leaseId:'lease'}:b.p_action==='assert'?context:{stored:true}}));
   const assistant={inspect:jest.fn(async()=>({unitName:'Synthetic',month:'2026-07',counts:{blockers:0,reviews:1},records:{measurements:{status:'REVIEW'},costs:{status:'REVIEW'}}}))},ai={interpret:jest.fn(async()=>({state:'READY'}))};

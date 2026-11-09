@@ -16,12 +16,20 @@ export async function inspectInvoiceUpload(file:DocumentFile){
  return inspectDocumentUpload(file,false);
 }
 
-export const intakeOrganizations=()=>process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'?String(process.env.EVA_AUTOMATIC_INTAKE_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean):[];
+/** Shared product rollout. Licenses, consent and tenant delegation remain database gates. */
+export const intakeOrganizations=()=>process.env.EVA_AUTOMATIC_INTAKE_ENABLED!=='true'?[]:process.env.EVA_AUTOMATIC_INTAKE_ROLLOUT==='ALLOWLIST'?String(process.env.EVA_AUTOMATIC_INTAKE_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean):['*'];
+export const intakeEnabled=(org:string)=>!!org&&(intakeOrganizations().includes('*')||intakeOrganizations().includes(org));
+export async function intakeWorkerOrganizations(db:any,kind:'INTAKE'|'EXPLANATION'){
+ const configured=intakeOrganizations();if(!configured.includes('*'))return configured;
+ const r=await db.rpc('eva_intake_worker_organizations',{p_kind:kind});
+ if(r.error||!Array.isArray(r.data)||r.data.length>100||r.data.some((v:unknown)=>typeof v!=='string'||!v||v==='*')||new Set(r.data).size!==r.data.length)throw Error('EVA_WORKER_SCOPE_UNAVAILABLE');
+ return r.data as string[];
+}
 export const intakePath=(org:string,id:string,mime:string)=>org+'/eva-intake/'+id+(mime==='application/xml'?'.xml':mime==='application/pdf'?'.pdf':mime==='image/png'?'.png':'.jpg');
 @Injectable()
 export class AutomaticIntakeService{
  constructor(private db:SupabaseService){}
- enabled(org:string){return intakeOrganizations().includes(org);}
+ enabled(org:string){return intakeEnabled(org);}
  private async action(t:TenantContext,action:string,id:string|null,body:any,administration=false){
   if(!this.enabled(t.organizationId))throw new ServiceUnavailableException('Recebimento automático ainda não habilitado nesta organização.');
   const r=await this.db.getClient().rpc(administration?'eva_intake_administration':'eva_intake_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});
@@ -47,6 +55,14 @@ export class AutomaticIntakeService{
   const project=(r:any)=>{const p:any=completed.get(r.id);return p?{...r,processingState:r.state,state:'PUBLISHED',percent:100,updatedAt:p.publishedAt,status:{...r.status,percent:100,prepared:true},note:'Concluído pela versão aprovada e publicada. O processamento anterior permanece no histórico.',completion:{closingId:p.closingId,publicationId:p.publicationId}}:r;};
   const archived=[...(data.completed??[]).map(project),...(data.rows??[]).filter((r:any)=>completed.has(r.id)).map(project)];
   return administer(present({enabled:true,...data,revision:createHash('sha256').update(JSON.stringify([data.revision??null,proof.data])).digest('hex'),rows:(data.rows??[]).filter((r:any)=>selection.queueOnly!=='true'||!completed.has(r.id)).map(project),completed:[...new Map(archived.map((r:any)=>[r.id,r])).values()].sort((a:any,b:any)=>String(b.updatedAt??'').localeCompare(String(a.updatedAt??''))).slice(0,5)}));
+ }
+ async operations(t:TenantContext,q:Record<string,string>={}){
+  if(Object.keys(q).some(k=>!['group','page'].includes(k))||q.group!==undefined&&!['ALL','TECHNICAL','HUMAN','SOURCES','PROCESSING','DONE'].includes(q.group)||q.page!==undefined&&!/^\d{1,4}$/.test(q.page))throw new BadRequestException('Filtro operacional inválido.');
+  if(!this.enabled(t.organizationId))return {enabled:false};
+  const r=await this.db.getClient().rpc('eva_intake_operational_dashboard',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_group:q.group??'ALL',p_offset:Number(q.page??0)*25});
+  if(r.error?.code==='42501')throw new ForbiddenException('Painel restrito à equipe interna autorizada.');
+  if(r.error)throw new ServiceUnavailableException('Não foi possível consultar o painel. O processamento foi preservado.');
+  return {enabled:true,...r.data};
  }
  async reconcile(t:TenantContext,id:string,body:any){
   if(!this.enabled(t.organizationId)||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Reconciliação inválida.');

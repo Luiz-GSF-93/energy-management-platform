@@ -33,3 +33,21 @@ A migraÃ§Ã£o 20261290 permite reconciliar um resultado UNKNOWN com `ai_attem
 ## Modo da transação dos RPCs de fontes
 
 A migração 20261291 declara fingerprint e catálogo de aliases VOLATILE porque a cadeia de autorização existente usa FOR SHARE. O PostgREST inicia RPCs STABLE em READ ONLY, causando SQLSTATE 25006 antes do preenchimento. Mantêm-se bloqueios, verificações e privilégios; somente o modo da transação é corrigido. O teste reproduz o erro em READ ONLY e valida o modo escolhido pelo metadado das funções.
+
+## Painel operacional e melhorias comuns a todas as organizações
+
+O painel em `/backoffice/documents/operations` apresenta recebidos e propostas da janela de 30 dias, filas técnica/humana/de fontes, etapa registrada, tempo sem atualização, próxima consulta, decisão de identidade já salva e explicação opcional separada. Pendências antigas continuam visíveis. Não interpreta consulta periódica como nova leitura paga nem como falha. Paginação de 25 envios, índices por organização e uma consulta autenticada a cada 30 segundos somente com a página visível. Falha de consulta aparece como erro com horário do último dado, sem mostrar zero artificial.
+
+A projeção usa o vínculo, papel e permissões reais no banco (`eva_intake_actor`), exige equipe interna e não retorna OCR/XML, URL do provedor, hash ou credencial. O backend recebe a organização do contexto autenticado; a consulta não aceita outra organização. Usuários externos não acessam esta visão. Uma decisão de identidade exibida não significa que uma alteração de fonte esteja aprovada.
+
+O recebimento usa rollout GLOBAL quando o recurso principal está ligado. A lista histórica de IDs não restringe mais as melhorias. `EVA_AUTOMATIC_INTAKE_ROLLOUT=ALLOWLIST` é rollback explícito para a lista antiga; o interruptor principal continua disponível. Workers descobrem no banco até 100 organizações com trabalhos vencidos, licença vigente única e automação habilitada; ordenação favorece o trabalho mais antigo. Somente IDs concretos chegam ao claim. O claim revalida autor, delegação, licença e escopo antes de cada efeito. Uma nova organização herda o mesmo processador sem nova variável de ambiente, desde que tenha contratado o módulo e configurado sua própria delegação/consentimento. Não são copiadas permissões, dados de cliente, contratos, justificativas de UC, alíquotas ou aprovações de outra organização.
+
+As correções de PDF/XML, CPU/conflitos, recuperação, identidade matriz/filial, desperdícios, CCEE/PLD e concessão pelo administrador permanecem código/migrações compartilhados. Cadastros e evidências continuam específicos da organização. Recursos experimentais não relacionados (por exemplo mapas e RAG) mantêm suas próprias licenças e controles; este rollout não os ativa nem concede novas permissões.
+
+A tela Documentos agora monta a conferência OCR somente do documento selecionado. Antes, componentes ocultos de todos os documentos eram montados e consultavam status independentemente. O link do painel abre a conferência pela navegação de documento já existente, sem iniciar OCR ou IA.
+
+Não é necessária uma troca imediata para RabbitMQ/Azure Service Bus. As filas duráveis, a preparação determinística e a explicação separada existentes atendem este incremento. Broker, OpenTelemetry/Prometheus/Grafana e dashboard executivo completo permanecem evoluções condicionadas a métricas e desenho de acesso/custo; não são apresentados como implementados. O painel identifica bloqueios, mas não elimina ausência de fonte, revogação ou decisão humana legítima.
+
+Migração 20261292: funções service-only, índices e projeção; nenhum resultado financeiro, licença, vínculo ou delegação é alterado. Implantar migração antes de ativar o código global. Rollback do código: ALLOWLIST; manter funções/índices e históricos, sem desfazer resultados.
+
+Migração 20261293: o painel reutiliza a prova de publicação por documento/hash, versão, decisão e publicação vigentes, em lotes de até 100 IDs. Uma publicação comprovada prevalece na apresentação sobre um erro antigo do recibo. O recibo e o histórico originais não são reescritos; retirada de publicação ou fonte alterada desfaz essa projeção.

@@ -17,7 +17,7 @@ import {BackofficeAiService,assistantAiEvidence} from '../ocr/backoffice-ai.serv
 import {OcrMachineDraftService} from '../ocr/ocr-machine-draft.service';
 import {automaticIntakeContext,automaticOcrIdentityConfidence} from './automatic-intake-context';
 import {intakeIdentityDiagnostic} from './automatic-intake-triage';
-import {intakeOrganizations,intakePath} from './automatic-intake.service';
+import {intakeOrganizations,intakeWorkerOrganizations,intakePath} from './automatic-intake.service';
 import {DOCUMENT_BUCKET} from '../documents/services/document-file';
 import {portalInvoiceKind} from './portal-invoice-kind';
 
@@ -36,8 +36,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
   return createHash('sha256').update(JSON.stringify(['intake-fingerprint-2',fingerprint,officialFlag??null,supplementalTariffFlagReference(i.month)??null])).digest('hex');
  }
  async runOnce(){
-  const organizations=intakeOrganizations();if(this.busy||this.stopped||!organizations.length)return;this.busy=true;
+  if(this.busy||this.stopped||!intakeOrganizations().length)return;this.busy=true;
   try{
+   const organizations=await intakeWorkerOrganizations(this.db.getClient(),'INTAKE');if(!organizations.length)return;
    const job=await this.rpc('claim_eva_automatic_intake',{p_organizations:organizations});if(!job)return;
    const transition=(action:string,body:any={})=>this.rpc('transition_eva_automatic_intake',{p_id:job.id,p_token:job.token,p_action:action,p_body:body});
    let i:any;let preparing=false;let submitting=false;let stage="SOURCE_CHECK";
