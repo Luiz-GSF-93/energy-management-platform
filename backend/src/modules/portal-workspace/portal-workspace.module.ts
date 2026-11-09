@@ -21,6 +21,7 @@ import {PortalWorkspaceService} from './portal-workspace.service';
 class PortalWorkspaceController {
  constructor(private service:PortalWorkspaceService,private presentation:PortalPresentationService,private automatic:AutomaticIntakeService){}
  @Get('automatic-intakes') @Header('Cache-Control','no-store') automaticList(@Tenant() t:TenantContext,@Query() q:any){return this.automatic.list(t,q);}
+ @Get('automatic-intakes/operations') @Header('Cache-Control','private, no-store') automaticOperations(@Tenant() t:TenantContext,@Query() q:any){return this.automatic.operations(t,q);}
  @Post('automatic-intakes') @UseInterceptors(FileInterceptor('file',{limits:{fileSize:MAX_DOCUMENT_BYTES,files:1,fields:5,fieldSize:256,parts:6}})) automaticUpload(@Tenant() t:TenantContext,@Body() b:any,@UploadedFile() f:DocumentFile){return this.automatic.upload(t,b,f);}
  @Post('automatic-intakes/:id/reconcile') automaticReconcile(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.reconcile(t,id,b);}
  @Post('automatic-intakes/:id/retry') automaticRetry(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.retry(t,id,b);}

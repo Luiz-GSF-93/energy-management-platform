@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState, useRef } from 'react';
 import EvaInvoiceInbox from '@/app/components/EvaInvoiceInbox';
 import AutomaticInvoiceIntake from '@/app/components/AutomaticInvoiceIntake';
@@ -74,7 +75,9 @@ function DocumentsContent() {
   useEffect(() => {
     let cancelled=false;
     currentOrg.current = organizationId;
-    if (!organizationId || !canView) return;
+    const openedFromHash=useRef('');
+  useEffect(()=>{const id=window.location.hash.match(/^#ocr-([a-f0-9-]{36})$/i)?.[1];if(id&&openedFromHash.current!==id&&documents.some(d=>d.id===id)){openedFromHash.current=id;setOcrId(id);}},[documents]);
+  if (!organizationId || !canView) return;
     apiRequest<{documents:Document[];customers:Customer[];units:Unit[]}>('/api/v1/document-catalog').then(({documents:d,customers:c,units:u})=>{if(!Array.isArray(d)||!Array.isArray(c)||!Array.isArray(u))throw new Error('Resposta do catálogo indisponível. Nenhum conjunto parcial foi exibido.');if(!cancelled){setDocuments(d);setCustomers(c);setUnits(u);}})
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Não foi possível carregar os dados. Tente novamente.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -127,12 +130,15 @@ function DocumentsContent() {
       if (currentOrg.current===org) { const link=document.createElement('a');link.href=result.url;link.rel='noopener noreferrer';link.click(); }
     } catch (e) { if (currentOrg.current===org) setError(e instanceof Error ? e.message : 'Arquivo indisponível.'); }
   }
+  const openedFromHash=useRef('');
+  useEffect(()=>{const id=window.location.hash.match(/^#ocr-([a-f0-9-]{36})$/i)?.[1];if(id&&openedFromHash.current!==id&&documents.some(d=>d.id===id)){openedFromHash.current=id;setOcrId(id);}},[documents]);
   if (!organizationId || !canView) return <p role="alert">Selecione uma organização com permissão para consultar documentos.</p>;
   return <section className="backoffice-page">
     <header className="backoffice-page__header"><h1 className="backoffice-page__title">Documentos</h1><p>Gerencie faturas, contratos, notas e modelos por cliente, unidade, classificação e versão.</p></header>
     {error && <div><p role="alert">{error}</p><button type="button" disabled={busy} onClick={()=>{setError('');setAttempt(n=>n+1);}}>Tentar carregar novamente</button></div>}{notice && <p role="status">{notice}</p>}
     {loading ? <p role="status">Carregando documentos…</p> : <>
       {context?.scope==='organization'&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')&&hasPermission(viewPermission)&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')?<EvaInvoiceInbox embedded key={organizationId+':'+context.user.id} organizationId={organizationId}/>:null}
+      <p><Link href="/backoffice/documents/operations">Abrir painel operacional da EVA · etapas e pendências</Link></p>
       <AutomaticInvoiceIntake customers={customers} units={units} onEnabled={setAutomaticEnabled} canUpload={canUpload} onUpdated={()=>setAttempt(n=>n+1)}/>
       <DocumentCatalog documents={documents} types={types} canUpload={canUpload} canEdit={hasPermission('613b71d0-67db-4761-9e11-61fdf63ac8d5')} canApprove={!!context&&context.scope!=='global'&&(['gestor','admin_org'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')} onNew={()=>{setDropFile(null);setError('');setPreviousDocument(null);setUploadTag('DRAFT');setCustomer('');setShowUpload(true);}} onVersion={d=>{setDropFile(null);setError('');setPreviousDocument(d as Document);setUploadTag('REVIEWED');setCustomer(d.customer_id);setShowUpload(true);}} onReload={()=>setAttempt(n=>n+1)} onPreview={id=>void preview(id)} onDownload={id=>void download(id)} onOcr={id=>{if(canAssist&&!inbox.some(v=>v.id===id))track(id);setOcrId(id);setOpened(old=>({id,request:(old?.request??0)+1}));}}/>
       {canUpload && showUpload && <DocumentDialog label="Inserir documento" busy={busy} onClose={()=>setShowUpload(false)}><button disabled={busy} onClick={()=>setShowUpload(false)} autoFocus>Fechar cadastro</button><form key={organizationId} onInvalidCapture={e=>{let d=(e.target as HTMLElement).closest('details');while(d){d.open=true;d=d.parentElement?.closest('details')??null;}}} onSubmit={send} style={{display:'grid',gap:16,maxWidth:680,padding:24,border:'1px solid var(--color-border)',borderRadius:12,background:'var(--color-surface)',color:'var(--color-text)'}}>
@@ -148,7 +154,7 @@ function DocumentsContent() {
       </form></DocumentDialog>}
       {Object.values(['cb949e2a-e01d-4cf0-8c69-6ca74fe4d627','1479c0b7-9608-4e95-bd83-7e6899255a78','489e6387-d5fc-4cb0-81f9-d7a76269dca5']).some(hasPermission)?<DocumentEvidenceWorkspace hasPermission={hasPermission} documents={documents} canUpload={canUpload}/>:null}
       {canAssist&&inbox.length>0&&<details className="operation-panel"><summary>Fila EVA ({inbox.length})</summary><AssistantInbox items={inbox.flatMap(item=>{const d=documents.find(d=>d.id===item.id&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR');return d?[{id:d.id,name:d.original_filename,month:d.reference_month.slice(0,7),update:updates[d.id]}]:[];})} onOpen={id=>{setOcrId(id);setOpened(old=>({id,request:(old?.request??0)+1}));}} onRemove={remove}/></details>}
-      {documents.filter(d=>d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR').map(d=><section ref={ocrId===d.id?ocrPanel:undefined} tabIndex={-1} key={organizationId+':'+d.id} hidden={ocrId!==d.id} className="operation-panel" aria-label={'OCR · '+d.original_filename}><header><h2>{d.original_filename} · OCR e EVA</h2><button onClick={()=>setOcrId('')}>Recolher conferência</button></header><OcrDocumentStatus id={d.id} autoAssist={canAssist&&activated.includes(d.id)} openRequest={opened?.id===d.id?opened.request:0} onAssistantUpdate={updateAssistant} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')}/></section>)}
+      {documents.filter(d=>d.id===ocrId&&d.file_verified&&d.document_type==='INVOICE_DISTRIBUTOR').map(d=><section ref={ocrId===d.id?ocrPanel:undefined} tabIndex={-1} key={organizationId+':'+d.id} hidden={ocrId!==d.id} className="operation-panel" aria-label={'OCR · '+d.original_filename}><header><h2>{d.original_filename} · OCR e EVA</h2><button onClick={()=>setOcrId('')}>Recolher conferência</button></header><OcrDocumentStatus id={d.id} autoAssist={canAssist&&activated.includes(d.id)} openRequest={opened?.id===d.id?opened.request:0} onAssistantUpdate={updateAssistant} canProcess={hasPermission('92e1b670-ab10-483a-b825-c6e16799496d')}/></section>)}
     </>}
   </section>;
 }
