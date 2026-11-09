@@ -171,9 +171,9 @@ export class DocumentsService {
       throw new ConflictException('Este registro ainda não possui arquivo verificado');
     }
     const result = await this.supabaseService.getClient().storage.from(DOCUMENT_BUCKET)
-      .createSignedUrl(row.file_path, 60, { download: inline ? false : row.original_filename });
+      .createSignedUrl(row.file_path, 60, { download: inline && row.mime_type!=='application/xml' ? false : row.original_filename });
     if (result.error || !result.data?.signedUrl) throw new ServiceUnavailableException('Arquivo temporariamente indisponível');
-    return { url: result.data.signedUrl, expiresIn: 60 };
+    return { url: result.data.signedUrl, expiresIn: 60, mimeType:row.mime_type };
   }
   async update(id: string, organizationId: string, input: UpdateDocumentDto) {
     await this.requireDocumentManagement(organizationId);

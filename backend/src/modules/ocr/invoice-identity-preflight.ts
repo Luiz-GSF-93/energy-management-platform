@@ -59,6 +59,12 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
  * that initial OCR is never permission to import, draft, approve or publish. */
 export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registration:InvoiceRegistration,fileHash:string,timeoutMs?:number,read?:()=>Promise<ExtractionResult>){
  const base={version:'invoice-identity-preflight-v1',fileHash,registration};
+ if(mime==='application/xml'){
+  const {readFiscalXml,xmlUnitMatch}=await import('./fiscal-xml'),xml=readFiscalXml(bytes);
+  const proof=xmlUnitMatch(xml.fiscal,{document:registration.taxId},{consumer_unit_number:registration.unitNumber,address:registration.address,aliases:registration.auditedUnitNumbers},registration.month);
+  if(xml.fiscal.sourceHash!==fileHash)throw Error('XML_SOURCE_HASH_MISMATCH');
+  return {...base,state:proof.matched?'MATCH':'MISMATCH',checks:{taxId:proof.taxIdentity.accepted?'MATCH':'MISMATCH',unit:proof.unitMatch?'MATCH':'MISMATCH',address:proof.addressMatch?'MATCH':'MISMATCH',period:proof.period?'MATCH':'MISMATCH'},taxIdentity:proof.taxIdentity,sourcePages:[],sourceKind:'XML'};
+ }
  if(mime!=='application/pdf')return {...base,state:'OCR_REQUIRED',checks:{source:'IMAGE_REQUIRES_INITIAL_OCR'}};
  try{const extracted=await (read?read():timeoutMs===undefined?extractPdfText(bytes):extractPdfText(bytes,timeoutMs));
   if(sourcePreparationEnabled()){

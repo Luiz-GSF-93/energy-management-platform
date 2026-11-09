@@ -1,0 +1,40 @@
+name: EVA document intake performance and XML
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/portal-workspace/automatic-*'
+      - 'backend/src/modules/portal-workspace/xml-intake-context*'
+      - 'backend/src/modules/ocr/fiscal-xml*'
+      - 'backend/src/database/migrations/2026128[678]*'
+      - 'backend/test/eva-fiscal-xml.cjs'
+      - 'frontend/app/components/AutomaticInvoiceIntake.tsx'
+      - '.github/workflows/eva-intake-performance.yml'
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
+        working-directory: backend
+      - run: node test/eva-fiscal-xml.cjs && node test/eva-automatic-intake.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

@@ -1,0 +1,24 @@
+import {readFiscalXml,xmlUnitMatch,xmlSupplierProposal} from './fiscal-xml';
+import {inspectInvoiceUpload,intakePath} from '../portal-workspace/automatic-intake.service';
+
+// Synthetic fiscal fields, never a real invoice or SEFAZ attestation.
+function key(model:string){let k='35260711222333000181'+model+'001000000001110000001';let n=0,w=2;for(let i=42;i>=0;i--){n+=Number(k[i])*w;w=w===9?2:w+1;}let d=11-n%11;return k+(d>=10?0:d);}
+function invoice(model='55',extra='Competencia: 07/2026; UC: 1234567'){
+ const tag=model==='55'?'NFe':'NF3e',ns=model==='55'?'nfe':'nf3e';
+ const product=model==='55'?'<det nItem="1"><prod><xProd>ENERGIA ELETRICA</xProd><uCom>MWh</uCom><qCom>10.0000</qCom><vUnCom>20.00</vUnCom><vProd>200.00</vProd></prod></det>':'<NFdet><det nItem="1"><detItem><prod><xProd>Consumo energia</xProd><cClass>0601001</cClass><uMed>2</uMed><qFaturada>10.00</qFaturada><vItem>20.00</vItem><vProd>200.00</vProd></prod></detItem></det></NFdet>';
+ return Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><${tag} xmlns="http://www.portalfiscal.inf.br/${ns}"><inf${tag} Id="${tag}${key(model)}"><ide><mod>${model}</mod><tpAmb>1</tpAmb><nNF>1</nNF><dhEmi>2026-08-10T12:00:00-03:00</dhEmi></ide><emit><CNPJ>11222333000181</CNPJ><xNome>Emissor sintetico</xNome></emit><dest><CNPJ>11444777000161</CNPJ><xNome>Cliente sintetico</xNome><enderDest><xLgr>Rua Exemplo</xLgr><nro>123</nro><xBairro>Centro</xBairro></enderDest></dest>${model==='66'?'<acessante><idAcesso>1234567</idAcesso></acessante><gFat><CompetFat>202607</CompetFat></gFat>':''}${product}<total>${model==='55'?'<ICMSTot><vNF>200.00</vNF></ICMSTot>':'<vNF>200.00</vNF>'}</total><infAdic><infCpl>${extra}</infCpl></infAdic></inf${tag}></${tag}>`);
+}
+describe('Bounded fiscal XML intake',()=>{
+ const customer={document:'11444777000161'},unit={consumer_unit_number:'1234567',address:'Rua Exemplo, 123, Centro'};
+ it('extracts NF-e typed amounts and source key without OCR confidence or fiscal approval',()=>{
+  const x=readFiscalXml(invoice());expect(x.fiscal).toMatchObject({model:'55',months:['2026-07'],amount:'200.00',signatureVerified:false,authorizationVerified:false});expect(x.raw.documents[0].fields.CustomerTaxId.confidence).toBeNull();
+  expect(xmlUnitMatch(x.fiscal,customer,unit,'2026-07').matched).toBe(true);
+  expect(xmlSupplierProposal(x,'2026-07',customer.document,{documentId:'synthetic',fileHash:x.fiscal.sourceHash},{unitNumber:unit.consumer_unit_number,address:unit.address})).toMatchObject({quantityMwh:'10.0000',pricePerMwh:'20.00',amount:'200.00',financialApproval:false,taxTreatment:'REVIEW',fiscalIdentity:{key:key('55')}});
+ });
+ it('reads NF3e NFdet/det/detItem/prod and gFat, preserving unit and month',()=>{const x=readFiscalXml(invoice('66',''));expect(x.fiscal).toMatchObject({kind:'INVOICE_DISTRIBUTOR',unitCodes:['1234567'],months:['2026-07'],rows:[{unit:'KWH',quantity:'10.00',price:'20.00'}]});expect(xmlUnitMatch(x.fiscal,customer,unit,'2026-07').matched).toBe(true);});
+ it('does not replace missing competence with issuance or a UI hint',()=>{const x=readFiscalXml(invoice('55','UC: 1234567'));expect(x.fiscal.months).toEqual([]);expect(xmlUnitMatch(x.fiscal,customer,unit,'2026-08').matched).toBe(false);});
+ it('rejects a second competence and different unit, recipient or address',()=>{const x=readFiscalXml(invoice('55','Competencia: 07/2026; Referencia: 08/2026; UC: 1234567'));expect(xmlUnitMatch(x.fiscal,customer,unit,'2026-07').matched).toBe(false);for(const changed of [{...unit,consumer_unit_number:'9999999'},{...unit,address:'Outro logradouro 123'}])expect(xmlUnitMatch(readFiscalXml(invoice()).fiscal,customer,changed,'2026-07').matched).toBe(false);expect(xmlUnitMatch(readFiscalXml(invoice()).fiscal,{document:'11222333000181'},unit,'2026-07').matched).toBe(false);});
+ it.each(['<!DOCTYPE NFe [<!ENTITY x SYSTEM "file:///secret">]>','<?xml-stylesheet href="https://invalid.test/x"?>'])('rejects entities and active processing instructions',prefix=>expect(()=>readFiscalXml(Buffer.concat([Buffer.from(prefix),invoice()]))).toThrow());
+ it('rejects wrong namespaces, duplicate recipient blocks, invalid check digit and oversized input',()=>{for(const text of [invoice().toString().replace('http://www.portalfiscal.inf.br/nfe','https://invalid.test'),invoice().toString().replace('</dest>','</dest><dest><CNPJ>11444777000161</CNPJ></dest>'),invoice().toString().replace(key('55'),key('55').slice(0,43)+(Number(key('55')[43])+1)%10)])expect(()=>readFiscalXml(Buffer.from(text))).toThrow();expect(()=>readFiscalXml(Buffer.alloc(2097153))).toThrow();});
+ it('accepts browser text/xml and keeps exact XML storage extension',async()=>{const buffer=invoice();expect(await inspectInvoiceUpload({buffer,size:buffer.length,mimetype:'text/xml',originalname:'nota.xml'})).toMatchObject({mime:'application/xml',extension:'xml'});expect(intakePath('org','receipt','application/xml')).toBe('org/eva-intake/receipt.xml');});
+});
