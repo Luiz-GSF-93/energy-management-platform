@@ -10,6 +10,7 @@ import {calculateMonthlyMarketReference} from '../energy-prices/market-reference
 @Injectable()
 export class CceeService {
   private running=false;
+  isBusy(){return this.running;}
   status(){
     try{const config=cceeConfig(process.env);config.pfx.fill(0);return {configured:true,enabled:true,mode:'READ_ONLY',automaticImport:false,diagnostic:'READY'};}
     catch(error){

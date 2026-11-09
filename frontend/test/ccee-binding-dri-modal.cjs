@@ -1,0 +1,35 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'https://localhost'});
+for(const k of ['window','document','navigator','HTMLElement','Event','FormData','Node'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+dom.window.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};dom.window.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');let calls=[],api;
+const original=Module._load;Module._load=function(n,p,m){
+ if(n==='@/app/lib/api/client')return {apiRequest:async(path,o)=>{calls.push([path,o]);return api(path,o);}};
+ if(n==='@/app/components/ui')return {Button:({children,variant,...p})=>React.createElement('button',p,children),Card:({children,title})=>React.createElement('section',null,React.createElement('h2',null,title),children),Alert:({children})=>React.createElement('p',{role:'alert'},children),Input:({label,...p})=>React.createElement('label',null,label,React.createElement('input',p))};
+ return original.call(this,n,p,m);
+};
+const {default:Wizard,bindingPrefill}=require('../app/backoffice/ccee-data/BindingWizard.tsx'),Dri=require('../app/backoffice/ccee-data/DriWorkspace.tsx').default;
+const root=createRoot(document.getElementById('root')),unit='11111111-1111-4111-8111-111111111111';
+const setValue=async(el,value)=>act(async()=>{const proto=el.tagName==='SELECT'?dom.window.HTMLSelectElement.prototype:dom.window.HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
+const click=async text=>act(async()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent===text);assert(b,text);b.click();});
+const input=label=>[...document.querySelectorAll('label')].find(e=>e.textContent.startsWith(label))?.querySelector('input');
+(async()=>{try{
+ const ctx={organizationId:'org',customer:{id:'customer',name:'Synthetic client',document:'11.222.333/0001-81'},unit:{id:unit,name:'Synthetic unit',installation:'UC_77',address:'Registered address'},previousBinding:null,discovery:{participant:{agentCode:'987',taxId:'11222333000181',validFrom:'2020-01-01'},reason:'Participant confirmed',updatedAt:'2026-11-09T10:00:00Z'}};
+ assert.equal(bindingPrefill(ctx).validFrom,'','A participant adhesion date must not become a representation grant date');
+ api=async(path,o)=>path.startsWith('/api/v1/consumer-units')?[{id:unit,name:'Synthetic unit',customer_id:'customer'}]:o?.method==='POST'?{organizationId:'org',unitId:unit,agentCode:'987',profiles:[{code:'123',principal:true,name:'Provider profile'}],points:[{code:'POINT_1',name:'Provider point',meters:['METER_1']}],hashes:['a'.repeat(64)],retrievedAt:'2026-11-09T10:00:00Z',selectedProfileCode:'123'}:ctx;
+ await act(async()=>root.render(React.createElement(Wizard,{organizationId:'org',customers:[{id:'customer',company_name:'Synthetic client'}],driEnabled:true,initialCustomer:'customer',initialUnit:unit,onSaved:async()=>{throw Error('No grant expected');}})));
+ assert(document.body.textContent.includes('UC_77'));assert(document.body.textContent.includes('Registered address'));assert.equal(input('Código do ponto de medição').value,'');
+ await click('Buscar dados na API CCEE');
+ assert.equal(input('Código do perfil do cliente').value,'123');assert.equal(input('Código do ponto de medição').value,'POINT_1');assert.equal(input('Código do medidor').value,'METER_1');
+ assert.equal(input('Representação válida a partir de').value,'');assert.equal(input('CNPJ do agente').value,'11222333000181');
+ const post=calls.find(c=>c[1]?.method==='POST');assert.equal(post[1].body.profileCode,undefined);assert(!('organizationId'in post[1].body));assert(!calls.some(c=>c[0]==='/api/v1/ccee-data/bindings'),'Discovery does not save or approve a binding');
+ const row={id:'job',kind:'DRI_EVENTS',state:'SUCCEEDED',month:'2026-10-01',created_at:'2026-11-09T10:00:00Z',result:{data:{sourceHash:'b'.repeat(64),rows:[{code:'event',eventKey:'event-key',name:'Settlement event <script>unsafe</script>',month:'2026-10'}]}}};
+ api=async path=>({organizationId:'org',...(path.includes('/jobs/')?{job:row}:{jobs:[row]})});calls=[];
+ await act(async()=>root.render(React.createElement(Dri,{organizationId:'org',enabled:true,canManage:true,bindings:[{id:'binding',status:'APPROVED',service_scope:['DRI_READ'],profile_code:'123',dri_agent_code:'987',customer_name:'Synthetic client',unit_name:'Synthetic unit'}]})));
+ await setValue(document.querySelector('select'),'binding');await setValue(document.querySelector('input[type=month]'),'2026-10');await click('Atualizar consultas DRI');await click('Conferir fonte e resultado');
+ assert(document.querySelector('dialog[open][aria-label="Consulta DRI"]'),'Result opens in a native modal');assert(document.body.textContent.includes('Eventos divulgados'));assert(document.body.textContent.includes('Consulta concluída'));assert(document.body.textContent.includes('Settlement event <script>unsafe</script>'));assert(!document.querySelector('script'),'Provider text is escaped');
+ assert(!calls.some(c=>c[1]?.method==='POST'),'Reading the result creates no new provider job or financial operation');
+ await click('Fechar resultado DRI');assert(!document.querySelector('dialog[open]'),'Closing returns to the existing workspace');
+ console.log('PASS guided CCEE binding: registry prefill, API candidates, no invented grant dates or representation; DRI modal and escaped source results');
+}finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
