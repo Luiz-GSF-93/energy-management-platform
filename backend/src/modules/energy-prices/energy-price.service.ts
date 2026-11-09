@@ -1,3 +1,4 @@
+import {unitMarketReference} from './unit-market-reference';
 import {resolvePortalUnits} from '../../common/services/portal-selected-units';
 import {normalizePublishedDetail} from '../portal-insights/portal-legacy-detail';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,InternalServerErrorException} from '@nestjs/common';
@@ -20,6 +21,15 @@ export class EnergyPriceService{
  const r=await this.db.getClient().rpc(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?'energy_price_read_workspace':'energy_price_read',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_year:Number(d.year),p_customer:d.customerId??null,p_unit:d.unitId??null});this.fail(r.error);
  if(r.data?.customerId){const modern=await this.db.getClient().rpc(process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'?'read_portal_financial_components_v2':'read_eva_published_components',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:portal,p_from:d.year+'-01',p_to:d.year+'-12',p_customer:r.data.customerId});this.fail(modern.error);if(!Array.isArray(modern.data)||modern.data.some((x:any)=>x.customerId!==r.data.customerId||!r.data.units.some((u:any)=>u.id===x.unitId)))throw new ConflictException('Escopo das fontes de preço divergente.');r.data.workspaceV2=process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true';r.data.evaDetails=modern.data.map((r:any)=>clientPublishedInsight(normalizePublishedDetail(r,t.organizationId),process.env.PORTAL_FINANCIAL_DETAIL_V2_ENABLED==='true'));}
  if(selection){for(const key of ['units','studies','baselines','financial','evaDetails','submarkets'])if(Array.isArray(r.data?.[key]))r.data[key]=r.data[key].filter((x:any)=>selection.includes(key==='units'?x.id:x.unitId));}
+ if(r.data?.customerId&&r.data.units?.length){
+  const ids=r.data.units.map((u:any)=>u.id);if(ids.length>500)throw new ConflictException('Recorte de unidades muito amplo.');
+  const [locations,supply]=await Promise.all([
+   this.db.getClient().from('consumer_units').select('id,organization_id,customer_id,state').eq('organization_id',t.organizationId).eq('customer_id',r.data.customerId).in('id',ids),
+   this.db.getClient().from('energy_contracts').select('organization_id,customer_id,consumer_unit_id,submarket').eq('organization_id',t.organizationId).eq('customer_id',r.data.customerId).eq('contract_type','ENERGY_PURCHASE').eq('status','ACTIVE').in('consumer_unit_id',ids)]);
+  this.fail(locations.error);this.fail(supply.error);
+  if(!Array.isArray(locations.data)||!Array.isArray(supply.data)||locations.data.length!==ids.length||locations.data.some((u:any)=>u.organization_id!==t.organizationId||u.customer_id!==r.data.customerId||!ids.includes(u.id))||supply.data.some((c:any)=>c.organization_id!==t.organizationId||c.customer_id!==r.data.customerId||!ids.includes(c.consumer_unit_id)))throw new ConflictException('Referência cadastral fora do recorte autorizado.');
+  r.data.unitMarketReferences=locations.data.map((u:any)=>({unitId:u.id,...unitMarketReference(u.state,supply.data.filter((c:any)=>c.consumer_unit_id===u.id&&c.submarket).map((c:any)=>c.submarket))}));
+ }
  try{return energyPriceDashboard(t.organizationId,Number(d.year),r.data,portal);}catch{throw new ConflictException('Fontes ou escopo do indicador exigem conferência.');}
  }
  async publish(input:unknown,t:TenantContext){await this.scope(t,false);const d=await validateWriteDto(EnergyPricePublishDto,input as EnergyPricePublishDto);

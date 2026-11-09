@@ -14,6 +14,8 @@ on:
       - 'backend/src/modules/ocr/ocr.module.ts'
       - 'frontend/app/backoffice/platform-costs/CceeMetrics.tsx'
       - 'frontend/test/ccee*'
+      - 'backend/src/modules/energy-prices/**'
+      - 'frontend/app/components/EnergyPrice*'
       - 'frontend/app/lib/api/plans.ts'
       - 'frontend/app/components/LicenseFromPlan.tsx'
       - 'frontend/app/backoffice/plans/**'
@@ -33,9 +35,11 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/energy-forecast/contract-context.service.spec.ts src/modules/platform-costs/service-catalog.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/ccee src/modules/energy-prices src/modules/energy-forecast/contract-context.service.spec.ts src/modules/platform-costs/service-catalog.spec.ts src/modules/ocr/eva-closing-dialogue.service.spec.ts
         working-directory: backend
       - run: node test/database/ccee-dri.test.mjs
+        working-directory: backend
+      - run: node test/database/ccee-reference-tasks.test.mjs
         working-directory: backend
       - run: node test/database/ccee-data-license.test.mjs
         working-directory: backend
@@ -68,6 +72,8 @@ jobs:
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/ccee-binding-dri-modal.cjs
         working-directory: frontend
       - run: node test/ccee-dri.cjs
         working-directory: frontend
