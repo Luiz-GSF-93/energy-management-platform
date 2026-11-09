@@ -44,8 +44,10 @@ O recebimento usa rollout GLOBAL quando o recurso principal está ligado. A list
 
 As correções de PDF/XML, CPU/conflitos, recuperação, identidade matriz/filial, desperdícios, CCEE/PLD e concessão pelo administrador permanecem código/migrações compartilhados. Cadastros e evidências continuam específicos da organização. Recursos experimentais não relacionados (por exemplo mapas e RAG) mantêm suas próprias licenças e controles; este rollout não os ativa nem concede novas permissões.
 
-A tela Documentos agora monta a conferência OCR somente do documento selecionado. Antes, componentes ocultos de todos os documentos eram montados e consultavam status independentemente. O link do painel abre a conferência pelo fragmento local, sem iniciar OCR ou IA.
+A tela Documentos agora monta a conferência OCR somente do documento selecionado. Antes, componentes ocultos de todos os documentos eram montados e consultavam status independentemente. O link do painel abre a conferência pela navegação de documento já existente, sem iniciar OCR ou IA.
 
 Não é necessária uma troca imediata para RabbitMQ/Azure Service Bus. As filas duráveis, a preparação determinística e a explicação separada existentes atendem este incremento. Broker, OpenTelemetry/Prometheus/Grafana e dashboard executivo completo permanecem evoluções condicionadas a métricas e desenho de acesso/custo; não são apresentados como implementados. O painel identifica bloqueios, mas não elimina ausência de fonte, revogação ou decisão humana legítima.
 
 Migração 20261292: funções service-only, índices e projeção; nenhum resultado financeiro, licença, vínculo ou delegação é alterado. Implantar migração antes de ativar o código global. Rollback do código: ALLOWLIST; manter funções/índices e históricos, sem desfazer resultados.
+
+Migração 20261293: o painel reutiliza a prova de publicação por documento/hash, versão, decisão e publicação vigentes, em lotes de até 100 IDs. Uma publicação comprovada prevalece na apresentação sobre um erro antigo do recibo. O recibo e o histórico originais não são reescritos; retirada de publicação ou fonte alterada desfaz essa projeção.

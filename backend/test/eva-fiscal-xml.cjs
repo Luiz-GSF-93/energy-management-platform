@@ -133,5 +133,24 @@ await db.query("UPDATE eva_automatic_intakes SET state='UNKNOWN' WHERE id=$1",[r
 await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE id=$1",[receipt]);ok((await dashboard()).summary.human===1);
 for(const role of ['anon','authenticated'])for(const name of ['eva_intake_worker_organizations(text)','eva_intake_operational_dashboard(text,text,text,boolean,text,integer)'])ok(!await scalar('SELECT has_function_privilege($1,$2,\'EXECUTE\') v',[role,name]));
 await deny(()=>scalar("SELECT eva_intake_worker_organizations('INVALID') v"));
+// A receipt error cannot mask an exact approved publication. Use the real proof function.
+await db.exec(`ALTER TABLE eva_assisted_closing_versions ADD COLUMN version int DEFAULT 1;
+ALTER TABLE eva_assisted_closing_events ADD COLUMN id uuid DEFAULT gen_random_uuid();
+CREATE TABLE eva_closing_publications(id uuid,organization_id text,customer_id text,closing_id uuid,source_hash text,approval_event_id uuid,created_at timestamptz DEFAULT now());
+ALTER TABLE eva_closing_publication_events ADD COLUMN state text;`);
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261239_eva_intake_completion_projection.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261293_eva_operations_publication_proof.sql','utf8'));
+const approval=id(83),publication=id(82),publishedHash='c'.repeat(64);
+await db.query("UPDATE eva_automatic_intakes SET state='UNKNOWN',lease_token=NULL,lease_until=NULL WHERE id=$1",[receipt]);
+await db.query('UPDATE eva_assisted_closing_versions SET payload_hash=$2 WHERE id=$1',[closing,publishedHash]);
+await db.query("INSERT INTO eva_assisted_closing_events(closing_id,state,sequence,organization_id,id) VALUES($1,'APPROVED',99,'org',$2)",[closing,approval]);
+await db.query("INSERT INTO eva_closing_publications(id,organization_id,customer_id,closing_id,source_hash,approval_event_id) VALUES($1,'org','client',$2,$3,$4)",[publication,closing,publishedHash,approval]);
+await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,1,'PUBLISHED')",[publication]);
+let confirmed=await dashboard();ok(confirmed.summary.technical===0);ok(confirmed.rows[0].state==='PUBLISHED');ok(confirmed.rows[0].group==='DONE');
+ok((await db.query('SELECT state FROM eva_automatic_intakes WHERE id=$1',[receipt])).rows[0].state==='UNKNOWN');
+await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,2,'WITHDRAWN')",[publication]);ok((await dashboard()).summary.technical===1);
+await db.query("UPDATE eva_closing_publication_events SET state='PUBLISHED' WHERE sequence=2");
+await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[receipt,'d'.repeat(64)]);ok((await dashboard()).summary.technical===1);
+await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[receipt,hash]);ok((await dashboard()).summary.technical===0);
 console.log('XML intake and fingerprint SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
