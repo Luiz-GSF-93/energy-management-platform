@@ -9,6 +9,7 @@ on:
       - 'backend/test/eva-fiscal-xml.cjs'
       - 'backend/test/eva-automatic-intake.cjs'
       - 'backend/src/database/migrations/20261290_eva_reconcile_before_explanation.sql'
+      - 'backend/src/database/migrations/20261291_eva_source_rpc_transaction_mode.sql'
       - 'frontend/app/components/AutomaticInvoiceIntake.tsx'
       - '.github/workflows/eva-intake-performance.yml'
 permissions:
