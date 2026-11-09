@@ -33,6 +33,8 @@ const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,
 
  serverError=null;serverRows=[{id:'triage',filename:'invoice.pdf',state:'REVIEW_REQUIRED',month:'2026-01',documentId:null,note:'UC diferente',identityReview:{fingerprint:'a'.repeat(64),reason:'UC histórica conferida no original e na unidade cadastrada.',diagnostic:{action:'CONTINUE_JUSTIFIED',fields:[{key:'unit',label:'UC / instalação',status:'MISMATCH',expected:'new-code',found:['old-code'],pages:[1],reason:'Código histórico diferente.'}]}}}];
  await act(async()=>root.render(React.createElement(Component,{key:'triage'})));
+ assert(!document.querySelector('[role="dialog"]'),'background polling cannot open a blocking modal');
+ await act(async()=>button('Conferir divergências por campo').click());
  assert(document.querySelector('[role="dialog"]').textContent.includes('EVA · divergências de identificação'));
  assert(document.body.textContent.includes('new-code')&&document.body.textContent.includes('old-code'));
  assert(!button('Continuar com justificativa').disabled);
@@ -40,6 +42,6 @@ const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,
  await act(async()=>button('Continuar com justificativa').click());
  const decisionRequest=requests.find(([url])=>url.endsWith('/identity-decision'));assert(decisionRequest);assert.equal(decisionRequest[1].body.decision,'CONTINUE');assert.equal(decisionRequest[1].body.fingerprint,'a'.repeat(64));assert(!document.querySelector('[role="dialog"]'));
 
- serverRows=[{id:'revoked-triage',filename:'private-invoice.pdf',state:'REVIEW_REQUIRED',identityReview:{fingerprint:'b'.repeat(64),diagnostic:{action:'REVIEW',fields:[]}}}];await act(async()=>root.render(React.createElement(Component,{key:'revoked-triage'})));assert(document.querySelector('[role="dialog"]'));serverError=Object.assign(new Error('Revoked'),{status:403});await act(async()=>button('Atualizar andamento').click());assert(!document.querySelector('[role="dialog"]'));assert(!document.body.textContent.includes('private-invoice.pdf'));
+ serverRows=[{id:'revoked-triage',filename:'private-invoice.pdf',state:'REVIEW_REQUIRED',identityReview:{fingerprint:'b'.repeat(64),diagnostic:{action:'REVIEW',fields:[]}}}];await act(async()=>root.render(React.createElement(Component,{key:'revoked-triage'})));await act(async()=>button('Conferir divergências por campo').click());assert(document.querySelector('[role="dialog"]'));serverError=Object.assign(new Error('Revoked'),{status:403});await act(async()=>button('Atualizar andamento').click());assert(!document.querySelector('[role="dialog"]'));assert(!document.body.textContent.includes('private-invoice.pdf'));
  console.log('Automatic intake UI: upload without context fields, stable focus, guided identity-only review and read-only navigation passed');
 }finally{await act(async()=>root.unmount());Module._load=original;}})().catch(e=>{console.error(e);process.exitCode=1});

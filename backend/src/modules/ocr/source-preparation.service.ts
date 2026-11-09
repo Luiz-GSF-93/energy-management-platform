@@ -1,4 +1,5 @@
 import {nativeInvoiceCredits} from './native-invoice-credits';
+import {readFiscalXml,xmlSupplierProposal} from './fiscal-xml';
 import {supplierDocumentKind,supplierInvoiceProposal} from './supplier-invoice-proposal';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {Injectable,ServiceUnavailableException} from '@nestjs/common';
@@ -59,7 +60,7 @@ export class SourcePreparationService{
     }
    }
    if(proof.state==='MATCH'){
-    if(nativeMatch)(proof as any).nativeInvoiceCredits=nativeInvoiceCredits(await read(),r.data.id,r.data.file_hash);
+    if(nativeMatch&&r.data.mime_type!=='application/xml')(proof as any).nativeInvoiceCredits=nativeInvoiceCredits(await read(),r.data.id,r.data.file_hash);
     if(this.identities.size>=16)this.identities.delete(this.identities.keys().next().value!);this.identities.set(key,{until:Date.now()+60000,value:structuredClone(proof)});}
    return proof;
   })();
@@ -80,6 +81,7 @@ export class SourcePreparationService{
   await this.verifiedSupplierInvoice(c,id,fileHash);
   const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('id',id).maybeSingle();
   if(r.error||!r.data||r.data.file_hash!==fileHash||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month)throw new ServiceUnavailableException('Nota mudou durante a extração local.');
+  if(r.data.mime_type==='application/xml')return {kind:'INVOICE' as const,proposal:xmlSupplierProposal(readFiscalXml(await this.text(r.data)),c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},{unitNumber:c.unit.consumer_unit_number,address:c.unit.address})};
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const stored=await this.db.getClient().rpc('eva_intake_supplier_text',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
    if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura preservada da nota.');

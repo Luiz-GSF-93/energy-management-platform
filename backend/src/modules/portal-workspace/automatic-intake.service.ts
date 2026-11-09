@@ -4,9 +4,20 @@ import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {DocumentFile,DOCUMENT_BUCKET,inspectDocumentUpload} from '../documents/services/document-file';
 import {assertPortalInvoiceUpload} from './portal-invoice-kind';
+import {readFiscalXml} from '../ocr/fiscal-xml';
+
+export async function inspectInvoiceUpload(file:DocumentFile){
+ if(/\.xml$/i.test(file?.originalname??'')||['application/xml','text/xml'].includes(file?.mimetype)){
+  readFiscalXml(file?.buffer);
+  const name=file.originalname?.split(/[\\/]/).pop()?.replace(/[\x00-\x1f\x7f]/g,'').trim();
+  if(!name||name.length>255||!/\.xml$/i.test(name)||!['application/xml','text/xml','application/octet-stream',''].includes(file.mimetype))throw new BadRequestException('Selecione um arquivo XML fiscal válido.');
+  return {name,mime:'application/xml',extension:'xml'};
+ }
+ return inspectDocumentUpload(file,false);
+}
 
 export const intakeOrganizations=()=>process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'?String(process.env.EVA_AUTOMATIC_INTAKE_ORGANIZATIONS??'').split(',').map(s=>s.trim()).filter(Boolean):[];
-export const intakePath=(org:string,id:string,mime:string)=>org+'/eva-intake/'+id+(mime==='application/pdf'?'.pdf':mime==='image/png'?'.png':'.jpg');
+export const intakePath=(org:string,id:string,mime:string)=>org+'/eva-intake/'+id+(mime==='application/xml'?'.xml':mime==='application/pdf'?'.pdf':mime==='image/png'?'.png':'.jpg');
 @Injectable()
 export class AutomaticIntakeService{
  constructor(private db:SupabaseService){}
@@ -36,6 +47,10 @@ export class AutomaticIntakeService{
   const project=(r:any)=>{const p:any=completed.get(r.id);return p?{...r,processingState:r.state,state:'PUBLISHED',percent:100,updatedAt:p.publishedAt,status:{...r.status,percent:100,prepared:true},note:'Concluído pela versão aprovada e publicada. O processamento anterior permanece no histórico.',completion:{closingId:p.closingId,publicationId:p.publicationId}}:r;};
   const archived=[...(data.completed??[]).map(project),...(data.rows??[]).filter((r:any)=>completed.has(r.id)).map(project)];
   return administer(present({enabled:true,...data,revision:createHash('sha256').update(JSON.stringify([data.revision??null,proof.data])).digest('hex'),rows:(data.rows??[]).filter((r:any)=>selection.queueOnly!=='true'||!completed.has(r.id)).map(project),completed:[...new Map(archived.map((r:any)=>[r.id,r])).values()].sort((a:any,b:any)=>String(b.updatedAt??'').localeCompare(String(a.updatedAt??''))).slice(0,5)}));
+ }
+ async reconcile(t:TenantContext,id:string,body:any){
+  if(!this.enabled(t.organizationId)||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Reconciliação inválida.');
+  return this.action(t,'reconcile_preparation',id,{reason:'Reconferência técnica do resultado preservado solicitada pela equipe interna autorizada.'},true);
  }
  async retry(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Retomada inválida.');
@@ -71,11 +86,11 @@ export class AutomaticIntakeService{
   if(result.error||!result.data||result.data.size!==source.size)throw new ServiceUnavailableException('Arquivo original indisponível.');
   const bytes=Buffer.from(await result.data.arrayBuffer());if(createHash('sha256').update(bytes).digest('hex')!==source.hash)throw new ConflictException('Integridade do original não confirmada.');
   const fresh=await this.action(t,'source',id,{});if(fresh.hash!==source.hash)throw new ConflictException('Fonte alterada.');
-  return new StreamableFile(bytes,{type:source.mime,disposition:'inline',length:bytes.length});
+  return new StreamableFile(bytes,{type:source.mime,disposition:source.mime==='application/xml'?'attachment; filename="original.xml"':'inline',length:bytes.length});
  }
  async upload(t:TenantContext,input:any,file:DocumentFile){
   if(!input||Object.keys(input).some(k=>!['requestId','customerId','unitId','month','consent'].includes(k))||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(input.requestId??'')||input.month&&!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month)||!['true','false',true,false].includes(input.consent))throw new BadRequestException('Confira o arquivo e a autorização de leitura.');
-  const detected=await inspectDocumentUpload(file,false),hash=createHash('sha256').update(file.buffer).digest('hex');
+  const detected=await inspectInvoiceUpload(file),hash=createHash('sha256').update(file.buffer).digest('hex');
   if(t.role==='consulta'&&!t.accessMode)await assertPortalInvoiceUpload(file,detected.mime);
   const hints=Object.fromEntries(['unitId','month'].filter(k=>input[k]).map(k=>[k,input[k]]));
   const receipt=await this.action(t,'reserve',randomUUID(),{...(input.customerId?{customerId:input.customerId}:{}),requestId:input.requestId,hash,filename:detected.name,mime:detected.mime,size:file.buffer.length,consent:input.consent===true||input.consent==='true',hints});

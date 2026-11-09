@@ -1,3 +1,4 @@
+import {AutomaticExplanationWorker} from './automatic-explanation.worker';
 import {AdminModule} from '../admin/admin.module';
 import {AutomaticIntakeService} from './automatic-intake.service';
 import {PortalCustomerAccessController} from './portal-customer-access';
@@ -21,6 +22,7 @@ class PortalWorkspaceController {
  constructor(private service:PortalWorkspaceService,private presentation:PortalPresentationService,private automatic:AutomaticIntakeService){}
  @Get('automatic-intakes') @Header('Cache-Control','no-store') automaticList(@Tenant() t:TenantContext,@Query() q:any){return this.automatic.list(t,q);}
  @Post('automatic-intakes') @UseInterceptors(FileInterceptor('file',{limits:{fileSize:MAX_DOCUMENT_BYTES,files:1,fields:5,fieldSize:256,parts:6}})) automaticUpload(@Tenant() t:TenantContext,@Body() b:any,@UploadedFile() f:DocumentFile){return this.automatic.upload(t,b,f);}
+ @Post('automatic-intakes/:id/reconcile') automaticReconcile(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.reconcile(t,id,b);}
  @Post('automatic-intakes/:id/retry') automaticRetry(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.retry(t,id,b);}
  @Post('automatic-intakes/:id/dismiss') automaticDismiss(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.dismiss(t,id,b);}
  @Post('automatic-intakes/:id/resolve') automaticResolve(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.resolve(t,id,b);}
@@ -54,5 +56,5 @@ class PortalRoutingController {
  @Get() @Header('Cache-Control','no-store') read(@Tenant() t:TenantContext){return this.service.action(t,'routing');}
  @Post() save(@Tenant() t:TenantContext,@Body() b:any){return this.service.action(t,'routing',null,b);}
 }
-@Module({imports:[AdminModule,LicensesModule,OcrModule],controllers:[PortalWorkspaceController,PortalRoutingController,PortalCustomerAccessController],providers:[AutomaticIntakeService,AutomaticIntakeWorker,PortalPresentationService,SupabaseService,DocumentsService,PortalWorkspaceService,PortalAutomationWorker,PortalNotificationsWorker,WhatsappTemplatesService],exports:[PortalWorkspaceService]})
+@Module({imports:[AdminModule,LicensesModule,OcrModule],controllers:[PortalWorkspaceController,PortalRoutingController,PortalCustomerAccessController],providers:[AutomaticExplanationWorker,AutomaticIntakeService,AutomaticIntakeWorker,PortalPresentationService,SupabaseService,DocumentsService,PortalWorkspaceService,PortalAutomationWorker,PortalNotificationsWorker,WhatsappTemplatesService],exports:[PortalWorkspaceService]})
 export class PortalWorkspaceModule{}

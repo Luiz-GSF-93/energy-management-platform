@@ -11,7 +11,7 @@ export async function invoiceIdentityWithHistory(db:any,bytes:Buffer,mime:string
  let extraction:Promise<ExtractionResult>|undefined;
  const once=()=>extraction??=(read?read():timeoutMs===undefined?extractPdfText(bytes):extractPdfText(bytes,timeoutMs));
  let proof=await invoiceIdentityPreflight(bytes,mime,clean,fileHash,timeoutMs,once);
- if(sourcePreparationEnabled()&&'unit' in proof.checks&&['MISMATCH','REVIEW'].includes(proof.checks.unit)){
+ if(sourcePreparationEnabled()&&'unit' in proof.checks&&['MISMATCH','REVIEW'].includes(proof.checks.unit??'')){
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const result=await db.rpc('ocr_identity_native_lineage',{p_org:scope.org,p_customer:scope.customer,p_unit:scope.unit,p_document:scope.document,p_hash:fileHash});
    const lineage=result.data;
