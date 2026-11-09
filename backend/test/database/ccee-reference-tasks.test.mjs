@@ -16,7 +16,7 @@ try{
  CREATE TABLE consumer_units(id text PRIMARY KEY,organization_id text,customer_id text,name text,consumer_unit_number text,address text,status text);
  CREATE TABLE ccee_unit_authorizations(id uuid,organization_id text,customer_id text,consumer_unit_id text,status text,revision int,profile_code text,dri_agent_code text);
  CREATE TABLE ccee_customer_discovery(id uuid DEFAULT gen_random_uuid(),organization_id text,customer_id text,tax_id text,state text,reason text,result jsonb,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
- CREATE TABLE ccee_sync_schedules(id uuid DEFAULT gen_random_uuid(),organization_id text,created_by text,kind text,state text,enabled boolean,homologated boolean);
+ CREATE TABLE ccee_sync_schedules(id uuid DEFAULT gen_random_uuid(),organization_id text,created_by text,execution_actor_id text,kind text,state text,enabled boolean,homologated boolean);
  CREATE TABLE ccee_integration_jobs(id uuid,organization_id text,kind text,requests int,finished_at timestamptz);
  CREATE TABLE ccee_integration_events(id uuid DEFAULT gen_random_uuid(),organization_id text,actor_id text,job_id uuid,event text,details jsonb,recorded_at timestamptz DEFAULT now());
  CREATE TABLE energy_price_pld_monthly(organization_id text,month date,submarket text,mean_brl_mwh numeric,source text,source_hash text,hours int,published_at timestamptz,provider text,PRIMARY KEY(organization_id,month,submarket));
@@ -24,6 +24,7 @@ try{
  CREATE TABLE licenses(organization_id text,active boolean,status text,start_date date,end_date date,free_market_management boolean);
  INSERT INTO licenses VALUES('org_default',true,'ACTIVE',CURRENT_DATE-30,NULL,true);
  CREATE FUNCTION assert_ccee_data_actor(o text,a text,mode text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF NOT EXISTS(SELECT 1 FROM public.actors WHERE id=a AND organization_id=o AND manage) THEN RAISE EXCEPTION 'denied' USING ERRCODE='42501';END IF;END$$;
+ CREATE FUNCTION ccee_permanent_automation_actor(o text,a text) RETURNS void LANGUAGE sql AS $$SELECT public.assert_ccee_data_actor(o,a,'manage')$$;
  CREATE FUNCTION ccee_operational_usage(p_org text) RETURNS jsonb LANGUAGE sql AS $$WITH usage_window AS(SELECT date_trunc('day',now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo' start),counts AS(SELECT 'PRIVATE'::text family,0::bigint requests UNION ALL SELECT 'PRIVATE',count(*) FROM public.ccee_integration_events e CROSS JOIN usage_window w WHERE e.organization_id=p_org AND e.event='CUSTOMER_DISCOVERY_REQUEST_RESERVED' AND e.recorded_at>=w.start) SELECT jsonb_build_object('total',coalesce(sum(requests),0),'PLD',coalesce(sum(requests) FILTER(WHERE family='PLD'),0),'PRIVATE',coalesce(sum(requests) FILTER(WHERE family='PRIVATE'),0)) FROM counts$$;
  CREATE FUNCTION ccee_communication_reserve(p_id uuid,p_lease uuid,p_market boolean DEFAULT false) RETURNS jsonb LANGUAGE sql AS $$SELECT public.ccee_operational_usage('org_default')$$;
  INSERT INTO customers VALUES('customer','org_default','Synthetic customer','11.222.333/0001-81',NULL);
@@ -31,6 +32,8 @@ try{
  INSERT INTO ccee_sync_schedules(organization_id,created_by,kind,state,enabled,homologated) VALUES('org_default','admin','PLD_HOURLY','SUCCEEDED',true,true);`);
  await db.query("INSERT INTO ccee_customer_discovery(organization_id,customer_id,tax_id,state,reason,result) VALUES($1,'customer','11222333000181','REPRESENTATION_PENDING','Source participant confirmed',$2)",[org,JSON.stringify({participant:{agentCode:'987',taxId:'11222333000181',validFrom:'2020-01-01T00:00:00',validTo:null}})]);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261284_ccee_binding_and_monthly_references.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261285_ccee_monthly_execution_actor.sql',import.meta.url),'utf8'));
+ await db.exec("UPDATE ccee_sync_schedules SET created_by='former-admin',execution_actor_id='admin'");
  const ctx=await context();ok(ctx.customer.id==='customer'&&ctx.unit.installation==='123456','Registered identity prefilled');ok(ctx.discovery.participant.agentCode==='987','CNPJ-confirmed participant is available');
  await deny(context(unit,'foreign'));await deny(context(unit,org,'viewer'));await deny(context('unknown'));
  const req=randomUUID(),task=await action('lookup',null,null,{unitId:unit,requestId:req});
@@ -53,10 +56,13 @@ try{
  await deny(action('reserve',changed.id,changed.lease_id));
  await db.exec("UPDATE ccee_reference_tasks SET state='REVIEW_REQUIRED' WHERE kind='BINDING_LOOKUP' AND state='RUNNING'");
  const claim=()=>scalar('SELECT ccee_monthly_reference_claim($1) value',[org]);
- let monthly=await claim();ok(monthly?.kind==='PLD_MONTHLY','Missing closed monthly reference claimed');ok(await claim()===null,'One monthly lease at a time');
+ let monthly=await claim();ok(monthly?.kind==='PLD_MONTHLY'&&monthly.actor_id==='admin','Missing monthly reference uses the active execution actor after takeover');ok(await claim()===null,'One monthly lease at a time');
  const month=monthly.month.slice(0,7),hours=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0)).getUTCDate()*24;
  const monthlyResult={organizationId:org,provider:'CCEE',source:'https://servicos.ccee.org.br/ws/prec/PLDBSv1',method:'HOURLY_ARITHMETIC_MEAN',taxesIncluded:false,sourceHashes:['b'.repeat(64)],months:['SE_CO','S','NE','N'].map(submarket=>({month,submarket,hours,meanBrlMwh:'123.456789'}))};
  await action('reserve',monthly.id,monthly.lease_id);
+ await db.exec("UPDATE ccee_sync_schedules SET execution_actor_id='viewer'");
+ await deny(action('finish',monthly.id,monthly.lease_id,{result:monthlyResult}));
+ await db.exec("UPDATE ccee_sync_schedules SET execution_actor_id='admin'");
  await deny(action('finish',monthly.id,monthly.lease_id,{result:{...monthlyResult,months:undefined}}));
  await deny(action('finish',monthly.id,monthly.lease_id,{result:{...monthlyResult,months:monthlyResult.months.map(r=>({...r,hours:1}))}}));
  await action('finish',monthly.id,monthly.lease_id,{result:monthlyResult});
