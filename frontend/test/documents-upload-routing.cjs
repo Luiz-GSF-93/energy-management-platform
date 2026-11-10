@@ -19,7 +19,7 @@ Module._load=function(n,p,m){
 };
 const Page=require('../app/backoffice/documents/page.tsx').default,root=createRoot(document.getElementById('root'));
 (async()=>{try{
- await act(async()=>root.render(React.createElement(Page)));assert(document.querySelector('[data-embedded-notices="true"]'),'Document page exposes the notice center');await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='+ Inserir novo').click());
+ await act(async()=>root.render(React.createElement(Page)));assert(document.querySelector('[data-embedded-notices="true"]'),'Document page exposes the notice center');assert(document.querySelector('nav[aria-label="Áreas de Documentos"] a[href="#documentos-biblioteca"]'),'The original library stays directly accessible');assert(document.getElementById('eva-inserir'));assert(document.getElementById('eva-conferir'));assert(document.getElementById('documentos-biblioteca'));await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='+ Inserir novo').click());
  assert(document.querySelector('input[type=month][name=referenceMonth]'),'Detailed competence remains available');assert(document.querySelector('select[name=customerId]'));assert(document.querySelector('select[name=consumerUnitId]'));assert(document.querySelector('select[name=catalogTag]'));
  const types=[...document.querySelectorAll('select[name=documentType] option')].map(o=>o.value);assert(types.includes('CONTRACT_ENERGY'));assert(types.includes('OTHER'));assert(types.includes('COMPLIANCE_REPORT'));assert(!types.includes('INVOICE_DISTRIBUTOR'));assert(!types.includes('INVOICE_SUPPLIER'));
  assert(catalog.types.some(([v])=>v==='INVOICE_DISTRIBUTOR'),'Catalog invoice filters remain intact');

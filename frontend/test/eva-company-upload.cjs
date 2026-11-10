@@ -1,0 +1,22 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module'),ts=require('typescript');
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+require.extensions['.css']=(m)=>m.exports={};
+const React=require('react'),{JSDOM}=require('jsdom'),dom=new JSDOM('<div id="root"></div>',{url:'http://localhost'});
+for(const k of ['window','document','navigator','HTMLElement','Event','MouseEvent','File','FormData'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+const requests=[],original=Module._load;let release;
+Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:async(url,options)=>{requests.push([url,options]);if(options?.method==='POST')return new Promise(resolve=>{release=resolve});return {enabled:true,rows:[],completed:[]};}};if(n==='@/app/backoffice/documents/DocumentDialog')return original.call(this,path.resolve('app/backoffice/documents/DocumentDialog.tsx'),p,m);return original.call(this,n,p,m);};
+const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,{createRoot}=require('react-dom/client'),root=createRoot(document.getElementById('root')),{act}=React;
+(async()=>{try{
+ const props={customers:[{id:'company',company_name:'Authorized company'}]};const button=label=>[...document.querySelectorAll('button')].find(b=>b.textContent===label);
+ await act(async()=>root.render(React.createElement(Component,props)));await act(async()=>button('Inserir documentos').click());
+ let input=document.querySelector('input[type=file]');assert(input.disabled);assert(button('Enviar e iniciar preenchimento').disabled);
+ const company=document.querySelector('select[name=customerId]');await act(async()=>{company.value='company';company.dispatchEvent(new Event('change',{bubbles:true}))});input=document.querySelector('input[type=file]');assert(!input.disabled);
+ Object.defineProperty(input,'files',{value:[new File(['x'.repeat(40)],'invoice.xml',{type:'application/xml'})],configurable:true});await act(async()=>input.dispatchEvent(new Event('change',{bubbles:true})));
+ assert(document.querySelector('[aria-label="Arquivos deste envio"]').textContent.includes('invoice.xml'));
+ document.querySelector('input[name=consent]').checked=true;const form=document.querySelector('form');
+ await act(async()=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+ const posts=requests.filter(([,o])=>o?.method==='POST');assert.equal(posts.length,1,'Double submit must send one request');assert.equal(posts[0][1].body.get('customerId'),'company');assert.equal(posts[0][1].body.get('consent'),'true');assert(posts[0][1].signal instanceof AbortSignal);assert(!posts[0][1].body.has('organizationId'));assert(company.disabled,'Company cannot change during an in-flight batch');
+ await act(async()=>release({message:'Received'}));assert(!document.querySelector('[role=dialog]'));assert(document.body.textContent.includes('1 arquivo(s) recebido(s)'));assert(!document.body.textContent.includes('Preenchimento concluído'));
+ await act(async()=>button('Inserir documentos').click());assert(!document.querySelector('select[name=customerId]').disabled);assert(!document.querySelector('[aria-label="Arquivos deste envio"]'));
+ console.log('PASS guided upload UI: company-first gate, file selection, explicit consent, stable company scope, double-submit lock and truthful receipt state.');
+}finally{await act(async()=>root.unmount());Module._load=original;dom.window.close();}})().catch(error=>{console.error(error);process.exitCode=1});
