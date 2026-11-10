@@ -1,3 +1,4 @@
+import {SUPPLIER_COST_DRAFT_VERSION} from '../ocr/supplier-invoice-cost-draft';
 import {xmlIntakeDiagnostic} from './xml-intake-context';
 import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
 import {readFiscalXml,xmlUnitMatch} from '../ocr/fiscal-xml';
@@ -33,7 +34,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
   const officialFlag=await this.officialFlags?.reference(i.organization_id,i.month);
   const state=await this.rpc('eva_intake_source_state',{p_id:job.id,p_token:job.token});
   if(typeof state?.fingerprint!=='string'||!/^[a-f0-9]{64}$/.test(state.fingerprint)||!Number.isSafeInteger(state.revision)||state.revision<0)throw Error('SOURCE_SIGNATURE_UNAVAILABLE');
-  return {revision:state.revision,signature:createHash('sha256').update(JSON.stringify(['intake-fingerprint-3',state.fingerprint,officialFlag??null,supplementalTariffFlagReference(i.month)??null])).digest('hex')};
+  return {revision:state.revision,signature:createHash('sha256').update(JSON.stringify(['intake-fingerprint-3',SUPPLIER_COST_DRAFT_VERSION,state.fingerprint,officialFlag??null,supplementalTariffFlagReference(i.month)??null])).digest('hex')};
  }
  private async signature(i:any,job:{id:string;token:string}){return (await this.sourceState(i,job)).signature;}
  async runOnce(){

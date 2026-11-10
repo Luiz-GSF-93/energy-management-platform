@@ -1,4 +1,7 @@
 import {resolutionId} from './ocr-resolution-plan';
+export const SUPPLIER_COST_DRAFT_VERSION='supplier-cost-draft-1';
+export function supplierInvoiceCostIdentity(c:any){return supplierInvoiceCostDraft(c)?{supplierCostDraftVersion:SUPPLIER_COST_DRAFT_VERSION}:{};}
+
 /** Only exact server-verified invoice evidence may populate a monthly draft.
  * Never replace an existing supplier item, no-cost declaration or financial decision. */
 export function supplierInvoiceCostDraft(c:any){

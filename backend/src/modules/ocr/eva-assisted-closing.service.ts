@@ -1,4 +1,4 @@
-import {supplierInvoiceCostDraft} from './supplier-invoice-cost-draft';
+import {supplierInvoiceCostDraft,SUPPLIER_COST_DRAFT_VERSION} from './supplier-invoice-cost-draft';
 import {preparationPolicy} from './eva-preparation-policy';
 import {sharedClosingRequired,closingDocumentRequests} from './closing-coordination';
 import {applyOperationalCceeReview} from './eva-operational-flow.model';
@@ -61,7 +61,7 @@ export class EvaAssistedClosingService{
   const flightKey=JSON.stringify([t.userId,t.roleId,t.accessMode,completionKey]);
   let pending=this.invoiceCompletions.get(flightKey);
   if(!pending){
-   pending=this.prepare({...q,scopeKind,requestId:resolutionId(['eva-invoice-completion-3',completionKey])},t);
+   pending=this.prepare({...q,scopeKind,requestId:resolutionId(['eva-invoice-completion-3',SUPPLIER_COST_DRAFT_VERSION,completionKey])},t);
    this.invoiceCompletions.set(flightKey,pending);
   }
   let result:any;
