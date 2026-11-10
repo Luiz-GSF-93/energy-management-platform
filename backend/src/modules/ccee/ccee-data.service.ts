@@ -1,3 +1,4 @@
+import {invoiceReadingPeriod,reconcileReadingPeriod} from './ccee-reading-period';
 import {driEnabled,isDri} from './ccee-dri.model';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {invoiceConsumption,measurementCsv,reconcileConsumption,reconciliationSummary,verifiedInvoiceBasis} from './ccee-reconciliation';
@@ -135,8 +136,11 @@ export class CceeDataService{
   const args={p_org:t.organizationId,p_actor:t.userId,p_id:id},source=await this.rpc('ccee_reconciliation_action',{...args,p_action:'source',p_body:{documentId:b.documentId}});
   let invoice=invoiceConsumption(source.document,source.ocr);
   if(b.verifiedBasis!==undefined)try{invoice=verifiedInvoiceBasis(invoice,b.verifiedBasis,t.userId);}catch{throw new BadRequestException('Informe intervalo, perdas e referência efetivamente conferidos na fatura; nenhuma base foi presumida.');}
-  const payload=reconcileConsumption(source.job,source.binding,invoice);
-  return this.rpc('ccee_reconciliation_action',{...args,p_action:'save',p_body:{documentId:b.documentId,requestId:b.requestId,reason:b.reason,sourceFingerprint:source.sourceFingerprint,payload}});
+  const period=invoiceReadingPeriod(invoice);
+  const scoped=period?await this.rpc('ccee_reconciliation_action',{...args,p_action:'source',p_body:{documentId:b.documentId,...period}}):source;
+  if(period&&scoped.baseSourceFingerprint!==source.sourceFingerprint)throw new ConflictException('A fatura mudou durante a conciliação. Reconfira a fonte preservada.');
+  const payload=period?reconcileReadingPeriod(scoped.job,scoped.binding,invoice,scoped.periodJobs):reconcileConsumption(source.job,source.binding,invoice);
+  return this.rpc('ccee_reconciliation_action',{...args,p_action:'save',p_body:{documentId:b.documentId,requestId:b.requestId,reason:b.reason,...period,sourceFingerprint:scoped.sourceFingerprint,payload}});
  }
  async reconciliations(t:TenantContext,unitId:string,month:string,page=0){
   await this.invoiceAccess(t);cceeText(unitId,100,1);cceeMonth(month,false);if(!Number.isInteger(page)||page<0||page>1000)throw new BadRequestException('Página inválida.');
