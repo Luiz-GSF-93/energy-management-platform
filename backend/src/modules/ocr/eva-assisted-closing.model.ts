@@ -125,6 +125,13 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
      row.sources.costReservations=[...(row.sources.costReservations??[]),reservation];
      add(e.name+': '+(item.label||item.category||'Custo adicional')+' incluído pelo valor informado de R$ '+item.amount+' ('+item.source+'), com ressalva tributária '+item.taxTreatment+'. Nenhum tributo adicional foi presumido ou recalculado; a ressalva não impede a preparação para decisão do responsável.');
     }
+    // Accepting an operator estimate for this month never turns it into an
+    // actual CCEE statement. Preserve disclosure in the approved projection.
+    if(item.category==='CCEE'&&item.scenario==='ACL'&&/^ESTIMATIVA CCEE revisada · EVA [a-f0-9-]{36} · [a-f0-9]{64}/i.test(item.source)){
+     estimated=true;
+     row.sources.estimatedCceeCosts=[...(row.sources.estimatedCceeCosts??[]),{id:item.id,amount:item.amount,effect:item.effect,source:item.source,costId:c.cost?.id,revision:c.cost?.revision,notes:c.cost?.notes??null}];
+     add(e.name+': CCEE incluída por estimativa informada e conferida para esta competência; não comprova extrato ou liquidação. Substituir pela fonte real quando disponível.');
+    }
     const amount=money(item.amount);if(amount<0n)throw Error();if(confirmedInvoiceExtra)supplierExtras+=amount;if(item.scenario==='ACL')extraAcl+=item.effect==='CREDIT'?-amount:amount;else extraAcr+=item.effect==='CREDIT'?-amount:amount;
    }
    if(p?.cceeEstimate?.state==='ESTIMATED'){if((costs?.items??[]).some((i:any)=>i.category==='CCEE'&&i.scenario==='ACL'))ownMissing.push('CCEE: registro atual e estimativa concorrentes; reconferir fontes.');else extraAcl+=money(p.cceeEstimate.total);}
