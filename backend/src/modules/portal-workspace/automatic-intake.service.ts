@@ -100,7 +100,16 @@ export class AutomaticIntakeService{
   return this.action(t,'dismiss',id,{reason:body.reason.trim()},true);
  }
  async resolve(t:TenantContext,id:string,body:any){
-  if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='customerId,month,reason,unitId')throw new BadRequestException('Confira somente o vínculo solicitado.');
+  if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).filter(k=>k!=='continueJustified').sort().join(',')!=='customerId,month,reason,unitId'||body.continueJustified!==undefined&&body.continueJustified!==true)throw new BadRequestException('Confira somente o vínculo solicitado.');
+  if(!this.enabled(t.organizationId))throw new ServiceUnavailableException('Recebimento automático indisponível.');
+  if(body.continueJustified===true){
+   const {continueJustified,...binding}=body;
+   if(typeof binding.reason!=='string'||binding.reason.trim().length<20)throw new BadRequestException('Justifique o vínculo com pelo menos 20 caracteres.');
+   const result=await this.db.getClient().rpc('eva_intake_resolve_justified',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_id:id,p_body:binding});
+   if(result.error?.code==='42501')throw new ForbiddenException('A continuação exige vínculo e permissões internos válidos.');
+   if(result.error)throw new ConflictException('O vínculo mudou ou não foi confirmado. Atualize o andamento antes de repetir.');
+   return result.data;
+  }
   return this.action(t,'resolve',id,body);
  }
  async content(t:TenantContext,id:string){

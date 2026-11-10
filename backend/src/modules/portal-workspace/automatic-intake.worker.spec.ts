@@ -11,7 +11,7 @@ describe('Automatic intake durable orchestration',()=>{
   const bytes=originalBytes??Buffer.from('%PDF-1.7\nSynthetic original\n%%EOF');
   const intake:any={id:'receipt',organization_id:'org',state,unit_id:'unit',customer_id:'client',month:'2026-07',document_id:['RECOGNIZING','OCR_QUEUED','OCR_POLLING','LINKING'].includes(state)?null:'doc',file_hash:createHash('sha256').update(bytes).digest('hex'),size_bytes:bytes.length,mime:'application/pdf',filename:'invoice.pdf',ai_attempted:false,signature:null,note:'Waiting'};
   const rows:any[]=[];const actions:any[]=[];
-  const rpc=jest.fn(async(name,b)=>{if(name==='eva_intake_source_state')return {data:{fingerprint:createHash('sha256').update(JSON.stringify(rows)).digest('hex'),revision:rows.length}};if(name==='eva_intake_alias_catalog')return {data:{unit:[]}};if(name==='eva_intake_identity_refs')return {data:[] as string[]};if(name==='claim_eva_automatic_intake')return {data:{id:'receipt',token:'lease'}};if(name==='eva_intake_work_context')return {data:{intake,delegate:{userId:'actor',roleId:'role',role:'gestor',permissions:[]}}};actions.push([b.p_action,b.p_body]);return {data:{}};});
+  const rpc=jest.fn(async(name,b)=>{if(name==='eva_intake_source_state')return {data:{fingerprint:createHash('sha256').update(JSON.stringify(rows)).digest('hex'),revision:rows.length}};if(name==='eva_intake_continue_requested')return {data:{continued:false}};if(name==='eva_intake_alias_catalog')return {data:{unit:[]}};if(name==='eva_intake_identity_refs')return {data:[] as string[]};if(name==='claim_eva_automatic_intake')return {data:{id:'receipt',token:'lease'}};if(name==='eva_intake_work_context')return {data:{intake,delegate:{userId:'actor',roleId:'role',role:'gestor',permissions:[]}}};actions.push([b.p_action,b.p_body]);return {data:{}};});
   const capture=jest.fn(async(table:string)=>({data:['consumer_units','customers'].includes(table)?[{id:table}]:rows}));
   const from=(table:string)=>{const builder:any={select:()=>builder,eq:()=>builder,order:()=>builder,limit:()=>capture(table)};return builder;};
   const connector={isConfigured:jest.fn(()=>true),submit:jest.fn(),poll:jest.fn()},ocr={assertAutomaticIdentity:jest.fn(async()=>({})),enqueue:jest.fn(),status:jest.fn(async()=>({job:{state:'SUCCEEDED'}}))},assistant={prepareAutomatic:jest.fn(async()=>({receipts:[],complete:false,current:{unitName:'Unit',month:'2026-07',counts:{blockers:0,reviews:1},records:{measurements:{},costs:{}}}})),inspect:jest.fn()},closing={history:jest.fn(async()=>({rows:[]})),prepareInvoice:jest.fn(async()=>({row:{id:'closing',state:'INCOMPLETE',report:{preparation:{percent:100}}}}))},ai={interpret:jest.fn(async()=>({state:'READY'}))};
@@ -34,7 +34,7 @@ describe('Automatic intake durable orchestration',()=>{
   f.rpc.mockImplementation(async(name,b)=>{
    if(name==='claim_eva_automatic_intake')return {data:{id:'receipt',token:'lease'}} as any;
    if(name==='eva_intake_work_context')return {data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'gestor',permissions:[]},customers:[{id:'client',document:'11222333000181',company_name:'Empresa sintética'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address:'Rua Exemplo 123'}]}} as any;
-   if(name==='eva_intake_alias_catalog')return {data:{unit:[]}} as any;
+   if(name==='eva_intake_continue_requested')return {data:{continued:false}};if(name==='eva_intake_alias_catalog')return {data:{unit:[]}} as any;
    f.actions.push([b.p_action,b.p_body]);return {data:{}};
   });
   await f.worker.runOnce();expect(f.actions.map(a=>a[0])).toEqual(['recognized','linked']);expect(f.actions[0][1].proof).toMatchObject({state:'MATCH',documentType:'INVOICE_DISTRIBUTOR',unitId:'unit',month:'2026-07'});expect(f.connector.submit).not.toHaveBeenCalled();expect(f.assistant.prepareAutomatic).not.toHaveBeenCalled();
@@ -69,10 +69,23 @@ describe('Automatic intake durable orchestration',()=>{
   f.intake.raw_result={content:text,pages:[{pageNumber:1,lines:text.split('\n').map(content=>({content})),words:text.split(/\s/).map(content=>({content,confidence:.5}))}]};
   const original=f.rpc.getMockImplementation()!;f.rpc.mockImplementation(async(name,b)=>{
    if(name==='eva_intake_work_context')return {data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'admin_org'},customers:[{id:'client',document:'11222333000181',company_name:'Empresa sintética'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address:'Rua Exemplo 123'}]}} as any;
-   if(name==='eva_intake_identity_work')return {data:{accepted,address:accepted?address:null}} as any;
+   if(name==='eva_intake_identity_resume_proof')return {data:{accepted,address:accepted?address:null}} as any;
    return original(name,b);
   });
   await f.worker.runOnce();expect(f.actions.map(a=>a[0])).toEqual(accepted&&sameUnit?['recognized','linked']:['review']);expect(f.connector.submit).not.toHaveBeenCalled();expect(f.ai.interpret).not.toHaveBeenCalled();
+ });
+
+ it('honors a queued justified binding after the diagnostic without restarting OCR',async()=>{
+  const f=fixture('OCR_POLLING'),previous=f.rpc.getMockImplementation()!;
+  f.intake.hints={unitId:'unit',month:'2026-07'};
+  f.intake.raw_result={content:'Original invoice requiring a justified installation binding.',pages:[{pageNumber:1,lines:[{content:'Original invoice requiring a justified installation binding.'}]}]};
+  f.rpc.mockImplementation(async(name,b)=>{
+   if(name==='eva_intake_work_context')return {data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'gestor'},customers:[{id:'client',document:'11222333000181',company_name:'Synthetic company'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address:'Rua Exemplo 123'}]}} as any;
+   if(name==='eva_intake_identity_resume_proof')return {data:{accepted:false}} as any;
+   if(name==='eva_intake_continue_requested')return {data:{continued:true}} as any;
+   return previous(name,b);
+  });
+  await f.worker.runOnce();expect(f.actions.at(-1)[0]).toBe('review');expect(f.rpc).toHaveBeenCalledWith('eva_intake_continue_requested',expect.objectContaining({p_id:'receipt',p_fingerprint:expect.stringMatching(/^[a-f0-9]{64}$/)}));expect(f.connector.submit).not.toHaveBeenCalled();expect(f.ocr.enqueue).not.toHaveBeenCalled();
  });
 
 });
