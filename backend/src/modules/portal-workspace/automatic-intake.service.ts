@@ -89,6 +89,12 @@ export class AutomaticIntakeService{
   const refs=query.refs.split(',');if(refs.length>100||refs.some((v:string)=>!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v)))throw new BadRequestException('Referências inválidas.');
   return this.identityAction(t,'justifications',null,{refs});
  }
+ async restore(t:TenantContext,id:string,body:any){
+  if(!this.enabled(t.organizationId)||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).join(',')!=='reason'||typeof body.reason!=='string'||body.reason.trim().length<30||body.reason.length>1000)throw new BadRequestException('Confirme a retomada e justifique com 30 a 1000 caracteres.');
+  const r=await this.db.getClient().rpc('eva_intake_restore',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_id:id,p_body:{reason:body.reason.trim()}});
+  if(r.error?.code==='42501')throw new ForbiddenException('Retomada restrita ao gestor ou administrador interno.');
+  if(r.error)throw new ConflictException('Retomada não confirmada. Reconfira o envio antes de repetir.');return r.data;
+ }
  async dismiss(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).sort().join(',')!=='reason'||typeof body.reason!=='string'||body.reason.trim().length<15||body.reason.length>1000)throw new BadRequestException('Informe o motivo do envio incorreto, com 15 a 1000 caracteres.');
   return this.action(t,'dismiss',id,{reason:body.reason.trim()},true);

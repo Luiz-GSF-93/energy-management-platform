@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://test.invalid'});
 for(const k of ['window','document','HTMLElement','HTMLSelectElement','Event','MouseEvent'])global[k]=dom.window[k];global.IS_REACT_ACT_ENVIRONMENT=true;
+require('./eva-processing-dom.cjs')();
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
 const group={scenario:'ACL',taxTreatment:'INCLUDED',count:2,costs:'10.00',credits:'12.50',balance:'-2.50',lines:[{id:'a',label:'Taxa CCEE',category:'CCEE',effect:'COST',amount:'10.00',signedAmount:'10.00',source:'Documento A'},{id:'b',label:'Crédito',category:'EXPOSURE',effect:'CREDIT',amount:'12.50',signedAmount:'-12.50',source:'Documento B'}]};

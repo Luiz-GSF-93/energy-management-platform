@@ -77,5 +77,12 @@ const acknowledge=()=>act(async()=>document.querySelector('input[type=checkbox]'
  const beforeWait=api;let finishPreview;api=(path,options)=>path.endsWith('/preview')?new Promise(resolve=>{finishPreview=resolve}):beforeWait(path,options);
  await act(async()=>button().click());const indicator=document.querySelector('[aria-label="EVA validando"]');assert(indicator);assert.equal(indicator.style.position,'fixed');assert(indicator.querySelector('img[src="/images/eva/eva-orb.webp"]'));assert(document.querySelector('[data-active="true"]'));assert(indicator.textContent.includes('Validando, aguarde'));
  await act(async()=>finishPreview(plan));assert.equal(document.querySelector('[aria-label="EVA validando"]'),null);
+ // Empty cost list explains the disabled button and opens an editor without leaving the EVA.
+ plan.contractDraft=null;plan.documentedSupplierOptions.proposals=[];plan.documentedSupplierOptions.cost.items=[];setup();let inlineOpened=0;
+ await act(async()=>root.render(React.createElement(C,{key:'missing-supplier-cost',unitId:'unit',month:'2026-01',onSaved:()=>{},renderCosts:done=>React.createElement('button',{onClick:()=>{inlineOpened++;done();}},'Salvar custo nesta etapa')})));
+ assert(document.body.textContent.includes('Falta o lançamento financeiro da nota'));assert(document.body.textContent.includes('Não altere a modalidade nem crie uma compra extra'));
+ const manualSave=()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Salvar conciliação documentada e reconferir');assert(manualSave().disabled);assert(document.querySelector('[aria-label="O que falta para salvar a conciliação"]').textContent.includes('Custos mensais'));
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Preencher lançamento da NF nesta tela').click());assert(document.querySelector('[aria-label="Preencher custos da NF nesta etapa"]'));
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Salvar custo nesta etapa').click());assert.equal(inlineOpened,1);assert(!calls.some(([,o])=>o?.method==='POST'),'Opening and refreshing missing costs never fabricates a cost or publishes a closing');
  console.log('PASS supplier invoice UI: populated values during slow reads, exact source scope, automatic field selection, scoped confirmation, stale sources and uncertain writes, animated in-flight confirmation status');
 }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
