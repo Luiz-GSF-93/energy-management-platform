@@ -1,6 +1,6 @@
 import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
 import {createHash} from 'node:crypto';
-import {invoiceIdentityText} from '../ocr/invoice-identity-preflight';
+import {invoiceAddressMatches,invoiceIdentityText} from '../ocr/invoice-identity-preflight';
 import {supplierDocumentKind,supplierRecipientText} from '../ocr/supplier-invoice-proposal';
 import {intakeMonthCandidates,IntakePage,IntakeCustomer,IntakeUnit} from './automatic-intake-context';
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
@@ -21,7 +21,7 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  const ids=[...recipient.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].map(m=>compact(m[0]));
  const explicitTax=!supplier?[...t.matchAll(/INSC\.?\s*EST[^\n]*?CNPJ\s*:\s*([0-9A-Z./-]+)/g)].map(m=>compact(m[1])):[];
  const taxes=[...new Set(explicitTax.length?explicitTax:ids)];
- const tax=compact(c.document),addr=compact(u.address),addressMatch=addr.length>=12&&compact(recipient).includes(addr);
+ const tax=compact(c.document),addressMatch=invoiceAddressMatches(recipient,u.address);
  const addressLines=recipient.split('\n').map(s=>s.trim()).filter(s=>/^(?:RUA|R\.|AVENIDA|AV\.?\s|RDV\s|RODOVIA\s|ESTRADA\s|CRT\s)/.test(norm(s))&&/(?:\d|S\s*\/\s*N)/.test(s));
  // Address mismatch requires an actual, unique printed street. Never use labels alone.
  const addresses=addressMatch?[u.address]:[...new Set(addressLines)];

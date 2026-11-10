@@ -6,6 +6,17 @@ export type InvoiceRegistration={customerName:string|null;taxId:string|null;unit
 const compact=(v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''):'';
 const norm=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const monthNames=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+/** A separately omitted CENTRO neighborhood does not change the printed installation.
+ * Compare the entire street/number/complement line; never prefix-match a number. */
+export function invoiceAddressMatches(text:string,address:string|null){
+ const expected=compact(address);if(expected.length<12)return false;
+ if(compact(text).includes(expected))return true;
+ const normalized=norm(address??'').trim();
+ if(!/^(?:RUA|R\.?\s|AVENIDA|AV\.?\s)/.test(normalized)||!/[0-9]/.test(normalized)||!/\sCENTRO$/.test(normalized))return false;
+ const core=compact(normalized.replace(/\s+CENTRO$/,''));
+ return core.length>=12&&text.split(/[\r\n]+/).some(line=>compact(line)===core);
+}
+
 export function invoiceIdentityText(text:string,r:InvoiceRegistration){
  const t=norm(text),all=compact(text),checks:Record<string,string>={};
  const tax=compact(r.taxId),taxes=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].map(m=>compact(m[0]));
@@ -14,7 +25,7 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
  const uc=compact(r.unitNumber),accepted=new Set([uc,...(r.auditedUnitNumbers??[]).map(compact)].filter(Boolean)),units=[...t.matchAll(/(?:UNIDADE\s+CONSUMIDORA|NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|INSTALACAO|SEU\s+CODIGO|\bUC\b)\s*(?:N[º°.]?|:)?\s*([0-9][0-9 .-]{4,30}[0-9])/g)].map(m=>compact(m[1]));
  checks.unit=!uc||!units.length?'REVIEW':units.every(n=>accepted.has(n))?'MATCH':'MISMATCH';
  // Preserve street numbers. Never accept the street alone or silently change the address.
- const address=compact(r.address);checks.address=[address,...(r.auditedAddresses??[]).map(compact)].some(a=>a.length>=12&&all.includes(a))?'MATCH':'REVIEW';
+ checks.address=[r.address,...(r.auditedAddresses??[])].some(a=>invoiceAddressMatches(text,a))?'MATCH':'REVIEW';
  const found:string[]=[];for(const m of t.matchAll(/(?:REFERENCIA|REF\s*[:.]?\s*MES\s*\/\s*ANO|MES\s*\/\s*ANO|COMPETENCIA)\b/g)){
   const tail=t.slice(m.index!+m[0].length,m.index!+m[0].length+120);
   const named=/\b(JAN[A-Z]*|FEV[A-Z]*|MAR[A-Z]*|ABR[A-Z]*|MAI[A-Z]*|JUN[A-Z]*|JUL[A-Z]*|AGO[A-Z]*|SET[A-Z]*|OUT[A-Z]*|NOV[A-Z]*|DEZ[A-Z]*)\s*[/.-]?\s*(20\d{2})\b/.exec(tail);
