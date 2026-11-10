@@ -54,7 +54,7 @@ export class SourcePreparationService{
     if(typeof evidence?.text==='string'&&evidence.text.length<=2097152){
      const current=await this.db.getClient().rpc('ocr_identity_native_lineage',{p_org:org,p_customer:customer,p_unit:unit,p_document:document,p_hash:r.data.file_hash});
      if(current.error)throw new ServiceUnavailableException('Correspondência auditada indisponível.');
-     const lineage=current.data??evidence.lineage,audited=Array.isArray(lineage?.codes)&&(lineage?.editIds?.length||lineage?.aliasIds?.length||lineage?.reviewIds?.length),reg=audited?{...registration,auditedUnitNumbers:lineage.codes}:registration;
+     const lineage=current.data??evidence.lineage,audited=Array.isArray(lineage?.codes)&&(lineage?.editIds?.length||lineage?.aliasIds?.length||lineage?.reviewIds?.length),reg=audited?{...registration,auditedUnitNumbers:lineage.codes,...(lineage?.reviewIds?.length&&lineage?.auditedAddresses?.length?{auditedAddresses:lineage.auditedAddresses}:{})}:registration;
      const checks=invoiceIdentityText(evidence.text,reg);
      if(checks.state==='MATCH')proof={version:'invoice-identity-preflight-v1',fileHash:r.data.file_hash,registration:reg,...checks,sourcePages:evidence.pages,...(lineage?.editIds?.length?{registrationEditIds:lineage.editIds}:{}),...(lineage?.aliasIds?.length?{registrationAliasIds:lineage.aliasIds}:{}),...(lineage?.reviewIds?.length?{registrationReviewIds:lineage.reviewIds}:{})} as any;
     }

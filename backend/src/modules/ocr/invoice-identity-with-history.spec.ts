@@ -25,4 +25,13 @@ describe('Audited identity at the first read',()=>{
   const prior=process.env.EVA_AUTOMATIC_INTAKE_ENABLED;process.env.EVA_AUTOMATIC_INTAKE_ENABLED='true';
   try{const s=setup();(s.db as any).rpc=jest.fn(async()=>({data:{codes:['11111','22222'],editIds:[],aliasIds:['alias']}}));(extractPdfText as jest.Mock).mockResolvedValue({sections:[{page:1,text:field==='period'?text.replace('JUN/2026','JUL/2026'):text.replace('RUA EXEMPLO 123 CENTRO','RUA OUTRA 456'),issues:[]}],ocrRequired:false});const proof=await s.read();expect(proof.state).not.toBe('MATCH');expect(proof.registration).toEqual(r);expect(proof).not.toHaveProperty('registrationAliasIds');expect(extractPdfText).toHaveBeenCalledTimes(1);}finally{if(prior===undefined)delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;else process.env.EVA_AUTOMATIC_INTAKE_ENABLED=prior;}
  });
+ it('loads document-bound address confirmation from the server, never from caller data',async()=>{
+  const prior=process.env.EVA_AUTOMATIC_INTAKE_ENABLED;process.env.EVA_AUTOMATIC_INTAKE_ENABLED='true';
+  try{const s=setup();const address='Rodovia Alternativa 55 Centro';(extractPdfText as jest.Mock).mockResolvedValue({sections:[{page:1,text:text.replace('UC: 22222','UC: 11111').replace('RUA EXEMPLO 123 CENTRO',address),issues:[]}],ocrRequired:false});
+   let addresses=[address];(s.db as any).rpc=jest.fn(async()=>({data:{codes:['11111'],editIds:[],aliasIds:[],reviewIds:addresses.length?['review']:[],auditedAddresses:addresses}}));
+   expect(await s.read()).toMatchObject({state:'MATCH',registrationReviewIds:['review'],registration:{auditedAddresses:[address]}});
+   addresses=[];expect((await invoiceIdentityWithHistory(s.db,Buffer.from('pdf'),'application/pdf',{...r,auditedAddresses:[address]},'a'.repeat(64),{org:'org',customer:'customer',unit:'unit',document:'doc'})).state).not.toBe('MATCH');
+  }finally{if(prior===undefined)delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;else process.env.EVA_AUTOMATIC_INTAKE_ENABLED=prior;}
+ });
+
 });

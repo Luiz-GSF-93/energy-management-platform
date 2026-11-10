@@ -7,3 +7,9 @@ describe('audited continuation of a specific document',()=>{
  it('preserves the existing UC decision',()=>expect(identityContinuation({diagnostic:{action:'CONTINUE_JUSTIFIED'}},'operacional')).toBe('UC'));
  it('routes an administrator address confirmation through the existing audited RPC and rejects other roles',async()=>{const old={...process.env};try{process.env.EVA_AUTOMATIC_INTAKE_ENABLED='true';const rpc=jest.fn(async()=>({data:{id:'saved'}})),s=new AutomaticIntakeService({getClient:()=>({rpc})} as any),t:any={organizationId:'org',userId:'actor',roleId:'role',role:'admin_org'},body={decision:'CONTINUE',continuation:'ADDRESS',fingerprint:'a'.repeat(64),reason:'The administrator confirmed the installation against the original document.'};await s.identityDecision(t,'00000000-0000-4000-8000-000000000001',body);expect(rpc).toHaveBeenCalledWith('eva_intake_identity_action',expect.objectContaining({p_action:'address',p_body:{decision:body.decision,fingerprint:body.fingerprint,reason:body.reason}}));await expect(s.identityDecision({...t,role:'operacional'},'00000000-0000-4000-8000-000000000001',body)).rejects.toThrow('Administrador');}finally{process.env=old;}});
 });
+
+it('allows an administrator to review one distributor address only after UC, CNPJ and period match',()=>{
+ const r=structuredClone(review);r.diagnostic.documentType='INVOICE_DISTRIBUTOR';r.diagnostic.fields[2].status='MATCH';expect(identityContinuation(r,'admin_org')).toBe('ADDRESS');
+ for(const status of ['INCONCLUSIVE','MISMATCH']){r.diagnostic.fields[2].status=status;expect(identityContinuation(r,'admin_org')).toBeNull();}
+ r.diagnostic.fields[2].status='MATCH';expect(identityContinuation(r,'gestor')).toBeNull();
+});

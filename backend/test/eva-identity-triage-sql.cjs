@@ -121,5 +121,31 @@ ok((await db.query("SELECT count(*)::int n FROM eva_intake_unit_aliases_audit WH
 ok((await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'decide',$2,$3) data",[actor,continued,continuedBody])).rows[0].data.replayed);
 await db.exec('SET ROLE authenticated');await deny(()=>lineage());await db.exec('RESET ROLE');
 
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261299_eva_distributor_address_review.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261299_eva_distributor_address_review.sql','utf8'));
+// An administrator may attest a specific distributor address only after all other anchors match.
+for(const [index,unitState] of ['MATCH','MISMATCH','INCONCLUSIVE'].entries()){
+ const target=id(1000+index),sourceHash=require('node:crypto').createHash('sha256').update(target).digest('hex');
+ await db.query(`INSERT INTO eva_automatic_intakes(id,organization_id,customer_id,actor_id,role_id,platform,external,request_id,file_hash,filename,mime,size_bytes,consent,hints,state,stored,lease_token,lease_until) VALUES($1,'org','client',$2,'manager',false,false,$3,$4,'distributor.pdf','application/pdf',100,true,$5,'RECOGNIZING',true,$6,clock_timestamp()+interval '1 minute')`,[target,actor,id(1100+index),sourceHash,JSON.stringify({unitId:id(1),month:'2026-01'}),token]);
+ const dg={...addressDiag,fileHash:sourceHash,fingerprint:sourceHash,documentType:'INVOICE_DISTRIBUTOR',fields:addressDiag.fields.map(f=>f.key==='unit'?{...f,status:unitState}:f)};
+ await db.query('SELECT eva_intake_identity_work($1,$2,$3)',[target,token,JSON.stringify(dg)]);await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[target]);
+ const body={fingerprint:sourceHash,decision:'CONTINUE',reason:'Administrator confirmed this exact invoice address for the same physical installation.'};
+ const action=(role='admin',a=id(72))=>db.query("SELECT eva_intake_identity_action('org',$1,$2,false,'address',$3,$4) data",[a,role,target,JSON.stringify(body)]);
+ await deny(()=>action('manager',actor));
+ if(unitState!=='MATCH'){await deny(()=>action());continue;}
+ ok((await action()).rows[0].data.decision==='ADDRESS');ok((await action()).rows[0].data.replayed===true);
+ await db.query(`INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,document_type,reference_month,file_hash,file_verified) VALUES($1,'org','client',$2,'INVOICE_DISTRIBUTOR','2026-01-01',$3,true)`,[target,id(1),sourceHash]);
+ await db.query(`UPDATE eva_automatic_intakes SET document_id=$1,unit_id=$2,month='2026-01',document_type='INVOICE_DISTRIBUTOR',proof='{"state":"MATCH"}' WHERE id=$1`,[target,id(1)]);
+ const lineage=(org='org',unit=id(1),hash=sourceHash)=>db.query('SELECT ocr_identity_native_lineage($1,$2,$3,$4,$5) data',[org,'client',unit,target,hash]).then(r=>r.rows[0].data);
+ const l=await lineage();ok(l.auditedAddresses[0]==='Rodovia Alternativa, km 55, s/n'&&l.reviewIds.length===1);ok((await lineage('other')).auditedAddresses.length===0);ok((await lineage('org',id(2))).auditedAddresses.length===0);ok((await lineage('org',id(1),'f'.repeat(64))).auditedAddresses.length===0);
+ await db.exec(`CREATE OR REPLACE FUNCTION public.ocr_identity_native_lineage_before_triage(p_org text,p_customer text,p_unit text,p_document text,p_hash text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('codes',jsonb_build_array('1234567'),'editIds','[]'::jsonb,'aliasIds','[]'::jsonb)$$;
+ CREATE OR REPLACE FUNCTION public.invoice_identity_registration(text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('customerName','Client','taxId','12345678000190','unitNumber','1234567','address','Rua Exemplo 123','month','2026-01')$$;`);
+ const proof={version:'invoice-identity-preflight-v1',fileHash:sourceHash,state:'MATCH',registration:{customerName:'Client',taxId:'12345678000190',unitNumber:'1234567',address:'Rua Exemplo 123',month:'2026-01',auditedUnitNumbers:l.codes,auditedAddresses:l.auditedAddresses},registrationReviewIds:l.reviewIds,checks:{unit:'MATCH',taxId:'MATCH',address:'MATCH',period:'MATCH'}};
+ const current=p=>db.query('SELECT ocr_identity_proof_current($1,$2,$3) valid',['org',target,JSON.stringify(p)]).then(r=>r.rows[0].valid);
+ ok(await current(proof));ok(!await current({...proof,registration:{...proof.registration,auditedAddresses:['Forged street 999']}}));ok(!await current({...proof,registrationReviewIds:[id(999)]}));ok(!await current({...proof,fileHash:'e'.repeat(64)}));
+
+ await db.query('UPDATE consumer_units SET address=$1 WHERE id=$2',['Different registration',id(1)]);ok((await lineage()).auditedAddresses.length===0);await db.query('UPDATE consumer_units SET address=$1 WHERE id=$2',['Rua Exemplo 123',id(1)]);
+}
+
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});
