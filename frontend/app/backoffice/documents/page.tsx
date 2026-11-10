@@ -1,5 +1,6 @@
 'use client';
 import { FormEvent, useCallback, useEffect, useState, useRef } from 'react';
+import EvaDocumentReviewQueue from '@/app/components/EvaDocumentReviewQueue';
 import EvaInvoiceInbox from '@/app/components/EvaInvoiceInbox';
 import AutomaticInvoiceIntake from '@/app/components/AutomaticInvoiceIntake';
 import DocumentDialog from './DocumentDialog';
@@ -132,6 +133,7 @@ function DocumentsContent() {
     <header className="backoffice-page__header"><h1 className="backoffice-page__title">Documentos</h1><p>Gerencie faturas, contratos, notas e modelos por cliente, unidade, classificação e versão.</p></header>
     {error && <div><p role="alert">{error}</p><button type="button" disabled={busy} onClick={()=>{setError('');setAttempt(n=>n+1);}}>Tentar carregar novamente</button></div>}{notice && <p role="status">{notice}</p>}
     {loading ? <p role="status">Carregando documentos…</p> : <>
+      <EvaDocumentReviewQueue/>
       {context?.scope==='organization'&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation')&&hasPermission(viewPermission)&&hasPermission('60f9690a-145b-4dba-b23f-9f945baca296')?<EvaInvoiceInbox embedded key={organizationId+':'+context.user.id} organizationId={organizationId}/>:null}
       <p><a href="/backoffice/documents/operations">Abrir painel operacional da EVA · etapas e pendências</a></p>
       <AutomaticInvoiceIntake customers={customers} units={units} onEnabled={setAutomaticEnabled} canUpload={canUpload} onUpdated={()=>setAttempt(n=>n+1)}/>

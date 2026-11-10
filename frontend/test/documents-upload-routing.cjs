@@ -6,6 +6,7 @@ require.extensions['.css']=(m)=>m.exports={};
 const React=require('react'),{act}=React,{createRoot}=require('react-dom/client');let catalog,requests=[],autoEnabled=true;
 const original=Module._load,invoice={id:'invoice',customer_id:'customer',consumer_unit_id:'unit',reference_month:'2026-07-01',document_type:'INVOICE_DISTRIBUTOR',original_filename:'invoice.pdf'};
 Module._load=function(n,p,m){
+ if(n==='@/app/components/EvaDocumentReviewQueue')return {__esModule:true,default:()=>null};
  if(n==='@/app/components/EvaInvoiceInbox')return {__esModule:true,default:({embedded})=>React.createElement('section',{'data-embedded-notices':String(embedded)},'Avisos de faturas da EVA')};
  if(n==='@/app/providers')return {useAuth:()=>({context:{scope:'organization',user:{id:'actor'},currentOrganization:{id:'org',role:'admin_org'}},hasPermission:()=>true})};
  if(n==='@/app/lib/api/client')return {apiRequest:async(url,o)=>{requests.push([url,o]);return {documents:[],customers:[{id:'customer',company_name:'Synthetic customer'}],units:[{id:'unit',customer_id:'customer',name:'Unit',consumer_unit_number:'123'}]}}};

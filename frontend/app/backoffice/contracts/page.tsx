@@ -54,7 +54,7 @@ function Workspace(){const {hasPermission}=useAuth();const [customers,setCustome
  function refreshOcr(){ocrNavigation.current=false;setOcrRevision(n=>n+1);}
  function change(action:()=>void){if(dirty){setPendingChange(()=>action);return;}action();}
  if(!canView)return <p>Acesso não autorizado aos contratos.</p>;
- return <section className="backoffice-page"><h1>Contratos e configuração energética</h1><p>Selecione um cliente para acompanhar as pendências ou use Inserir novo para iniciar um cadastro.</p>
+ return <section className="backoffice-page"><h1>Contratos e configuração energética</h1><p>Confira os preenchimentos concluídos pela EVA na fila de Documentos. Use esta área para preparar apurações manualmente ou administrar os contratos.</p>
  {pendingChange?<WorkflowModal title="Alterações não salvas" onClose={()=>setPendingChange(null)}><div role="alert" className="ds-card"><p>Há campos não salvos. Trocar de área ou cliente descartará esse preenchimento.</p><Button variant="secondary" onClick={()=>setPendingChange(null)}>Permanecer no formulário</Button><Button onClick={()=>{setDirty(false);pendingChange();setPendingChange(null);}}>Descartar e continuar</Button></div></WorkflowModal>:null}
  {error?<><Alert variant="error">{error}</Alert><Button onClick={()=>{setError('');setLoading(true);setRevision(v=>v+1);}}>Tentar novamente</Button></>:null}
  {ocrError?<><Alert variant="error">{ocrError}</Alert><Button disabled={ocrLoading} onClick={()=>change(refreshOcr)}>Tentar carregar acompanhamento novamente</Button></>:null}

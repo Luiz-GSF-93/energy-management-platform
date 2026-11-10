@@ -1,4 +1,5 @@
 'use client';
+import {EvaReviewQueueBell} from './EvaDocumentReviewQueue';
 import TradingApprovalBell from './TradingApprovalBell';
 import CceeTraining from './CceeTraining';
 import AuditPresence from './AuditPresence';
@@ -32,7 +33,7 @@ export default function BackofficeShell({
 
       <main className="backoffice-main">
         <div className="environment-topbar">{isOrganizationAuthContext(context)&&!context.accessMode&&['admin_org','gestor','operacional'].includes(context.currentOrganization.role)?<Link className="operation-bell" href="/backoffice/support">Atendimento Central</Link>:null}<AuditSecurityBell/><TradingApprovalBell/><OperationNotificationBell /><UserIdentity /></div>
-        <CceeTraining/>
+        <EvaReviewQueueBell/><CceeTraining/>
         {children}
         <BotEnergyBackoffice />
       </main>
