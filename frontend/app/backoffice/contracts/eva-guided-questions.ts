@@ -1,4 +1,4 @@
-export type GuidedQuestion={key:string;unitId:string;section:string;code:string;messages:string[];label:string;parts?:GuidedQuestion[];suggestions:{label:string;value:unknown;source:string}[]};
+export type GuidedQuestion={key:string;unitId:string;section:string;code:string;unitName?:string;messages:string[];label:string;parts?:GuidedQuestion[];suggestions:{label:string;value:unknown;source:string}[]};
 const sections:Record<string,string>={costs:'custos da competência',monthly:'medições da fatura',library:'tarifas e tributos ACR',parameters:'tarifas e tributos',supply:'nota e condições do fornecedor',management:'honorários',distributor:'identificação da unidade',source:'fontes pendentes'};
 export function guidedQuestions(report:any):GuidedQuestion[]{
  if(!report||report.approvalEligible||!Array.isArray(report.units))return [];
@@ -7,7 +7,7 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
   const key=unit.id+':'+(['CCEE_ESTIMATE_REVIEW','CCEE_COVERAGE'].includes(code)?code:section),old=roots.get(key);
   if(old){if(!old.messages.includes(message))old.messages.push(message);return;}
   const pattern=section==='costs'?/^costs:|^supplier:tax/:section==='monthly'?/^consumption|^demand|^reactive/:section==='supply'?/^supplier:/:section==='management'?/^fee:/:/^tariff:|^tax:|^acr:/;
-  roots.set(key,{key,unitId:unit.id,section,code,label:code==='CCEE_COVERAGE'?'Quais são os custos CCEE desta competência?':code==='SUPPLIER_INVOICE_TAX'?'Como considerar o ICMS da nota do fornecedor?':code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
+  roots.set(key,{key,unitId:unit.id,unitName:unit.name??unit.id,section,code,label:code==='CCEE_COVERAGE'?'Quais são os custos CCEE desta competência?':code==='SUPPLIER_INVOICE_TAX'?'Como considerar o ICMS da nota do fornecedor?':code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
  };
  for(const unit of report.units){
   const actions=(report.pendingActions??[]).filter((a:any)=>a.unitId===unit.id&&a.message);
@@ -17,10 +17,12 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
   const leftovers=(unit.missing??[]).filter((m:any)=>typeof m==='string'&&!actions.some((a:any)=>a.message===m||m.includes(a.message)));
   for(const m of leftovers){const section=/identidade|CNPJ|instalação|unidade diverg/i.test(m)?'distributor':/medição|medições|consumo|demanda/i.test(m)?'monthly':/fornecedor|nota fiscal|NF /i.test(m)?'supply':/CCEE|custo/i.test(m)?'costs':/tribut|tarifa|ICMS|PIS|COFINS|bandeira/i.test(m)?'parameters':/honorário/i.test(m)?'management':'source';add(unit,section,'SOURCE_REVIEW',m);}
  }
- const original=Array.from(roots.values());
- if(report.scope?.kind!=='UNIT')return original;
- const grouped:GuidedQuestion[]=[];
- for(const unit of report.units){for(const supplier of [true,false]){const parts=original.filter(q=>q.unitId===unit.id&&(q.section==='supply')===supplier);if(!parts.length)continue;
- grouped.push({...parts[0],key:unit.id+':'+(supplier?'supplier-review':'financial-review'),label:supplier?'Vamos confirmar a nota do fornecedor?':'Vamos conferir custos CCEE e demais fontes?',messages:Array.from(new Set(parts.flatMap(q=>q.messages))),suggestions:parts.flatMap(q=>q.suggestions),parts});}}
+ const original=Array.from(roots.values()),grouped:GuidedQuestion[]=[];
+ // Two review stages for the entire closing; each part keeps its own unit ID.
+ for(const supplier of [true,false]){
+  const parts=original.filter(q=>(q.section==='supply'||q.section==='distributor')===supplier);
+  if(!parts.length)continue;
+  grouped.push({...parts[0],key:supplier?'documents-review':'financial-review',label:supplier?'1. Conferir documentos e vínculos':'2. Conferir valores e estimativas',messages:Array.from(new Set(parts.flatMap(q=>q.messages))),suggestions:parts.flatMap(q=>q.suggestions),parts});
+ }
  return grouped;
 }

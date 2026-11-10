@@ -8,7 +8,8 @@ function eventNameInMonth(name:string,sourceMonth:string,targetMonth:string){
 function eventNameText(name:unknown){return typeof name==='string'?name.replace(/&#(x[0-9a-f]+|[0-9]+);/gi,(match,code)=>{const n=code[0].toLowerCase()==='x'?parseInt(code.slice(1),16):Number(code);return n>31&&n<=0x10ffff&&!(n>=0xd800&&n<=0xdfff)?String.fromCodePoint(n):match;}).normalize('NFC'):'';}
 export function servicePolicyPlan(c:any,now=new Date()){
  const p=c.policy,month=c.targetMonth,cursor=p.cursor??{},job=c.job,ms=now.getTime();
- const next=new Date(Math.floor(ms/3600000)*3600000+3600000).toISOString();
+ const tomorrow=new Date(Date.parse(c.today+'T00:00:00-03:00')+86400000).toISOString();
+ const next=p.kind==='DRI'?tomorrow:new Date(Math.floor(ms/3600000)*3600000+3600000).toISOString();
  const finish=(state:string,extra:any={})=>({action:'finish',state,nextRunAt:next,cursor,...extra});
  const stop=(code:string)=>finish('REVIEW_REQUIRED',{enabled:false,error:code});
  if(!p||!['MEASUREMENTS','DRI'].includes(p.kind)||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw Error('INVALID_AUTOMATIC_CONTEXT');
@@ -21,7 +22,7 @@ export function servicePolicyPlan(c:any,now=new Date()){
   const hash=semanticCursor(p.kind==='DRI'&&cursor.stage==='EVENTS'?rows.map(({providerOccurrences,...r}:any)=>r):rows);
   if(cursor.stage==='MEASUREMENTS')return finish('READY',{success:true,sourceAt:rows.at(-1)?.hourLabel??null,cursor:{month,sourceHash:hash},lastMonthlyDate:c.today,sourceMonth:month});
   if(cursor.stage==='EVENTS'){
-   if(cursor.month===month&&cursor.eventsHash===hash)return finish('READY',{sourceMonth:month});
+   if(cursor.month===month&&cursor.eventsHash===hash&&cursor.completedDate===c.today)return finish('READY',{sourceMonth:month});
    const expectedName=eventNameInMonth(String(p.source_selector.eventName??''),String(p.month??month).slice(0,7),month);
    const candidates=rows.filter((r:any)=>eventNameText(r.name)===eventNameText(expectedName)&&r.month===month);
    if(!candidates.length)return finish('WAITING_FOR_SOURCE',{cursor:{...cursor,month},sourceMonth:month});
@@ -36,7 +37,7 @@ export function servicePolicyPlan(c:any,now=new Date()){
    if(frames.length!==1||!frames[0].parameters?.includes('CODIGO_AGENTE')||frames[0].parameters.some((v:string)=>!['CODIGO_AGENTE','CODIGO_EVENTO_CONTABIL'].includes(v)))return stop('FRAME_SELECTION_REVIEW');
    return enqueue('DRI_RESULTS',{parentJobId:job.id,eventCode:cursor.eventCode,...(cursor.eventKey?{eventKey:cursor.eventKey}:{}),reportId:reports[0].id,frameId:frames[0].id},'RESULTS',cursor);
   }
-  if(cursor.stage==='RESULTS')return finish('READY',{success:true,sourceMonth:month,cursor:{month,eventsHash:cursor.eventsHash,sourceHash:hash}});
+  if(cursor.stage==='RESULTS')return finish('READY',{success:true,sourceMonth:month,cursor:{month,eventsHash:cursor.eventsHash,sourceHash:hash,completedDate:c.today}});
   return stop('AUTOMATIC_PHASE_REVIEW');
  }
  if(p.kind==='MEASUREMENTS'){
@@ -44,5 +45,6 @@ export function servicePolicyPlan(c:any,now=new Date()){
   if(p.last_monthly_date===c.today&&cursor.month===month)return finish('READY',{nextRunAt:new Date(Date.parse(c.today+'T00:00:00-03:00')+86400000).toISOString()});
   return enqueue('MEASUREMENTS',{measurementKind:'FINAL'},'MEASUREMENTS',cursor);
  }
+ if(cursor.month===month&&cursor.completedDate===c.today)return finish('READY',{sourceMonth:month});
  return enqueue('DRI_EVENTS',{},'EVENTS',cursor.month===month?cursor:{});
 }

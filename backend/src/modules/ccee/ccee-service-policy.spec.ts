@@ -20,8 +20,20 @@ describe('Automatic read policy',()=>{
  });
  it('propagates disclosure identity and waits on an exact no-report response',()=>{const p={...policy,kind:'DRI',cursor:{stage:'EVENTS'},source_selector:{eventName:'Contabilização'}};const found=servicePolicyPlan(context({policy:p,job:{id:'j',state:'SUCCEEDED',result:{complete:true,data:{rows:[{name:'Contabilização',month:'2026-09',code:'77',eventKey:'a'.repeat(64)}]}}}}),now);expect(found.body.eventKey).toBe('a'.repeat(64));expect(found.cursor.eventKey).toBe('a'.repeat(64));const waiting=servicePolicyPlan(context({policy:{...p,cursor:{stage:'REPORTS',eventsHash:'hash'}},job:{state:'SUCCEEDED',result:{complete:true,data:{availability:'NO_REPORTS',rows:[]}}}}),now);expect(waiting.state).toBe('WAITING_FOR_SOURCE');expect(waiting.enabled).not.toBe(false);expect(waiting.success).not.toBe(true);});
  it('does not repeat downstream reads solely because the same event occurred twice in the provider list',()=>{
-  const row={name:'Contabilização',month:'2026-09',code:'77',sourceIdentity:'same-full-source'},eventsHash=semanticCursor([row]),p={...policy,kind:'DRI',cursor:{stage:'EVENTS',month:'2026-09',eventsHash},source_selector:{eventName:'Contabilização'}};
+  const row={name:'Contabilização',month:'2026-09',code:'77',sourceIdentity:'same-full-source'},eventsHash=semanticCursor([row]),p={...policy,kind:'DRI',cursor:{stage:'EVENTS',month:'2026-09',eventsHash,completedDate:'2026-10-27'},source_selector:{eventName:'Contabilização'}};
   expect(servicePolicyPlan(context({policy:p,job:{id:'j',state:'SUCCEEDED',result:{complete:true,data:{rows:[{...row,providerOccurrences:2}]}}}}),now)).toMatchObject({action:'finish',state:'READY'});
+ });
+
+ it('refreshes financial results on the next day even if the accounting event list has not changed',()=>{
+  const row={name:'Contabilização',month:'2026-09',code:'77'},eventsHash=semanticCursor([row]);
+  const p={...policy,kind:'DRI',cursor:{stage:'EVENTS',month:'2026-09',eventsHash,completedDate:'2026-10-26'},source_selector:{eventName:'Contabilização'}};
+  expect(servicePolicyPlan(context({policy:p,job:{id:'j',state:'SUCCEEDED',result:{complete:true,data:{rows:[row]}}}}),now)).toMatchObject({action:'enqueue',kind:'DRI_REPORTS'});
+ });
+ it('schedules one financial refresh per Brasilia day and preserves month changes',()=>{
+  const p={...policy,kind:'DRI',cursor:{month:'2026-09',completedDate:'2026-10-27'}};
+  expect(servicePolicyPlan(context({policy:p}),now)).toMatchObject({action:'finish',state:'READY',nextRunAt:'2026-10-28T03:00:00.000Z'});
+  expect(servicePolicyPlan(context({policy:p,targetMonth:'2026-10'}),now)).toMatchObject({action:'enqueue',kind:'DRI_EVENTS'});
+  expect(servicePolicyPlan(context({policy:{...p,cursor:{month:'2026-09',stage:'RESULTS'}},job:{state:'SUCCEEDED',result:{complete:true,data:{rows:[{amount:'10.00'}]}}}}),now)).toMatchObject({success:true,cursor:{completedDate:'2026-10-27'},nextRunAt:'2026-10-28T03:00:00.000Z'});
  });
 
 });
