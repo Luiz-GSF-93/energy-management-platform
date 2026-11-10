@@ -9,7 +9,7 @@ const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,
 (async()=>{try{
  await act(async()=>root.render(React.createElement(Component,{customers:[{id:'client',company_name:'Synthetic client'}],units:[{id:'unit',customer_id:'client',name:'Synthetic unit',consumer_unit_number:'123'}]})));
  assert(requests[0][0].includes('queueOnly=true'),'The visible reading queue must request only pending receipts');
- assert.equal(document.querySelector('progress').value,45);assert(document.body.textContent.includes('Identificação salva em'));assert(document.body.textContent.includes('Pausado para conferência'));
+ assert.equal(document.querySelector('progress').value,45);assert(document.body.textContent.includes('Identificação salva em'));assert(document.body.textContent.includes('Para a EVA continuar:'));
  const button=label=>[...document.querySelectorAll('button')].find(b=>b.textContent===label);
  await act(async()=>button('Enviar para a EVA').click());const form=document.querySelector('form');assert(form);assert(form.querySelector('input[type=file]').accept.includes('application/xml'));assert(form.querySelector('input[type=file]').accept.includes('application/pdf'));assert.deepEqual([...form.querySelectorAll('[name]')].map(v=>v.name).sort(),['consent','file']);assert(document.querySelector('[role="dialog"]').textContent.includes('Não é necessário cadastrar a competência'));
  const count=requests.length;await act(async()=>window.dispatchEvent(new Event('focus')));assert.equal(requests.length,count,'focus cannot submit or restart recognition');
