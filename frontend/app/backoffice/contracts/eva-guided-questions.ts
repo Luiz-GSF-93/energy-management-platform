@@ -24,6 +24,13 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
   const leftovers=(unit.missing??[]).filter((m:any)=>typeof m==='string'&&!actions.some((a:any)=>a.message===m||m.includes(a.message)));
   for(const m of leftovers){const section=/identidade|CNPJ|instalação|unidade diverg/i.test(m)?'distributor':/medição|medições|consumo|demanda/i.test(m)?'monthly':/fornecedor|nota fiscal|NF /i.test(m)?'supply':/CCEE|custo/i.test(m)?'costs':/tribut|tarifa|ICMS|PIS|COFINS|bandeira/i.test(m)?'parameters':/honorário/i.test(m)?'management':'source';add(unit,section,'SOURCE_REVIEW',m);}
  }
+ // Consolidated fee allocation has no individual unit.missing entry. Keep it
+ // answerable in the same financial stage and anchor it to this customer.
+ for(const message of report.missing??[]){
+  if(typeof message!=='string'||!/rateio|honor[aá]rio/i.test(message)||!report.units[0])continue;
+  if(report.units.some((u:any)=>(u.missing??[]).some((m:string)=>message===m||message===u.name+': '+m)))continue;
+  add(report.units[0],'management','MANAGEMENT_ALLOCATION',message);
+ }
  const original=Array.from(roots.values()),grouped:GuidedQuestion[]=[];
  // Two review stages for the entire closing; each part keeps its own unit ID.
  for(const supplier of [true,false]){
