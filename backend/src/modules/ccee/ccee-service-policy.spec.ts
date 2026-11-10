@@ -24,16 +24,22 @@ describe('Automatic read policy',()=>{
   expect(servicePolicyPlan(context({policy:p,job:{id:'j',state:'SUCCEEDED',result:{complete:true,data:{rows:[{...row,providerOccurrences:2}]}}}}),now)).toMatchObject({action:'finish',state:'READY'});
  });
 
- it('refreshes financial results on the next day even if the accounting event list has not changed',()=>{
+ it('refreshes financial results on the next weekly cycle even if the accounting event list has not changed',()=>{
   const row={name:'Contabilização',month:'2026-09',code:'77'},eventsHash=semanticCursor([row]);
-  const p={...policy,kind:'DRI',cursor:{stage:'EVENTS',month:'2026-09',eventsHash,completedDate:'2026-10-26'},source_selector:{eventName:'Contabilização'}};
+  const p={...policy,kind:'DRI',cursor:{stage:'EVENTS',month:'2026-09',eventsHash,completedDate:'2026-10-20'},source_selector:{eventName:'Contabilização'}};
   expect(servicePolicyPlan(context({policy:p,job:{id:'j',state:'SUCCEEDED',result:{complete:true,data:{rows:[row]}}}}),now)).toMatchObject({action:'enqueue',kind:'DRI_REPORTS'});
  });
- it('schedules one financial refresh per Brasilia day and preserves month changes',()=>{
+ it('schedules weekly financial reads with a month-end refresh and preserves month changes',()=>{
   const p={...policy,kind:'DRI',cursor:{month:'2026-09',completedDate:'2026-10-27'}};
-  expect(servicePolicyPlan(context({policy:p}),now)).toMatchObject({action:'finish',state:'READY',nextRunAt:'2026-10-28T03:00:00.000Z'});
+  expect(servicePolicyPlan(context({policy:p}),now)).toMatchObject({action:'finish',state:'READY',nextRunAt:'2026-10-31T03:00:00.000Z'});
   expect(servicePolicyPlan(context({policy:p,targetMonth:'2026-10'}),now)).toMatchObject({action:'enqueue',kind:'DRI_EVENTS'});
-  expect(servicePolicyPlan(context({policy:{...p,cursor:{month:'2026-09',stage:'RESULTS'}},job:{state:'SUCCEEDED',result:{complete:true,data:{rows:[{amount:'10.00'}]}}}}),now)).toMatchObject({success:true,cursor:{completedDate:'2026-10-27'},nextRunAt:'2026-10-28T03:00:00.000Z'});
+  expect(servicePolicyPlan(context({policy:{...p,cursor:{month:'2026-09',stage:'RESULTS'}},job:{state:'SUCCEEDED',result:{complete:true,data:{rows:[{amount:'10.00'}]}}}}),now)).toMatchObject({success:true,cursor:{completedDate:'2026-10-27'},nextRunAt:'2026-10-31T03:00:00.000Z'});
+ });
+
+ it('refreshes at month end even when the last successful collection was less than a week ago',()=>{
+  const p={...policy,kind:'DRI',cursor:{month:'2026-09',completedDate:'2026-10-27'}};
+  expect(servicePolicyPlan(context({policy:p,today:'2026-10-31'}),new Date('2026-10-31T15:00:00Z'))).toMatchObject({action:'enqueue',kind:'DRI_EVENTS'});
+  expect(servicePolicyPlan(context({policy:{...p,cursor:{month:'2026-09',completedDate:'2026-11-10'}},today:'2026-11-11'}),new Date('2026-11-11T15:00:00Z'))).toMatchObject({action:'finish',nextRunAt:'2026-11-17T03:00:00.000Z'});
  });
 
 });

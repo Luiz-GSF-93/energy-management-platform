@@ -6,10 +6,16 @@ function eventNameInMonth(name:string,sourceMonth:string,targetMonth:string){
  return name;
 }
 function eventNameText(name:unknown){return typeof name==='string'?name.replace(/&#(x[0-9a-f]+|[0-9]+);/gi,(match,code)=>{const n=code[0].toLowerCase()==='x'?parseInt(code.slice(1),16):Number(code);return n>31&&n<=0x10ffff&&!(n>=0xd800&&n<=0xdfff)?String.fromCodePoint(n):match;}).normalize('NFC'):'';}
+function financialRefreshWindow(today:string,completedDate?:string){
+ const start=Date.parse(today+'T00:00:00-03:00'),year=Number(today.slice(0,4)),month=Number(today.slice(5,7))-1;
+ const lastDay=Date.UTC(year,month+1,0,3),nextMonth=Date.UTC(year,month+1,1,3),weekly=Date.parse((completedDate??today)+'T00:00:00-03:00')+7*86400000;
+ return new Date(Math.min(...[weekly,lastDay,nextMonth].filter(value=>value>start))).toISOString();
+}
 export function servicePolicyPlan(c:any,now=new Date()){
  const p=c.policy,month=c.targetMonth,cursor=p.cursor??{},job=c.job,ms=now.getTime();
- const tomorrow=new Date(Date.parse(c.today+'T00:00:00-03:00')+86400000).toISOString();
- const next=p.kind==='DRI'?tomorrow:new Date(Math.floor(ms/3600000)*3600000+3600000).toISOString();
+ const todayStart=Date.parse(c.today+'T00:00:00-03:00'),lastDay=Date.UTC(Number(c.today.slice(0,4)),Number(c.today.slice(5,7)),0,3);
+ const refreshDue=cursor.month!==month||!cursor.completedDate||todayStart-Date.parse(cursor.completedDate+'T00:00:00-03:00')>=7*86400000||todayStart===lastDay&&cursor.completedDate!==c.today;
+ const next=p.kind==='DRI'?financialRefreshWindow(c.today):new Date(Math.floor(ms/3600000)*3600000+3600000).toISOString();
  const finish=(state:string,extra:any={})=>({action:'finish',state,nextRunAt:next,cursor,...extra});
  const stop=(code:string)=>finish('REVIEW_REQUIRED',{enabled:false,error:code});
  if(!p||!['MEASUREMENTS','DRI'].includes(p.kind)||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw Error('INVALID_AUTOMATIC_CONTEXT');
@@ -22,7 +28,7 @@ export function servicePolicyPlan(c:any,now=new Date()){
   const hash=semanticCursor(p.kind==='DRI'&&cursor.stage==='EVENTS'?rows.map(({providerOccurrences,...r}:any)=>r):rows);
   if(cursor.stage==='MEASUREMENTS')return finish('READY',{success:true,sourceAt:rows.at(-1)?.hourLabel??null,cursor:{month,sourceHash:hash},lastMonthlyDate:c.today,sourceMonth:month});
   if(cursor.stage==='EVENTS'){
-   if(cursor.month===month&&cursor.eventsHash===hash&&cursor.completedDate===c.today)return finish('READY',{sourceMonth:month});
+   if(cursor.month===month&&cursor.eventsHash===hash&&!refreshDue)return finish('READY',{sourceMonth:month});
    const expectedName=eventNameInMonth(String(p.source_selector.eventName??''),String(p.month??month).slice(0,7),month);
    const candidates=rows.filter((r:any)=>eventNameText(r.name)===eventNameText(expectedName)&&r.month===month);
    if(!candidates.length)return finish('WAITING_FOR_SOURCE',{cursor:{...cursor,month},sourceMonth:month});
@@ -45,6 +51,6 @@ export function servicePolicyPlan(c:any,now=new Date()){
   if(p.last_monthly_date===c.today&&cursor.month===month)return finish('READY',{nextRunAt:new Date(Date.parse(c.today+'T00:00:00-03:00')+86400000).toISOString()});
   return enqueue('MEASUREMENTS',{measurementKind:'FINAL'},'MEASUREMENTS',cursor);
  }
- if(cursor.month===month&&cursor.completedDate===c.today)return finish('READY',{sourceMonth:month});
+ if(cursor.month===month&&!refreshDue)return finish('READY',{sourceMonth:month,nextRunAt:financialRefreshWindow(c.today,cursor.completedDate)});
  return enqueue('DRI_EVENTS',{},'EVENTS',cursor.month===month?cursor:{});
 }
