@@ -108,7 +108,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    }
    else if(!costs||!Array.isArray(costs.items)||typeof costs.noCosts!=='boolean'||costs.noCosts&&costs.items.length)ownMissing.push('Custos adicionais: revisão da competência não demonstrada.');
    else for(const item of costs.items){
-    if((draft?.state==='COMPLETE'||draft?.setVersion===1)&&draft.consumedCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item)))continue;
+    if((draft?.format==='supplier-invoice-evidence-1'||draft?.state==='COMPLETE'||draft?.setVersion===1)&&draft.consumedCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item)))continue;
     if((item.scenario==='ACL'||e.comparative)&&item.source?.includes(c.document.id))continue;
     const confirmedInvoiceExtra=draft?.format==='supplier-invoice-evidence-1'&&draft.state==='COMPLETE'&&item.category==='SUPPLIER_EXTRA_ENERGY'&&draft.confirmedExtraCostSources.some((proof:any)=>proof.id===item.id&&proof.costId===c.cost?.id&&proof.hash===indexMemoryHash(item));
     if(['SUPPLIER_INVOICE','SUPPLIER_EXTRA_ENERGY'].includes(item.category)&&!confirmedInvoiceExtra){ownMissing.push('Conciliar compra/nota do fornecedor para evitar dupla contagem.');continue;}
