@@ -4,7 +4,7 @@ import {withInvoiceDemand} from './invoice-demand-reference';
 import {AneelTariffFlagsService} from './aneel-tariff-flags.service';
 import {regularSupplierReference} from './documented-supplier-settlement';
 import {cceeCostEstimate,cceeEstimateEnabled,operatorCceeEstimate} from './ccee-cost-estimate';
-import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
+import {confirmedSupplierInstallation,collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {documentedSupplierSettlement,settlementHash} from './documented-supplier-settlement';
 import {SourcePreparationService} from './source-preparation.service';
@@ -112,9 +112,10 @@ export class CalculationAutofillService{
    c.documentedSupplierOptions.proposals=[];c.documentedSupplierOptions.excluded=[];
    if(this.sourcePreparation){
     const evidence=await collectSupplierInvoiceEvidence(c.documentedSupplierOptions.documents,d=>this.sourcePreparation!.supplierEvidence(c,d.id,d.file_hash));
-    Object.assign(c.documentedSupplierOptions,{documents:evidence.documents,proposals:evidence.proposals,excluded:evidence.excluded});
+    Object.assign(c.documentedSupplierOptions,{documents:evidence.documents,proposals:evidence.proposals,excluded:evidence.excluded,reviewProposals:evidence.reviewProposals??[]});
     c.proposalObservations=[...(c.proposalObservations??[]),...evidence.observations];
-    if(!c.manualOverrides.supplierSettlement||evidence.selected?.setVersion)c.supplierInvoiceProposal=evidence.selected;
+    if(!c.manualOverrides.supplierSettlement||evidence.selected?.setVersion)c.supplierInvoiceProposal=evidence.selected??confirmedSupplierInstallation(c,evidence);
+    if(c.supplierInvoiceProposal&&!c.supplierInvoiceProposal.setVersion&&!c.documentedSupplierOptions.proposals.some((p:any)=>p.documentId===c.supplierInvoiceProposal.documentId))c.documentedSupplierOptions.proposals.push(c.supplierInvoiceProposal);
    }
    const v=c.manualOverrides.supplierSettlement;
    if(v){
