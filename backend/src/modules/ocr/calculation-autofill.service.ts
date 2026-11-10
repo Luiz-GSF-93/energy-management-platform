@@ -183,7 +183,7 @@ export class CalculationAutofillService{
     const current=await this.context(q,t,manual);preflight={...preflight,stage:'BEFORE_DRAFTS',currentBasis:current.available?current.basis:null,currentToken:current.available?current.token:null};if(!current.available||current.basis!==c.basis)throw new ConflictException('Sources changed');
     writesStarted=true;const r=await (current.c.ready?this.resolution.prepare(c.documentId,t,{token:current.c.token}):this.resolution.prepareProposals(c.documentId,t,{token:current.c.token}));receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
    }
-   if(this.costs&&(c.c.ready||c.c.proposalReady)){
+   if(this.costs&&(c.c.ready||c.c.proposalReady)&&supplierInvoiceCostDraft(c.c)){
     const latest=await this.context(q,t,manual);
     if(!latest.available)throw new ConflictException('Fontes da NF indisponíveis.');
     const candidate=supplierInvoiceCostDraft(latest.c);
