@@ -147,5 +147,18 @@ for(const [index,unitState] of ['MATCH','MISMATCH','INCONCLUSIVE'].entries()){
  await db.query('UPDATE consumer_units SET address=$1 WHERE id=$2',['Different registration',id(1)]);ok((await lineage()).auditedAddresses.length===0);await db.query('UPDATE consumer_units SET address=$1 WHERE id=$2',['Rua Exemplo 123',id(1)]);
 }
 
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261300_eva_restore_original.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261300_eva_restore_original.sql','utf8'));
+const restoreReason={reason:'Operator confirmed this exact original is correct and explicitly requested its restoration.'};
+const restore=(target=id(500),org='org',a=actor,role='manager')=>db.query('SELECT eva_intake_restore($1,$2,$3,false,$4,$5) data',[org,a,role,target,JSON.stringify(restoreReason)]);
+await deny(()=>restore(id(500),'other'));await deny(()=>restore(id(500),'org',id(70),'external'));await deny(()=>restore(id(400)));await deny(()=>restore(id(800)));
+const rawBefore=(await db.query('SELECT raw_result,file_hash FROM eva_automatic_intakes WHERE id=$1',[id(500)])).rows[0];
+ok((await restore()).rows[0].data.state==='RECOGNIZING');ok((await restore()).rows[0].data.replayed===true);
+ok(JSON.stringify((await db.query('SELECT raw_result,file_hash FROM eva_automatic_intakes WHERE id=$1',[id(500)])).rows[0])===JSON.stringify(rawBefore));
+ok((await db.query("SELECT count(*)::int n FROM eva_automatic_intake_events WHERE intake_id=$1 AND event='RESTORED'",[id(500)])).rows[0].n===1);
+await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE id=$1",[id(500)]);
+const restoredReview=(await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'list',NULL,$2) data",[actor,JSON.stringify({ids:[id(500)]})])).rows[0].data;
+ok(restoredReview.items.length===1);
+await db.exec('SET ROLE authenticated');await deny(()=>restore());await db.exec('RESET ROLE');
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

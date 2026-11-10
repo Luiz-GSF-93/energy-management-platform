@@ -1,8 +1,10 @@
+import {supplierInvoiceCostDraft} from './supplier-invoice-cost-draft';
+import {MonthlyCostsService} from '../contracts/services/monthly-costs.service';
 import {withInvoiceDemand} from './invoice-demand-reference';
 import {AneelTariffFlagsService} from './aneel-tariff-flags.service';
 import {regularSupplierReference} from './documented-supplier-settlement';
 import {cceeCostEstimate,cceeEstimateEnabled,operatorCceeEstimate} from './ccee-cost-estimate';
-import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
+import {confirmedSupplierInstallation,collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {documentedSupplierSettlement,settlementHash} from './documented-supplier-settlement';
 import {SourcePreparationService} from './source-preparation.service';
@@ -27,7 +29,7 @@ import {MonthlyInputsService} from '../contracts/services/monthly-inputs.service
 const uuid=(x:unknown)=>typeof x==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
 @Injectable()
 export class CalculationAutofillService{
- constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService,private sourcePreparation?:SourcePreparationService,private officialFlags?:AneelTariffFlagsService){}
+ constructor(private db:SupabaseService,private licenses:LicensesService,private resolution:OcrResolutionService,private config:ConfigService,private inputs:MonthlyInputsService,private parameters?:CalculationParametersService,private sourcePreparation?:SourcePreparationService,private officialFlags?:AneelTariffFlagsService,private costs?:MonthlyCostsService){}
  private enabled(){return this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true';}
  private canWrite(t:TenantContext){return ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions.includes(P.ENERGIA_OCR_PROCESS);}
  private async allowed(t:TenantContext,write=false){
@@ -110,9 +112,10 @@ export class CalculationAutofillService{
    c.documentedSupplierOptions.proposals=[];c.documentedSupplierOptions.excluded=[];
    if(this.sourcePreparation){
     const evidence=await collectSupplierInvoiceEvidence(c.documentedSupplierOptions.documents,d=>this.sourcePreparation!.supplierEvidence(c,d.id,d.file_hash));
-    Object.assign(c.documentedSupplierOptions,{documents:evidence.documents,proposals:evidence.proposals,excluded:evidence.excluded});
+    Object.assign(c.documentedSupplierOptions,{documents:evidence.documents,proposals:evidence.proposals,excluded:evidence.excluded,reviewProposals:evidence.reviewProposals??[]});
     c.proposalObservations=[...(c.proposalObservations??[]),...evidence.observations];
-    if(!c.manualOverrides.supplierSettlement||evidence.selected?.setVersion)c.supplierInvoiceProposal=evidence.selected;
+    if(!c.manualOverrides.supplierSettlement||evidence.selected?.setVersion)c.supplierInvoiceProposal=evidence.selected??confirmedSupplierInstallation(c,evidence);
+    if(c.supplierInvoiceProposal&&!c.supplierInvoiceProposal.setVersion&&!c.documentedSupplierOptions.proposals.some((p:any)=>p.documentId===c.supplierInvoiceProposal.documentId))c.documentedSupplierOptions.proposals.push(c.supplierInvoiceProposal);
    }
    const v=c.manualOverrides.supplierSettlement;
    if(v){
@@ -179,6 +182,12 @@ export class CalculationAutofillService{
     }
     const current=await this.context(q,t,manual);preflight={...preflight,stage:'BEFORE_DRAFTS',currentBasis:current.available?current.basis:null,currentToken:current.available?current.token:null};if(!current.available||current.basis!==c.basis)throw new ConflictException('Sources changed');
     writesStarted=true;const r=await (current.c.ready?this.resolution.prepare(c.documentId,t,{token:current.c.token}):this.resolution.prepareProposals(c.documentId,t,{token:current.c.token}));receipts.push(...r.receipts);if(receipts.some((x:any)=>x.state==='VERIFY_REQUIRED'))status='PARTIAL';
+   }
+   if(this.costs&&(c.c.ready||c.c.proposalReady)&&supplierInvoiceCostDraft(c.c)){
+    const latest=await this.context(q,t,manual);
+    if(!latest.available)throw new ConflictException('Fontes da NF indisponíveis.');
+    const candidate=supplierInvoiceCostDraft(latest.c);
+    if(candidate){writesStarted=true;const old=latest.c.cost;const saved=old?.status==='DRAFT'?await this.costs.update(old.id,{...candidate,revision:old.revision},t):await this.costs.create(candidate,t);receipts.push({label:'NF do fornecedor preenchida em custos mensais para conferência',state:'SAVED_DRAFT',id:saved.id});}
    }
    if(this.parameters&&c.c.libraryRecord&&(c.c.ready||c.c.proposalReady)){
     const lib=c.c.libraryRecord;

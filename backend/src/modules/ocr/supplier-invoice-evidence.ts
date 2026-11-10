@@ -1,18 +1,19 @@
 import {supplierInvoiceSet,supplierInvoiceSetDraft} from './supplier-invoice-set';
 import {settlementHash} from './documented-supplier-settlement';
-export async function collectSupplierInvoiceEvidence(documents:any[],read:(d:any)=>Promise<{kind:string;proposal:any}>){
- const kept:any[]=[],proposals:any[]=[],excluded:any[]=[],observations:string[]=[];
+export async function collectSupplierInvoiceEvidence(documents:any[],read:(d:any)=>Promise<{kind:string;proposal:any;reviewProposal?:any}>){
+ const kept:any[]=[],proposals:any[]=[],reviewProposals:any[]=[],excluded:any[]=[],observations:string[]=[];
  if(documents.length>10)return {documents,proposals,excluded,selected:null,observations:['Há mais de dez documentos candidatos; confira as notas sem selecionar uma lista parcial.']};
  for(const d of documents){
-  try{const evidence=await read(d);if(evidence.kind==='CONTRACT'){excluded.push({id:d.id,name:d.original_filename,reason:'Conteúdo contratual; não é nota fiscal.'});continue;}kept.push(d);if(evidence.proposal)proposals.push(evidence.proposal);}
+  try{const evidence=await read(d);if(evidence.kind==='CONTRACT'){excluded.push({id:d.id,name:d.original_filename,reason:'Conteúdo contratual; não é nota fiscal.'});continue;}kept.push(d);if(evidence.proposal)proposals.push(evidence.proposal);if(evidence.reviewProposal)reviewProposals.push(evidence.reviewProposal);}
   catch{kept.push(d);observations.push('Nota do fornecedor: extração local exige revisão; sem nova chamada paga.');}
  }
- return {documents:kept,proposals,excluded,observations,selected:kept.length===1&&proposals.length===1?proposals[0]:supplierInvoiceSet(kept,proposals)};
+ return {documents:kept,proposals,reviewProposals,excluded,observations,selected:kept.length===1&&proposals.length===1?proposals[0]:supplierInvoiceSet(kept,proposals)};
 }
-export type SupplierInvoiceAllocation={documentId:string;fileHash:string;coverage:'FULL'|'WITH_DOCUMENTED_EXTRA';reason:string;invoiceSetHash?:string;invoiceTaxes?:{documentId:string;fileHash:string;treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}[];costId?:string;costRevision?:number;costsHash?:string;taxConfirmation?:{treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}};
+export type SupplierInvoiceAllocation={installationConfirmation?:{reason:string};documentId:string;fileHash:string;coverage:'FULL'|'WITH_DOCUMENTED_EXTRA';reason:string;invoiceSetHash?:string;invoiceTaxes?:{documentId:string;fileHash:string;treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}[];costId?:string;costRevision?:number;costsHash?:string;taxConfirmation?:{treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}};
 export function supplierInvoiceAllocationInput(v:any):SupplierInvoiceAllocation{
  const uuid=(s:any)=>typeof s==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(s);
- if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).filter(k=>!['taxConfirmation','invoiceSetHash','invoiceTaxes'].includes(k)).sort().join(',')!==(v.coverage==='WITH_DOCUMENTED_EXTRA'?'costId,costRevision,costsHash,coverage,documentId,fileHash,reason':'coverage,documentId,fileHash,reason')||!uuid(v.documentId)||!/^[a-f0-9]{64}$/.test(v.fileHash??'')||!['FULL','WITH_DOCUMENTED_EXTRA'].includes(v.coverage)||typeof v.reason!=='string'||v.reason.trim().length<20||v.reason.length>1000||v.coverage==='WITH_DOCUMENTED_EXTRA'&&(!uuid(v.costId)||!Number.isInteger(v.costRevision)||v.costRevision<1||!/^[a-f0-9]{64}$/.test(v.costsHash??'')))throw Error('Confirme a cobertura e as fontes atuais da nota e de eventual compra adicional.');
+ if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).filter(k=>!['taxConfirmation','invoiceSetHash','invoiceTaxes','installationConfirmation'].includes(k)).sort().join(',')!==(v.coverage==='WITH_DOCUMENTED_EXTRA'?'costId,costRevision,costsHash,coverage,documentId,fileHash,reason':'coverage,documentId,fileHash,reason')||!uuid(v.documentId)||!/^[a-f0-9]{64}$/.test(v.fileHash??'')||!['FULL','WITH_DOCUMENTED_EXTRA'].includes(v.coverage)||typeof v.reason!=='string'||v.reason.trim().length<20||v.reason.length>1000||v.coverage==='WITH_DOCUMENTED_EXTRA'&&(!uuid(v.costId)||!Number.isInteger(v.costRevision)||v.costRevision<1||!/^[a-f0-9]{64}$/.test(v.costsHash??'')))throw Error('Confirme a cobertura e as fontes atuais da nota e de eventual compra adicional.');
+ if(v.installationConfirmation!==undefined){const x=v.installationConfirmation;if(v.invoiceSetHash||!x||Object.keys(x).join(',')!=='reason'||typeof x.reason!=='string'||x.reason.trim().length<30||x.reason.length>1000)throw Error('Confirme a unidade atendida e justifique a associação específica desta NF.');}
  if(v.invoiceSetHash!==undefined&&(!/^[a-f0-9]{64}$/.test(v.invoiceSetHash)||v.taxConfirmation!==undefined))throw Error('Confirme o conjunto atual, com tributos individuais por nota.');
  if(v.invoiceTaxes!==undefined){if(!v.invoiceSetHash||!Array.isArray(v.invoiceTaxes)||v.invoiceTaxes.length>10||new Set(v.invoiceTaxes.map((x:any)=>x.documentId)).size!==v.invoiceTaxes.length)throw Error('Confirmações fiscais inválidas.');for(const x of v.invoiceTaxes){if(!x||Object.keys(x).sort().join(',')!=='documentId,fileHash,reason,treatment'||!uuid(x.documentId)||!/^[a-f0-9]{64}$/.test(x.fileHash??'')||!['NET_DESTINATION_ICMS','INCLUDED'].includes(x.treatment)||typeof x.reason!=='string'||x.reason.trim().length<20||x.reason.length>1000)throw Error('Confira a fonte fiscal de cada nota.');}}
  if(v.taxConfirmation!==undefined){const x=v.taxConfirmation;if(!x||typeof x!=='object'||Array.isArray(x)||Object.keys(x).sort().join(',')!=='reason,treatment'||!['NET_DESTINATION_ICMS','INCLUDED'].includes(x.treatment)||typeof x.reason!=='string'||x.reason.trim().length<20||x.reason.length>1000)throw Error('Confirme o tratamento fiscal da NF e sua fonte, sem presumir isenção.');}
@@ -29,7 +30,7 @@ export function supplierInvoiceEvidenceDraft(c:any){
  const requirements:any[]=[],differences:string[]=[],consumedCostSources:any[]=[],confirmedExtraCostSources:any[]=[];
  const need=(code:string,message:string,section='supply')=>requirements.push({code,message,section});
  let taxTreatment=p.taxTreatment;
- const source:any={documentId:p.documentId,fileHash:p.fileHash,kind:'VERIFIED_INVOICE',taxEvidence:p.taxEvidence};
+ const source:any={documentId:p.documentId,fileHash:p.fileHash,kind:'VERIFIED_INVOICE',taxEvidence:p.taxEvidence,...(p.installationIdentity?.matchedBy==='OPERATOR_CONFIRMATION'?{installationConfirmation:p.installationIdentity}: {})};
  let difference:string|null=null;
  try{
   const measured=scaled(c.measurements.consumptionTotal)/1000n,quantity=scaled(p.quantityMwh);
@@ -55,4 +56,12 @@ export function supplierInvoiceEvidenceDraft(c:any){
  }catch(e){need('SUPPLIER_INVOICE_REVIEW',e instanceof Error&&e.message?e.message:'Confira a quantidade e as fontes atuais da NF.');}
  if(!source.taxConfirmation&&!(p.taxTreatment==='NET_DESTINATION_ICMS'&&p.taxEvidence?.kind==='DESTINATION_ICMS'||p.taxTreatment==='INCLUDED'&&p.taxEvidence?.kind==='INVOICE_ICMS_INCLUDED'))need('SUPPLIER_INVOICE_TAX','Confirme se o valor da NF está sem ICMS (acrescentar por dentro) ou se já é o total final com tributos incluídos. A cobertura da nota já confirmada será preservada.');
  return {format:'supplier-invoice-evidence-1',state:requirements.length?'PENDING':'COMPLETE',requirements,differences,consumedCostSources,confirmedExtraCostSources,source,memory:null,terms:null,requiresHumanAcceptance:requirements.length>0,financialApproval:false,canPublish:false,supplier:{formulaVersion:'supplier-invoice-evidence-1',contract:null,pricePerMwh:p.pricePerMwh,contractedMwh:p.quantityMwh,regularAmount:p.amount,extraAmount:'0.00',totalAmount:p.amount,taxTreatment,volumeDifferenceMwh:difference,requirements:[]}};
+}
+
+/** Explicit operator decision for one same-CNPJ/month invoice without an installation code. */
+export function confirmedSupplierInstallation(c:any,evidence:any){
+ const a=c.manualOverrides?.supplierInvoiceAllocation,p=evidence.reviewProposals?.length===1&&evidence.documents?.length===1?evidence.reviewProposals[0]:null,u=c.unit;
+ if(!a?.installationConfirmation||!c.manualAuthor||!p||p.requiresUnitConfirmation!==true||p.month!==c.month||p.documentId!==a.documentId||p.fileHash!==a.fileHash||evidence.documents[0].id!==p.documentId||evidence.documents[0].file_hash!==p.fileHash||p.installationReview?.organizationId!==u.organization_id||p.installationReview?.customerId!==u.customer_id||p.installationReview?.unitId!==u.id)return null;
+ supplierInvoiceAllocationInput(a);
+ return {...p,installationIdentity:{matched:true,matchedBy:'OPERATOR_CONFIRMATION',unitMatch:false,addressMatch:false,conflict:false,taxIdentity:{accepted:true,relation:'EXACT'},actor:c.manualAuthor,reason:a.installationConfirmation.reason,documentId:p.documentId,fileHash:p.fileHash,unitId:u.id}};
 }

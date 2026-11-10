@@ -1,3 +1,4 @@
+import {supplierUnitCodes} from './supplier-unit-identity';
 import {nativeInvoiceCredits} from './native-invoice-credits';
 import {readFiscalXml,xmlSupplierProposal} from './fiscal-xml';
 import {supplierDocumentKind,supplierInvoiceProposal} from './supplier-invoice-proposal';
@@ -97,11 +98,12 @@ export class SourcePreparationService{
    if(lineage.data.auditedAddresses!==undefined&&(!Array.isArray(lineage.data.auditedAddresses)||lineage.data.auditedAddresses.length>100||lineage.data.auditedAddresses.some((v:unknown)=>typeof v!=='string'||v.length>2000)))throw new ServiceUnavailableException('Confirmação auditada do endereço indisponível.');
    identity={...identity,aliases:lineage.data.codes.filter((code:unknown):code is string=>typeof code==='string'),auditedAddresses:lineage.data.auditedAddresses??[]};
   }
+  const inspectText=(text:string)=>{const taxId=c.originalIdentity?.registration?.taxId??'',source={documentId:id,fileHash},proposal=supplierInvoiceProposal(text,c.month,taxId,source,identity);const candidate=!proposal&&supplierUnitCodes(text).length===0?supplierInvoiceProposal(text,c.month,taxId,source):null;return {kind:supplierDocumentKind(text),proposal,...(candidate?{reviewProposal:{...candidate,requiresUnitConfirmation:true,installationReview:{organizationId:c.unit.organization_id,customerId:c.unit.customer_id,unitId:c.unit.id}}}:{})};};
   if(d.mime_type==='application/xml')return {kind:'INVOICE' as const,proposal:xmlSupplierProposal(readFiscalXml(bytes),c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const stored=await this.db.getClient().rpc('eva_intake_supplier_text',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
    if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura preservada da nota.');
-   if(typeof stored.data==='string'&&stored.data.length<=2097152)return {kind:supplierDocumentKind(stored.data),proposal:supplierInvoiceProposal(stored.data,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
+   if(typeof stored.data==='string'&&stored.data.length<=2097152)return inspectText(stored.data);
   }
   const key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
   // Metadata and the verified-bytes check above still run on every request.
@@ -110,7 +112,7 @@ export class SourcePreparationService{
   if(!cached||cached.until<=Date.now()){if(this.extracted.size>=8)this.extracted.delete(this.extracted.keys().next().value!);this.extracted.set(key,{until:Date.now()+60000,value:extracted});}
   if(extracted.ocrRequired)return {kind:'UNKNOWN' as const,proposal:null};
   const text=extracted.sections.map(s=>s.text).join('\n');
-  return {kind:supplierDocumentKind(text),proposal:supplierInvoiceProposal(text,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
+  return inspectText(text);
  }
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;

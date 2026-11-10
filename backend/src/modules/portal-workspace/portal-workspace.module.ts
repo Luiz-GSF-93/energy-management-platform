@@ -25,6 +25,7 @@ class PortalWorkspaceController {
  @Post('automatic-intakes') @UseInterceptors(FileInterceptor('file',{limits:{fileSize:MAX_DOCUMENT_BYTES,files:1,fields:5,fieldSize:256,parts:6}})) automaticUpload(@Tenant() t:TenantContext,@Body() b:any,@UploadedFile() f:DocumentFile){return this.automatic.upload(t,b,f);}
  @Post('automatic-intakes/:id/reconcile') automaticReconcile(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.reconcile(t,id,b);}
  @Post('automatic-intakes/:id/retry') automaticRetry(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.retry(t,id,b);}
+ @Post('automatic-intakes/:id/restore') automaticRestore(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.restore(t,id,b);}
  @Post('automatic-intakes/:id/dismiss') automaticDismiss(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.dismiss(t,id,b);}
  @Post('automatic-intakes/:id/resolve') automaticResolve(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.resolve(t,id,b);}
  @Post('automatic-intakes/:id/identity-decision') automaticIdentityDecision(@Tenant() t:TenantContext,@Param('id') id:string,@Body() b:any){return this.automatic.identityDecision(t,id,b);}

@@ -63,7 +63,7 @@ export default function MonthlyCosts({customerId,units,onDirty,initialContext,au
    const result='Rascunho salvo · revisão '+row.revision+'. Validação permanece pendente.';setMessage(result);return result;
   }finally{writing.current=false;setBusy(false);}
  }
- async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;try{await persist(autofill&&focusCategory!=='CCEE'?{...editor,notes:ocrReviewNote(editor.notes,autofill)}:editor);if(focusCategory==='CCEE')await onSaved?.(lastSavedCost.current??undefined);}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}}
+ async function save(e:FormEvent){e.preventDefault();if(!editor||busy)return;try{await persist(autofill&&focusCategory!=='CCEE'?{...editor,notes:ocrReviewNote(editor.notes,autofill)}:editor);await onSaved?.(lastSavedCost.current??undefined);}catch(e){setError(e instanceof Error?e.message:'Não foi possível salvar.');}}
 
  async function review(row:Row){
   if(busy||absenceDirty)return;setBusy(true);setError('');setMessage('');setConfirm(null);setHistory(null);
