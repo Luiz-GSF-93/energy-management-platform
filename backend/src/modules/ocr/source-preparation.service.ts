@@ -16,7 +16,7 @@ import {structuredSpotMonth} from './monthly-supplier-mode';
 @Injectable()
 export class SourcePreparationService{
  constructor(private readonly db:SupabaseService){}
- private readonly verifiedBytes=new Map<string,number>();
+ private readonly supplierBytes=new Map<string,{until:number;bytes:Buffer}>();
  private readonly identityReads=new Map<string,Promise<Awaited<ReturnType<typeof invoiceIdentityPreflight>>>>();
  private readonly identities=new Map<string,{until:number;value:Awaited<ReturnType<typeof invoiceIdentityPreflight>>}>();
  private readonly extracted=new Map<string,{until:number;value:Awaited<ReturnType<typeof extractPdfText>>}>();
@@ -67,34 +67,49 @@ export class SourcePreparationService{
   this.identityReads.set(key,pending);
   try{return structuredClone(await pending);}finally{if(this.identityReads.get(key)===pending)this.identityReads.delete(key);}
  }
- async verifiedSupplierInvoice(c:any,id:string,fileHash:string){
+ private async supplierDocument(c:any,id:string,fileHash:string){
   const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('document_type','INVOICE_SUPPLIER').eq('id',id).maybeSingle();
-  if(r.error||!r.data||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month||r.data.file_hash!==fileHash)throw new ServiceUnavailableException('Nota do fornecedor fora da competência ou fonte alterada.');
-  const key=[r.data.organization_id,r.data.customer_id,r.data.consumer_unit_id,id,fileHash,r.data.file_path,r.data.file_size_bytes].join(':');
-  if((this.verifiedBytes.get(key)??0)<Date.now()){await this.text(r.data);if(this.verifiedBytes.size>=16)this.verifiedBytes.delete(this.verifiedBytes.keys().next().value!);this.verifiedBytes.set(key,Date.now()+60000);}
-  return {...Object.fromEntries(['id','organization_id','customer_id','consumer_unit_id','document_type','file_hash','reference_month','file_verified','original_filename'].map(k=>[k,r.data[k]])),bytesVerified:true};
+  if(r.error||!r.data||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month||r.data.file_hash!==fileHash||r.data.file_verified!==true)throw new ServiceUnavailableException('Nota do fornecedor fora da competência ou fonte alterada.');
+  return r.data;
+ }
+ private async supplierOriginal(d:any){
+  const key=JSON.stringify([d.organization_id,d.customer_id,d.consumer_unit_id,d.id,d.file_hash,d.file_path,d.storage_bucket,d.file_size_bytes,d.mime_type,d.file_verified]),cached=this.supplierBytes.get(key);
+  if(cached&&cached.until>Date.now())return cached.bytes;
+  const bytes=await this.text(d);
+  // At most four originals (60 MB), for sixty seconds. Metadata is rechecked
+  // before every reuse; no identity decision or financial proposal is cached.
+  if(this.supplierBytes.size>=4)this.supplierBytes.delete(this.supplierBytes.keys().next().value!);
+  this.supplierBytes.set(key,{until:Date.now()+60000,bytes});return bytes;
+ }
+ async verifiedSupplierInvoice(c:any,id:string,fileHash:string){
+  const d=await this.supplierDocument(c,id,fileHash);await this.supplierOriginal(d);
+  return {...Object.fromEntries(['id','organization_id','customer_id','consumer_unit_id','document_type','file_hash','reference_month','file_verified','original_filename'].map(k=>[k,d[k]])),bytesVerified:true};
  }
  async supplierProposal(c:any,id:string,fileHash:string){
   return (await this.supplierEvidence(c,id,fileHash)).proposal;
  }
  async supplierEvidence(c:any,id:string,fileHash:string){
-  await this.verifiedSupplierInvoice(c,id,fileHash);
-  const r=await this.db.getClient().from('documents').select('*').eq('organization_id',c.unit.organization_id).eq('customer_id',c.unit.customer_id).eq('consumer_unit_id',c.unit.id).eq('id',id).maybeSingle();
-  if(r.error||!r.data||r.data.file_hash!==fileHash||r.data.id!==id||r.data.organization_id!==c.unit.organization_id||r.data.customer_id!==c.unit.customer_id||r.data.consumer_unit_id!==c.unit.id||r.data.document_type!=='INVOICE_SUPPLIER'||String(r.data.reference_month).slice(0,7)!==c.month)throw new ServiceUnavailableException('Nota mudou durante a extração local.');
-  if(r.data.mime_type==='application/xml')return {kind:'INVOICE' as const,proposal:xmlSupplierProposal(readFiscalXml(await this.text(r.data)),c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},{unitNumber:c.unit.consumer_unit_number,address:c.unit.address})};
+  const d=await this.supplierDocument(c,id,fileHash),bytes=await this.supplierOriginal(d);
+  let identity={unitNumber:c.unit.consumer_unit_number,address:c.unit.address,aliases:[] as string[]};
+  if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
+   const lineage=await this.db.getClient().rpc('eva_supplier_identity_lineage',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
+   if(lineage.error||!Array.isArray(lineage.data?.codes))throw new ServiceUnavailableException('Histórico auditado da unidade indisponível.');
+   identity={...identity,aliases:lineage.data.codes.filter((code:unknown):code is string=>typeof code==='string')};
+  }
+  if(d.mime_type==='application/xml')return {kind:'INVOICE' as const,proposal:xmlSupplierProposal(readFiscalXml(bytes),c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const stored=await this.db.getClient().rpc('eva_intake_supplier_text',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
    if(stored.error)throw new ServiceUnavailableException('Não foi possível conferir a leitura preservada da nota.');
-   if(typeof stored.data==='string'&&stored.data.length<=2097152)return {kind:supplierDocumentKind(stored.data),proposal:supplierInvoiceProposal(stored.data,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},{unitNumber:c.unit.consumer_unit_number,address:c.unit.address})};
+   if(typeof stored.data==='string'&&stored.data.length<=2097152)return {kind:supplierDocumentKind(stored.data),proposal:supplierInvoiceProposal(stored.data,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
   }
   const key=['supplier',c.unit.organization_id,c.unit.id,id,fileHash].join(':'),cached=this.extracted.get(key);
   // Metadata and the verified-bytes check above still run on every request.
   // Do not download the same hashed PDF again merely to reuse its local text.
-  const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(await this.text(r.data),8000);
+  const extracted=cached&&cached.until>Date.now()?cached.value:await extractPdfText(bytes,8000);
   if(!cached||cached.until<=Date.now()){if(this.extracted.size>=8)this.extracted.delete(this.extracted.keys().next().value!);this.extracted.set(key,{until:Date.now()+60000,value:extracted});}
   if(extracted.ocrRequired)return {kind:'UNKNOWN' as const,proposal:null};
   const text=extracted.sections.map(s=>s.text).join('\n');
-  return {kind:supplierDocumentKind(text),proposal:supplierInvoiceProposal(text,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},{unitNumber:c.unit.consumer_unit_number,address:c.unit.address})};
+  return {kind:supplierDocumentKind(text),proposal:supplierInvoiceProposal(text,c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
  }
  async inspect(c:any){
   if(!sourcePreparationEnabled())return null;

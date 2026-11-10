@@ -1,0 +1,8 @@
+import {closingDocumentRequests,sharedClosingRequired} from './closing-coordination';
+const unit=(id:string)=>({id,organization_id:'org',customer_id:'client',status:'ACTIVE',consumer_unit_number:id});
+const sources=(contracts:any[])=>({financial:{tables:{consumer_units:[unit('u1'),unit('u2')],management_contracts:contracts}}});
+const contract={status:'ACTIVE',savings_percentage:'10',start_date:'2026-01-01',end_date:'2026-12-31'};
+describe('Monthly closing coordination',()=>{
+ it('requires consolidated variable fees only for active applicable terms',()=>{expect(sharedClosingRequired(sources([contract]),'2026-07')).toBe(true);for(const change of [{status:'INACTIVE'},{end_date:'2026-06-30'},{start_date:'2026-08-01'},{savings_percentage:'0'}])expect(sharedClosingRequired(sources([{...contract,...change}]),'2026-07')).toBe(false);expect(sharedClosingRequired(sources([{...contract,end_date:null}]),'2026-07')).toBe(true);});
+ it('requests a separate distributor and supplier document per UC and month without borrowing a sibling invoice',()=>{const s:any=sources([]);s.documentedSupplierDocuments=[{...unit('u1'),id:'nf1',consumer_unit_id:'u1',document_type:'INVOICE_SUPPLIER',reference_month:'2026-07-01',file_verified:true}];s.financial.tables.documents=[{...s.documentedSupplierDocuments[0],consumer_unit_id:'u2',document_type:'INVOICE_DISTRIBUTOR'}];const r=closingDocumentRequests(s,'2026-07',['u1','u2']);expect(r.map((x:any)=>[x.distributor,x.supplier,x.requests.length])).toEqual([[false,true,1],[true,false,1]]);expect(closingDocumentRequests(s,'2026-08',['u1'])[0].requests).toHaveLength(2);});
+});

@@ -1,5 +1,5 @@
 import {invoiceIdentityText} from '../ocr/invoice-identity-preflight';
-import {supplierDocumentKind,supplierInvoiceProposal,supplierRecipientText} from '../ocr/supplier-invoice-proposal';
+import {supplierDocumentKind,supplierInvoiceProposal} from '../ocr/supplier-invoice-proposal';
 
 export type IntakeUnit={id:string;customer_id:string;consumer_unit_number:string;address:string;aliases?:string[];auditedAddresses?:string[]};
 export type IntakeCustomer={id:string;document:string;company_name:string};
@@ -28,11 +28,9 @@ export function automaticIntakeContext(pages:IntakePage[],customer:IntakeCustome
   if(kind==='INVOICE'){
    const proposal=supplierInvoiceProposal(text,month,customer.document,{documentId:'pending-intake',fileHash:hash},{unitNumber:unit.consumer_unit_number,address:unit.address,aliases:unit.aliases,auditedAddresses:unit.auditedAddresses});
    if(!proposal)continue;
-   // A single authorized unit is unambiguous. With multiple units, require its
-   // recipient address or explicit UC, never issuer address or upload filename.
-   const recipient=supplierRecipientText(text);
-   const addresses=[unit.address,...(unit.auditedAddresses??[])].map(compact),uc=compact(unit.consumer_unit_number??'');
-   if(units.length!==1&&!addresses.some(address=>address.length>=12&&compact(recipient).includes(address))&&!(uc.length>=5&&new RegExp('(?:UC|INSTALA[ÇC][ÃA]O)\\s*[:.]?\\s*'+unit.consumer_unit_number.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(recipient)))continue;
+   // Require the supplied installation even for a single registered unit;
+   // neither the fiscal CNPJ nor the upload filename proves delivery.
+   if(proposal.installationIdentity?.matched!==true)continue;
    matches.push({unitId:unit.id,month,documentType:'INVOICE_SUPPLIER',checks:{taxId:'MATCH',unit:'MATCH',period:'MATCH'},...(proposal.taxIdentity?{taxIdentity:proposal.taxIdentity,reservations:[proposal.taxIdentity.reason]}:{}),sourcePages:pages.map(p=>p.page)});
   }else{
    const proof=invoiceIdentityText(text,{customerName:customer.company_name,taxId:customer.document,unitNumber:unit.consumer_unit_number,address:unit.address,month,auditedUnitNumbers:unit.aliases??[]});

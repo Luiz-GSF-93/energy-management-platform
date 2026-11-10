@@ -3,7 +3,7 @@ import {contractClosingDraftEnabled} from './contract-closing-draft';
 import {indexMemoryHash} from '../contracts/services/contract-index-memory.model';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import type {InvoiceComparison} from './eva-tariff-workbench.model';
-import {feeMoney,allocateFee} from '../contracts/services/management-fee';
+import {feeMoney,allocateFee,allocationUnits} from '../contracts/services/management-fee';
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import {clientPublishedInsight} from '../portal-insights/portal-insights.model';
 import {canContinueWithReservation,isPreparationReservation,preparationPolicy} from './eva-preparation-policy';
@@ -182,7 +182,9 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   let variable=0n,shares=units.map(u=>({consumerUnitId:u.id,amount:'0.00'}));
   if(hybrids[0]){
    const percentages=entries.map(e=>field(e.plan,'fee:percentage')?.value);if(new Set(percentages).size!==1)throw Error('Honorário percentual divergente entre unidades.');const percent=scale(percentages[0]);if(percent<0n||percent>100000000n)throw Error('Honorário percentual inválido.');
-   const allocations=entries.map(e=>field(e.plan,'fee:allocation')?.value);if(!allocations.every(a=>JSON.stringify(a)===JSON.stringify(allocations[0])))throw Error('Rateio mensal divergente entre unidades.');const a=allocations[0];if(!Array.isArray(a)||a.length!==units.length||a.some(x=>!units.some(u=>u.id===x.consumerUnitId)))throw Error('Rateio não cobre todas as unidades do cliente.');
+   const allocations=entries.map(e=>field(e.plan,'fee:allocation')?.value);
+   const canonical=(value:any)=>Array.isArray(value)?value.map(x=>({consumerUnitId:x.consumerUnitId,percentage:allocationUnits(String(x.percentage)).toString()})).sort((a,b)=>String(a.consumerUnitId).localeCompare(String(b.consumerUnitId))):value;
+   if(!allocations.every(a=>JSON.stringify(canonical(a))===JSON.stringify(canonical(allocations[0]))))throw Error('Rateio mensal divergente entre unidades.');const a=allocations[0];if(!Array.isArray(a)||a.length!==units.length||a.some(x=>!units.some(u=>u.id===x.consumerUnitId)))throw Error('Rateio não cobre todas as unidades do cliente.');
    variable=base>0n?rounded(base*percent,100000000n):0n;shares=allocateFee(fmt(variable),a);
   }
   const fees=fixedFee+variable,after=acl+fees,savings=acr-after;

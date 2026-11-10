@@ -57,6 +57,13 @@ export class BackofficeAiService {
 // signed storage URLs or repository instructions are sent to the model.
 export function assistantAiEvidence(plan:any):AiEvidence[]{
  const evidence:AiEvidence[]=[{id:'context',label:'Contexto autorizado',value:`${plan.unitName} · ${plan.month} · ${plan.counts.blockers} bloqueios · ${plan.counts.reviews} revisões. Não comprova publicação.`,source:'Diagnóstico atual do backend'}];
+ const reading=plan.sourceReading;
+ if(reading?.version===1&&reading.documentId===plan.documentId&&reading.sourceHash===plan.sourceHash&&/^[a-f0-9]{64}$/.test(reading.sourceHash)&&reading.financialApproval===false){
+  if(reading.method==='FISCAL_XML'&&Number.isSafeInteger(reading.components)&&reading.components>=0&&reading.components<=2000){
+   evidence.push({id:'reading-method',label:'Origem da leitura desta fatura',value:'XML fiscal interpretado deterministicamente, sem OCR. '+reading.components+' itens lidos. A leitura não comprova assinatura fiscal, pagamento nem aprovação do fechamento.',source:'Leitor XML · original vinculado à unidade e competência selecionadas'});
+   if(reading.classificationsComplete===true&&Array.isArray(reading.classifications)&&reading.classifications.length<=100&&reading.classifications.every((code:unknown)=>typeof code==='string'&&/^\d{7}$/.test(code)))evidence.push({id:'reading-classifications',label:'Classificações fiscais dos itens',value:reading.classifications.join(', ')||'Nenhuma classificação informada.',source:'cClass do XML original. Identificador da componente; interpretar com descrição, unidade, tributos e efeito de crédito ou débito. Não é um novo valor a somar.'});
+  }else if(reading.method==='PRESERVED_OCR')evidence.push({id:'reading-method',label:'Origem da leitura desta fatura',value:'Leitura OCR preservada. Reutilizar os campos comprovados; uma fonte complementar não exige repetir OCR. Confirmação do operador não altera a confiança original.',source:'Leitura vinculada ao original desta unidade e competência'});
+ }
  for(const f of plan.fieldTasks??[])evidence.push({id:'field-'+evidence.length,fieldKey:f.kind+':'+f.key,label:f.label,value:f.value??'Não identificado',source:f.source||'Fonte não identificada'});
  for(const f of plan.findings??[])evidence.push({id:'finding-'+evidence.length,label:f.section+' · '+f.severity,value:f.message,source:'Diagnóstico atual · '+f.code});
  for(const h of plan.comparisons??[])evidence.push({id:'history-'+evidence.length,label:'Histórico da unidade',value:`${h.month} · ${h.state} · ${h.message}`,source:'Registro validado · versão '+h.version});

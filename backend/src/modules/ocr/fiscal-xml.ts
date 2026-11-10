@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {BadRequestException} from '@nestjs/common';
 import {validTaxId} from '../../common/validation/tax-id';
 import {companyTaxIdentity} from './eva-preparation-policy';
+import {supplierUnitIdentity,supplierUnitCodes} from './supplier-unit-identity';
 
 export const FISCAL_XML_VERSION='fiscal-xml-1';
 export const MAX_FISCAL_XML_BYTES=2*1024*1024;
@@ -52,27 +53,32 @@ export function readFiscalXml(bytes:Buffer){
  const names=['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
  for(const m of referenceText.matchAll(/FORNECIDA\s+NO\s+MES\s+DE\s+([A-Z]+)\/(20\d{2})\b/g)){const n=names.indexOf(m[1]);if(n>=0)months.add(m[2]+'-'+String(n+1).padStart(2,'0'));}
  const units=new Set<string>();const access=str(node(info.acessante).idAcesso);if(/^[-.0-9]{5,32}$/.test(access))units.add(access);
- for(const m of extra.matchAll(/(?:\bUC\b|INSTALA[ÇC][AÃ]O|UNIDADE CONSUMIDORA)\s*[:.]?\s*([0-9][0-9.-]{4,31})\b/gi))units.add(m[1]);
+ for(const code of supplierUnitCodes([extra,...rows.map(row=>row.description)].join('\n')))units.add(code);
  const recipientAddress=[address.xLgr,address.nro,address.xCpl,address.xBairro].map(str).filter(Boolean).join(', ');
+ const delivery=node(info.entrega),deliveryAddress=[delivery.xLgr,delivery.nro,delivery.xCpl,delivery.xBairro].map(str).filter(Boolean).join(', ');
  // Content is a labelled field view, not a PDF page or OCR transcription.
  const content=[model==='66'?'NF3e · XML fiscal de energia':'NF-e · XML do fornecedor','Emitente: '+str(emit.xNome),'CNPJ do emitente: '+str(emit.CNPJ),'Destinatário: '+str(dest.xNome),'CNPJ: '+str(dest.CNPJ),'Endereço: '+recipientAddress,...[...units].map(u=>'UC: '+u),...[...months].map(m=>'Competência: '+m.slice(5)+'/'+m.slice(0,4)),'Valor total: '+amount,'Chave de acesso: '+key,...rows.map(r=>r.description+' | '+r.unit+' | '+(r.quantity??'não informado')+' | '+(r.amount??'não informado')),extra].join('\n');
  const field=(value:string)=>{const offset=content.indexOf(value);return {content:value,confidence:null,spans:[{offset,length:value.length}],boundingRegions:[{pageNumber:1}],evidenceKind:'XML_NODE'};};
  const fields={CustomerName:field(str(dest.xNome)),CustomerTaxId:field(str(dest.CNPJ)),ServiceAddress:field(recipientAddress),VendorName:field(str(emit.xNome)),VendorTaxId:field(str(emit.CNPJ)),InvoiceId:field(str(ide.nNF)),InvoiceTotal:field(amount)};
  const sourceHash=createHash('sha256').update(bytes).digest('hex');
- const fiscal={version:FISCAL_XML_VERSION,model,kind:model==='66'?'INVOICE_DISTRIBUTOR':'INVOICE_SUPPLIER',sourceHash,issuer:{taxId:str(emit.CNPJ),name:str(emit.xNome)},recipient:{taxId:str(dest.CNPJ),name:str(dest.xNome),address:recipientAddress},unitCodes:[...units],months:[...months],amount:money(amount)!,key,rows,extra,protocolStatus:declaredStatus||null,signatureVerified:false,authorizationVerified:false};
+ const fiscal={version:FISCAL_XML_VERSION,model,kind:model==='66'?'INVOICE_DISTRIBUTOR':'INVOICE_SUPPLIER',sourceHash,issuer:{taxId:str(emit.CNPJ),name:str(emit.xNome)},recipient:{taxId:str(dest.CNPJ),name:str(dest.xNome),address:recipientAddress},...(deliveryAddress?{deliveryAddress}:{}),unitCodes:[...units],months:[...months],amount:money(amount)!,key,rows,extra,protocolStatus:declaredStatus||null,signatureVerified:false,authorizationVerified:false};
  return {fiscal,raw:{content,contentUnit:'XML_FIELDS',xml:fiscal,pages:[{pageNumber:1,lines:content.split('\n').map(content=>({content}))}],documents:[{fields}],keyValuePairs:[],tables:[]}};
 }
 
-export function xmlUnitMatch(fiscal:ReturnType<typeof readFiscalXml>['fiscal'],customer:{document:string|null},unit:{consumer_unit_number:string|null;address:string|null;aliases?:string[]},month:string|null){
+export function xmlUnitMatch(fiscal:ReturnType<typeof readFiscalXml>['fiscal'],customer:{document:string|null},unit:{consumer_unit_number:string|null;address:string|null;aliases?:string[];auditedAddresses?:string[]},month:string|null){
  const address=compact(unit.address??''),addressMatch=address.length>=12&&compact(fiscal.recipient.address)===address;
  const units=[unit.consumer_unit_number??'',...unit.aliases??[]].map(compact),unitMatch=fiscal.unitCodes.length>0&&fiscal.unitCodes.every(v=>units.includes(compact(v)));
  const period=fiscal.months.length===1&&fiscal.months[0]===month;
+ if(fiscal.kind==='INVOICE_SUPPLIER'){
+  const proof=supplierUnitIdentity(customer.document??'',fiscal.recipient.taxId,{unitNumber:unit.consumer_unit_number??'',address:unit.address??'',aliases:unit.aliases,auditedAddresses:unit.auditedAddresses},fiscal.unitCodes,[fiscal.recipient.address,fiscal.deliveryAddress??''],period);
+  return {matched:proof.matched,taxIdentity:proof.taxIdentity,addressMatch:proof.addressMatch,unitMatch:proof.unitMatch,period};
+ }
  const tax=companyTaxIdentity(customer.document??'',[fiscal.recipient.taxId],{unit:unitMatch,address:addressMatch,period});
  return {matched:tax.accepted&&addressMatch&&period&&(unitMatch||fiscal.kind==='INVOICE_SUPPLIER'&&fiscal.unitCodes.length===0),taxIdentity:tax,addressMatch,unitMatch,period};
 }
 
-export function xmlSupplierProposal(xml:ReturnType<typeof readFiscalXml>,month:string,taxId:string,source:{documentId:string;fileHash:string},unit:{unitNumber:string;address:string;aliases?:string[]}){
- const f=xml.fiscal,proof=xmlUnitMatch(f,{document:taxId},{consumer_unit_number:unit.unitNumber,address:unit.address,aliases:unit.aliases},month);
+export function xmlSupplierProposal(xml:ReturnType<typeof readFiscalXml>,month:string,taxId:string,source:{documentId:string;fileHash:string},unit:{unitNumber:string;address:string;aliases?:string[];auditedAddresses?:string[]}){
+ const f=xml.fiscal,proof=xmlUnitMatch(f,{document:taxId},{consumer_unit_number:unit.unitNumber,address:unit.address,aliases:unit.aliases,auditedAddresses:unit.auditedAddresses},month);
  if(f.kind!=='INVOICE_SUPPLIER'||source.fileHash!==f.sourceHash||!proof.matched||f.rows.length!==1)return null;
  const row=f.rows[0];if(!/ENERGIA|CONSUMO CONTRATADO/i.test(row.description)||row.unit.toUpperCase()!=='MWH'||!row.quantity||!row.price||!row.amount)return null;
  if(money(row.amount)!==f.amount||scaled(row.quantity)*scaled(row.price)!==scaled(row.amount)*100000000n)return null;
