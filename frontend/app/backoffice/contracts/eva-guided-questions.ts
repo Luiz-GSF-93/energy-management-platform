@@ -1,7 +1,7 @@
 export type GuidedQuestion={key:string;unitId:string;section:string;code:string;unitName?:string;messages:string[];label:string;parts?:GuidedQuestion[];suggestions:{label:string;value:unknown;source:string}[]};
 const sections:Record<string,string>={costs:'custos da competência',monthly:'medições da fatura',library:'tarifas e tributos ACR',parameters:'tarifas e tributos',supply:'nota e condições do fornecedor',management:'honorários',distributor:'identificação da unidade',source:'fontes pendentes'};
 export function guidedQuestions(report:any):GuidedQuestion[]{
- if(!report||report.approvalEligible||!Array.isArray(report.units))return [];
+ if(!report||!Array.isArray(report.units)||report.approvalEligible&&!(report.preparationPolicy?.reservations??[]).some((r:any)=>['CCEE_COVERAGE','CCEE_ESTIMATE_REVIEW','SUPPLIER_INVOICE_COVERAGE','SUPPLIER_INVOICE_TAX'].includes(r.code)))return [];
  const roots=new Map<string,GuidedQuestion>();
  const add=(unit:any,section:string,code:string,message:string)=>{
   const key=unit.id+':'+(['CCEE_ESTIMATE_REVIEW','CCEE_COVERAGE'].includes(code)?code:section),old=roots.get(key);
@@ -10,6 +10,13 @@ export function guidedQuestions(report:any):GuidedQuestion[]{
   roots.set(key,{key,unitId:unit.id,unitName:unit.name??unit.id,section,code,label:code==='CCEE_COVERAGE'?'Quais são os custos CCEE desta competência?':code==='SUPPLIER_INVOICE_TAX'?'Como considerar o ICMS da nota do fornecedor?':code==='CCEE_ESTIMATE_REVIEW'?'Posso conferir os custos CCEE estimados com você?':'Vamos confirmar '+(sections[section]??sections.source)+'?',messages:[message],suggestions:(unit.fields??[]).filter((f:any)=>f.state==='FILLED'&&f.source&&pattern.test(f.key)).slice(0,20).map((f:any)=>({label:f.label??f.key,value:f.value,source:f.source}))});
  };
  for(const unit of report.units){
+  // Supplementary reviews may be preserved as reservations after deterministic
+  // filling. They still need an editable answer, not only a summary paragraph.
+  for(const r of report.preparationPolicy?.reservations??[]){
+   if(r.unitId!==unit.id||!r.message)continue;
+   if(['CCEE_COVERAGE','CCEE_ESTIMATE_REVIEW'].includes(r.code))add(unit,'costs',r.code,String(r.message));
+   else if(['SUPPLIER_INVOICE_COVERAGE','SUPPLIER_INVOICE_TAX'].includes(r.code))add(unit,'supply',r.code,String(r.message));
+  }
   const actions=(report.pendingActions??[]).filter((a:any)=>a.unitId===unit.id&&a.message);
   // Compatibility for saved proposals: a missing supplier amount is one
   // supplier question, not a request to register the tariff library again.
