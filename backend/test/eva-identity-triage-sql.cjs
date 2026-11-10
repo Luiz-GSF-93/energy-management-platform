@@ -99,5 +99,27 @@ const comments=await db.query("SELECT eva_intake_identity_action('org',$1,'manag
 ok(comments.rows[0].data.rows.length===2);ok(comments.rows[0].data.rows.some(r=>r.actor==='Operador de teste'&&r.reason===body.reason));
 await deny(()=>db.query("SELECT eva_intake_identity_action('org',$1,'external',false,'justifications',NULL,$2)",[id(70),JSON.stringify({refs:reviewIds.rows.map(r=>r.id)})]));
 const foreignComments=await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'justifications',NULL,$2) data",[actor,JSON.stringify({refs:[id(999)]})]);ok(foreignComments.rows[0].data.rows.length===0);
+
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261296_eva_audited_continue.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261296_eva_audited_continue.sql','utf8'));
+// A confirmed fiscal address belongs to the exact document, not every future unit invoice.
+const supplier=id(900);await db.query(`INSERT INTO documents(id,organization_id,customer_id,consumer_unit_id,document_type,reference_month,file_hash,file_verified) VALUES($1,'org','client',$2,'INVOICE_SUPPLIER','2026-01-01',$3,true)`,[supplier,id(1),addressDiag.fileHash]);
+await db.query(`UPDATE eva_automatic_intakes SET document_id=$2,unit_id=$3,month='2026-01',proof='{"state":"MATCH"}' WHERE id=$1`,[n,supplier,id(1)]);
+const lineage=(org='org',unit=id(1),h=addressDiag.fileHash)=>db.query('SELECT eva_supplier_identity_lineage($1,$2,$3,$4,$5) data',[org,'client',unit,supplier,h]).then(r=>r.rows[0].data);
+ok((await lineage()).auditedAddresses[0]==='Rodovia Alternativa, km 55, s/n');ok(await lineage('other')===null);ok(await lineage('org',id(2))===null);ok(await lineage('org',id(1),'f'.repeat(64))===null);
+await db.query('UPDATE consumer_units SET address=$1 WHERE id=$2',['Registration changed',id(1)]);ok((await lineage()).auditedAddresses.length===0);await db.query('UPDATE consumer_units SET address=$1 WHERE id=$2',['Rua Exemplo 123',id(1)]);
+// An authorized UC decision persists the printed historical identifier for later months.
+await db.exec(`UPDATE roles SET permissions=permissions||'["0f2e539d-03f9-4168-bc8c-55ac3a371628"]'::jsonb WHERE id='manager'`);
+const continued=id(800),cfp='7'.repeat(64),ch='8'.repeat(64);
+await db.query(`INSERT INTO eva_automatic_intakes(id,organization_id,customer_id,actor_id,role_id,platform,external,request_id,file_hash,filename,mime,size_bytes,consent,hints,state,stored,raw_result,lease_token,lease_until) VALUES($1,'org','client',$2,'manager',false,false,$3,$4,'historical.pdf','application/pdf',100,true,$5,'RECOGNIZING',true,'{"content":"Installation 7654322"}',$6,clock_timestamp()+interval '1 minute')`,[continued,actor,id(801),ch,JSON.stringify({unitId:id(1),month:'2026-01'}),token]);
+await db.query(`SELECT eva_intake_event($1,'SOURCE_REVIEW',$2,$3)`,[continued,JSON.stringify({customerId:'client',unitId:id(1),month:'2026-01'}),actor]);
+const continuedDiag={...diagnostic,fingerprint:cfp,fileHash:ch,unitCode:'7654322',fields:diagnostic.fields.map(f=>f.key==='unit'?{...f,found:['7654322']}:f)};
+await db.query('SELECT eva_intake_identity_work($1,$2,$3)',[continued,token,JSON.stringify(continuedDiag)]);await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[continued]);
+const continuedBody=JSON.stringify({...body,fingerprint:cfp});
+ok((await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'decide',$2,$3) data",[actor,continued,continuedBody])).rows[0].data.decision==='CONTINUE');
+ok((await db.query("SELECT count(*)::int n FROM eva_intake_unit_aliases_audit WHERE organization_id='org' AND previous_code='7654322' AND unit_id=$1",[id(1)])).rows[0].n===1);
+ok((await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'decide',$2,$3) data",[actor,continued,continuedBody])).rows[0].data.replayed);
+await db.exec('SET ROLE authenticated');await deny(()=>lineage());await db.exec('RESET ROLE');
+
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});
