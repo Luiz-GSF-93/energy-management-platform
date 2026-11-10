@@ -1,0 +1,39 @@
+name: EVA Documents review and approval queue
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/eva-document-review-queue.yml'
+      - 'backend/src/modules/ocr/eva-document-review*'
+      - 'backend/src/modules/operations/operations.service*'
+      - 'backend/src/database/migrations/20261302_eva_document_review_queue.sql'
+      - 'backend/test/eva-document-review-queue.cjs'
+      - 'frontend/app/components/EvaDocumentReviewQueue.tsx'
+      - 'frontend/app/backoffice/contracts/EvaReviewHandoff.tsx'
+      - 'frontend/app/backoffice/contracts/AssistedClosingReview.tsx'
+      - 'frontend/app/backoffice/documents/page.tsx'
+      - 'frontend/app/components/BackofficeShell.tsx'
+      - 'frontend/test/eva-document-review-queue.cjs'
+permissions:
+  contents: read
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-document-review.service.spec.ts src/modules/operations/operations.service.spec.ts
+        working-directory: backend
+      - run: node test/eva-document-review-queue.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/eva-document-review-queue.cjs && node test/eva-assisted-closing.cjs && node test/documents-upload-routing.cjs && node test/eva-guided-review.cjs && node test/ccee-cost-review.cjs
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
