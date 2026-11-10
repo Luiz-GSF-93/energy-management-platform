@@ -113,6 +113,7 @@ export class AutomaticIntakeService{
   return new StreamableFile(bytes,{type:source.mime,disposition:source.mime==='application/xml'?'attachment; filename="original.xml"':'inline',length:bytes.length});
  }
  async upload(t:TenantContext,input:any,file:DocumentFile){
+  if(input?.customerId!==undefined&&(typeof input.customerId!=='string'||!input.customerId.trim()||input.customerId.length>100))throw new BadRequestException('Selecione uma empresa válida.');
   if(!input||Object.keys(input).some(k=>!['requestId','customerId','unitId','month','consent'].includes(k))||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(input.requestId??'')||input.month&&!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month)||!['true','false',true,false].includes(input.consent))throw new BadRequestException('Confira o arquivo e a autorização de leitura.');
   const detected=await inspectInvoiceUpload(file),hash=createHash('sha256').update(file.buffer).digest('hex');
   if(t.role==='consulta'&&!t.accessMode)await assertPortalInvoiceUpload(file,detected.mime);
