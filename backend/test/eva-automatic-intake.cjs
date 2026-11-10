@@ -181,5 +181,24 @@ await deny(()=>admin('reconcile_preparation',id(10),reason,id(70),'external'));
 await deny(()=>admin('reconcile_preparation',id(10),reason,id(71),'manager','other'));
 ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261290_eva_reconcile_before_explanation.sql','utf8'));
+// Another explicitly approved unit must not block recovery of this unit.
+const scopeMigration=fs.readFileSync(__dirname+'/../src/database/migrations/20261301_eva_reconcile_unit_scope.sql','utf8');
+await db.exec(scopeMigration);await db.exec(scopeMigration);
+const approvedReport=(scope,ids)=>({scope:{kind:scope,unitIds:ids},unitIds:ids});
+const overlap=report=>db.query('SELECT public.eva_intake_approval_overlaps($1,$2) value',[JSON.stringify(report),id(1)]).then(r=>r.rows[0].value);
+ok(await overlap(approvedReport('UNIT',[id(1)])));
+ok(!(await overlap(approvedReport('UNIT',[id(2)]))));
+for(const report of [null,{},approvedReport('CUSTOMER',[id(2)]),approvedReport('UNIT',[]),approvedReport('UNIT',[id(1),id(2)]),{scope:{kind:'UNIT',unitIds:[id(2)]},unitIds:[id(1)]},{scope:{kind:'UNIT',unitIds:'bad'},unitIds:[]},approvedReport('UNIT',['not-a-unit'])])ok(await overlap(report));
+await db.query("INSERT INTO eva_assisted_closing_versions(id,organization_id,customer_id,month,report,version) VALUES($1,'org','client','2026-07',$2,3)",[id(52),JSON.stringify(approvedReport('UNIT',[id(2)]))]);
+await db.query("INSERT INTO eva_assisted_closing_events(closing_id,state,sequence,organization_id) VALUES($1,'APPROVED',1,'org')",[id(52)]);
+await resetRecovery();ok((await admin('reconcile_preparation',id(10),reason)).state==='AWAITING_SOURCES');
+for(const report of [approvedReport('UNIT',[id(1)]),approvedReport('CUSTOMER',[id(2)]),{}]){
+ await db.query('UPDATE eva_assisted_closing_versions SET report=$2 WHERE id=$1',[id(52),JSON.stringify(report)]);
+ await resetRecovery();await deny(()=>admin('reconcile_preparation',id(10),reason));
+}
+await db.query('UPDATE eva_assisted_closing_versions SET report=$2 WHERE id=$1',[id(52),JSON.stringify(approvedReport('UNIT',[id(2)]))]);
+await db.query("UPDATE calculation_preparation_run_events SET state='UNKNOWN' WHERE run_id=$1",[id(91)]);
+await resetRecovery();await deny(()=>admin('reconcile_preparation',id(10),reason));
+for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_intake_approval_overlaps(jsonb,text)','EXECUTE') p",[role])).rows[0].p);
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
