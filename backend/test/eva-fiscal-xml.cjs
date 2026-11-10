@@ -152,5 +152,51 @@ await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,2,'WI
 await db.query("UPDATE eva_closing_publication_events SET state='PUBLISHED' WHERE sequence=2");
 await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[receipt,'d'.repeat(64)]);ok((await dashboard()).summary.technical===1);
 await db.query('UPDATE documents SET file_hash=$2 WHERE id=$1',[receipt,hash]);ok((await dashboard()).summary.technical===0);
+
+// New revision-aware orchestration: exercise the actual migration and guarded
+// scope wrapper against the disposable database, never a production receipt.
+for(const table of ['calculation_monthly_inputs','calculation_monthly_costs','management_fee_allocations','supplier_spot_reconciliations','calculation_cost_absences'])await db.exec(`ALTER TABLE ${table} ADD COLUMN month text DEFAULT '2026-07'`);
+await db.exec(`CREATE FUNCTION eva_assisted_closing_action(text,text,text,boolean,text,text,text,uuid,jsonb) RETURNS jsonb LANGUAGE sql AS $$SELECT '{"passed":true}'::jsonb$$;`);
+const scopeMigration=fs.readFileSync(__dirname+'/../src/database/migrations/20261280_eva_unit_closing_scope.sql','utf8');
+await db.exec(scopeMigration.slice(scopeMigration.indexOf('CREATE FUNCTION public.eva_closing_scope_match'),scopeMigration.indexOf('REVOKE ALL ON FUNCTION public.eva_closing_scope_match')));
+await db.exec(scopeMigration.slice(scopeMigration.indexOf('CREATE FUNCTION public.eva_scoped_closing_action'),scopeMigration.indexOf('REVOKE ALL ON FUNCTION public.eva_scoped_closing_action')));
+const originalClosing=await scalar('SELECT to_jsonb(v) v FROM eva_assisted_closing_versions v WHERE id=$1',[closing]);
+const migrate94=fs.readFileSync(__dirname+'/../src/database/migrations/20261294_eva_source_revisions.sql','utf8');
+await db.exec(migrate94);await db.exec(migrate94);
+assert.deepEqual(await scalar('SELECT to_jsonb(v) v FROM eva_assisted_closing_versions v WHERE id=$1',[closing]),originalClosing);checks++;
+for(const role of ['anon','authenticated'])for(const signature of ['eva_intake_source_state(uuid,uuid)','eva_intake_revision_transition(uuid,uuid,text,jsonb,bigint)','eva_supplier_identity_lineage(text,text,text,text,text)'])ok(!await scalar("SELECT has_function_privilege($1,$2,'EXECUTE') v",[role,signature]));
+await db.exec(`CREATE OR REPLACE FUNCTION portal_intake_scoped_rpc(text,jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN IF $1='eva_intake_reference_signature' THEN RETURN to_jsonb(public.eva_intake_reference_signature(($2->>'p_id')::uuid,($2->>'p_token')::uuid));ELSIF $1='transition_eva_automatic_intake' THEN RETURN public.transition_eva_automatic_intake(($2->>'p_id')::uuid,($2->>'p_token')::uuid,$2->>'p_action',$2->'p_body');END IF;RAISE EXCEPTION 'denied';END$$;`);
+await db.query("UPDATE eva_automatic_intakes SET state='AWAITING_SOURCES',closing_id=NULL,lease_token=$2,lease_until=clock_timestamp()+interval '5 minutes',next_attempt_at='infinity' WHERE id=$1",[receipt,job.token]);
+let state=await rpc('eva_intake_source_state');ok(state.revision>=0&&/^[a-f0-9]{64}$/.test(state.fingerprint));
+await deny(()=>scalar('SELECT eva_intake_source_state($1,$2) v',[receipt,id(99)]));
+// A sibling unit source belongs to this customer closing, never another tenant.
+await db.query("INSERT INTO consumer_units VALUES($1,'org','client','7654321','Rua Outra 900','ACTIVE')",[id(2)]);
+let next=await rpc('eva_intake_source_state');ok(next.revision>state.revision&&next.fingerprint!==state.fingerprint);
+state=next;await db.query("INSERT INTO unit_demand_approvals VALUES('approval','org','client',$1)",[id(2)]);next=await rpc('eva_intake_source_state');ok(next.revision>state.revision&&next.fingerprint!==state.fingerprint);
+state=next;await db.query("UPDATE customers SET company_name='Client updated' WHERE id='client'");next=await rpc('eva_intake_source_state');ok(next.revision>state.revision&&next.fingerprint!==state.fingerprint);
+state=next;await db.query("UPDATE customers SET company_name='Foreign updated' WHERE id='foreign'");assert.deepEqual(await rpc('eva_intake_source_state'),state);checks++;
+// Monthly changes wake only the corresponding competence.
+await db.query("INSERT INTO calculation_monthly_inputs VALUES('other-month','org','client',$1,'2026-08')",[unit]);assert.deepEqual(await rpc('eva_intake_source_state'),state);checks++;
+// No 500-row truncation: a late record still changes the fingerprint.
+await db.query("INSERT INTO calculation_parameters SELECT 'p-'||lpad(n::text,4,'0'),'org','client',$1 FROM generate_series(1,501)n",[unit]);state=await rpc('eva_intake_source_state');
+await db.exec("UPDATE calculation_parameters SET id='p-9999' WHERE id='p-0501'");next=await rpc('eva_intake_source_state');ok(next.fingerprint!==state.fingerprint);
+// The source changed after the worker's final read but before releasing its
+// lease. A guarded wait must stay scheduled rather than becoming infinity.
+state=next;await db.exec("UPDATE customers SET company_name='Racing source' WHERE id='client'");
+await scalar('SELECT eva_intake_revision_transition($1,$2,$3,$4,$5) v',[receipt,job.token,'wait',JSON.stringify({signature:state.fingerprint}),state.revision]);
+ok(await scalar("SELECT next_attempt_at<clock_timestamp()+interval '10 seconds' v FROM eva_automatic_intakes WHERE id=$1",[receipt]));
+await deny(()=>scalar('SELECT eva_intake_revision_transition($1,$2,$3,$4,$5) v',[receipt,job.token,'wait','{}',state.revision]));
+// Published receipts remain untouched by subsequent source changes.
+await db.query("UPDATE eva_automatic_intakes SET state='PUBLISHED',next_attempt_at='infinity' WHERE id=$1",[receipt]);
+const published=await scalar('SELECT to_jsonb(i) v FROM eva_automatic_intakes i WHERE id=$1',[receipt]);await db.exec("UPDATE customers SET company_name='Later source' WHERE id='client'");assert.deepEqual(await scalar('SELECT to_jsonb(i) v FROM eva_automatic_intakes i WHERE id=$1',[receipt]),published);checks++;
+// Use the real scope publication guard with only its downstream action stubbed.
+const gated=id(81),scopeReport={scope:{kind:'UNIT',unitIds:[unit]}};
+await db.exec('ALTER TABLE eva_assisted_closing_versions ADD COLUMN source_snapshot jsonb');
+const putContract=contract=>db.query('UPDATE eva_assisted_closing_versions SET source_snapshot=$2 WHERE id=$1',[gated,JSON.stringify({financial:{tables:{management_contracts:[contract]}}})]);
+await db.query('INSERT INTO eva_assisted_closing_versions(id,organization_id,customer_id,month,report) VALUES($1,\'org\',\'client\',\'2026-07\',$2)',[gated,JSON.stringify(scopeReport)]);
+const decide=()=>scalar("SELECT eva_scoped_closing_action('org',$1,'manager',false,'decide',$2,'2026-07',$3,'{\"decision\":\"APPROVE\"}','UNIT','BASE',false) v",[actor,unit,gated]);
+const term={status:'ACTIVE',start_date:'2026-01-01',end_date:'2026-12-31',savings_percentage:'10'};
+await putContract(term);await assert.rejects(decide,/Shared variable fee/);checks++;
+for(const change of [{status:'INACTIVE'},{end_date:'2026-06-30'},{start_date:'2026-08-01'},{savings_percentage:'0'}]){await putContract({...term,...change});ok((await decide()).passed);}
 console.log('XML intake and fingerprint SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

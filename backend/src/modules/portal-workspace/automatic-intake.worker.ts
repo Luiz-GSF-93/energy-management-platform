@@ -29,18 +29,19 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('EVA_INTAKE_PENDING')).finally(()=>this.schedule()),5000);this.timer.unref?.();}
  private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
- private async signature(i:any,job:{id:string;token:string}){
+ private async sourceState(i:any,job:{id:string;token:string}){
   const officialFlag=await this.officialFlags?.reference(i.organization_id,i.month);
-  const fingerprint=await this.rpc('eva_intake_source_fingerprint',{p_id:job.id,p_token:job.token});
-  if(typeof fingerprint!=='string'||!/^[a-f0-9]{64}$/.test(fingerprint))throw Error('SOURCE_SIGNATURE_UNAVAILABLE');
-  return createHash('sha256').update(JSON.stringify(['intake-fingerprint-2',fingerprint,officialFlag??null,supplementalTariffFlagReference(i.month)??null])).digest('hex');
+  const state=await this.rpc('eva_intake_source_state',{p_id:job.id,p_token:job.token});
+  if(typeof state?.fingerprint!=='string'||!/^[a-f0-9]{64}$/.test(state.fingerprint)||!Number.isSafeInteger(state.revision)||state.revision<0)throw Error('SOURCE_SIGNATURE_UNAVAILABLE');
+  return {revision:state.revision,signature:createHash('sha256').update(JSON.stringify(['intake-fingerprint-3',state.fingerprint,officialFlag??null,supplementalTariffFlagReference(i.month)??null])).digest('hex')};
  }
+ private async signature(i:any,job:{id:string;token:string}){return (await this.sourceState(i,job)).signature;}
  async runOnce(){
   if(this.busy||this.stopped||!intakeOrganizations().length)return;this.busy=true;
   try{
    const organizations=await intakeWorkerOrganizations(this.db.getClient(),'INTAKE');if(!organizations.length)return;
    const job=await this.rpc('claim_eva_automatic_intake',{p_organizations:organizations});if(!job)return;
-   const transition=(action:string,body:any={})=>this.rpc('transition_eva_automatic_intake',{p_id:job.id,p_token:job.token,p_action:action,p_body:body});
+   const transition=(action:string,body:any={},revision?:number)=>this.rpc(revision===undefined?'transition_eva_automatic_intake':'eva_intake_revision_transition',{p_id:job.id,p_token:job.token,p_action:action,p_body:body,...(revision===undefined?{}:{p_revision:revision})});
    let i:any;let preparing=false;let submitting=false;let stage="SOURCE_CHECK";
    try{
     const ctx=job.context??await this.rpc('eva_intake_work_context',{p_id:job.id,p_token:job.token});i=ctx.intake;
@@ -142,10 +143,15 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      if(status.job?.state!=='SUCCEEDED'){await transition('wait',{note:'Leitura automática em andamento; sem novo envio.'});return;}
     }
     const history:any=await this.closing.history({consumerUnitId:i.unit_id,month:i.month,scopeKind:'UNIT',page:'0'},t);
-    const approved=history.rows?.find((r:any)=>r.state==='APPROVED'&&(r.id===i.closing_id||r.report?.units?.some((u:any)=>u.id===i.unit_id&&u.documentId===i.document_id&&u.sourceHash===i.file_hash)));
+    const matchesApproved=(r:any)=>r.state==='APPROVED'&&(r.id===i.closing_id||r.report?.units?.some((u:any)=>u.id===i.unit_id&&u.documentId===i.document_id&&u.sourceHash===i.file_hash));
+    let approved=history.rows?.find(matchesApproved);
+    if(!approved){
+     const consolidated:any=await this.closing.history({consumerUnitId:i.unit_id,month:i.month,scopeKind:'CUSTOMER',page:'0'},t);
+     approved=consolidated.rows?.find(matchesApproved);
+    }
     if(approved){await transition('published',{closingId:approved.id,note:'Fechamento aprovado. Históricos preservados.'});return;}
-    const signature=await this.signature(i,job);
-    if(i.signature===signature){await transition('wait',{note:i.note});return;}
+    const before=await this.sourceState(i,job),signature=before.signature;
+    if(i.signature===signature){await transition('wait',{note:i.note},before.revision);return;}
     // A failed read-only identity check has no uncertain financial writes.
     await this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id);
     stage='DRAFT_PREPARATION';await transition('begin_prepare');preparing=true;
@@ -157,8 +163,10 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     const report=result.row.report,complete=report.preparation?.percent===100||report.approvalEligible===true;
     // The prepared transition atomically queues an optional explanation.
     // Model latency and failure never gate these deterministic fields.
-    stage='FINAL_SOURCE_CHECK';const after=await this.signature(i,job);
-    await transition('prepared',{closingId:result.row.id,signature:after,sourcesChanged:signature!==after,complete,note:complete?'Preenchimento da proposta concluído. Revise somente as confirmações do resumo antes de aprovar.':'A EVA preencheu as fontes disponíveis e retomará automaticamente quando os documentos ou registros pendentes forem atualizados.'});
+    stage='FINAL_SOURCE_CHECK';const after=await this.sourceState(i,job),sourcesChanged=signature!==after.signature;
+    // A later signature does not attest the inputs of the result just prepared.
+    // Keep the earlier signature dirty; the next pass must consume new sources.
+    await transition('prepared',{closingId:result.row.id,signature:sourcesChanged?signature:after.signature,sourcesChanged,complete,note:sourcesChanged?'Uma fonte mudou durante a preparação. Resultado preservado; a EVA vai reconferir a competência sem repetir OCR.':complete?'Preenchimento da proposta concluído. Revise somente as confirmações do resumo antes de aprovar.':'A EVA preencheu as fontes disponíveis e retomará automaticamente quando os documentos ou registros pendentes forem atualizados.'},after.revision);
    }catch(e){
     const unknown=preparing||submitting;
     if(submitting&&e instanceof OcrProviderError&&e.code==='RATE_LIMITED'){

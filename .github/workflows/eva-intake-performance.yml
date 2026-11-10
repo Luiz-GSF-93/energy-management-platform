@@ -5,6 +5,14 @@ on:
       - 'backend/src/modules/portal-workspace/automatic-*'
       - 'backend/src/modules/portal-workspace/xml-intake-context*'
       - 'backend/src/modules/ocr/fiscal-xml*'
+      - 'backend/src/modules/ocr/supplier-unit-identity*'
+      - 'backend/src/modules/ocr/supplier-invoice-proposal*'
+      - 'backend/src/modules/ocr/closing-coordination*'
+      - 'backend/src/modules/ocr/eva-assisted-closing*'
+      - 'backend/src/modules/ocr/source-preparation.service*'
+      - 'frontend/app/backoffice/contracts/AssistedClosingReview*'
+      - 'frontend/test/eva-assisted-closing.cjs'
+      - 'backend/src/database/migrations/20261294_eva_source_revisions.sql'
       - 'backend/src/database/migrations/2026128[6789]*'
       - 'backend/test/eva-fiscal-xml.cjs'
       - 'backend/test/eva-automatic-intake.cjs'
@@ -30,7 +38,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/portal-workspace/automatic-rollout.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/ocr/supplier-unit-identity.spec.ts src/modules/ocr/closing-coordination.spec.ts src/modules/ocr/supplier-invoice-proposal.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/eva-assisted-closing.model.spec.ts src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-rollout.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
         working-directory: backend
       - run: node test/eva-fiscal-xml.cjs && node test/eva-automatic-intake.cjs
         working-directory: backend
@@ -45,7 +53,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/eva-operations.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
+      - run: node test/eva-assisted-closing.cjs && node test/eva-operations.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

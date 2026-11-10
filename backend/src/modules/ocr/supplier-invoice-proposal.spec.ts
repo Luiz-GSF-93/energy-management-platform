@@ -17,6 +17,7 @@ describe('Supplier NF proposal',()=>{
   expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source,{...unit,address:'RUA ERRADA 900 CENTRO'})).toBeNull();
   expect(supplierInvoiceProposal(bill.replace('RUA DA','UC: 99999999\nRUA DA'),'2026-05','11222333000181',source,unit)).toBeNull();
  });
+ it('retains historical-UC evidence in a PDF proposal even when the fiscal address is the matrix',()=>{const bill=text.replace('02/06/2026','02/06/2026\nAv da Matriz 900').replace('DADOS ADICIONAIS','DADOS ADICIONAIS\nUC: 7000001');expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source,{unitNumber:'9000001',address:'Rua da Unidade 123',aliases:['7000001']})).toMatchObject({installationIdentity:{matched:true,matchedBy:'UNIT_CODE'}});});
  const wrapped=`DANFE CNPJ DESTINATARIO/REMETENTE
  Empresa sintetica 11.222.333/0001-81
  FATURA

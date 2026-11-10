@@ -1,4 +1,5 @@
 import {preparationPolicy} from './eva-preparation-policy';
+import {sharedClosingRequired,closingDocumentRequests} from './closing-coordination';
 import {applyOperationalCceeReview} from './eva-operational-flow.model';
 import {closingCceeLocal} from './closing-ccee-local';
 import {closingDemandContext} from './closing-demand-context';
@@ -20,6 +21,7 @@ import {PERMISSIONS as P} from '../../common/constants/permissions';
 const uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 @Injectable()
 export class EvaAssistedClosingService{
+ private readonly invoiceCompletions=new Map<string,Promise<any>>();
  constructor(private db:SupabaseService,private config:ConfigService,private autofill:CalculationAutofillService){}
  private publicationEnabled(){return process.env.EVA_APPROVED_PUBLICATIONS_ENABLED==='true'&&process.env.EVA_APPROVED_PORTAL_ENABLED==='true';}
  private enabled(){return this.config.get('EVA_ASSISTED_CLOSING_ENABLED')==='true';}
@@ -53,7 +55,16 @@ export class EvaAssistedClosingService{
   const current:any=await this.autofill.inspect({consumerUnitId:q.consumerUnitId,month:q.month},t);
   if(!current.available||!current.canPrepare||current.documentId!==documentId||current.sourceHash!==sourceHash||current.unitId!==q.consumerUnitId||current.month!==q.month||!/^[a-f0-9]{64}$/.test(current.basis??''))throw new ConflictException('Atualize a fonte desta unidade e competência antes de preencher.');
   const sourceBasis=await this.rpc('capture',{...q,scopeKind:'UNIT'},t,null,{});
-  const result=await this.prepare({...q,scopeKind:'UNIT',requestId:resolutionId(['eva-invoice-completion-unit-2',t.organizationId,documentId,sourceHash,current.basis,autofillHash(sourceBasis)])},t);
+  const scopeKind=sharedClosingRequired(sourceBasis,q.month)?'CUSTOMER':'UNIT';
+  const completionKey=autofillHash([t.organizationId,scopeKind,q.month,sourceBasis,...(scopeKind==='UNIT'?[q.consumerUnitId,current.basis]:[])]);
+  const flightKey=JSON.stringify([t.userId,t.roleId,t.accessMode,completionKey]);
+  let pending=this.invoiceCompletions.get(flightKey);
+  if(!pending){
+   pending=this.prepare({...q,scopeKind,requestId:resolutionId(['eva-invoice-completion-3',completionKey])},t);
+   this.invoiceCompletions.set(flightKey,pending);
+  }
+  let result:any;
+  try{result=await pending;}finally{if(this.invoiceCompletions.get(flightKey)===pending)this.invoiceCompletions.delete(flightKey);}
   const row=result.row,unit=row?.report?.units?.find((u:any)=>u.id===q.consumerUnitId);
   if(row?.organization_id!==t.organizationId||row.month!==q.month||!unit||unit.documentId!==documentId||unit.sourceHash!==sourceHash)throw new ConflictException('O fechamento retornou fora da fonte selecionada.');
   return result;
@@ -99,8 +110,9 @@ export class EvaAssistedClosingService{
   if(contractClosingDraftEnabled())for(const e of entries){const memory=e.plan?.contractDraft?.memory;if(memory&&!(sources.contractMemories??[]).some((m:any)=>m.id===memory.id&&m.organization_id===t.organizationId&&m.customer_id===primary.customer_id&&m.consumer_unit_id===e.unitId&&autofillHash(m)===memory.hash))throw new ConflictException('A memória contratual mudou durante a captura. Reconfira as fontes antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const group=e.context?.contractDraft?.source;if(!group?.invoiceSetHash)continue;if(!supplierInvoiceSetCaptureMatches(group,sources.documentedSupplierDocuments??[],{organizationId:t.organizationId,customerId:primary.customer_id,unitId:e.unitId,month:q.month}))throw new ConflictException('Uma das notas do conjunto mudou durante a captura. Reconfira todas as fontes antes de preparar.');}
-  if(q.scopeKind==='UNIT'&&(sources.financial.tables.consumer_units??[]).filter((u:any)=>u.status==='ACTIVE').length>1&&(sources.financial.tables.management_contracts??[]).some((m:any)=>Number(m.savings_percentage)>0))entries[0].unavailable='Honorário variável compartilhado: prepare o consolidado do cliente para calcular economia e rateio com todas as unidades.';
+  if(q.scopeKind==='UNIT'&&sharedClosingRequired(sources,q.month))entries[0].unavailable='Honorário variável compartilhado: prepare o consolidado do cliente para calcular economia e rateio com todas as unidades.';
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries);
+  (report as any).documentRequests=closingDocumentRequests(sources,q.month,entries.map(entry=>entry.unitId));
   if(q.scopeKind==='UNIT'){(report as any).scope={kind:'UNIT',unitIds:[q.consumerUnitId]};const unitReport=report.units.find((u:any)=>u.id===q.consumerUnitId);if(unitReport)unitReport.sources.cceeLocal=await closingCceeLocal(this.db.getClient(),t,primary,q.month);}
 
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){const refs=await this.db.getClient().rpc('eva_intake_identity_refs',{p_org:t.organizationId,p_sources:report.units.flatMap((u:any)=>{const d=u.sources?.contractDraft?.source,p=u.sources?.supplierInvoiceProposal;return [{id:u.id,documentId:u.documentId,sourceHash:u.sourceHash},...[d,p,...(d?.documents??[]),...(d?.invoices??[]),...(p?.invoices??[])].filter(v=>v?.documentId&&v?.fileHash).map(v=>({id:u.id,documentId:v.documentId,sourceHash:v.fileHash}))];})});if(refs.error)throw new ServiceUnavailableException('Justificativas de identidade indisponíveis; fontes preservadas.');if(refs.data?.length)(report as any).operatorJustificationRefs=refs.data;}
