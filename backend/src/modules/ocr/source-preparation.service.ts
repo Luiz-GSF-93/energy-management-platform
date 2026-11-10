@@ -90,11 +90,12 @@ export class SourcePreparationService{
  }
  async supplierEvidence(c:any,id:string,fileHash:string){
   const d=await this.supplierDocument(c,id,fileHash),bytes=await this.supplierOriginal(d);
-  let identity={unitNumber:c.unit.consumer_unit_number,address:c.unit.address,aliases:[] as string[]};
+  let identity={unitNumber:c.unit.consumer_unit_number,address:c.unit.address,aliases:[] as string[],auditedAddresses:[] as string[]};
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){
    const lineage=await this.db.getClient().rpc('eva_supplier_identity_lineage',{p_org:c.unit.organization_id,p_customer:c.unit.customer_id,p_unit:c.unit.id,p_document:id,p_hash:fileHash});
    if(lineage.error||!Array.isArray(lineage.data?.codes))throw new ServiceUnavailableException('Histórico auditado da unidade indisponível.');
-   identity={...identity,aliases:lineage.data.codes.filter((code:unknown):code is string=>typeof code==='string')};
+   if(lineage.data.auditedAddresses!==undefined&&(!Array.isArray(lineage.data.auditedAddresses)||lineage.data.auditedAddresses.length>100||lineage.data.auditedAddresses.some((v:unknown)=>typeof v!=='string'||v.length>2000)))throw new ServiceUnavailableException('Confirmação auditada do endereço indisponível.');
+   identity={...identity,aliases:lineage.data.codes.filter((code:unknown):code is string=>typeof code==='string'),auditedAddresses:lineage.data.auditedAddresses??[]};
   }
   if(d.mime_type==='application/xml')return {kind:'INVOICE' as const,proposal:xmlSupplierProposal(readFiscalXml(bytes),c.month,c.originalIdentity?.registration?.taxId??'',{documentId:id,fileHash},identity)};
   if(process.env.EVA_AUTOMATIC_INTAKE_ENABLED==='true'){

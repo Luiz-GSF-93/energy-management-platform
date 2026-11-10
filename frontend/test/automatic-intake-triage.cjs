@@ -37,11 +37,16 @@ const Component=require('../app/components/AutomaticInvoiceIntake.tsx').default,
  await act(async()=>button('Conferir divergências por campo').click());
  assert(document.querySelector('[role="dialog"]').textContent.includes('EVA · divergências de identificação'));
  assert(document.body.textContent.includes('new-code')&&document.body.textContent.includes('old-code'));
- assert(!button('Continuar com justificativa').disabled);
+ assert(!button('Continuar e concluir').disabled);
  assert(!button('Retomar com as respostas salvas'));
- await act(async()=>button('Continuar com justificativa').click());
+ await act(async()=>button('Continuar e concluir').click());
  const decisionRequest=requests.find(([url])=>url.endsWith('/identity-decision'));assert(decisionRequest);assert.equal(decisionRequest[1].body.decision,'CONTINUE');assert.equal(decisionRequest[1].body.fingerprint,'a'.repeat(64));assert(!document.querySelector('[role="dialog"]'));
 
+
+ serverRows=[{id:'address-review',filename:'supplier.pdf',state:'REVIEW_REQUIRED',identityReview:{continuation:'ADDRESS',fingerprint:'c'.repeat(64),reason:'Administrador confirmou o endereço fiscal e a instalação atendida nesta NF.',diagnostic:{action:'REVIEW',fields:[{key:'address',label:'Endereço da unidade',status:'MISMATCH',expected:'Installation street 100',found:['Fiscal street 900'],pages:[1],reason:'Endereço fiscal separado da instalação.'}]}}}];
+ await act(async()=>root.render(React.createElement(Component,{key:'address-review'})));await act(async()=>button('Conferir divergências por campo').click());
+ assert(button('Continuar e concluir'));assert(button('Descontinuar preenchimento'));assert(button('Conferir depois'));assert(document.body.textContent.includes('Valores sem comprovação continuarão indicados'));
+ await act(async()=>button('Continuar e concluir').click());const addressRequest=requests.filter(([url])=>url.endsWith('/identity-decision')).at(-1);assert.equal(addressRequest[1].body.continuation,'ADDRESS');assert.equal(addressRequest[1].body.fingerprint,'c'.repeat(64));
  serverRows=[{id:'revoked-triage',filename:'private-invoice.pdf',state:'REVIEW_REQUIRED',identityReview:{fingerprint:'b'.repeat(64),diagnostic:{action:'REVIEW',fields:[]}}}];await act(async()=>root.render(React.createElement(Component,{key:'revoked-triage'})));await act(async()=>button('Conferir divergências por campo').click());assert(document.querySelector('[role="dialog"]'));serverError=Object.assign(new Error('Revoked'),{status:403});await act(async()=>button('Atualizar andamento').click());assert(!document.querySelector('[role="dialog"]'));assert(!document.body.textContent.includes('private-invoice.pdf'));
  console.log('Automatic intake UI: upload without context fields, stable focus, guided identity-only review and read-only navigation passed');
 }finally{await act(async()=>root.unmount());Module._load=original;}})().catch(e=>{console.error(e);process.exitCode=1});
