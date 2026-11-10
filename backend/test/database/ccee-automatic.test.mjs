@@ -23,6 +23,7 @@ try{
  CREATE FUNCTION ccee_data_action(o text,a text,x text,i uuid,b jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$DECLARE j public.ccee_integration_jobs;BEGIN INSERT INTO public.ccee_integration_jobs(organization_id,actor_id,kind,month,authorization_id,measurement_kind,state,request_payload) VALUES(o,a,b->>'kind',((b->>'month')||'-01')::date,(b->>'authorizationId')::uuid,b->>'measurementKind','QUEUED',b) RETURNING * INTO j;RETURN jsonb_build_object('job',to_jsonb(j));END$$;
  CREATE FUNCTION ccee_dri_action(o text,a text,x text,i uuid,b jsonb) RETURNS jsonb LANGUAGE sql AS $$SELECT public.ccee_data_action(o,a,x,i,b)$$;`);
  await db.exec(readFileSync(new URL('../../src/database/migrations/20261229_ccee_automatic_service_policies.sql',import.meta.url),'utf8'));
+ const multiReports=readFileSync(new URL('../../src/database/migrations/20261298_ccee_multiple_report_policies.sql',import.meta.url),'utf8');await db.exec(multiReports);await db.exec(multiReports);ok(true);
  const binding=randomUUID(),proof=randomUUID();await db.query('INSERT INTO ccee_unit_authorizations VALUES($1,$2,4,true)',[binding,'org_default']);
  await deny(action('configure_unit',null,cmd({authorizationId:binding,unit:'kWh',confirmed:false,sourceReference:'Source confirmation'})));
  await deny(action('list',null,{},'foreign'));await deny(action('configure_unit',null,cmd(),'org_default','viewer'));
@@ -39,6 +40,18 @@ try{
  await deny(q('SELECT ccee_auto_advance($1,$2,$3) result',[policy.id,randomUUID(),JSON.stringify({})]));
  await q('SELECT ccee_auto_advance($1,$2,$3) result',[policy.id,claim.policy.lease_id,JSON.stringify({action:'finish',state:'READY',cursor:{month:'2026-09'},nextRunAt:'2099-01-01T00:00:00Z'})]);
  await db.exec("UPDATE actors SET active=false WHERE id='admin'");await db.query('UPDATE ccee_service_sync_policies SET next_run_at=now() WHERE id=$1',[policy.id]);ok(await q('SELECT ccee_auto_claim($1,true,false) result',['org_default'])===null);ok((await q('SELECT to_jsonb(p) result FROM ccee_service_sync_policies p WHERE id=$1',[policy.id])).enabled===false);await db.exec("UPDATE actors SET active=true WHERE id='admin'");
+ const ev=randomUUID(),catalog=randomUUID(),one=randomUUID(),two=randomUUID();
+ await db.query(`INSERT INTO ccee_integration_jobs(id,organization_id,actor_id,kind,month,authorization_id,state,result,request_payload,finished_at) VALUES($1,'org_default','admin','DRI_EVENTS','2026-09-01',$2,'SUCCEEDED',$3,'{}',now())`,[ev,binding,JSON.stringify({complete:true,data:{rows:[{code:'event',name:'2026_09 - Divulgação'}]}})]);
+ const multiReportRows=[{id:'114',name:'SUM001',frames:[{id:'451',name:'Q4'}]},{id:'119',name:'VCA001',frames:[{id:'470',name:'Q2'}]}];
+ await db.query(`INSERT INTO ccee_integration_jobs(id,organization_id,actor_id,kind,month,authorization_id,state,result,request_payload,finished_at) VALUES($1,'org_default','admin','DRI_REPORTS','2026-09-01',$2,'SUCCEEDED',$3,$4,now())`,[catalog,binding,JSON.stringify({complete:true,data:{rows:multiReportRows}}),JSON.stringify({parentJobId:ev})]);
+ for(const [id,reportId,frameId] of [[one,'114','451'],[two,'119','470']])await db.query(`INSERT INTO ccee_integration_jobs(id,organization_id,actor_id,kind,month,authorization_id,state,result,request_payload,finished_at) VALUES($1,'org_default','admin','DRI_RESULTS','2026-09-01',$2,'SUCCEEDED',$3,$4,now())`,[id,binding,JSON.stringify({complete:true,data:{rows:[]}}),JSON.stringify({parentJobId:catalog,eventCode:'event',reportId,frameId})]);
+ const first=(await action('configure',null,cmd({sourceJobId:one,monthMode:'FIXED'}))).policy;
+ const second=(await action('configure',null,cmd({sourceJobId:two,monthMode:'FIXED'}))).policy;
+ ok(first.id!==second.id);ok(first.source_selector.reportName==='SUM001'&&second.source_selector.reportName==='VCA001');
+ await deny(action('configure',first.id,cmd({sourceJobId:two,monthMode:'FIXED',revision:first.revision})));
+ await deny(action('configure',null,cmd({sourceJobId:one,monthMode:'FIXED'})));
+ const listed=await action('list');ok(listed.policies.filter(p=>p.kind==='DRI').length===2);ok(listed.sources.find(s=>s.id===two).report_name==='VCA001');ok(listed.sources.find(s=>s.id===two).frame_name==='Q2');
+ await deny(db.query(`INSERT INTO ccee_service_sync_policies(organization_id,authorization_id,kind,created_by,month_mode,month,source_selector,request_id) VALUES('org_default',$1,'DRI','admin','FIXED','2026-09-01','{}',$2)`,[binding,randomUUID()]));
  const job=randomUUID(),lease=randomUUID();await db.query(`INSERT INTO ccee_integration_jobs(id,organization_id,kind,lease_id,lease_until,state) VALUES($1,'org_default','MEASUREMENTS',$2,now()+interval '1 hour','RUNNING')`,[job,lease]);
  const reserve=()=>q('SELECT ccee_communication_reserve($1,$2,false) result',[job,lease]);await reserve();ok((await q("SELECT count(*)::integer result FROM ccee_integration_events WHERE event='COMMUNICATION_REQUEST_RESERVED'"))===1);
  await db.query(`INSERT INTO ccee_integration_events(organization_id,job_id,event,details) SELECT 'org_default',$1,'COMMUNICATION_REQUEST_RESERVED','{}' FROM generate_series(1,99)`,[job]);await deny(reserve());
@@ -70,7 +83,7 @@ try{
  await deny(take('temporary-platform'));await deny(take('viewer'));
  await db.query("UPDATE ccee_service_sync_policies SET current_job_id=NULL,lease_until=NULL");
  const captured=await take();ok(captured.actorId==='permanent'&&captured.enabledChanged===false);ok((await take()).actorId==='permanent');await deny(take('permanent','Changed reason rejected'));
- ok((await q("SELECT count(*)::integer result FROM ccee_service_sync_policies WHERE kind<>'UNIT_BASIS' AND execution_actor_id='permanent'"))===2);
+ ok((await q("SELECT count(*)::integer result FROM ccee_service_sync_policies WHERE kind<>'UNIT_BASIS' AND execution_actor_id='permanent'"))===4);
  const schedule=randomUUID(),scheduleLease=randomUUID();await db.query("INSERT INTO ccee_sync_schedules(id,organization_id,kind,max_requests,daily_limit,created_by,execution_actor_id,state,lease_id,lease_until,current_day) VALUES($1,'org_default','PLD_HOURLY',2,60,'temporary-platform','permanent','RUNNING',$2,now()+interval '1 hour',current_date)",[schedule,scheduleLease]);
  ok((await q('SELECT ccee_market_assert($1,$2) result',[schedule,scheduleLease])).organizationId==='org_default');
  await db.query("UPDATE organization_members SET status='REVOKED' WHERE user_id='permanent'");await deny(q('SELECT ccee_market_assert($1,$2) result',[schedule,scheduleLease]));await deny(take());
