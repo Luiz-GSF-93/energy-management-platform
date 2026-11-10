@@ -1,3 +1,4 @@
+import {supplierInvoiceCostDraft} from './supplier-invoice-cost-draft';
 import {preparationPolicy} from './eva-preparation-policy';
 import {sharedClosingRequired,closingDocumentRequests} from './closing-coordination';
 import {applyOperationalCceeReview} from './eva-operational-flow.model';
@@ -85,7 +86,7 @@ export class EvaAssistedClosingService{
    for(const u of [...all].filter(u=>q.scopeKind!=='UNIT'||u.id===q.consumerUnitId).sort((a,b)=>a.id.localeCompare(b.id))){
     if(u.status!=='ACTIVE'||(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state)))continue;
     const candidate=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);snapshots.set(u.id,candidate);
-    if(!candidate.available||!(candidate.c.ready||candidate.c.proposalReady))continue;
+    if(!candidate.available||!(candidate.c.ready||candidate.c.proposalReady||supplierInvoiceCostDraft(candidate.c)))continue;
     const result=await this.autofill.prepare({consumerUnitId:u.id,month:q.month,requestId:resolutionId(['assisted-autofill-2',t.organizationId,q.month,u.id,candidate.basis]),token:candidate.token},t);
     if(!['PREPARED','PARTIAL'].includes(result.run?.state))throw new ServiceUnavailableException('Preparação dos rascunhos ainda não confirmada. Consulte o histórico antes de repetir.');
     preparedDrafts=true;
