@@ -24,6 +24,14 @@ describe('EVA assisted closing',()=>{
    draft.confirmedExtraCostSources=[];expect(report([e]).approvalEligible).toBe(false);
   }finally{if(prior===undefined)delete process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;else process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED=prior;}
  });
+ it('does not ask to reconcile the same hash-bound NF again while supplementary reviews remain',()=>{
+  const prior=process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;try{process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED='true';const e=entry(),item={id:'invoice-item',category:'SUPPLIER_INVOICE',amount:'500.00',source:'NF fiscal-source',scenario:'ACL',effect:'COST',taxTreatment:'RESERVED'};
+   e.context.cost={id:'cost'};e.plan.fields.find((f:any)=>f.key==='costs:monthly').value={noCosts:false,items:[item]};
+   const draft={format:'supplier-invoice-evidence-1',state:'PENDING',requirements:[{code:'SUPPLIER_INVOICE_COVERAGE',message:'Confirmar cobertura da NF.'}],differences:[],source:{kind:'VERIFIED_INVOICE',documentId:'nf',fileHash:'b'.repeat(64)},consumedCostSources:[{id:item.id,costId:'cost',hash:settlementHash(item)}],confirmedExtraCostSources:[]};e.context.contractDraft=draft;e.plan.contractDraft=draft;
+   let r=report([e]);expect(r.missing.some((m:string)=>m.includes('Conciliar compra/nota'))).toBe(false);expect(r.approvalEligible).toBe(false);expect(r.proposalFinancial?.aclBeforeFees).toBe('700.00');expect(r.automaticApproval).toBe(false);
+   item.amount='501.00';r=report([e]);expect(r.missing.some((m:string)=>m.includes('Conciliar compra/nota'))).toBe(true);expect(r.proposalFinancial).toBeUndefined();
+  }finally{if(prior===undefined)delete process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED;else process.env.EVA_CONTRACT_CLOSING_DRAFTS_ENABLED=prior;}
+ });
  it('completes provisional totals with an estimated CCEE review without approving or emitting final financial values',()=>{const e=entry();e.plan.cceeEstimate={state:'ESTIMATED',total:'10.00',items:[],reviewRequired:true};const r=report([e]);expect(r.preparation).toEqual({state:'COMPLETE_REVIEW_REQUIRED',percent:100});expect(r.proposalFinancial).toMatchObject({status:'ESTIMATED_REVIEW_REQUIRED',aclBeforeFees:'710.00',savings:'240.00'});expect(r.financial.status).toBe('INCOMPLETE');expect(r.financial.aclBeforeFees).toBeNull();expect(r.approvalEligible).toBe(false);expect(r.publicationAllowed).toBe(false);});
  it('never shows complete provisional totals when another essential value is absent',()=>{const e=entry();e.plan.cceeEstimate={state:'ESTIMATED',total:'10.00',items:[],reviewRequired:true};e.plan.operational.supplier.amount=null;const r=report([e]);expect(r.proposalFinancial).toBeUndefined();expect(r.approvalEligible).toBe(false);});
 
