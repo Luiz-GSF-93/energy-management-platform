@@ -1,4 +1,4 @@
-import {cceeCostEstimate} from './ccee-cost-estimate';
+import {cceeCostEstimate,operatorCceeEstimate} from './ccee-cost-estimate';
 import {reviewDigest} from '../contracts/services/review-snapshots.service';
 import {assistedClosingReport} from './eva-assisted-closing.model';
 const unit={id:'unit',organization_id:'org',customer_id:'customer'};
@@ -25,4 +25,9 @@ describe('CCEE historical estimates',()=>{
  it('reads costs from a human-approved EVA report, including a secondary unit in a consolidated report',()=>{const r=cceeCostEstimate([eva()],unit,'2026-05');expect(r.total).toBe('30.00');expect(r.items[0].sources[0]).toMatchObject({approvalEventId:'approval',approvedBy:'manager',revision:null,costId:null});});
  it.each(['hash','state','unit','event','estimated'])('rejects invalid or estimated EVA %s evidence',kind=>{const r=eva();if(kind==='hash')r.payload_hash='b'.repeat(64);if(kind==='state')r.state='INCOMPLETE';if(kind==='unit'){r.report.units[0].id='other';r.payload_hash=reviewDigest(r.report);}if(kind==='event')r.events[0].state='REJECTED';if(kind==='estimated'){r.report.units[0].prepared={ccee:{state:'ESTIMATED'}};r.payload_hash=reviewDigest(r.report);}expect(cceeCostEstimate([r],unit,'2026-05').state).toBe('UNAVAILABLE');});
  it('does not count legacy and EVA representations of the same month twice',()=>expect(cceeCostEstimate([row('2026-04','40.00'),eva()],unit,'2026-05').total).toBe('30.00'));
+});
+
+describe('Explicit operator CCEE premise',()=>{
+ it('preserves amount, author and reason as an estimate without actual historical samples',()=>{expect(operatorCceeEstimate({amount:'2200',reason:'Budget supplied for this unit and month',confirmed:true},'operator','2026-02')).toMatchObject({total:'2200.00',state:'ESTIMATED',method:'OPERATOR_DEFINED',operator:'operator',reviewRequired:true,financialApproval:false,items:[{nature:'ESTIMATED',sources:[]}]});});
+ it('does not replace an actual current record or an explicit declaration',()=>{expect(operatorCceeEstimate({amount:'2200',reason:'Budget supplied for this unit and month',confirmed:true},'operator','2026-02',[{category:'CCEE',scenario:'ACL'}]).state).toBe('CURRENT_RECORD');});
 });

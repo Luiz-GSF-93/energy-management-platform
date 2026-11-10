@@ -3,7 +3,9 @@ class PeriodDto {
  @IsDateString({strict:true}) @Matches(/^\d{4}-\d{2}-\d{2}$/) startDate!:string;
  @IsDateString({strict:true}) @Matches(/^\d{4}-\d{2}-\d{2}$/) endDate!:string;
 }
-export class ManagementDto extends PeriodDto {
+export class ManagementDto {
+ @IsDateString({strict:true}) @Matches(/^\d{4}-\d{2}-\d{2}$/) startDate!:string;
+ @IsOptional() @IsDateString({strict:true}) @Matches(/^\d{4}-\d{2}-\d{2}$/) endDate?:string|null;
  @IsUUID() customerId!:string;
  @IsString() @Matches(/\S/) @MaxLength(50) contractNumber!:string;
  @IsIn(['FIXED','HYBRID','VARIABLE']) remunerationModel!:string;

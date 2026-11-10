@@ -48,7 +48,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  };
  add('unit','Unidade',u.name,'','BOTH','Cadastro '+u.id);add('month','Competência',c.month,'','BOTH','Fatura '+c.document.id);
  for(const [key,label] of Object.entries({distributor:'Distribuidora',tariff_group:'Grupo tarifário',tariff_subgroup:'Subgrupo tarifário',tariff_modality:'Modalidade',consumption_class:'Classe de consumo'}))add('unit:'+key,label,u[key]??null,'','BOTH','Cadastro '+u.id);
- if(u.tariff_group==='A')for(const key of u.tariff_modality==='BLUE'?['contracted_demand_peak','contracted_demand_off_peak']:['contracted_demand'])add('unit:'+key,'Demanda contratada · '+key,u[key]??null,'kW','BOTH','Cadastro '+u.id);
+ if(u.tariff_group==='A')for(const key of u.tariff_modality==='BLUE'?['contracted_demand_peak','contracted_demand_off_peak']:['contracted_demand'])add('unit:'+key,key==='contracted_demand'?'Demanda contratada':key==='contracted_demand_peak'?'Demanda contratada na ponta':'Demanda contratada fora ponta',u[key]??null,'kW','BOTH',c.closingDemandSource?.kind==='INVOICE_CONTRACTED_DEMAND'?'Fatura '+c.document.id+' · SHA-256 '+c.document.file_hash+' · Grandezas contratadas':'Cadastro '+u.id);
  const src='Fatura '+c.document.id+' · SHA-256 '+c.document.file_hash;
  for(const key of ['consumptionTotal','consumptionPeak','consumptionOffPeak'])add(key,{consumptionTotal:'Consumo total',consumptionPeak:'Consumo ponta',consumptionOffPeak:'Consumo fora ponta'}[key]!,c.measurements[key]??null,'kWh','BOTH',src);
  const demands=c.technical?.demand??[];
@@ -70,7 +70,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  else add('ACR:library','Biblioteca ACR',null,'','ACR','',library.state==='AMBIGUOUS'?'Mais de uma tabela compatível na competência.':'Não há tabela compatível cobrindo a competência.');
  // Tax incidence is not present in the library profile. Only structured current declarations are usable.
  for(const scenario of ['ACL','ACR'])for(const code of ['ICMS','PIS','COFINS']){
-  const matches=c.captured.parameters.filter((x:any)=>x.scenario===scenario&&x.kind==='TAX'&&x.component_code===code&&['APPROVED','DRAFT'].includes(x.status)&&String(x.start_date).slice(0,10)<=period.start&&String(x.end_date).slice(0,10)>=period.end);
+  const matches=c.captured.parameters.filter((x:any)=>x.scenario===scenario&&x.kind==='TAX'&&x.component_code===code&&['APPROVED','DRAFT'].includes(x.status)&&String(x.start_date).slice(0,10)<=period.start&&String(x.end_date??'9999-12-31').slice(0,10)>=period.end);
   const candidate=matches.length===1?matches[0]:null;
   const p=candidate&&!parameterIssues(candidate,c.captured.parameters).length?candidate:null;
   add(scenario+':tax:'+code,code,p?{rate:p.amount_text,treatment:p.treatment,basis:p.tax_basis}:null,'',''+scenario,p?'Parâmetro '+p.id+' revisão '+p.revision+' · '+p.source:'',p?null:'Incidência e bases precisam de evidência cadastrada; a alíquota da fatura não comprova o cenário comparativo.');
@@ -127,7 +127,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
  if(draft)add('supplier:total',draft.setVersion===1?'Fornecedor · soma fiscal das notas':draft.format==='supplier-invoice-evidence-1'?'Fornecedor · valor faturado na NF':'Fornecedor · total mensal conciliado',draft.state==='COMPLETE'||draft.format==='supplier-invoice-evidence-1'?draft.supplier?.totalAmount:null,'BRL','ACL',draft.format==='supplier-invoice-evidence-1'?supplierSource!:draft.state==='COMPLETE'?(draft.format==='documented-supplier-settlement-1'?'Nota verificada '+draft.source.documentId+' · SHA-256 '+draft.source.fileHash+' · conciliação documentada':'Anexo '+draft.source.documentId+' · memória '+draft.memory.id+' · fontes de custos conciliadas'):'','Valor documentado, sem reaplicar reajuste. Tributos e custos externos permanecem discriminados na memória.');
  for(const r of s?.requirements??[])observations.push(r.message);
  if(invoiceProposal)observations.push(...invoiceProposal.observations);
- if(c.cceeEstimate&&c.cceeEstimate.state!=='CURRENT_RECORD'){add('ccee:estimate','Custos CCEE · estimativa para revisão',c.cceeEstimate.state==='ESTIMATED'?c.cceeEstimate:null,'BRL','ACL',c.cceeEstimate.state==='ESTIMATED'?'Média histórica ponderada · fontes e pesos na memória CCEE':'','Estimativa não é custo confirmado; revisar antes de aprovar.');observations.push(...c.cceeEstimate.observations);}
+ if(c.cceeEstimate&&c.cceeEstimate.state!=='CURRENT_RECORD'){add('ccee:estimate','Custos CCEE · estimativa para revisão',c.cceeEstimate.state==='ESTIMATED'?c.cceeEstimate:null,'BRL','ACL',c.cceeEstimate.state==='ESTIMATED'?c.cceeEstimate.method==='OPERATOR_DEFINED'?'Estimativa informada pelo operador · justificativa na memória CCEE':'Média histórica ponderada · fontes e pesos na memória CCEE':'','Estimativa não é custo confirmado; revisar antes de aprovar.');observations.push(...c.cceeEstimate.observations);}
  if(!c.ready)observations.push(c.proposalReady?'Identidade e leitura conferidas para a proposta. Revise somente os ajustes indicados no resumo antes da aprovação.':'Identidade, leitura ou conciliação da fatura ainda exige conferência.');
  for(const r of c.rates)if(r.state==='CONFLICT')observations.push(r.label+': divergência com registro existente.');
  const monthlyConflict=c.input?.status==='DRAFT'&&!!c.monthlyChanges?.length;

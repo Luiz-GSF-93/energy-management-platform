@@ -4,6 +4,16 @@ on:
     paths:
       - 'backend/src/modules/portal-workspace/automatic-*'
       - 'backend/src/modules/portal-workspace/identity-continuation*'
+      - 'backend/src/modules/ocr/invoice-demand-reference*'
+      - 'backend/src/modules/ocr/calculation-autofill*'
+      - 'backend/src/modules/ocr/ccee-cost-estimate*'
+      - 'backend/src/modules/ocr/closing-demand-context.ts'
+      - 'backend/src/database/migrations/20261297_management_open_ended_terms.sql'
+      - 'backend/test/database/verify-contract-configurations.mjs'
+      - 'frontend/app/backoffice/contracts/CceeEstimateProposal.tsx'
+      - 'frontend/app/backoffice/contracts/EvaGuidedReview.tsx'
+      - 'frontend/app/backoffice/contracts/CommercialTerms.tsx'
+      - 'frontend/test/ccee-estimate-proposal.cjs'
       - 'backend/src/database/migrations/20261296_eva_audited_continue.sql'
       - 'backend/test/eva-identity-triage-sql.cjs'
       - 'backend/src/modules/portal-workspace/xml-intake-context*'
@@ -45,11 +55,13 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/ocr/invoice-reading-context.spec.ts src/modules/ocr/backoffice-ai.service.spec.ts src/modules/ocr/azure-backoffice-ai.connector.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/ocr/supplier-unit-identity.spec.ts src/modules/ocr/closing-coordination.spec.ts src/modules/ocr/supplier-invoice-proposal.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/eva-assisted-closing.model.spec.ts src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-rollout.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/identity-continuation.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
+      - run: npm test -- --runInBand --runTestsByPath src/modules/ocr/fiscal-xml.spec.ts src/modules/ocr/invoice-demand-reference.spec.ts src/modules/ocr/calculation-autofill.spec.ts src/modules/ocr/ccee-cost-estimate.spec.ts src/modules/ocr/closing-source-scope.spec.ts src/modules/contracts/services/management-fee.spec.ts src/modules/contracts/services/configurations.service.spec.ts src/modules/ocr/invoice-reading-context.spec.ts src/modules/ocr/backoffice-ai.service.spec.ts src/modules/ocr/azure-backoffice-ai.connector.spec.ts src/modules/ocr/ocr-assistant.service.spec.ts src/modules/ocr/supplier-unit-identity.spec.ts src/modules/ocr/closing-coordination.spec.ts src/modules/ocr/supplier-invoice-proposal.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/ocr/eva-assisted-closing.model.spec.ts src/modules/portal-workspace/automatic-intake-context.spec.ts src/modules/portal-workspace/automatic-rollout.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake-triage.spec.ts src/modules/portal-workspace/identity-continuation.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/ocr/invoice-identity-preflight.spec.ts src/modules/ocr/source-preparation.service.spec.ts
         working-directory: backend
       - run: node test/eva-fiscal-xml.cjs && node test/eva-automatic-intake.cjs && node test/eva-identity-triage-sql.cjs
         working-directory: backend
       - run: npm run build
+        working-directory: backend
+      - run: node test/database/verify-contract-configurations.mjs
         working-directory: backend
   frontend:
     runs-on: ubuntu-latest
@@ -60,7 +72,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/eva-assisted-closing.cjs && node test/eva-operations.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
+      - run: node test/ccee-estimate-proposal.cjs && node test/management-fees.cjs && node test/eva-assisted-closing.cjs && node test/eva-operations.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

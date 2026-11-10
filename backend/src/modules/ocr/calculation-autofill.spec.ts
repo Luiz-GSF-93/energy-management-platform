@@ -130,3 +130,5 @@ describe('Current CCEE records do not depend on historical availability',()=>{
   }finally{if(previous===undefined)delete process.env.CCEE_COST_ESTIMATE_ENABLED;else process.env.CCEE_COST_ESTIMATE_ENABLED=previous}
  });
 });
+
+it('accepts an acknowledged monthly CCEE estimate and rejects missing acknowledgement, foreign fields and invalid money',()=>{const value={amount:'2200.00',reason:'Explicit monthly budget pending operator review',confirmed:true};expect(commercialProposal({cceeEstimate:value})).toEqual({cceeEstimate:value});for(const patch of [{confirmed:false},{amount:'-1'},{amount:'1.001'},{reason:'short'},{organizationId:'foreign'}])expect(()=>commercialProposal({cceeEstimate:{...value,...patch}})).toThrow();});
