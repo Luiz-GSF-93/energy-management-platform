@@ -50,5 +50,18 @@ await deny(()=>db.exec('UPDATE eva_closing_review_events SET reason=reason'));
 for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_document_review_queue(text,text,text,text,jsonb)','EXECUTE') v",[role])).rows[0].v);
 for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_document_review_rows(text)','EXECUTE') v",[role])).rows[0].v);
 await deny(()=>call('list',{page:-1}));await deny(()=>call('list',{stage:'APPROVED'}));
+// Published competencies can have newer revisions, but they are not new original tasks.
+const prioritySql=fs.readFileSync(__dirname+'/../src/database/migrations/20261303_eva_published_review_priority.sql','utf8');
+await db.exec('ALTER TABLE eva_closing_publications ADD COLUMN customer_id text;ALTER TABLE eva_closing_publications ADD COLUMN source_hash text;');
+await db.query('UPDATE eva_closing_publications SET customer_id=$1,source_hash=$2',['customer',hash]);
+await db.exec(prioritySql);await db.exec(prioritySql);
+await closing(16,id(1),6);q=await call('list');ok(q.total===1);ok(q.rows[0].stage==='REVISION');ok(q.summary.revision===1&&q.summary.operator===0&&q.summary.approval===0);
+ok((await call('list',{stage:'APPROVAL'})).total===0);ok((await call('list',{stage:'REVISION'})).total===1);
+ok((await call('notifications')).rows.length===0);
+const published=(org,customer,units)=>db.query('SELECT public.eva_review_previously_published($1,$2,$3,$4) v',[org,customer,'2026-01',JSON.stringify(units)]).then(r=>r.rows[0].v);
+ok(await published('org','customer',[id(1)]));ok(!(await published('other','customer',[id(1)])));ok(!(await published('org','foreign',[id(1)])));ok(!(await published('org','customer',[id(1),id(3)])));ok(!(await published('org','customer',[])));ok(!(await published('org','customer',null)));
+ok((await call('submit',command(16,109))).stage==='APPROVAL');ok((await call('list',{stage:'APPROVAL'},'manager','mgr')).total===1);
+ok((await db.query("SELECT state FROM eva_closing_publication_events WHERE publication_id=$1 ORDER BY sequence DESC LIMIT 1",[id(90)])).rows[0].state==='PUBLISHED');
+await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,2,'WITHDRAWN')",[id(90)]);ok(!(await published('org','customer',[id(1)])));
 console.log('Document review queue SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
