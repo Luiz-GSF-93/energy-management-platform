@@ -1,6 +1,7 @@
+import {withInvoiceDemand} from './invoice-demand-reference';
 import {AneelTariffFlagsService} from './aneel-tariff-flags.service';
 import {regularSupplierReference} from './documented-supplier-settlement';
-import {cceeCostEstimate,cceeEstimateEnabled} from './ccee-cost-estimate';
+import {cceeCostEstimate,cceeEstimateEnabled,operatorCceeEstimate} from './ccee-cost-estimate';
 import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft} from './supplier-invoice-evidence';
 import {documentedSettlementEnabled} from './documented-tariff-period';
 import {documentedSupplierSettlement,settlementHash} from './documented-supplier-settlement';
@@ -53,7 +54,7 @@ export class CalculationAutofillService{
   if(docs.error||!Array.isArray(docs.data)||docs.data.length>100)throw new ServiceUnavailableException('Não foi possível conferir as faturas completas.');
   if(docs.data.length!==1||!docs.data[0].file_verified||!/^[a-f0-9]{64}$/.test(docs.data[0].file_hash??''))return {available:false as const,unit,month,observation:docs.data.length>1?'Há mais de uma fatura nesta unidade e competência; conferir o vínculo correto.':'É necessária uma fatura verificada nesta unidade e competência.'};
   const libraries:any[]=[];for(let offset=0;offset<10000;offset+=200){const r=await db.from('tariff_library_versions').select('*').eq('organization_id',t.organizationId).order('id').range(offset,offset+199);if(r.error||!Array.isArray(r.data))throw new ServiceUnavailableException('Biblioteca indisponível.');libraries.push(...r.data);if(r.data.length<200)break;if(offset===9800)throw new ServiceUnavailableException('Biblioteca extensa; nenhuma seleção parcial.');}
-  const c:any=await this.resolution.preparationSnapshot(docs.data[0].id,t);
+  let c:any=await this.resolution.preparationSnapshot(docs.data[0].id,t);
   if(c.unit.id!==unit||c.unit.organization_id!==t.organizationId||c.unit.customer_id!==u.customer_id||c.month!==month||c.document.file_hash!==docs.data[0].file_hash||autofillHash(c.unit)!==autofillHash(u))throw new ConflictException('O vínculo ou arquivo mudou durante a consulta.');
   const historical=await db.from('monthly_energy_settlements').select('id,organization_id,customer_id,consumer_unit_id,month,status,validation_status,approved_at,published_at,version_number,financial_format,financial_hash').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('financial_format','financial-settlement-1.0').in('status',['APPROVED','PUBLISHED']).eq('validation_status','VALIDATED').not('approved_at','is',null).lt('month',period.start).order('month',{ascending:false}).order('version_number',{ascending:false}).limit(101);
   if(historical.error||!Array.isArray(historical.data)||historical.data.length>100)throw new ServiceUnavailableException('Histórico anterior indisponível; nenhuma referência parcial.');
@@ -61,8 +62,14 @@ export class CalculationAutofillService{
   if(units.error||!Array.isArray(units.data)||units.data.length>100)throw new ServiceUnavailableException('Unidades indisponíveis para conferir rateio.');
   let prior=null;
   if(historical.data.length){const top=historical.data[0];if(historical.data.some((r:any)=>r.id!==top.id&&r.month===top.month&&r.version_number===top.version_number))throw new ConflictException('Fechamento anterior ambíguo.');const row=await db.from('monthly_energy_settlements').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('id',top.id).maybeSingle();if(row.error||!row.data||row.data.financial_hash!==top.financial_hash)throw new ConflictException('Fechamento anterior mudou durante a consulta.');prior=previousCalculationReference([row.data],u,month);if(!prior)throw new ServiceUnavailableException('Integridade do fechamento anterior requer conferência.');}
+  c=withInvoiceDemand(c);
   c.reference=prior;c.customerUnits=units.data;
+  let restored:any=null;
+  if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
+  c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
   if(cceeEstimateEnabled()){
+   if(c.manualOverrides.cceeEstimate)c.cceeEstimate=operatorCceeEstimate(c.manualOverrides.cceeEstimate,c.manualAuthor,c.month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
+   else {
    const current=cceeCostEstimate([],u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
    if(current.state==='CURRENT_RECORD')c.cceeEstimate=current;
    else {
@@ -80,9 +87,7 @@ export class CalculationAutofillService{
    c.cceeEstimate=cceeCostEstimate(history,u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
    }
   }
-  let restored:any=null;
-  if(manual===undefined)restored=await this.savedCommercial({unit,month},c.document,u.customer_id,t);
-  c.manualOverrides=manual??restored?.values??{};c.manualAuthor=manual?t.userId:restored?.author??null;
+  }
   const flagEnd=month+'-'+String(new Date(Number(month.slice(0,4)),Number(month.slice(5)),0).getDate());
   c.officialFlagParameterOverride=c.captured.parameters.some((x:any)=>x.kind==='TARIFF'&&x.component_code==='TARIFF_FLAG'&&x.scenario==='ACR'&&x.organization_id===t.organizationId&&x.consumer_unit_id===unit&&x.customer_id===u.customer_id&&x.status==='APPROVED'&&x.treatment==='NET'&&x.source?.trim()&&x.start_date<=month+'-01'&&x.end_date>=flagEnd);
   if(this.officialFlags&&!c.officialFlagParameterOverride)c.officialTariffFlag=await this.officialFlags.reference(t.organizationId,month);
@@ -125,7 +130,7 @@ export class CalculationAutofillService{
   }
   const plan=calculationAutofillPlan(c,libraries);
   // External sources identify one preparation. Existing manual drafts are not overwritten on replay.
-  const basis=autofillHash({...invoiceInterpretationBasis(c.layout),...(c.officialTariffFlag?{officialTariffFlag:c.officialTariffFlag}:{}),cceeEstimate:c.cceeEstimate??null,supplierInvoiceProposal:c.supplierInvoiceProposal??null,v:documentedSettlementEnabled()?6:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),...(documentedSettlementEnabled()?{documentedInvoice:c.documentedSupplierInvoice??null}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
+  const basis=autofillHash({...invoiceInterpretationBasis(c.layout),...(c.officialTariffFlag?{officialTariffFlag:c.officialTariffFlag}:{}),cceeEstimate:c.cceeEstimate??null,supplierInvoiceProposal:c.supplierInvoiceProposal??null,v:documentedSettlementEnabled()?6:5,...(contractClosingDraftEnabled()?{contractDraft:c.contractDraft,indexMemories:c.indexMemories}:{}),...(c.sourcePreparation?{sourcePreparation:c.sourcePreparation}:{}),...(documentedSettlementEnabled()?{documentedInvoice:c.documentedSupplierInvoice??null}:{}),manual:c.manualOverrides,manualAuthor:c.manualAuthor,reference:c.reference?{id:c.reference.id,hash:c.reference.hash}:null,customerUnits:c.customerUnits,document:c.document,evidence:c.evidenceToken,unit:c.unit,...(c.closingDemandSource?{demandSource:c.closingDemandSource}:{}),contracts:c.captured.contracts,prices:c.captured.prices,management:c.captured.management,adjustments:c.captured.adjustments,feeRules:c.captured.feeRules,billingRules:c.captured.billingRules,approvedParameters:c.captured.parameters.filter((p:any)=>p.status==='APPROVED'),validatedMonthly:c.captured.monthly.filter((p:any)=>p.status==='VALIDATED'),validatedCosts:c.captured.monthlyCosts.filter((p:any)=>p.status==='VALIDATED'),libraries});
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }
@@ -138,7 +143,7 @@ export class CalculationAutofillService{
  async closingSnapshot(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())throw new ServiceUnavailableException('Preparação automática indisponível.');return this.context(q,t);}
  async inspect(q:Record<string,unknown>,t:TenantContext){if(!this.enabled())return {enabled:false};await this.allowed(t);this.query(q);return this.output(await this.context(q,t),t);}
  private async rpc(action:string,q:{unit:string;month:string},t:TenantContext,run:string|null,body:any){return this.fail(await this.db.getClient().rpc('calculation_autofill_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.unit,p_month:q.month,p_run:run,p_body:body}));}
- private manual(value:unknown){try{const parsed=commercialProposal(value);if(parsed.supplierSettlement&&!documentedSettlementEnabled())throw Error('Conciliação documentada ainda desligada.');return parsed;}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Valores comerciais inválidos.');}}
+ private manual(value:unknown){try{const parsed=commercialProposal(value);if(parsed.cceeEstimate&&!cceeEstimateEnabled())throw Error('Estimativa CCEE ainda desligada.');if(parsed.supplierSettlement&&!documentedSettlementEnabled())throw Error('Conciliação documentada ainda desligada.');return parsed;}catch(e){throw new BadRequestException(e instanceof Error?e.message:'Valores comerciais inválidos.');}}
  async preview(body:any,t:TenantContext){await this.allowed(t,true);if(!this.enabled())throw new ServiceUnavailableException('Preenchimento automático desligado.');if(!body||Object.keys(body).sort().join(',')!=='consumerUnitId,manual,month')throw new BadRequestException('Proposta inválida.');const q={consumerUnitId:body.consumerUnitId,month:body.month};this.query(q);return this.output(await this.context(q,t,this.manual(body.manual)),t);}
  async history(q:Record<string,unknown>,t:TenantContext){await this.allowed(t);if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');return this.rpc('history',this.query(scope),t,null,{page:Number(page)});}
  async reconcile(body:any,t:TenantContext){

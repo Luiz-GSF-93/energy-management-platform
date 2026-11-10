@@ -64,7 +64,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   row.wasteIndicators=clientPublishedInsight({financial:{},retained:e.comparative?.retained??[]}).indicators;
   row.sources.identityState=c?.originalIdentity?.state??null;
   if(c?.originalIdentity?.reservations?.length){row.sources.identityReservations=c.originalIdentity.reservations;for(const reason of c.originalIdentity.reservations){add(reason);policyReservations.push({unitId:e.unitId,code:'SAME_CNPJ_ROOT',message:reason});}}
-  if(p?.cceeEstimate?.state==='ESTIMATED'){estimated=true;const message='CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.';ownMissing.push(message);estimateReviews.add(e.name+': '+message);pendingActions.push({code:'CCEE_ESTIMATE_REVIEW',unitId:e.unitId,section:'costs',message});row.sources.cceeEstimate=p.cceeEstimate;}
+  if(p?.cceeEstimate?.state==='ESTIMATED'){estimated=true;const message='CCEE: estimativa preenchida. Confira o valor, a justificativa e as fontes antes de aprovar.';ownMissing.push(message);estimateReviews.add(e.name+': '+message);pendingActions.push({code:'CCEE_ESTIMATE_REVIEW',unitId:e.unitId,section:'costs',message});row.sources.cceeEstimate=p.cceeEstimate;}
   if(p?.supplierInvoiceProposal){row.sources.supplierInvoiceProposal=p.supplierInvoiceProposal;add('Fornecedor: NF integral proposta, volume comprado preservado separadamente da medição. Conferir composição tributária.');}
   if(sourcePreparationEnabled()&&!draft){
    const supplier=c?.diagnosis?.contractSupplierCost;
@@ -165,7 +165,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    if(!row.comparison.consecutive)add('A referência de '+e.name+' é '+prior.month+'; não é o mês imediatamente anterior.');
   }else add('Não há fechamento anterior íntegro e elegível para comparar '+e.name+'.');
   if(canContinueWithReservation(row,e)){
-   const reviews=[...(draft?.requirements??[]),...(p?.cceeEstimate?.state==='ESTIMATED'?[{code:'CCEE_ESTIMATE_REVIEW',message:'CCEE: estimativa histórica preenchida. Revise a memória e registre os custos da competência antes de aprovar.'}]:[])].filter(r=>isPreparationReservation(r.code));
+   const reviews=[...(draft?.requirements??[]),...(p?.cceeEstimate?.state==='ESTIMATED'?[{code:'CCEE_ESTIMATE_REVIEW',message:'CCEE: estimativa preenchida. Confira o valor, a justificativa e as fontes antes de aprovar.'}]:[])].filter(r=>isPreparationReservation(r.code));
    for(const review of reviews){const index=ownMissing.indexOf(review.message);if(index<0)continue;ownMissing.splice(index,1);estimated=true;policyReservations.push({...review,unitId:e.unitId});add(e.name+': '+review.message+' Ressalva registrada automaticamente; valores comprovados preparados para decisão humana.');for(let i=pendingActions.length-1;i>=0;i--)if(pendingActions[i].unitId===e.unitId&&pendingActions[i].code===review.code)pendingActions.splice(i,1);}
   }
   for(const note of p.observations??[])add(note);

@@ -18,3 +18,5 @@ describe('Management fee per unit',()=>{
 });
 
 it('keeps an explicit variable-only fixed amount at zero and waits for client consolidation',()=>{expect(memory({...contract,fixed_fee_monthly:'0.00',savings_percentage:'9.8'})).toMatchObject({fixedUnit:'0.00',percentage:'9.8',status:'VARIABLE_PENDING',totalFee:null});});
+
+it('supports a genuinely indefinite fee without changing past dated contracts',()=>{expect(memory({...contract,end_date:null})).toMatchObject({fixedUnit:'1000.00',percentage:'20'});expect(memory({...contract,end_date:'2025-12-31'}).fixedUnit).toBeNull();});

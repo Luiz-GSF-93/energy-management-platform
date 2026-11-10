@@ -62,7 +62,7 @@ export class CalculationPreparationService {
  ocrPreparationCandidates(this.db.getClient(),u,d.month),
  this.all(()=>this.table('calculation_cost_absences').select('*').eq('organization_id',org).eq('customer_id',u.customer_id).eq('consumer_unit_id',u.id).eq('month',d.month))]);
  const effectiveManagement=adjustedContracts(management,adjustments,d.month);
- const period=monthPeriod(d.month),ids=contracts.filter(c=>['ACTIVE','APPROVED'].includes(c.status)&&c.contract_type==='ENERGY_PURCHASE'&&String(c.start_date).slice(0,10)<=period.end&&(!c.end_date||String(c.end_date).slice(0,10)>=period.start)).map(c=>c.id),prices:any[]=[];
+ const period=monthPeriod(d.month),ids=contracts.filter(c=>['ACTIVE','APPROVED'].includes(c.status)&&c.contract_type==='ENERGY_PURCHASE'&&String(c.start_date).slice(0,10)<=period.end&&(!c.end_date||String(c.end_date??'9999-12-31').slice(0,10)>=period.start)).map(c=>c.id),prices:any[]=[];
  for(let i=0;i<ids.length;i+=100){const batch=ids.slice(i,i+100);prices.push(...await this.all(()=>this.table('contract_price_history').select('*').in('contract_id',batch)));}
  // ACL supplier TE is contractual energy. Legacy manually entered ACL TE must not be counted twice.
  const tariffParameters=parameters.filter(p=>!(u.free_market===true&&p.scenario==='ACL'&&p.kind==='TARIFF'&&p.component_code==='TE'));
@@ -78,7 +78,7 @@ export class CalculationPreparationService {
  if(ocrDocuments.some(doc=>doc.gd?.detected)&&!prepared.findings.some(f=>f.code==='OCR_GD_PENDING'))prepared.findings.push({code:'OCR_GD_PENDING',section:'GD / OCR',severity:'BLOCKER',message:'A fatura possui indícios de GD. Confira créditos, compensação, rateio e vigência antes de calcular; os candidatos OCR ainda não são lançamentos aprovados.'});
  prepared.counts.blockers=prepared.findings.filter(f=>f.severity==='BLOCKER').length;
  prepared.counts.reviews=prepared.findings.filter(f=>f.severity==='REVIEW').length;
- for(const c of effectiveManagement.filter(c=>c.fee_adjustment_pending&&c.status==='ACTIVE'&&String(c.start_date).slice(0,10)<=period.end&&String(c.end_date).slice(0,10)>=period.start))prepared.findings.push({code:'MANAGEMENT_INDEX_PENDING:'+c.id,section:'Honorários',severity:'BLOCKER',message:'Índice anual dos honorários pendente. Confirme o reajuste antes de apurar.'});
+ for(const c of effectiveManagement.filter(c=>c.fee_adjustment_pending&&c.status==='ACTIVE'&&String(c.start_date).slice(0,10)<=period.end&&String(c.end_date??'9999-12-31').slice(0,10)>=period.start))prepared.findings.push({code:'MANAGEMENT_INDEX_PENDING:'+c.id,section:'Honorários',severity:'BLOCKER',message:'Índice anual dos honorários pendente. Confirme o reajuste antes de apurar.'});
  const tariffPreview=previewTariffs(u,d.month,period,tariffParameters,monthly);
  const costs=monthlyCostLedger(u,d.month,monthlyCosts,'ADDITIONAL',absenceRows);
  const operational=operationalTaxBases(u,d.month,parameters,supplier,costs);

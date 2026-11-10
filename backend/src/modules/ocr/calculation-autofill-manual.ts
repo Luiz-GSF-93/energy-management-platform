@@ -1,12 +1,13 @@
 import {SupplierSettlement,supplierSettlementInput} from './documented-supplier-settlement';
 import {SupplierInvoiceAllocation,supplierInvoiceAllocationInput} from './supplier-invoice-evidence';
-export type ManualCommercial={fixedFee?:string;feePercentage?:string;supplierPricePerMwh?:string;supplierSettlement?:SupplierSettlement;supplierInvoiceAllocation?:SupplierInvoiceAllocation};
+export type ManualCommercial={cceeEstimate?:{amount:string;reason:string;confirmed:true};fixedFee?:string;feePercentage?:string;supplierPricePerMwh?:string;supplierSettlement?:SupplierSettlement;supplierInvoiceAllocation?:SupplierInvoiceAllocation};
 export function commercialProposal(value:unknown):ManualCommercial{
  if(value===undefined)return {};
  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Valores comerciais inválidos.');
  const v=value as Record<string,unknown>,out:ManualCommercial={};
- if(!Object.keys(v).length||Object.keys(v).some(k=>!['fixedFee','feePercentage','supplierPricePerMwh','supplierSettlement','supplierInvoiceAllocation'].includes(k)))throw Error('Informe somente honorários, fornecedor e cobertura da NF.');
+ if(!Object.keys(v).length||Object.keys(v).some(k=>!['fixedFee','feePercentage','supplierPricePerMwh','supplierSettlement','supplierInvoiceAllocation','cceeEstimate'].includes(k)))throw Error('Informe somente honorários, fornecedor, cobertura da NF ou estimativa CCEE.');
  for(const [key,x] of Object.entries(v)){
+  if(key==='cceeEstimate'){const e=x as any;if(!e||typeof e!=='object'||Array.isArray(e)||Object.keys(e).sort().join(',')!=='amount,confirmed,reason'||e.confirmed!==true||typeof e.amount!=='string'||!/^(0|[1-9][0-9]{0,8})(\.\d{1,2})?$/.test(e.amount)||typeof e.reason!=='string'||e.reason.trim().length<20||e.reason.length>1000)throw Error('Informe o valor estimado CCEE e confirme a justificativa com 20 a 1000 caracteres.');out.cceeEstimate={amount:e.amount,reason:e.reason.trim(),confirmed:true};continue;}
   if(key==='supplierInvoiceAllocation'){out.supplierInvoiceAllocation=supplierInvoiceAllocationInput(x);continue;}
   if(key==='supplierSettlement'){out.supplierSettlement=supplierSettlementInput(x);continue;}
   if(typeof x!=='string'||!/^(0|[1-9][0-9]{0,8})(\.\d{1,6})?$/.test(x)||key==='fixedFee'&&(x.split('.')[1]?.length??0)>2||key==='feePercentage'&&(!/^(100(\.0{1,4})?|[0-9]{1,2}(\.\d{1,4})?)$/.test(x)))throw Error('Confira formato, casas decimais e percentual de 0 a 100.');

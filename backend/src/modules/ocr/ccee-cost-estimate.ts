@@ -67,3 +67,11 @@ export function cceeCostEstimate(rows:any[],unit:any,month:string,currentItems:a
  if(!result.items.length)result.observations.push('Sem histórico real elegível; informar custos CCEE, sem presumir zero.');
  return result;
 }
+
+/** Explicit monthly operator premise. It never becomes an actual observation
+ * or replaces a present cost/declaration; approval remains a separate act. */
+export function operatorCceeEstimate(input:{amount:string;reason:string;confirmed:true},actor:string,month:string,currentItems:any[]=[],noCosts=false){
+ const current=cceeCostEstimate([],{},month,currentItems,noCosts);if(current.state==='CURRENT_RECORD')return current;
+ const total=money(cents(input.amount)),source='Estimativa CCEE informada pelo operador '+actor+' · '+input.reason;
+ return {...current,state:'ESTIMATED',method:'OPERATOR_DEFINED',total,operator:actor,reason:input.reason,items:[{key:'CCEE_OPERATING|COST',label:'Custos operacionais CCEE estimados',effect:'COST',category:'CCEE',scenario:'ACL',amount:total,nature:'ESTIMATED',sources:[],source,coverage:0,reviewRequired:true}],observations:['CCEE estimada em R$ '+total+' para '+month+'. '+input.reason,'Premissa informada pelo operador; não é extrato nem custo liquidado. Conferir antes da aprovação e substituir pela fonte real quando disponível. Garantias e penalidades não foram presumidas.'],reviewRequired:true,financialApproval:false};
+}

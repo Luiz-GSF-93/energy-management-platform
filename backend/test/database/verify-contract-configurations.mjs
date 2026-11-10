@@ -20,6 +20,8 @@ try{
  for(const t of ['customers','consumer_units','energy_contracts','management_contracts']){const columns=fixture.columns.filter(c=>c.table===t).map(c=>q(c.name)+' '+c.type+(c.not_null?' NOT NULL':'')+(c.default?' DEFAULT '+c.default:''));await db.exec('CREATE TABLE '+q(t)+' ('+columns.join(',')+',PRIMARY KEY(id));GRANT ALL ON '+q(t)+' TO service_role');}
  const schema=readFileSync(new URL('../../../docs/supabase-schema.sql',import.meta.url),'utf8');const start=schema.indexOf('CREATE TABLE contract_price_history');await db.exec(schema.slice(start,schema.indexOf(');',start)+2));await db.exec('GRANT ALL ON contract_price_history TO service_role');
  const migration=readFileSync(new URL('../../src/database/migrations/20260925_f1_27_contract_configurations.sql',import.meta.url),'utf8');await db.exec(migration);await db.exec(migration);ok(true);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20260925_f1_53_management_allocations.sql',import.meta.url),'utf8'));
+ const indefinite=readFileSync(new URL('../../src/database/migrations/20261297_management_open_ended_terms.sql',import.meta.url),'utf8');await db.exec(indefinite);await db.exec(indefinite);ok(true);
  const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002',c='00000000-0000-4000-8000-000000000003';
  await db.exec("INSERT INTO organizations VALUES ('org-a'),('org-b');INSERT INTO customers(id,organization_id,company_name,document) VALUES ('"+a+"','org-a','A','A'),('"+b+"','org-b','B','B');INSERT INTO consumer_units(id,organization_id,customer_id,consumer_unit_number,distributor,tariff_group) VALUES ('"+a+"','org-a','"+a+"','A','D','A4'),('"+b+"','org-b','"+b+"','B','D','A4');INSERT INTO energy_contracts(id,organization_id,customer_id,consumer_unit_id,contract_number,contract_type,contracted_volume_mwh,current_price,start_date,end_date,status) VALUES ('"+c+"','org-a','"+a+"','"+a+"','E-1','ENERGY_PURCHASE',100,250,'2026-01-01','2027-12-31','ACTIVE');SET ROLE service_role;");
  const client={getClient:()=>({from:t=>new Query(t)})},license={requireEntitlement:async()=>{}};const contracts=new ContractsService(client,license);const service=new ContractConfigurationsService(client,license,contracts);
@@ -30,6 +32,11 @@ try{
  await service.createManagement({...fee,contractNumber:'G-2027',startDate:'2027-01-01',endDate:'2027-12-31'},'org-a');ok((await service.listManagement('org-a')).length===2);ok((await service.listManagement('org-b')).length===0);
  await denied(()=>service.createManagement(fee,'org-b'),404);
  await assert.rejects(()=>db.query('UPDATE management_contracts SET fixed_fee_monthly=1 WHERE id=$1',[m.id]),e=>e.code==='P3271');checks++;
+ const open=await service.createManagement({...fee,contractNumber:'G-continuous',startDate:'2028-01-01',endDate:null},'org-a');ok(open.end_date===null);
+ await denied(()=>service.createManagement({...fee,contractNumber:'G-overlap-future',startDate:'2030-01-01',endDate:'2030-12-31'},'org-a'),409);
+ await denied(()=>service.createManagement({...fee,contractNumber:'G-invalid-date',startDate:'2029-01-01',endDate:'2028-01-01'},'org-a'),400);
+ await assert.rejects(()=>db.query('UPDATE management_contracts SET fixed_fee_monthly=2 WHERE id=$1',[open.id]),e=>e.code==='P3271');checks++;
+ const allocation=await db.query("INSERT INTO management_fee_allocations(organization_id,customer_id,contract_id,month,version,fixed_fee_basis,allocations,source,created_by) VALUES('org-a',$1,$2,'2030-01',1,'PER_UNIT',$3,'Explicit monthly confirmation','operator') RETURNING id",[a,open.id,JSON.stringify([{consumerUnitId:a,percentage:'100'}])]);ok(allocation.rows.length===1);
  const period={startDate:'2026-01-01',endDate:'2026-12-31',pricePerMwh:260,reason:'Preço 2026'};const price=await service.addPrice(c,period,'org-a');ok(price.price_per_mwh===260);
  await denied(()=>service.addPrice(c,period,'org-a'),409);await denied(()=>service.prices(c,'org-b'),404);
  await service.addPrice(c,{...period,startDate:'2027-01-01',endDate:'2027-12-31',pricePerMwh:275},'org-a');ok((await service.prices(c,'org-a')).length===2);ok((await contracts.findOne(c,'org-a')).current_price===250);
