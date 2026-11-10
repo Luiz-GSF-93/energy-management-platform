@@ -63,5 +63,20 @@ ok(await published('org','customer',[id(1)]));ok(!(await published('other','cust
 ok((await call('submit',command(16,109))).stage==='APPROVAL');ok((await call('list',{stage:'APPROVAL'},'manager','mgr')).total===1);
 ok((await db.query("SELECT state FROM eva_closing_publication_events WHERE publication_id=$1 ORDER BY sequence DESC LIMIT 1",[id(90)])).rows[0].state==='PUBLISHED');
 await db.query("INSERT INTO eva_closing_publication_events VALUES('org',$1,2,'WITHDRAWN')",[id(90)]);ok(!(await published('org','customer',[id(1)])));
+
+// Financial rejection is different from a handoff return, but remains actionable.
+await db.exec("ALTER TABLE eva_assisted_closing_events ADD COLUMN note text NOT NULL DEFAULT '';");
+const visibilitySql=fs.readFileSync(__dirname+'/../src/database/migrations/20261306_eva_queue_rejected_visibility.sql','utf8');
+await db.exec(visibilitySql);await db.exec(visibilitySql);
+await db.query("INSERT INTO eva_assisted_closing_events(organization_id,closing_id,sequence,state,note) VALUES('org',$1,2,'REJECTED','Manager requires invoice reconciliation')",[id(16)]);
+q=await call('list',{stage:'RETURNED'});ok(q.total===1);ok(q.rows[0].stage==='RETURNED');ok(q.rows[0].returnReason==='Manager requires invoice reconciliation');ok(q.rows[0].approvalEligible===false);ok(q.summary.returned===1);
+ok((await call('list',{stage:'APPROVAL'})).total===0);await deny(()=>call('submit',command(16,110)));
+await closing(17,id(2),7);q=await call('list',{stage:'ALL'});ok(q.total===2);ok(q.rows[0].id===id(17));ok(q.rows[1].id===id(16));
+ok((await call('list',{stage:'OPERATOR'})).total===2);ok((await call('list',{stage:'INPUT'})).total===0);ok((await call('list',{stage:'PUBLICATION'})).total===0);
+await db.query("UPDATE eva_assisted_closing_versions SET report=jsonb_set(report,'{preparation,percent}','75') WHERE id=$1",[id(17)]);
+await db.query("UPDATE eva_assisted_closing_versions SET report=jsonb_set(report,'{approvalEligible}','false') WHERE id=$1",[id(17)]);
+q=await call('list',{stage:'INPUT'});ok(q.total===1&&q.rows[0].id===id(17));
+ok((await call('status',{closingId:id(16)})).row.stage==='RETURNED');ok((await call('status',{closingId:id(12)})).row===null);
+
 console.log('Document review queue SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
