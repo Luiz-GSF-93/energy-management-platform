@@ -33,7 +33,7 @@ export function automaticIntakeContext(pages:IntakePage[],customer:IntakeCustome
    if(proposal.installationIdentity?.matched!==true)continue;
    matches.push({unitId:unit.id,month,documentType:'INVOICE_SUPPLIER',checks:{taxId:'MATCH',unit:'MATCH',period:'MATCH'},...(proposal.taxIdentity?{taxIdentity:proposal.taxIdentity,reservations:[proposal.taxIdentity.reason]}:{}),sourcePages:pages.map(p=>p.page)});
   }else{
-   const proof=invoiceIdentityText(text,{customerName:customer.company_name,taxId:customer.document,unitNumber:unit.consumer_unit_number,address:unit.address,month,auditedUnitNumbers:unit.aliases??[]});
+   const proof=invoiceIdentityText(text,{customerName:customer.company_name,taxId:customer.document,unitNumber:unit.consumer_unit_number,address:unit.address,month,auditedUnitNumbers:unit.aliases??[],auditedAddresses:unit.auditedAddresses??[]});
    if(proof.state==='MATCH')matches.push({unitId:unit.id,month,documentType:'INVOICE_DISTRIBUTOR',checks:proof.checks,...(proof.taxIdentity?{taxIdentity:proof.taxIdentity,reservations:proof.reservations}:{}),sourcePages:pages.map(p=>p.page)});
   }
  }

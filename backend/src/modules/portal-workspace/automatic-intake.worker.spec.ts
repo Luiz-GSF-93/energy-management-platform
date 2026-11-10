@@ -61,4 +61,16 @@ describe('Automatic intake durable orchestration',()=>{
  it('waits on the existing operation for a temporary provider GET failure',async()=>{const f=fixture('OCR_POLLING');f.connector.poll.mockRejectedValue(new OcrProviderError('PROVIDER_UNAVAILABLE'));await f.worker.runOnce();expect(f.connector.submit).not.toHaveBeenCalled();expect(f.actions.at(-1)[0]).toBe('wait');});
  it('only reschedules a paid POST when the provider explicitly rejected it with 429',async()=>{const f=fixture('OCR_QUEUED');f.connector.submit.mockRejectedValue(new OcrProviderError('RATE_LIMITED',30));await f.worker.runOnce();expect(f.connector.submit).toHaveBeenCalledTimes(1);expect(f.actions.at(-1)[0]).toBe('retry_ocr');});
  it('does not resubmit after an ambiguous provider POST response',async()=>{const f=fixture('OCR_QUEUED');f.connector.submit.mockRejectedValue(new OcrProviderError('SUBMISSION_UNKNOWN'));await f.worker.runOnce();expect(f.connector.submit).toHaveBeenCalledTimes(1);expect(f.actions.at(-1)[0]).toBe('unknown');});
+ it.each([[true,true],[false,true],[true,false]])('links a confirmed distributor address only for the same UC: accepted=%s sameUnit=%s',async(accepted,sameUnit)=>{
+  const f=fixture('RECOGNIZING');f.intake.hints={unitId:'unit',month:'2026-07'};
+  const address='Rodovia Alternativa 55 Centro',text='Empresa sintética CNPJ 11.222.333/0001-81\nUC '+(sameUnit?'1234567':'9999999')+'\n'+address+'\nReferência JUL/2026';
+  f.intake.raw_result={content:text,pages:[{pageNumber:1,lines:text.split('\n').map(content=>({content})),words:text.split(/\s/).map(content=>({content,confidence:.5}))}]};
+  const original=f.rpc.getMockImplementation()!;f.rpc.mockImplementation(async(name,b)=>{
+   if(name==='eva_intake_work_context')return {data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'admin_org'},customers:[{id:'client',document:'11222333000181',company_name:'Empresa sintética'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address:'Rua Exemplo 123'}]}} as any;
+   if(name==='eva_intake_identity_work')return {data:{accepted,address:accepted?address:null}} as any;
+   return original(name,b);
+  });
+  await f.worker.runOnce();expect(f.actions.map(a=>a[0])).toEqual(accepted&&sameUnit?['recognized','linked']:['review']);expect(f.connector.submit).not.toHaveBeenCalled();expect(f.ai.interpret).not.toHaveBeenCalled();
+ });
+
 });

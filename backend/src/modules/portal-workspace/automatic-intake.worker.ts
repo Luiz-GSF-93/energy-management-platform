@@ -111,7 +111,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
         }
         continue;
        }
-       const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))||identityReview?.accepted&&proof.unitId===selected?.id&&identityDiagnostic?.action==='CONTINUE_JUSTIFIED'))matches.push(proof);
+       const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))||identityReview?.accepted&&proof.unitId===selected?.id&&(identityDiagnostic?.action==='CONTINUE_JUSTIFIED'||identityReview.address&&['taxId','unit','period'].every(key=>identityDiagnostic?.fields?.find((f:any)=>f.key===key)?.status==='MATCH'))))matches.push(proof);
       }
       if(matches.length!==1){const fields=identityDiagnostic?.fields?.filter((f:any)=>f.status!=='MATCH');await transition('review',{note:fields?.length?'Confira '+fields.map((f:any)=>f.label+': '+(f.status==='MISMATCH'?'diferente do cadastro':'não comprovado')).join('; ')+'. A leitura e suas respostas foram preservadas.':'A leitura está disponível. Selecione o cliente, a unidade e a competência para conferir os campos do original.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});return;}
       if(i.external&&matches[0].documentType!=='INVOICE_DISTRIBUTOR'){

@@ -2,7 +2,7 @@ import {companyTaxIdentity} from './eva-preparation-policy';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractPdfText} from './eva-pdf-text.extractor';
 import type {ExtractionResult} from './eva-extraction.model';
-export type InvoiceRegistration={customerName:string|null;taxId:string|null;unitNumber:string|null;address:string|null;month:string|null;auditedUnitNumbers?:string[]};
+export type InvoiceRegistration={customerName:string|null;taxId:string|null;unitNumber:string|null;address:string|null;month:string|null;auditedUnitNumbers?:string[];auditedAddresses?:string[]};
 const compact=(v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''):'';
 const norm=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const monthNames=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
@@ -14,7 +14,7 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
  const uc=compact(r.unitNumber),accepted=new Set([uc,...(r.auditedUnitNumbers??[]).map(compact)].filter(Boolean)),units=[...t.matchAll(/(?:UNIDADE\s+CONSUMIDORA|NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|INSTALACAO|SEU\s+CODIGO|\bUC\b)\s*(?:N[º°.]?|:)?\s*([0-9][0-9 .-]{4,30}[0-9])/g)].map(m=>compact(m[1]));
  checks.unit=!uc||!units.length?'REVIEW':units.every(n=>accepted.has(n))?'MATCH':'MISMATCH';
  // Preserve street numbers. Never accept the street alone or silently change the address.
- const address=compact(r.address);checks.address=address.length>=12&&all.includes(address)?'MATCH':'REVIEW';
+ const address=compact(r.address);checks.address=[address,...(r.auditedAddresses??[]).map(compact)].some(a=>a.length>=12&&all.includes(a))?'MATCH':'REVIEW';
  const found:string[]=[];for(const m of t.matchAll(/(?:REFERENCIA|REF\s*[:.]?\s*MES\s*\/\s*ANO|MES\s*\/\s*ANO|COMPETENCIA)\b/g)){
   const tail=t.slice(m.index!+m[0].length,m.index!+m[0].length+120);
   const named=/\b(JAN[A-Z]*|FEV[A-Z]*|MAR[A-Z]*|ABR[A-Z]*|MAI[A-Z]*|JUN[A-Z]*|JUL[A-Z]*|AGO[A-Z]*|SET[A-Z]*|OUT[A-Z]*|NOV[A-Z]*|DEZ[A-Z]*)\s*[/.-]?\s*(20\d{2})\b/.exec(tail);
@@ -61,7 +61,7 @@ export async function invoiceIdentityPreflight(bytes:Buffer,mime:string,registra
  const base={version:'invoice-identity-preflight-v1',fileHash,registration};
  if(mime==='application/xml'){
   const {readFiscalXml,xmlUnitMatch}=await import('./fiscal-xml'),xml=readFiscalXml(bytes);
-  const proof=xmlUnitMatch(xml.fiscal,{document:registration.taxId},{consumer_unit_number:registration.unitNumber,address:registration.address,aliases:registration.auditedUnitNumbers},registration.month);
+  const proof=xmlUnitMatch(xml.fiscal,{document:registration.taxId},{consumer_unit_number:registration.unitNumber,address:registration.address,aliases:registration.auditedUnitNumbers,auditedAddresses:registration.auditedAddresses},registration.month);
   if(xml.fiscal.sourceHash!==fileHash)throw Error('XML_SOURCE_HASH_MISMATCH');
   return {...base,state:proof.matched?'MATCH':'MISMATCH',checks:{taxId:proof.taxIdentity.accepted?'MATCH':'MISMATCH',unit:proof.unitMatch?'MATCH':'MISMATCH',address:proof.addressMatch?'MATCH':'MISMATCH',period:proof.period?'MATCH':'MISMATCH'},taxIdentity:proof.taxIdentity,sourcePages:[],sourceKind:'XML'};
  }
