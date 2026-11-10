@@ -160,5 +160,42 @@ await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE i
 const restoredReview=(await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'list',NULL,$2) data",[actor,JSON.stringify({ids:[id(500)]})])).rows[0].data;
 ok(restoredReview.items.length===1);
 await db.exec('SET ROLE authenticated');await deny(()=>restore());await db.exec('RESET ROLE');
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261305_eva_justified_binding_resume.sql','utf8'));
+const queuedResume=async(n,kind='UC')=>{
+ const target=id(n),fileHash=require('node:crypto').createHash('sha256').update(target).digest('hex');
+ await db.query(`INSERT INTO eva_automatic_intakes(id,organization_id,customer_id,actor_id,role_id,platform,external,request_id,file_hash,filename,mime,size_bytes,consent,hints,state,stored) VALUES($1,'org','client',$2,'manager',false,false,$3,$4,'resume.pdf','application/pdf',100,true,'{}','REVIEW_REQUIRED',true)`,[target,actor,id(n+100),fileHash]);
+ const binding={customerId:'client',unitId:id(1),month:'2026-01',reason:'Operator explicitly confirmed this original, selected installation and the justified identification difference.'};
+ const response=await db.query("SELECT eva_intake_resolve_justified('org',$1,$2,false,$3,$4) data",[kind==='UC'?actor:id(72),kind==='UC'?'manager':'admin',target,JSON.stringify(binding)]);
+ ok(response.rows[0].data.continuationRequested===true);
+ await db.query("UPDATE eva_automatic_intakes SET lease_token=$2,lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[target,token]);
+ const dg={...(kind==='UC'?diagnostic:addressDiag),fingerprint:fileHash,fileHash,registration:diagnostic.registration,documentType:kind==='UC'?'INVOICE_DISTRIBUTOR':'INVOICE_SUPPLIER',...(kind==='UC'?{unitCode:'7654399',fields:diagnostic.fields.map(f=>f.key==='unit'?{...f,found:['7654399']}:f)}:{fields:addressDiag.fields.map(f=>f.key==='unit'?{...f,status:'INCONCLUSIVE',found:[]}:f)})};
+ await db.query('SELECT eva_intake_identity_work($1,$2,$3)',[target,token,JSON.stringify(dg)]);
+ await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[target]);
+ return {target,dg,binding,fileHash};
+};
+for(const kind of ['UC','ADDRESS']){
+ const c=await queuedResume(kind==='UC'?2000:2001,kind);
+ ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[c.target,c.fileHash])).rows[0].data.continued===true);
+ ok((await db.query('SELECT state FROM eva_automatic_intakes WHERE id=$1',[c.target])).rows[0].state==='RECOGNIZING');
+ ok((await db.query("SELECT count(*)::int n FROM eva_intake_identity_reviews WHERE intake_id=$1 AND kind=$2",[c.target,kind==='UC'?'CONTINUE':'ADDRESS'])).rows[0].n===1);
+ ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[c.target,c.fileHash])).rows[0].data.continued===false);
+ if(kind==='UC'){
+  await db.query("UPDATE eva_automatic_intakes SET lease_token=$2,lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[c.target,token]);
+  const matched={...c.dg,fingerprint:'7'.repeat(64),action:'REVIEW',unitCode:null,fields:c.dg.fields.map(f=>f.key==='unit'?{...f,status:'MATCH'}:f)};
+  const carried=(await db.query('SELECT eva_intake_identity_resume_proof($1,$2,$3) data',[c.target,token,JSON.stringify(matched)])).rows[0].data;
+  ok(carried.accepted===true&&carried.unitCode==='7654399');
+  const wrong={...matched,fingerprint:'8'.repeat(64),fields:matched.fields.map(f=>f.key==='unit'?{...f,found:['unrelated-code']}:f)};
+  ok((await db.query('SELECT eva_intake_identity_resume_proof($1,$2,$3) data',[c.target,token,JSON.stringify(wrong)])).rows[0].data.accepted===false);
+ }
+}
+const staleResume=await queuedResume(2002);
+await db.query("UPDATE consumer_units SET address='Changed registration 999' WHERE id=$1",[id(1)]);
+ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[staleResume.target,staleResume.fileHash])).rows[0].data.continued===false);
+await db.query("UPDATE consumer_units SET address='Rua Exemplo 123' WHERE id=$1",[id(1)]);
+const revokedIntent=await queuedResume(2003);
+await db.query("SELECT eva_intake_action('org',$1,'manager',false,'resolve',$2,$3)",[actor,revokedIntent.target,JSON.stringify(revokedIntent.binding)]);
+await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE id=$1",[revokedIntent.target]);
+ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[revokedIntent.target,revokedIntent.fileHash])).rows[0].data.continued===false);
+for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await deny(()=>db.query('SELECT eva_intake_continue_requested($1,$2)',[revokedIntent.target,revokedIntent.fileHash]));await db.exec('RESET ROLE');}
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

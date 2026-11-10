@@ -1,3 +1,4 @@
+import {acceptedIdentityContinuation} from './identity-continuation';
 import {SUPPLIER_COST_DRAFT_VERSION} from '../ocr/supplier-invoice-cost-draft';
 import {xmlIntakeDiagnostic} from './xml-intake-context';
 import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
@@ -98,7 +99,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
        const selected=units.find((u:any)=>u.id===i.hints?.unitId);
        if(customer.id===i.customer_id&&selected&&i.hints?.month){
         identityDiagnostic=xml?xmlIntakeDiagnostic(xml,customer,selected,i.hints.month):intakeIdentityDiagnostic(pages,customer,selected,i.file_hash,i.hints.month,raw);
-        if(identityDiagnostic){identityReview=await this.rpc('eva_intake_identity_work',{p_id:job.id,p_token:job.token,p_diagnostic:identityDiagnostic});if(identityReview.rejected)return;
+        if(identityDiagnostic){identityReview=await this.rpc('eva_intake_identity_resume_proof',{p_id:job.id,p_token:job.token,p_diagnostic:identityDiagnostic});if(identityReview.rejected)return;
          if(identityReview.accepted&&identityReview.unitCode)selected.aliases=[...new Set([...selected.aliases,identityReview.unitCode])];
          if(identityReview.accepted&&identityReview.address)selected.auditedAddresses=[identityReview.address];
         }
@@ -112,9 +113,9 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
         }
         continue;
        }
-       const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))||identityReview?.accepted&&proof.unitId===selected?.id&&(identityDiagnostic?.action==='CONTINUE_JUSTIFIED'||identityReview.address&&['taxId','unit','period'].every(key=>identityDiagnostic?.fields?.find((f:any)=>f.key===key)?.status==='MATCH'))))matches.push(proof);
+       const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))||proof.unitId===selected?.id&&acceptedIdentityContinuation(identityReview,identityDiagnostic)))matches.push(proof);
       }
-      if(matches.length!==1){const fields=identityDiagnostic?.fields?.filter((f:any)=>f.status!=='MATCH');await transition('review',{note:fields?.length?'Confira '+fields.map((f:any)=>f.label+': '+(f.status==='MISMATCH'?'diferente do cadastro':'não comprovado')).join('; ')+'. A leitura e suas respostas foram preservadas.':'A leitura está disponível. Selecione o cliente, a unidade e a competência para conferir os campos do original.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});return;}
+      if(matches.length!==1){const fields=identityDiagnostic?.fields?.filter((f:any)=>f.status!=='MATCH');await transition('review',{note:fields?.length?'Confira '+fields.map((f:any)=>f.label+': '+(f.status==='MISMATCH'?'diferente do cadastro':'não comprovado')).join('; ')+'. A leitura e suas respostas foram preservadas.':'A leitura está disponível. Selecione o cliente, a unidade e a competência para conferir os campos do original.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});if(identityDiagnostic?.fingerprint)await this.rpc('eva_intake_continue_requested',{p_id:job.id,p_fingerprint:identityDiagnostic.fingerprint});return;}
       if(i.external&&matches[0].documentType!=='INVOICE_DISTRIBUTOR'){
        await transition('review',{note:'O portal aceita somente fatura da distribuidora. A nota do fornecedor deve ser conferida pela equipe do backoffice.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
       }

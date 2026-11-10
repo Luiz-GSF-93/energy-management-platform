@@ -25,4 +25,12 @@ describe('Automatic intake receipt',()=>{
  it('has no database or storage effects outside the explicit organization allowlist',async()=>{const f=fixture();expect(await f.service.list({...f.t,organizationId:'other'})).toEqual({enabled:false,rows:[]});expect(f.rpc).not.toHaveBeenCalled();await expect(f.service.upload({...f.t,organizationId:'other'},{requestId:id,consent:true},f.file)).rejects.toThrow();expect(f.upload).not.toHaveBeenCalled();});
  it('rejects a wrong portal document before reserving quota or uploading',async()=>{const f=fixture();jest.spyOn(portalGate,'assertPortalInvoiceUpload').mockRejectedValue(Error('Somente fatura da distribuidora'));await expect(f.service.upload({...f.t,role:'consulta'},{requestId:id,consent:true},f.file)).rejects.toThrow('Somente fatura');expect(f.rpc).not.toHaveBeenCalled();expect(f.upload).not.toHaveBeenCalled();});
  it('keeps supplier invoice reception in the backoffice',async()=>{const f=fixture();const gate=jest.spyOn(portalGate,'assertPortalInvoiceUpload');await f.service.upload({...f.t,role:'admin_org'},{requestId:id,consent:true},f.file);expect(gate).not.toHaveBeenCalled();expect(f.upload).toHaveBeenCalledTimes(1);});
+ it('records an explicit justified binding through the audited wrapper without trusting client tenant fields',async()=>{
+  const f=fixture(),body={customerId:'client',unitId:'unit',month:'2026-03',reason:'Operator confirmed the same installation against the original.',continueJustified:true};
+  await f.service.resolve(f.t,id,body);expect(f.rpc).toHaveBeenCalledWith('eva_intake_resolve_justified',expect.objectContaining({p_org:'org',p_actor:'client',p_role:'role',p_id:id,p_body:{customerId:body.customerId,unitId:body.unitId,month:body.month,reason:body.reason}}));
+  await expect(f.service.resolve(f.t,id,{...body,organizationId:'foreign'})).rejects.toThrow();
+  await expect(f.service.resolve(f.t,id,{...body,reason:'short'})).rejects.toThrow();
+ });
+ it('does not record a justified continuation while the feature is disabled',async()=>{const f=fixture();delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;await expect(f.service.resolve(f.t,id,{customerId:'client',unitId:'unit',month:'2026-03',reason:'Operator confirmed the same installation.',continueJustified:true})).rejects.toThrow();expect(f.rpc).not.toHaveBeenCalled();});
+
 });

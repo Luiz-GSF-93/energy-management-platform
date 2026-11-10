@@ -23,6 +23,7 @@ on:
       - 'frontend/test/ccee-estimate-proposal.cjs'
       - 'backend/src/database/migrations/20261296_eva_audited_continue.sql'
       - 'backend/src/database/migrations/20261299_eva_distributor_address_review.sql'
+      - 'backend/src/database/migrations/20261305_eva_justified_binding_resume.sql'
       - 'backend/src/database/migrations/20261300_eva_restore_original.sql'
       - 'backend/src/modules/ocr/supplier-invoice-cost-draft.ts'
       - 'backend/src/modules/ocr/invoice-identity-with-history*'
