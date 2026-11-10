@@ -20,4 +20,14 @@ describe('historical official tariff evidence boundaries',()=>{
   expect(selectAutofillLibrary(rows,unit,'2026-04',{taxTreatment:'NET'}).record).toBeNull();
   expect(selectAutofillLibrary(rows.map(r=>({...r,profile:{...r.profile,consumptionClass:'COMMERCIAL'}})),unit,'2026-03').record).toBeNull();
  });
+ it('reuses one reviewed CPFL A4 NET library across eligible companies while retaining scope and ambiguity checks',()=>{
+  const unit={organization_id:'org',distributor:'CPFL Paulista',tariff_group:'A',tariff_subgroup:'A4',tariff_modality:'GREEN',consumption_class:'COMMERCIAL'};
+  const profile={source:'Official reviewed reference',distributor:'CPFL Paulista',group:'A',subgroup:'A4',modality:'GREEN',consumptionClass:'GENERAL',taxTreatment:'NET',startDate:'2026-04-24',endDate:'2027-04-07',items:[{component:'TE',band:'OFF_PEAK',value:'271.19',measure:'BRL_MWH'}]};
+  const net={id:'net',organization_id:'org',profile},legacy={id:'legacy',organization_id:'org',profile:{...profile,taxTreatment:'UNKNOWN',consumptionClass:'COMERCIAL'}};
+  for(const consumption_class of ['COMMERCIAL','INDUSTRIAL','RURAL'])for(const month of ['2026-08','2026-09','2026-10','2027-03'])expect(selectAutofillLibrary([legacy,net],{...unit,consumption_class},month).record?.id).toBe('net');
+  expect(selectAutofillLibrary([legacy,net,{...net,id:'another-net'}],unit,'2026-09').state).toBe('AMBIGUOUS');
+  for(const patch of [{organization_id:'foreign'},{distributor:'CPFL Piratininga'},{tariff_modality:'BLUE'},{tariff_subgroup:'A3'}])expect(selectAutofillLibrary([net],{...unit,...patch},'2026-09').record).toBeNull();
+  expect(selectAutofillLibrary([net],unit,'2027-05').record).toBeNull();
+ });
+
 });

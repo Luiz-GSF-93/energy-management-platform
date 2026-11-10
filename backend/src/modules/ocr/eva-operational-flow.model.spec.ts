@@ -26,6 +26,12 @@ describe('operational closing scope and coverage',()=>{
   report.units[0].sources.cceeLocal={candidates:[{eventCode:'event',mapVersion:'v1',sourceHash:'new-source'}]};sources.financial.tables.calculation_monthly_costs[0].costs.items[0].source+=' event v1 old-source';
   applyOperationalCceeReview(report,sources);expect(report.approvalEligible).toBe(false);expect(report.financial.status).toBe('INCOMPLETE');
  });
+ it('requires reconfirmation when the latest financial event changes after a daily read',()=>{
+  const {report,sources}:any=coverage();sources.operationalFlow.costAcks=[{unitId:'unit',ack:{costId:'cost',revision:2}}];
+  report.units[0].sources={cceeLocal:{candidates:[{eventCode:'new-event',mapVersion:'MCP_V1',sourceHash:'new-hash'}]}};
+  sources.financial.tables.calculation_monthly_costs[0].costs.items[0].source+=' old-event MCP_V1 old-hash';
+  applyOperationalCceeReview(report,sources);expect(report.approvalEligible).toBe(false);expect(report.pendingActions).toEqual([expect.objectContaining({code:'CCEE_COVERAGE'})]);
+ });
  it('a previous cost revision acknowledgment cannot authorize a changed amount',()=>{const {report,sources}=coverage();sources.operationalFlow.costAcks=[{unitId:'unit',ack:{costId:'cost',revision:1}}];applyOperationalCceeReview(report,sources);expect(report.approvalEligible).toBe(false);});
  it('accepts the explicit acknowledgment only for the current unit and cost revision',()=>{const {report,sources}=coverage();sources.operationalFlow.costAcks=[{unitId:'unit',ack:{costId:'cost',revision:2}}];applyOperationalCceeReview(report,sources);expect(report.approvalEligible).toBe(true);});
  it('preserves an acknowledgment after status-only validation, but not a changed financial digest',()=>{

@@ -17,7 +17,7 @@ export function applyOperationalCceeReview(report:any,sources:any){
  for(const unit of report.units??[]){
   const rows=(sources.financial?.tables?.calculation_monthly_costs??[]).filter((r:any)=>r.consumer_unit_id===unit.id&&r.month===report.month).sort((a:any,b:any)=>b.version-a.version),cost=rows[0];
   const autoItems=cost?.costs?.items?.filter((i:any)=>i.category==='CCEE'&&String(i.source??'').includes('Política auditada de alocação automática:'))??[];if(!autoItems.length)continue;
-  const staleApi=(unit.sources?.cceeLocal?.candidates??[]).some((candidate:any)=>autoItems.some((item:any)=>item.source.includes(candidate.eventCode)&&item.source.includes(candidate.mapVersion)&&!item.source.includes(candidate.sourceHash)));
+  const staleApi=(unit.sources?.cceeLocal?.candidates??[]).some((candidate:any)=>autoItems.some((item:any)=>item.source.includes(candidate.mapVersion)&&(!item.source.includes(candidate.eventCode)||!item.source.includes(candidate.sourceHash))));
   const ack=sources.operationalFlow.costAcks?.find((r:any)=>r.unitId===unit.id)?.ack;
   const current=sources.operationalFlow.costRows?.find((r:any)=>r.unitId===unit.id&&r.id===cost.id);
   if(!staleApi&&ack?.costId===cost.id&&(ack?.revision===cost.revision||/^[a-f0-9]{64}$/.test(ack?.costHash??'')&&ack.costHash===current?.costHash))continue;

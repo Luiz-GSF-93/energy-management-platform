@@ -44,7 +44,7 @@ type Editor={requiresJustification?:boolean;billedDemand:BilledDemand;id?:string
 
 const blank=()=>Object.fromEntries(Object.keys(fields).map(k=>[k,null])) as Measurements;
 
-export default function MonthlyInputs({customerId,units,onDirty,initialContext,autofill:acceptedAutofill}:{autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
+export default function MonthlyInputs({customerId,units,onDirty,initialContext,autofill:acceptedAutofill,onSaved}:{onSaved?:()=>void;autofill?:OcrAutofill;initialContext?:CorrectionContext;customerId:string;units:Unit[];onDirty:(v:boolean)=>void}){
 
  const {hasPermission}=useAuth();const [unitId,setUnit]=useState(initialContext?.unitId||''),[year,setYear]=useState(initialContext?.month.slice(0,4)||''),[month,setMonth]=useState(initialContext?.month.slice(5,7)||'');
 
@@ -96,7 +96,7 @@ export default function MonthlyInputs({customerId,units,onDirty,initialContext,a
 
 
 
- async function validate(){if(!confirm||busy)return;setBusy(true);setError('');setMessage('');try{const row=await apiRequest<Row>('/api/v1/calculation-monthly-inputs/'+confirm.id+'/validate',{method:'POST',body:{revision:confirm.revision}});setRows(old=>(old||[]).map(r=>r.id===row.id?row:r));setConfirm(null);setMessage('Versão validada e preservada. Isso valida as medições informadas; não publica uma apuração financeira.');}catch(e){setError(e instanceof Error?e.message:'Não foi possível validar.');}finally{setBusy(false);}}
+ async function validate(){if(!confirm||busy)return;setBusy(true);setError('');setMessage('');try{const row=await apiRequest<Row>('/api/v1/calculation-monthly-inputs/'+confirm.id+'/validate',{method:'POST',body:{revision:confirm.revision}});setRows(old=>(old||[]).map(r=>r.id===row.id?row:r));setConfirm(null);setMessage('Versão validada e preservada. Isso valida as medições informadas; não publica uma apuração financeira.');onSaved?.();}catch(e){setError(e instanceof Error?e.message:'Não foi possível validar.');}finally{setBusy(false);}}
 
  async function audit(id:string){setBusy(true);setError('');try{setHistory({id,events:await apiRequest<Event[]>('/api/v1/calculation-monthly-inputs/'+id+'/events')});}catch(e){setError(e instanceof Error?e.message:'Histórico indisponível.');}finally{setBusy(false);}}
 
