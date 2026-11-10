@@ -1,3 +1,4 @@
+import {invoiceReadingContext} from './invoice-reading-context';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {createHash} from 'node:crypto';
 import {ocrDraftRole,ocrDraftPermission} from './ocr-draft-access';
@@ -96,6 +97,7 @@ export class OcrAssistantService {
   const areas=[['distributor','Distribuidora e unidade',['Unidade']],['supply','Contrato e fornecedor',['Fornecedor','Preços','Volumes']],['management','Honorários vigentes',['Honorários']],['parameters','Tarifas e parâmetros',['Parâmetros','Tributos','Bases tributárias','Bases operacionais']],['monthly','Dados mensais',['Medições']],['costs','Custos mensais',['Custos mensais','Custos adicionais']]] as const;
   progress('ready');
   return {token,basis,fieldTasks,prefilled,canValidate:ocrDraftRole(t)&&t.permissions?.includes(P.ENERGIA_OCR_PROCESS),documentId:document,sourceHash:source.doc.file_hash,customerId:diagnosis.unit.customerId,unitId:diagnosis.unit.id,unitName:diagnosis.unit.name,month,checkedAt:new Date().toISOString(),
+   sourceReading:invoiceReadingContext(source.raw,source.doc),
    extractionEngine:source.raw?.xml?'Leitor XML determinístico':'Azure Document Intelligence',calculationEngine:'Motor ACL Ã— ACR existente',confidence,
    values:reviews.fields.map(f=>({key:f.key,label:f.label,value:f.decimal,unit:f.unit,state:f.state,sources:f.sources,review:f.history[0]?.sourceHash===f.sourceHash?f.history[0]:null})),
    comparisons,operations:previews.map(p=>({...p,canPropose:ocrDraftRole(t)&&ocrDraftPermission(t)&&canPropose(p),evidenceHash:ocrReviewDigest({values:p.values??null,candidates:p.candidates??null,candidate:p.candidate??null})})),counts:diagnosis.counts,findings:diagnosis.findings,
