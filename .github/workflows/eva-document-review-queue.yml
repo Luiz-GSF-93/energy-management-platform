@@ -6,6 +6,7 @@ on:
       - 'backend/src/modules/ocr/eva-document-review*'
       - 'backend/src/modules/operations/operations.service*'
       - 'backend/src/database/migrations/20261302_eva_document_review_queue.sql'
+      - 'backend/src/database/migrations/20261303_eva_published_review_priority.sql'
       - 'backend/test/eva-document-review-queue.cjs'
       - 'frontend/app/components/EvaDocumentReviewQueue.tsx'
       - 'frontend/app/backoffice/contracts/EvaReviewHandoff.tsx'
