@@ -12,6 +12,8 @@ on:
       - 'frontend/app/components/EvaDocumentReviewQueue.tsx'
       - 'frontend/app/backoffice/contracts/eva-guided-questions.ts'
       - 'frontend/app/backoffice/contracts/EvaGuidedReview.tsx'
+      - 'frontend/app/backoffice/contracts/CommercialTerms.tsx'
+      - 'frontend/app/backoffice/contracts/ManagementAllocation.tsx'
       - 'frontend/test/eva-guided-review.cjs'
       - 'frontend/app/backoffice/contracts/EvaReviewHandoff.tsx'
       - 'frontend/app/backoffice/contracts/AssistedClosingReview.tsx'
