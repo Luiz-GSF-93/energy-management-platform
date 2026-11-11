@@ -4,7 +4,7 @@ import {acceptedIdentityContinuation} from './identity-continuation';
 import {SUPPLIER_COST_DRAFT_VERSION} from '../ocr/supplier-invoice-cost-draft';
 import {xmlIntakeDiagnostic} from './xml-intake-context';
 import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
-import {readFiscalXml,xmlUnitMatch} from '../ocr/fiscal-xml';
+import {readFiscalXml,xmlUnitMatch,fiscalSupplyMonths} from '../ocr/fiscal-xml';
 import {captureInvoiceAssessment} from '../ocr/invoice-assessment';
 import {AneelTariffFlagsService} from '../ocr/aneel-tariff-flags.service';
 import {supplementalTariffFlagReference} from '../ocr/supplemental-tariff-flag-reference';
@@ -107,7 +107,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
         }
        }
        if(xml){
-        const month=xml.fiscal.months.length===1?xml.fiscal.months[0]:null;
+        const supplyMonths=fiscalSupplyMonths(xml.fiscal),month=supplyMonths.length===1?supplyMonths[0]:null;
         if(month&&(!i.hints?.month||i.hints.month===month))for(const unit of units){
          if(i.hints?.unitId&&i.hints.unitId!==unit.id)continue;
          const proof=xmlUnitMatch(xml.fiscal,customer,unit,month);

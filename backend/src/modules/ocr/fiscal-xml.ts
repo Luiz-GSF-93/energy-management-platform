@@ -62,13 +62,23 @@ export function readFiscalXml(bytes:Buffer){
  const fields={CustomerName:field(str(dest.xNome)),CustomerTaxId:field(str(dest.CNPJ)),ServiceAddress:field(recipientAddress),VendorName:field(str(emit.xNome)),VendorTaxId:field(str(emit.CNPJ)),InvoiceId:field(str(ide.nNF)),InvoiceTotal:field(amount)};
  const sourceHash=createHash('sha256').update(bytes).digest('hex');
  const fiscal={version:FISCAL_XML_VERSION,model,kind:model==='66'?'INVOICE_DISTRIBUTOR':'INVOICE_SUPPLIER',sourceHash,issuer:{taxId:str(emit.CNPJ),name:str(emit.xNome)},recipient:{taxId:str(dest.CNPJ),name:str(dest.xNome),address:recipientAddress},...(deliveryAddress?{deliveryAddress}:{}),unitCodes:[...units],months:[...months],amount:money(amount)!,key,rows,extra,protocolStatus:declaredStatus||null,signatureVerified:false,authorizationVerified:false};
- return {fiscal,raw:{content,contentUnit:'XML_FIELDS',xml:fiscal,pages:[{pageNumber:1,lines:content.split('\n').map(content=>({content}))}],documents:[{fields}],keyValuePairs:[],tables:[]}};
+ // Reinterpretation reads the original nodes without replacing a preserved raw extraction.
+ const sourcePrices=items.map((d:any)=>{const p=model==='55'?node(d.prod):node(node(node(d).detItem).prod);return decimal(p.vUnCom??p.vItem,12);});
+ return {fiscal,sourcePrices,raw:{content,contentUnit:'XML_FIELDS',xml:fiscal,pages:[{pageNumber:1,lines:content.split('\n').map(content=>({content}))}],documents:[{fields}],keyValuePairs:[],tables:[]}};
+}
+
+/** Explicit supply labels only: issue/payment dates are never competence. The
+ * stored fiscal/raw object remains unchanged so preserved extractions replay. */
+export function fiscalSupplyMonths(fiscal:{months:string[];extra:string;rows:{description:string}[]}){
+ const months=new Set(fiscal.months),text=[fiscal.extra,...fiscal.rows.map(r=>r.description)].join('\n').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+ for(const m of text.matchAll(/PERIODO\s+DE\s+(?:SUPRIMENTO\s+)?FORNECIMENTO\s*[:.]?\s*(0?[1-9]|1[0-2])(?:\s*[/.-]\s*|\s+)(20\d{2})\b/g))months.add(m[2]+'-'+m[1].padStart(2,'0'));
+ return [...months];
 }
 
 export function xmlUnitMatch(fiscal:ReturnType<typeof readFiscalXml>['fiscal'],customer:{document:string|null},unit:{consumer_unit_number:string|null;address:string|null;aliases?:string[];auditedAddresses?:string[]},month:string|null){
  const address=compact(unit.address??''),addressMatch=address.length>=12&&compact(fiscal.recipient.address)===address;
  const units=[unit.consumer_unit_number??'',...unit.aliases??[]].map(compact),unitMatch=fiscal.unitCodes.length>0&&fiscal.unitCodes.every(v=>units.includes(compact(v)));
- const period=fiscal.months.length===1&&fiscal.months[0]===month;
+ const months=fiscalSupplyMonths(fiscal),period=months.length===1&&months[0]===month;
  if(fiscal.kind==='INVOICE_SUPPLIER'){
   const proof=supplierUnitIdentity(customer.document??'',fiscal.recipient.taxId,{unitNumber:unit.consumer_unit_number??'',address:unit.address??'',aliases:unit.aliases,auditedAddresses:unit.auditedAddresses},fiscal.unitCodes,[fiscal.recipient.address,fiscal.deliveryAddress??''],period);
   return {matched:proof.matched,taxIdentity:proof.taxIdentity,addressMatch:proof.addressMatch,unitMatch:proof.unitMatch,period};
@@ -80,9 +90,11 @@ export function xmlUnitMatch(fiscal:ReturnType<typeof readFiscalXml>['fiscal'],c
 export function xmlSupplierProposal(xml:ReturnType<typeof readFiscalXml>,month:string,taxId:string,source:{documentId:string;fileHash:string},unit:{unitNumber:string;address:string;aliases?:string[];auditedAddresses?:string[]}){
  const f=xml.fiscal,proof=xmlUnitMatch(f,{document:taxId},{consumer_unit_number:unit.unitNumber,address:unit.address,aliases:unit.aliases,auditedAddresses:unit.auditedAddresses},month);
  if(f.kind!=='INVOICE_SUPPLIER'||source.fileHash!==f.sourceHash||!proof.matched||f.rows.length!==1)return null;
- const row=f.rows[0];if(!/ENERGIA|CONSUMO CONTRATADO/i.test(row.description)||row.unit.toUpperCase()!=='MWH'||!row.quantity||!row.price||!row.amount)return null;
- if(money(row.amount)!==f.amount||scaled(row.quantity)*scaled(row.price)!==scaled(row.amount)*100000000n)return null;
+ const row=f.rows[0],price=xml.sourcePrices?.[0]??row.price;if(!/ENERGIA|CONSUMO CONTRATADO/i.test(row.description)||row.unit.toUpperCase()!=='MWH'||!row.quantity||!price||!row.amount)return null;
+ const precision=(v:string)=>{const [whole,decimal='']=v.split('.');return BigInt(whole)*10n**12n+BigInt(decimal.padEnd(12,'0'));};
+ const product=precision(row.quantity)*precision(price),cent=10n**22n;
+ if(money(row.amount)!==f.amount||(product+cent/2n)/cent!==precision(row.amount)/10n**10n)return null;
  // Additional freight/taxes/discounts not represented in this single energy row
  // prevent total reconciliation above; no exemption or net tax is inferred.
- return {format:'supplier-invoice-proposal-1',month,quantityMwh:row.quantity,pricePerMwh:row.price,amount:f.amount,...source,nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment:'REVIEW',taxEvidence:null,fiscalIdentity:{kind:'NFE_ACCESS_KEY',key:f.key},taxIdentity:proof.taxIdentity,observations:['Extração determinística do XML; valores e protocolo declarados pelo arquivo. Assinatura e situação fiscal não foram consultadas. Não comprova pagamento.'],xmlVersion:FISCAL_XML_VERSION};
+ return {format:'supplier-invoice-proposal-1',month,quantityMwh:row.quantity,pricePerMwh:price,amount:f.amount,...source,nature:'DOCUMENT_PROPOSAL',reviewRequired:true,financialApproval:false,taxTreatment:'REVIEW',taxEvidence:null,fiscalIdentity:{kind:'NFE_ACCESS_KEY',key:f.key},taxIdentity:proof.taxIdentity,observations:['Extração determinística do XML; valores e protocolo declarados pelo arquivo. Assinatura e situação fiscal não foram consultadas. Não comprova pagamento.'],xmlVersion:FISCAL_XML_VERSION};
 }
