@@ -209,5 +209,13 @@ ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[punctuati
 ok((await db.query("SELECT actor_id FROM eva_intake_identity_reviews WHERE intake_id=$1 AND kind='ADDRESS'",[punctuation.target])).rows[0].actor_id===actor);
 for(const found of [[],['RDV SP328 3505','RDV SP328 3506'],[''],[null]])ok((await db.query('SELECT eva_identity_single_address($1) v',[JSON.stringify(found)])).rows[0].v===false);
 await db.exec('SET ROLE authenticated');await deny(()=>db.query('SELECT eva_identity_single_address($1)',[JSON.stringify(['RDV SP328 3505'])]));await db.exec('RESET ROLE');
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261312_eva_supplier_optional_uc_confirmation.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261312_eva_supplier_optional_uc_confirmation.sql','utf8'));
+const optionalReview=async(n,change=()=>{})=>{
+ const c=await queuedResume(n,'ADDRESS'),dg={...c.dg,fingerprint:require('node:crypto').createHash('sha256').update(c.fileHash+'matching-address').digest('hex'),fields:c.dg.fields.map(f=>f.key==='address'?{...f,status:'MATCH',found:[c.dg.registration.address]}:f.key==='unit'?{...f,found:[]}:f)};change(dg);
+ await db.query("UPDATE eva_automatic_intakes SET lease_token=$2,lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[c.target,token]);await db.query('SELECT eva_intake_identity_work($1,$2,$3)',[c.target,token,JSON.stringify(dg)]);await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[c.target]);return {c,dg};
+};
+const optionalUc=await optionalReview(2200);ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[optionalUc.c.target,optionalUc.dg.fingerprint])).rows[0].data.continued===true);
+for(const [n,change] of [[2201,d=>{d.documentType='INVOICE_DISTRIBUTOR'}],[2202,d=>{Object.assign(d.fields[2],{status:'MISMATCH',found:['9999999']})}],[2203,d=>{d.fields[0].status='MISMATCH'}],[2204,d=>{d.fields[3].status='MISMATCH'}]]){const x=await optionalReview(n,change);ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[x.c.target,x.dg.fingerprint])).rows[0].data.continued===false);}
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

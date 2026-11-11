@@ -30,3 +30,5 @@ describe('accepted identity decisions resume the original reading',()=>{
 });
 
  it('offers continuation for duplicate highway lines with punctuation differences, keeping distinct installations blocked',()=>{const r=structuredClone(review);r.diagnostic.documentType='INVOICE_DISTRIBUTOR';r.diagnostic.fields[2].status='MATCH';r.diagnostic.fields[1]={key:'address',status:'INCONCLUSIVE',found:['RDV JOSE FREGONESI SP328 3505','RDV JOSE FREGONESI SP328, 3505']};expect(identityContinuation(r,'operacional')).toBe('ADDRESS');r.diagnostic.fields[1].found!.push('RDV JOSE FREGONESI SP328 3506');expect(identityContinuation(r,'operacional')).toBeNull();});
+
+it('allows explicit identity confirmation of a supplier NF identified by CNPJ and address without requiring a UC',()=>{const r=structuredClone(review);r.diagnostic.fields[1].status='MATCH';Object.assign(r.diagnostic.fields[2],{found:[],required:false});expect(identityContinuation(r,'operacional')).toBe('ADDRESS');r.diagnostic.documentType='INVOICE_DISTRIBUTOR';expect(identityContinuation(r,'operacional')).toBeNull();});

@@ -59,6 +59,14 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
    const blocks=[...t.matchAll(/\bCNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\s*\/\s*\d{4}-?\d{2})\s+([0-9][0-9.-]{4,25})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s*\/\s*(20\d{2})\b/g)]
     .filter(m=>(compact(m[1])===tax||companyTaxIdentity(tax,[compact(m[1])],{unit:true,address:true,period:true}).relation==='SAME_ROOT')&&name.length>=8&&nameMatches(t.slice(Math.max(0,m.index!-350),m.index)));
    if(blocks.length){recipientTaxes=blocks.map(m=>compact(m[1]));checks.taxId=recipientTaxes.every(v=>v===tax)?'MATCH':'MISMATCH';checks.unit=uc&&blocks.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';checks.period=r.month&&blocks.every(m=>m[4]+'-'+String(monthNames.indexOf(m[3])+1).padStart(2,'0')===r.month)?'MATCH':'MISMATCH';}
+   // The complete CPFL recipient band can exceed the legacy 220-character
+   // proximity window. Bind the explicitly labelled CNPJ to the named recipient,
+   // before the fiscal number; never take the issuer or an arbitrary nearby ID.
+   const header=t.split(/NOTA\s+FISCAL\s+N|DESCRICAO\s+DA\s+OPERACAO/)[0].split('\n'),recipientStart=header.findIndex(line=>nameMatches(line));
+   const band=recipientStart>=0?header.slice(recipientStart).join('\n'):'';
+   const declared=[...new Set([...band.matchAll(/(?:^|\n)\s*INSC\.?\s*EST\s*:?[^\n]{0,80}?\bCNPJ\s*:\s*([0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2})\b/g)].map(m=>compact(m[1])))];
+   if(declared.length){recipientTaxes=declared;checks.taxId=companyTaxIdentity(tax,declared,{unit:false,address:false,period:false}).relation==='EXACT'?'MATCH':'MISMATCH';}
+
   }
 
  }
