@@ -1,4 +1,4 @@
-import {readFiscalXml,xmlUnitMatch,xmlSupplierProposal} from './fiscal-xml';
+import {readFiscalXml,xmlUnitMatch,xmlSupplierProposal,fiscalSupplyMonths} from './fiscal-xml';
 import {inspectInvoiceUpload,intakePath} from '../portal-workspace/automatic-intake.service';
 
 // Synthetic fiscal fields, never a real invoice or SEFAZ attestation.
@@ -23,4 +23,10 @@ describe('Bounded fiscal XML intake',()=>{
  it.each(['<!DOCTYPE NFe [<!ENTITY x SYSTEM "file:///secret">]>','<?xml-stylesheet href="https://invalid.test/x"?>'])('rejects entities and active processing instructions',prefix=>expect(()=>readFiscalXml(Buffer.concat([Buffer.from(prefix),invoice()]))).toThrow());
  it('rejects wrong namespaces, duplicate recipient blocks, invalid check digit and oversized input',()=>{for(const text of [invoice().toString().replace('http://www.portalfiscal.inf.br/nfe','https://invalid.test'),invoice().toString().replace('</dest>','</dest><dest><CNPJ>11444777000161</CNPJ></dest>'),invoice().toString().replace(key('55'),key('55').slice(0,43)+(Number(key('55')[43])+1)%10)])expect(()=>readFiscalXml(Buffer.from(text))).toThrow();expect(()=>readFiscalXml(Buffer.alloc(2097153))).toThrow();});
  it('accepts browser text/xml and keeps exact XML storage extension',async()=>{const buffer=invoice();expect(await inspectInvoiceUpload({buffer,size:buffer.length,mimetype:'text/xml',originalname:'nota.xml'})).toMatchObject({mime:'application/xml',extension:'xml'});expect(intakePath('org','receipt','application/xml')).toBe('org/eva-intake/receipt.xml');});
+});
+
+describe('preserved XML supply labels and unit-price precision',()=>{
+ it('reads an explicit supply period without changing the preserved raw document',()=>{const x=readFiscalXml(invoice('55','PERIODO DE SUPRIMENTO FORNECIMENTO: 10 2026; UC: 1234567'));expect(x.raw.xml.months).toEqual([]);expect(fiscalSupplyMonths(x.fiscal)).toEqual(['2026-10']);expect(xmlUnitMatch(x.fiscal,{document:'11444777000161'},{consumer_unit_number:'1234567',address:'Rua Exemplo 123 Centro'},'2026-10').matched).toBe(true);expect(fiscalSupplyMonths({...x.fiscal,months:['2026-09']})).toHaveLength(2);});
+ it('uses source unit-price precision and reconciles the fiscal amount rounded to cents',()=>{const bytes=Buffer.from(invoice('55','PERIODO DE SUPRIMENTO FORNECIMENTO: 10 2026; UC: 1234567').toString().replace('10.0000','80.9710').replace('20.00</vUnCom>','105.2900000000</vUnCom>').replace(/200\.00/g,'8525.44'));const x=readFiscalXml(bytes);expect(x.raw.xml.rows[0].price).toBeNull();const proposal=()=>xmlSupplierProposal(x,'2026-10','11444777000161',{documentId:'source',fileHash:x.fiscal.sourceHash},{unitNumber:'1234567',address:'Rua Exemplo 123 Centro'});expect(proposal()).toMatchObject({quantityMwh:'80.9710',pricePerMwh:'105.2900000000',amount:'8525.44',financialApproval:false});x.sourcePrices[0]='105.3000000000';expect(proposal()).toBeNull();});
+ it('cannot infer competence from issue or payment dates',()=>{const x=readFiscalXml(invoice('55','EMISSAO: 10 2026; PAGAMENTO: 10/2026; UC: 1234567'));expect(fiscalSupplyMonths(x.fiscal)).toEqual([]);});
 });
