@@ -1,5 +1,18 @@
 name: EVA worker capacity and process isolation
 on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/common/workers/**'
+      - 'backend/src/main*.ts'
+      - 'backend/src/eva-worker.module.ts'
+      - 'backend/test/eva-worker-bootstrap.cjs'
+      - 'backend/src/modules/**/*worker*'
+      - 'backend/src/modules/portal-workspace/automatic-intake.service.ts'
+      - 'backend/src/modules/audit/**'
+      - 'backend/src/database/migrations/20261308_audit_alert_count.sql'
+      - '.github/workflows/eva-worker-capacity.yml'
   pull_request:
     paths:
       - 'backend/src/common/workers/**'
