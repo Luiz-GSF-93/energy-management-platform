@@ -63,3 +63,13 @@ describe('CPFL installation header serialized by OCR with source preparation ena
  it.each([['Leitura anterior','Outra informação'],['EMPRESA EXEMPLO LTDA\n76543210','OUTRA EMPRESA LTDA\n76543210'],['31/03/2026','31/02/2026'],['\n30','\n29']])('rejects an unrelated or inconsistent row: %s',(a,b)=>expect(invoiceIdentityText(bill.replace(a,b),r).state).not.toBe('MATCH'));
  it('requires the authorized historical correspondence and keeps another explicit UC mismatch',()=>{expect(invoiceIdentityText(bill,{...r,auditedUnitNumbers:[]}).state).toBe('MISMATCH');expect(invoiceIdentityText(bill+'\nUC: 1111111111',r).state).toBe('MISMATCH');});
 });
+
+
+describe('CPFL explicitly labelled recipient tax band',()=>{
+ const r={customerName:'CLIENTE SINTETICO DE NOME COMPRIDO LTDA',taxId:'11444777000161',unitNumber:'1234567',address:'RUA EXEMPLO 123 CENTRO',month:'2026-10'};
+ const bill='COMPANHIA PAULISTA DE FORCA E LUZ\nCNPJ DO EMITENTE 11.222.333/0001-81\n'+r.customerName+'\nUC 1234567\nRUA EXEMPLO 123 CENTRO\n'+('Dados da leitura e do medidor\n'.repeat(20))+'INSC.EST: 123456 / CNPJ: 11.444.777/0001-61\nNOTA FISCAL Nº 123\nReferencia OUT/2026';
+ function read(text:string,reg=r){const old=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;try{process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';return invoiceIdentityText(text,reg);}finally{if(old===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=old;}}
+ it('accepts the recipient CNPJ even when the complete named band exceeds 220 characters',()=>expect(read(bill)).toMatchObject({state:'MATCH',checks:{taxId:'MATCH',unit:'MATCH',address:'MATCH',period:'MATCH'}}));
+ it('does not use the issuer CNPJ or unlabelled distant text as the recipient',()=>{expect(read(bill.replace('11.444.777/0001-61','11.222.333/0001-81')).checks.taxId).toBe('MISMATCH');expect(read(bill.replace('INSC.EST:','Informacao:')).checks.taxId).toBe('REVIEW');});
+ it('preserves conflicting unit, reference and recipient checks',()=>{expect(read(bill.replace('UC 1234567','UC 9999999')).state).toBe('MISMATCH');expect(read(bill.replace('OUT/2026','NOV/2026')).state).toBe('MISMATCH');expect(read(bill.replace('NOTA FISCAL','INSC.EST: 321 / CNPJ: 11.222.333/0001-81\nNOTA FISCAL')).state).toBe('MISMATCH');});
+});
