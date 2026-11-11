@@ -18,3 +18,5 @@ O worker importa somente o módulo OCR e os três processadores de envios; não 
 Ativação: implantar primeiro o worker; verificar heartbeat/logs e progresso real de uma tarefa autorizada; só então mudar a API para API. Rollback: devolver API para COMBINED antes de parar o worker. Não apagar filas nem documentos.
 
 Separar o processo não aumenta a capacidade do banco. Medir consultas e recursos do Supabase após a correção; não prometer eliminação de todos os limites nem contratar aumento de plano automaticamente. Referência de configuração inicial a aprovar: uma réplica, limite de 1 GB RAM e 1 vCPU. Custo por uso a conferir no Railway antes de ativar.
+
+A referência privada `CALCULATION_AUTOFILL_ENABLED=${{energy-management-platform.CALCULATION_AUTOFILL_ENABLED}}` é obrigatória quando `EVA_AUTOMATIC_INTAKE_ENABLED=true`. O bootstrap valida essa dependência antes de reivindicar trabalhos. Uma configuração incompleta deve falhar na implantação, preservando a réplica anterior, em vez de arquivar faturas e interromper a preparação financeira. As flags de licença, contrato, fontes, CCEE e aprovação continuam independentes.
