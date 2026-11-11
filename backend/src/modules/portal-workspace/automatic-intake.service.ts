@@ -83,7 +83,7 @@ export class AutomaticIntakeService{
  }
  async identityDecision(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).filter(k=>k!=='continuation').sort().join(',')!=='decision,fingerprint,reason'||body.continuation!==undefined&&!['UC','ADDRESS'].includes(body.continuation)||!['CONTINUE','STOP'].includes(body.decision)||!/^[a-f0-9]{64}$/.test(body.fingerprint)||typeof body.reason!=='string'||body.reason.trim().length<20||body.reason.length>1000)throw new BadRequestException('Confirme a decisão e justifique com 20 a 1000 caracteres.');
-  if(body.continuation==='ADDRESS'&&(t.role!=='admin_org'||body.decision!=='CONTINUE'))throw new ForbiddenException('A confirmação de endereço exige Administrador da organização.');
+  if(body.continuation==='ADDRESS'&&(!['admin_org','gestor','operacional'].includes(t.role)||body.decision!=='CONTINUE'))throw new ForbiddenException('A confirmação de endereço exige acesso interno autorizado aos documentos.');
   return this.identityAction(t,body.continuation==='ADDRESS'?'address':'decide',id,{decision:body.decision,fingerprint:body.fingerprint,reason:body.reason.trim()});
  }
  async identityJustifications(t:TenantContext,query:any){

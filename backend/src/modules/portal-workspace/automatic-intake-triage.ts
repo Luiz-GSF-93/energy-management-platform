@@ -24,7 +24,7 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  const tax=compact(c.document),addressMatch=invoiceAddressMatches(recipient,u.address);
  const addressLines=recipient.split('\n').map(s=>s.trim()).filter(s=>/^(?:RUA|R\.|AVENIDA|AV\.?\s|RDV\s|RODOVIA\s|ESTRADA\s|CRT\s)/.test(norm(s))&&/(?:\d|S\s*\/\s*N)/.test(s));
  // Address mismatch requires an actual, unique printed street. Never use labels alone.
- const addresses=addressMatch?[u.address]:[...new Set(addressLines)];
+ const addresses=addressMatch?[u.address]:[...new Map(addressLines.map(line=>[compact(line),line])).values()];
  const codes=[...t.matchAll(/(?:NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|UNIDADE\s+CONSUMIDORA|\bUC\b|\bINSTALACAO)\s*(?:N[º°.]?|:)?\s*([0-9][0-9.-]{4,30})\b/g)].map(m=>compact(m[1]));
  const uc=[...new Set(codes)],accepted=new Set([u.consumer_unit_number,...u.aliases??[]].map(compact)),unknown=uc.filter(v=>!accepted.has(v));
  const months=intakeMonthCandidates(text),proof=invoiceIdentityText(text,{customerName:c.company_name,taxId:c.document,unitNumber:u.consumer_unit_number,address:u.address,month,auditedUnitNumbers:u.aliases});
