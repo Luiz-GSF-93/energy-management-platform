@@ -3,11 +3,13 @@ export function identityContinuation(review:any,role:string):'UC'|'ADDRESS'|null
  const d=review?.diagnostic;
  if(d?.action==='CONTINUE_JUSTIFIED')return 'UC';
  const fields=d?.fields;
- if(role!=='admin_org'||!['INVOICE_SUPPLIER','INVOICE_DISTRIBUTOR'].includes(d?.documentType)||!Array.isArray(fields)||fields.length!==4)return null;
+ if(!['admin_org','gestor','operacional'].includes(role)||!['INVOICE_SUPPLIER','INVOICE_DISTRIBUTOR'].includes(d?.documentType)||!Array.isArray(fields)||fields.length!==4)return null;
  const field=(key:string)=>fields.find((f:any)=>f.key===key);
  const address=field('address');
+ const addresses=Array.isArray(address?.found)?address.found:[];
+ const unique=new Set(addresses.map((v:unknown)=>typeof v==='string'?v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''):''));
  if(d.documentType==='INVOICE_DISTRIBUTOR'&&field('unit')?.status!=='MATCH')return null;
- return field('taxId')?.status==='MATCH'&&field('period')?.status==='MATCH'&&field('unit')?.status!=='MISMATCH'&&address?.status==='MISMATCH'&&address.found?.length===1&&typeof address.found[0]==='string'&&address.found[0].length>=12?'ADDRESS':null;
+ return field('taxId')?.status==='MATCH'&&field('period')?.status==='MATCH'&&field('unit')?.status!=='MISMATCH'&&['MISMATCH','INCONCLUSIVE'].includes(address?.status)&&unique.size===1&&!unique.has('')&&typeof addresses[0]==='string'&&addresses[0].length>=12?'ADDRESS':null;
 }
 
 /** An accepted source-bound decision resolves identity confidence only; amounts

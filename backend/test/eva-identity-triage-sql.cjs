@@ -197,5 +197,17 @@ await db.query("SELECT eva_intake_action('org',$1,'manager',false,'resolve',$2,$
 await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED' WHERE id=$1",[revokedIntent.target]);
 ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[revokedIntent.target,revokedIntent.fileHash])).rows[0].data.continued===false);
 for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await deny(()=>db.query('SELECT eva_intake_continue_requested($1,$2)',[revokedIntent.target,revokedIntent.fileHash]));await db.exec('RESET ROLE');}
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261309_eva_internal_address_continuation.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261309_eva_internal_address_continuation.sql','utf8'));
+const punctuation=await queuedResume(2100,'ADDRESS');
+const repeated={...punctuation.dg,documentType:'INVOICE_DISTRIBUTOR',fields:punctuation.dg.fields.map(f=>f.key==='address'?{...f,status:'INCONCLUSIVE',found:['RDV JOSE FREGONESI SP328 3505','RDV JOSE FREGONESI SP328, 3505']}:f.key==='unit'?{...f,status:'MATCH'}:f)};
+await db.query("SELECT eva_intake_resolve_justified('org',$1,'manager',false,$2,$3)",[actor,punctuation.target,JSON.stringify(punctuation.binding)]);
+await db.query("UPDATE eva_automatic_intakes SET lease_token=$2,lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[punctuation.target,token]);
+await db.query('SELECT eva_intake_identity_work($1,$2,$3)',[punctuation.target,token,JSON.stringify(repeated)]);
+await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[punctuation.target]);
+ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[punctuation.target,punctuation.fileHash])).rows[0].data.continued===true);
+ok((await db.query("SELECT actor_id FROM eva_intake_identity_reviews WHERE intake_id=$1 AND kind='ADDRESS'",[punctuation.target])).rows[0].actor_id===actor);
+for(const found of [[],['RDV SP328 3505','RDV SP328 3506'],[''],[null]])ok((await db.query('SELECT eva_identity_single_address($1) v',[JSON.stringify(found)])).rows[0].v===false);
+await db.exec('SET ROLE authenticated');await deny(()=>db.query('SELECT eva_identity_single_address($1)',[JSON.stringify(['RDV SP328 3505'])]));await db.exec('RESET ROLE');
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});
