@@ -212,7 +212,7 @@ await db.exec('SET ROLE authenticated');await deny(()=>db.query('SELECT eva_iden
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261312_eva_supplier_optional_uc_confirmation.sql','utf8'));
 await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261312_eva_supplier_optional_uc_confirmation.sql','utf8'));
 const optionalReview=async(n,change=()=>{})=>{
- const c=await queuedResume(n,'ADDRESS'),dg={...c.dg,fingerprint:require('node:crypto').createHash('sha256').update(c.fileHash+'matching-address').digest('hex'),fields:c.dg.fields.map(f=>f.key==='address'?{...f,status:'MATCH',found:[c.dg.registration.address]}:f.key==='unit'?{...f,required:false,found:[]}:f)};change(dg);
+ const c=await queuedResume(n,'ADDRESS'),dg={...c.dg,fingerprint:require('node:crypto').createHash('sha256').update(c.fileHash+'matching-address').digest('hex'),fields:c.dg.fields.map(f=>f.key==='address'?{...f,status:'MATCH',found:[c.dg.registration.address]}:f.key==='unit'?{...f,found:[]}:f)};change(dg);
  await db.query("UPDATE eva_automatic_intakes SET lease_token=$2,lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[c.target,token]);await db.query('SELECT eva_intake_identity_work($1,$2,$3)',[c.target,token,JSON.stringify(dg)]);await db.query("UPDATE eva_automatic_intakes SET state='REVIEW_REQUIRED',lease_token=NULL,lease_until=NULL WHERE id=$1",[c.target]);return {c,dg};
 };
 const optionalUc=await optionalReview(2200);ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[optionalUc.c.target,optionalUc.dg.fingerprint])).rows[0].data.continued===true);
