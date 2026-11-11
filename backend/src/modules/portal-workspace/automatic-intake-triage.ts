@@ -15,8 +15,12 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  let recipient=supplier?supplierRecipientText(text):'';
  if(!supplier){
   // CPFL's recipient strip is distinct from issuer and bank details.
-  const before=t.split(/NOTA FISCAL N|DESCRICAO DA OPERACAO/)[0],name=norm(c.company_name);
-  const start=before.indexOf(name);recipient=start>=0?before.slice(start):before;
+  const first=norm((pages.find(p=>p.page===1)??pages[0]).text),before=first.split(/NOTA\s+FISCAL\s+N|DESCRICAO\s+DA\s+OPERACAO/)[0];
+  const lines=before.split('\n'),name=compact(c.company_name),start=lines.findIndex(line=>name.length>=8&&compact(line).includes(name));
+  // Subsequent pages repeat the issuer header. They are not a second recipient
+  // address. Missing recipient identification must not fall back to the issuer.
+  const taxLine=lines.findIndex(line=>/INSC\.?\s*EST[^\n]*?CNPJ\s*:/.test(line)&&compact(line).includes(compact(c.document)));
+  recipient=start>=0?lines.slice(start).join('\n'):taxLine>=0?lines.slice(Math.max(0,taxLine-12),taxLine+1).join('\n'):'';
  }
  const ids=[...recipient.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].map(m=>compact(m[0]));
  const explicitTax=!supplier?[...t.matchAll(/INSC\.?\s*EST[^\n]*?CNPJ\s*:\s*([0-9A-Z./-]+)/g)].map(m=>compact(m[1])):[];
