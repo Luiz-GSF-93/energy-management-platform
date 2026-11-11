@@ -1,5 +1,5 @@
 import {memberPermissions} from '../../common/services/member-permissions';
-import { Injectable, BadRequestException, UnauthorizedException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, ForbiddenException, InternalServerErrorException, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../services/supabase.service';
 import { AuditService } from '../../common/services/audit.service';
@@ -44,9 +44,16 @@ export class AuthService {
       .auth.signInWithPassword({
         email,
         password,
+      }).catch(() => {
+        this.logger.warn('AUTH_PROVIDER_UNAVAILABLE');
+        throw new ServiceUnavailableException('Serviço de acesso temporariamente indisponível. Tente novamente em instantes.');
       });
 
-    if (error) throw new UnauthorizedException('Credenciais inválidas');
+    if (error && error.status === 400) throw new UnauthorizedException('Credenciais inválidas');
+    if (error || !data?.session || !data?.user) {
+      this.logger.warn('AUTH_PROVIDER_UNAVAILABLE');
+      throw new ServiceUnavailableException('Serviço de acesso temporariamente indisponível. Tente novamente em instantes.');
+    }
 
     // Retorna o JWT do Supabase (já assinado e válido)
     return {

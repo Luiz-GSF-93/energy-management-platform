@@ -32,7 +32,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --silent src/modules/admin/users src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.service.accept-invite.spec.ts src/modules/auth/password-recovery.spec.ts src/common/auth/invite-password-policy.spec.ts src/common/services/portal-member-permissions.spec.ts src/common/guards/tenant.guard.portal-units.spec.ts src/common/guards/tenant.guard.platform.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --silent src/modules/admin/users src/modules/auth/auth.service.login.spec.ts src/modules/auth/auth.service.get-context.spec.ts src/modules/auth/auth.service.accept-invite.spec.ts src/modules/auth/password-recovery.spec.ts src/common/auth/invite-password-policy.spec.ts src/common/services/portal-member-permissions.spec.ts src/common/guards/tenant.guard.portal-units.spec.ts src/common/guards/tenant.guard.platform.spec.ts
         working-directory: backend
       - run: node test/user-approvals-database.cjs
         working-directory: backend
