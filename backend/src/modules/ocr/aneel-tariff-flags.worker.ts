@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {AneelTariffFlagsConnector} from './aneel-tariff-flags.connector';
@@ -5,7 +6,7 @@ import {AneelTariffFlagsConnector} from './aneel-tariff-flags.connector';
 export class AneelTariffFlagsWorker implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private logger=new Logger(AneelTariffFlagsWorker.name);
  constructor(private db:SupabaseService,private connector:AneelTariffFlagsConnector){}
- onModuleInit(){this.schedule();}onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;this.schedule();}onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.logger.warn('ANEEL_FLAG_SYNC_UNCONFIRMED')).finally(()=>this.schedule()),30000);this.timer.unref?.();}
  private async rpc(action:string,job:any=null,body:any={}){const r=await this.db.getClient().rpc('aneel_flag_worker',{p_action:action,p_org:'org_default',p_run:job?.runId??null,p_token:job?.token??null,p_body:body});if(r.error)throw Error('SYNC_STATE_UNAVAILABLE');return r.data;}
  async runOnce(){

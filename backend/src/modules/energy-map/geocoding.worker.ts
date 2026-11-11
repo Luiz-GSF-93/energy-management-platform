@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -14,7 +15,7 @@ export class EnergyMapGeocodingWorker implements OnModuleInit,OnModuleDestroy {
   const maps=(this.config.get<string>('ENERGY_MAP_ORGANIZATIONS')||'').split(',').map(v=>v.trim());
   return [...new Set((this.config.get<string>('ENERGY_MAP_GEOCODING_ORGANIZATIONS')||'').split(',').map(v=>v.trim()).filter(v=>v&&maps.includes(v)))].slice(0,100);
  }
- onModuleInit(){if(this.provider.configured()&&this.organizations().length)this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.provider.configured()&&this.organizations().length)this.schedule();}
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.logger.warn('GEOCODING_WORKER_UNAVAILABLE')).finally(()=>this.schedule());},5000);this.timer.unref?.();}
  async runOnce(){

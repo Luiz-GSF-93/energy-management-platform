@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {BadRequestException,Body,Controller,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Post,Req} from '@nestjs/common';
 import {createHash,randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -30,7 +31,7 @@ export class CceeCalendarSyncService implements OnModuleInit,OnModuleDestroy{
  enabled(){return process.env.CCEE_CALENDAR_AUTO_ENABLED==='true'&&process.env.CCEE_OFFICIAL_CALENDAR_ENABLED==='true'&&process.env.CCEE_SYNC_WORKER_ENABLED==='true';}
  async read(actor:string){const r=await this.data.rpc('ccee_calendar_sync_owner',{p_actor:actor,p_action:'read'});return {...r,serverEnabled:this.enabled()};}
  async configure(actor:string,input:unknown){cceeDataEnabled('CCEE_OFFICIAL_CALENDAR_ENABLED');const b=cceeObject(input,['enabled','year','reason','requestId']);cceeUuid(b.requestId);cceeText(b.reason,1000,10);if(typeof b.enabled!=='boolean'||!Number.isInteger(b.year)||b.year<2021||b.year>2099)throw new BadRequestException('Ano ou política de calendário inválidos.');return this.data.rpc('ccee_calendar_sync_owner',{p_actor:actor,p_action:'configure',p_enabled:b.enabled,p_year:b.year,p_reason:b.reason,p_request:b.requestId});}
- onModuleInit(){if(this.enabled())this.schedule();}onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.log.warn('CCEE_CALENDAR_SYNC_UNCONFIRMED')).finally(()=>this.schedule());},60000);this.timer.unref?.();}
  async runOnce(){if(this.stopped||this.busy||!this.enabled())return;this.busy=true;try{
   const job=await this.data.rpc('ccee_calendar_sync_claim',{});if(!job)return;let source:string|null=null,hash:string|null=null,version:string|null=null,error:string|null=null,stage='identificação da fonte oficial';

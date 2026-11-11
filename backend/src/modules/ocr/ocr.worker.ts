@@ -1,3 +1,5 @@
+import {EvaPoller} from '../../common/workers/eva-poller';
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {createHash} from 'node:crypto';
 import {invoiceIdentityWithHistory} from './invoice-identity-with-history';
 import {extractGdEvidence} from './gd-evidence';
@@ -10,12 +12,12 @@ import { extractInvoiceEvidence } from './invoice-evidence';
 import { DOCUMENT_BUCKET, MAX_DOCUMENT_BYTES } from '../documents/services/document-file';
 @Injectable()
 export class OcrWorker implements OnModuleInit,OnModuleDestroy {
- private timer?:ReturnType<typeof setTimeout>; private stopped=false; private busy=false;
+ private poller=new EvaPoller(); private stopped=false; private busy=false;
  private readonly logger=new Logger(OcrWorker.name);
  constructor(private readonly db:SupabaseService,private readonly licenses:LicensesService,private readonly connector:AzureInvoiceConnector){}
- onModuleInit(){if(this.connector.isConfigured())this.schedule();}
- onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
- private schedule(){if(this.stopped)return;this.timer=setTimeout(async()=>{try{await this.runOnce();}catch{this.logger.warn('OCR_WORKER_RETRY_PENDING');}finally{this.schedule();}},5000);this.timer.unref();}
+ onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(this.connector.isConfigured())this.schedule();}
+ onModuleDestroy(){this.poller.stop();this.stopped=true;}
+ private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),5000,()=>this.logger.warn('OCR_WORKER_RETRY_PENDING'));}
  private async change(job:any,action:string,extra:Record<string,unknown>={}){
   const {error}=await this.db.getClient().rpc('transition_document_ocr',{p_id:job.id,p_token:job.lease_token,p_action:action,...extra});
   if(error)throw new Error('OCR_STATE_NOT_CONFIRMED');
@@ -26,7 +28,7 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
   try{
    const {data,error}=await this.db.getClient().rpc('claim_document_ocr');
    if(error)throw new Error('OCR_QUEUE_UNAVAILABLE');
-   const job=data?.[0];if(!job)return;
+   const job=data?.[0];if(!job)return;this.poller.activity();
    if(job.attempts>120){await this.change(job,'FAIL',{p_error:'RETRY_LIMIT'});return;}
    try{await this.licenses.requireEntitlement(job.organization_id,'document_management');}
    catch{await this.change(job,'FAIL',{p_error:'LICENSE_UNAVAILABLE'});return;}

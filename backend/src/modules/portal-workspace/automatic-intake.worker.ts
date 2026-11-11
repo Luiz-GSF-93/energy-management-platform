@@ -1,3 +1,5 @@
+import {EvaPoller} from '../../common/workers/eva-poller';
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {acceptedIdentityContinuation} from './identity-continuation';
 import {SUPPLIER_COST_DRAFT_VERSION} from '../ocr/supplier-invoice-cost-draft';
 import {xmlIntakeDiagnostic} from './xml-intake-context';
@@ -25,11 +27,11 @@ import {portalInvoiceKind} from './portal-invoice-kind';
 
 @Injectable()
 export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
- private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(AutomaticIntakeWorker.name);
+ private poller=new EvaPoller();private stopped=false;private busy=false;private log=new Logger(AutomaticIntakeWorker.name);
  constructor(private db:SupabaseService,private connector:AzureInvoiceConnector,private ocr:OcrQueueService,private assistant:OcrAssistantService,private closing:EvaAssistedClosingService,private ai:BackofficeAiService,@Optional() private drafts?:OcrMachineDraftService,@Optional() private officialFlags?:AneelTariffFlagsService){}
- onModuleInit(){if(intakeOrganizations().length)this.schedule();}
- onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
- private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('EVA_INTAKE_PENDING')).finally(()=>this.schedule()),5000);this.timer.unref?.();}
+ onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(intakeOrganizations().length)this.schedule();}
+ onModuleDestroy(){this.poller.stop();this.stopped=true;}
+ private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),5000,()=>this.log.warn('EVA_INTAKE_PENDING'));}
  private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
  private async sourceState(i:any,job:{id:string;token:string}){
   const officialFlag=await this.officialFlags?.reference(i.organization_id,i.month);
@@ -42,7 +44,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
   if(this.busy||this.stopped||!intakeOrganizations().length)return;this.busy=true;
   try{
    const organizations=await intakeWorkerOrganizations(this.db.getClient(),'INTAKE');if(!organizations.length)return;
-   const job=await this.rpc('claim_eva_automatic_intake',{p_organizations:organizations});if(!job)return;
+   const job=await this.rpc('claim_eva_automatic_intake',{p_organizations:organizations});if(!job)return;this.poller.activity();
    const transition=(action:string,body:any={},revision?:number)=>this.rpc(revision===undefined?'transition_eva_automatic_intake':'eva_intake_revision_transition',{p_id:job.id,p_token:job.token,p_action:action,p_body:body,...(revision===undefined?{}:{p_revision:revision})});
    let i:any;let preparing=false;let submitting=false;let stage="SOURCE_CHECK";
    try{

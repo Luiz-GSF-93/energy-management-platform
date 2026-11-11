@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {BadRequestException,Body,Controller,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Param,Post,Query} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -16,7 +17,7 @@ export class CceeCustomerDiscoveryService implements OnModuleInit,OnModuleDestro
  async list(t:TenantContext,page=0){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');const ws=await this.data.workspace(t);const result=await this.data.rpc('ccee_customer_discovery_read',{p_org:t.organizationId,p_actor:t.userId,p_page:page});return{...result,serverEnabled:this.enabled(),nextCheckAt:this.enabled()&&!this.busy?this.nextCheckAt:null,canManage:ws.canManage,canRetry:ws.canManage&&result.canRetry===true};}
  async control(t:TenantContext,input:unknown){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.data.workspace(t);const b=cceeObject(input,['enabled','reason','requestId'],['mode']);cceeText(b.reason,500,10);cceeUuid(b.requestId);if(typeof b.enabled!=='boolean')throw new CceeReadingError('INVALID_CUSTOMER_POLICY');if(b.mode!==undefined){if(!['DAILY','HOMOLOGATION'].includes(b.mode as string))throw new BadRequestException('Selecione o modo de atualização.');return this.data.rpc('ccee_customer_discovery_recurring_control',{p_org:t.organizationId,p_actor:t.userId,p_enabled:b.enabled,p_mode:b.mode,p_reason:b.reason,p_request:b.requestId});}return this.data.rpc('ccee_customer_discovery_control',{p_org:t.organizationId,p_actor:t.userId,p_enabled:b.enabled,p_reason:b.reason,p_request:b.requestId});}
  async retry(t:TenantContext,id:string,input:unknown){cceeDataEnabled('CCEE_DATA_WORKSPACE_ENABLED');await this.data.workspace(t);cceeUuid(id);const b=cceeObject(input,['reason','requestId','confirmed']);cceeText(b.reason,500,30);cceeUuid(b.requestId);if(b.confirmed!==true)throw new BadRequestException('Confirme a revisão antes de reconsultar o mesmo CNPJ.');return this.data.rpc('ccee_customer_discovery_retry',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_reason:b.reason,p_request:b.requestId,p_confirmed:true});}
- onModuleInit(){if(this.enabled())this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.nextCheckAt=new Date(Date.now()+30000).toISOString();this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.log.warn('CCEE_CUSTOMER_DISCOVERY_UNCONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
  async runOnce(){

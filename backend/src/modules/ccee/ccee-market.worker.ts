@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleInit,OnModuleDestroy} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {CceeMarketConnector} from './ccee-market.connector';
@@ -7,7 +8,7 @@ export class CceeMarketWorker implements OnModuleInit,OnModuleDestroy{
  private busy=false;private stopped=false;private timer?:ReturnType<typeof setTimeout>;private logger=new Logger(CceeMarketWorker.name);
  constructor(private db:SupabaseService,private connector:CceeMarketConnector){}
  private enabled(){return process.env.CCEE_MARKET_SYNC_ENABLED==='true'&&process.env.CCEE_DATA_WORKSPACE_ENABLED==='true'&&process.env.CCEE_READ_ENABLED==='true';}
- onModuleInit(){if(this.enabled())this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.logger.warn('CCEE_MARKET_RESULT_NOT_CONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
  private async rpc(name:string,args:Record<string,unknown>){const r=await this.db.getClient().rpc(name,args);if(r.error){if(r.error.code==='42501')throw new CceeReadingError('ACCESS_CHANGED');if(r.error.code==='P0001'&&r.error.message==='MARKET_REQUEST_BUDGET_EXHAUSTED')throw new CceeReadingError('BUDGET_EXHAUSTED');throw new CceeReadingError('DATABASE_RESULT_NOT_CONFIRMED');}return r.data;}

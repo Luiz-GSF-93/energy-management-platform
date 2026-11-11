@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {CceeDriConnector} from './ccee-dri.connector';
 import {isDri} from './ccee-dri.model';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit,Optional} from '@nestjs/common';
@@ -9,7 +10,7 @@ export class CceeDataWorker implements OnModuleInit,OnModuleDestroy{
  private busy=false;private stopped=false;private timer?:ReturnType<typeof setTimeout>;private logger=new Logger(CceeDataWorker.name);
  constructor(private db:SupabaseService,private connector:CceePrivateConnector,@Optional() private dri?:CceeDriConnector){}
  private enabled(){return process.env.CCEE_DATA_WORKSPACE_ENABLED==='true'&&process.env.CCEE_SYNC_WORKER_ENABLED==='true';}
- onModuleInit(){if(this.enabled())this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.logger.warn('CCEE_READING_RESULT_NOT_CONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
  async runOnce(){

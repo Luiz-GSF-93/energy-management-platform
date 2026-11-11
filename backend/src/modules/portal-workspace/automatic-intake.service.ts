@@ -1,3 +1,4 @@
+import {wakeEvaWorkers} from '../../common/workers/eva-poller';
 import {identityContinuation} from './identity-continuation';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
 import {createHash,randomUUID} from 'node:crypto';
@@ -37,6 +38,7 @@ export class AutomaticIntakeService{
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo ou permissão de documentos indisponível.');
   if(r.error?.code==='P3391')throw new ConflictException('A cota de documentos está esgotada. O envio não foi iniciado.');
   if(r.error)throw new ConflictException('Recebimento não confirmado. Confira os envios antes de repetir.');
+  if(['stored','resolve','resume','retry'].includes(action))wakeEvaWorkers();
   return r.data;
  }
  async list(t:TenantContext,query:any={}){
@@ -108,9 +110,9 @@ export class AutomaticIntakeService{
    const result=await this.db.getClient().rpc('eva_intake_resolve_justified',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_id:id,p_body:binding});
    if(result.error?.code==='42501')throw new ForbiddenException('A continuação exige vínculo e permissões internos válidos.');
    if(result.error)throw new ConflictException('O vínculo mudou ou não foi confirmado. Atualize o andamento antes de repetir.');
-   return result.data;
+   wakeEvaWorkers();return result.data;
   }
-  return this.action(t,'resolve',id,body);
+  const result=await this.action(t,'resolve',id,body);wakeEvaWorkers();return result;
  }
  async content(t:TenantContext,id:string){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id))throw new BadRequestException('Envio inválido.');
@@ -139,6 +141,6 @@ export class AutomaticIntakeService{
    }
    await this.action(t,'stored',receipt.id,{hash});
   }
-  return {id:receipt.id,replayed:receipt.replayed,state:receipt.state,message:'Arquivo recebido. A EVA reconhecerá o vínculo, a competência e as fontes disponíveis automaticamente.'};
+  wakeEvaWorkers();return {id:receipt.id,replayed:receipt.replayed,state:receipt.state,message:'Arquivo recebido. A EVA reconhecerá o vínculo, a competência e as fontes disponíveis automaticamente.'};
  }
 }

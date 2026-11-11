@@ -1,3 +1,5 @@
+import {EvaPoller} from '../../common/workers/eva-poller';
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {sourcePreparationEnabled} from '../ocr/source-preparation-v3';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
@@ -11,14 +13,14 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
  * an uncertain write is stopped for reconciliation, never automatically replayed. */
 @Injectable()
 export class PortalAutomationWorker implements OnModuleInit,OnModuleDestroy {
- private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(PortalAutomationWorker.name);
+ private poller=new EvaPoller();private stopped=false;private busy=false;private log=new Logger(PortalAutomationWorker.name);
  constructor(private db:SupabaseService,private ocr:OcrQueueService,private assistant:OcrAssistantService,private autofill:CalculationAutofillService,private closing:EvaAssistedClosingService){}
  private enabled(){return process.env.PORTAL_CLIENT_WORKSPACE_ENABLED==='true'&&process.env.PORTAL_INVOICE_AUTOMATION_ENABLED==='true';}
- onModuleInit(){if(this.enabled())this.schedule();}
- onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
- private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('PORTAL_AUTOMATION_PENDING')).finally(()=>this.schedule()),15000);this.timer.unref?.();}
+ onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(this.enabled())this.schedule();}
+ onModuleDestroy(){this.poller.stop();this.stopped=true;}
+ private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),15000,()=>this.log.warn('PORTAL_AUTOMATION_PENDING'));}
  async runOnce(){if(this.busy||this.stopped||!this.enabled())return;this.busy=true;try{
-  const claimed=await this.db.getClient().rpc('claim_portal_invoice_automation');if(claimed.error)throw Error('PORTAL_AUTOMATION_CLAIM');const job=claimed.data;if(!job)return;
+  const claimed=await this.db.getClient().rpc('claim_portal_invoice_automation');if(claimed.error)throw Error('PORTAL_AUTOMATION_CLAIM');const job=claimed.data;if(!job)return;this.poller.activity();
   const stage=job.stage;
   const finish=async(state:string,note:string,source:string|null=null)=>{const r=await this.db.getClient().rpc('finish_portal_invoice_automation',{p_id:job.id,p_reservation:job.reservation,p_state:state,p_note:note,p_source:source});if(r.error)throw Error('PORTAL_AUTOMATION_FINISH');};
   try {

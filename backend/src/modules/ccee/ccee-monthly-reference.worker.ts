@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {CceeService} from './ccee.service';
@@ -6,7 +7,7 @@ export class CceeMonthlyReferenceWorker implements OnModuleInit,OnModuleDestroy{
  private busy=false;private stopped=false;private timer?:ReturnType<typeof setTimeout>;private log=new Logger(CceeMonthlyReferenceWorker.name);
  constructor(private db:SupabaseService,private ccee:CceeService){}
  private enabled(){return process.env.CCEE_MARKET_SYNC_ENABLED==='true'&&process.env.CCEE_DATA_WORKSPACE_ENABLED==='true'&&process.env.CCEE_READ_ENABLED==='true';}
- onModuleInit(){if(this.enabled())this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.log.warn('CCEE_MONTHLY_REFERENCE_UNCONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
  async runOnce(){

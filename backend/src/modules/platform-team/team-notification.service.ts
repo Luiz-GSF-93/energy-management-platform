@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {BadRequestException,ForbiddenException,Injectable,OnModuleDestroy,OnModuleInit,ServiceUnavailableException} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -8,7 +9,7 @@ const enabled=(key:string)=>process.env[key]==='true';
 export class TeamNotificationService implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setInterval>;private running=false;
  constructor(private readonly db:SupabaseService){}
- onModuleInit(){this.timer=setInterval(()=>void this.tick().catch(()=>undefined),60000);this.timer.unref?.();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;this.timer=setInterval(()=>void this.tick().catch(()=>undefined),60000);this.timer.unref?.();}
  onModuleDestroy(){if(this.timer)clearInterval(this.timer);}
  private gate(){if(!enabled('PLATFORM_TEAM_NOTIFICATIONS_ENABLED'))throw new ServiceUnavailableException('Acompanhamento de avisos da equipe desligado; aguardando homologação.');}
  private async rpc(name:string,args:Record<string,unknown>){const {data,error}=await this.db.getClient().rpc(name,args);if(error){if(error.code==='42501')throw new ForbiddenException('Consulta exclusiva ao Owner ativo.');if(['22023','40001'].includes(error.code))throw new BadRequestException('Confira os filtros, a justificativa e os bloqueios de reenvio.');throw new ServiceUnavailableException('Operação não confirmada; reconfira o histórico antes de repetir.');}if(data==null&&name!=='claim_platform_team_notification')throw new ServiceUnavailableException('Resultado não confirmado; reconfira o histórico.');return data;}
