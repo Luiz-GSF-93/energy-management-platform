@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {portalDeliveryBudget} from '../portal-workspace/portal-notifications.worker';
@@ -7,7 +8,7 @@ import {sendWorkflowNotice,tradingApprovalDeliveryEnabled} from './trading-workf
 export class TradingWorkflowWorker implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private busy=false;private stopped=false;private log=new Logger(TradingWorkflowWorker.name);
  constructor(private db:SupabaseService,private templates:WhatsappTemplatesService){}
- onModuleInit(){this.schedule();}onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;this.schedule();}onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('TRADING_DELIVERY_UNCONFIRMED')).finally(()=>this.schedule()),15000);this.timer.unref?.();}
  async runOnce(){if(this.stopped||this.busy)return;this.busy=true;
   try{const client=this.db.getClient();const reminder=await client.rpc('collect_trading_workflow_reminders');if(reminder.error)throw Error('REMINDER_FAILED');if(!tradingApprovalDeliveryEnabled())return;const budget=portalDeliveryBudget();if(!budget)return;const args={p_action:'CLAIM',p_id:null,p_lease:null,p_daily:budget.daily,p_budget:budget.budget,p_costs:budget.costs,p_result:null};const c=await client.rpc('trading_workflow_delivery',args);if(c.error)throw Error('CLAIM_FAILED');const d=c.data;if(!d)return;

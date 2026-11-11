@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleInit,OnModuleDestroy} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {PlatformCostsService} from './platform-costs.service';
@@ -9,7 +10,7 @@ export class PlatformCostsWorker implements OnModuleInit,OnModuleDestroy {
  private requests=0;private durationMs=0;private failures=0;
  constructor(private db:SupabaseService,private costs:PlatformCostsService){}
  observe(milliseconds:number,status:number){this.requests++;this.durationMs+=milliseconds;if(status>=500)this.failures++;}
- onModuleInit(){this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;this.schedule();}
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(async()=>{try{await this.tick();}catch{this.logger.warn('PLATFORM_COST_MONITOR_PENDING');}finally{this.schedule();}},60000);this.timer.unref();}
  async tick(){

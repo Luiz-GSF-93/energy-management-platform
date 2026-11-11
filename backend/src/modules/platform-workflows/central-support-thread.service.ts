@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,Logger,OnModuleDestroy,OnModuleInit,ServiceUnavailableException} from '@nestjs/common';
 import {createHash} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
@@ -9,7 +10,7 @@ export function supportFailure(error:any):never{const msg=SUPPORT_ERRORS[error?.
 export class CentralSupportThreadService implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setInterval>;private running=false;private readonly log=new Logger(CentralSupportThreadService.name);
  constructor(private readonly db:SupabaseService){}
- onModuleInit(){this.timer=setInterval(()=>void this.tick(),60000);this.timer.unref?.();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;this.timer=setInterval(()=>void this.tick(),60000);this.timer.unref?.();}
  onModuleDestroy(){if(this.timer)clearInterval(this.timer);}
  async tick(){if(this.running)return;this.running=true;try{const r=await this.db.createAuthClient().rpc('central_support_close_due',{p_limit:50});if(r.error)this.log.warn('Support closure check unavailable');}catch{this.log.warn('Support closure check unavailable');}finally{this.running=false;}}
  identity(t:TenantContext){if(!t?.organizationId||!t.userId||t.accessMode||!['admin_org','gestor','operacional'].includes(t.role))throw new ForbiddenException('Use sua conta interna da organização.');return {o:t.organizationId,a:t.userId,p:false};}

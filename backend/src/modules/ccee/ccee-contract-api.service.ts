@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Body,Controller,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Param,Post,ServiceUnavailableException} from '@nestjs/common';
 import {request} from 'node:https';
 import {Tenant} from '../../common/decorators/tenant.decorator';
@@ -81,7 +82,7 @@ export class CceeContractApiWorker implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(CceeContractApiWorker.name);
  constructor(private db:SupabaseService,private connector:CceeContractConnector){}
  private enabled(){return process.env.CCEE_CONTRACT_READ_ENABLED==='true'&&process.env.CCEE_DATA_WORKSPACE_ENABLED==='true'&&process.env.CCEE_SYNC_WORKER_ENABLED==='true';}
- onModuleInit(){if(this.enabled())this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.log.warn('CCEE_CONTRACT_STEP_UNCONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
  async runOnce(){

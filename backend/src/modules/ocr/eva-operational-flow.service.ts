@@ -1,3 +1,5 @@
+import {EvaPoller} from '../../common/workers/eva-poller';
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {BadRequestException,ConflictException,Body,Controller,ForbiddenException,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Post,Query} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -13,7 +15,7 @@ import {operationalBindingState,operationalReviewReceipt} from './eva-operationa
 /** Coordinates existing guarded draft services. Never calls OCR, AI or a SOAP transport. */
 @Injectable()
 export class EvaOperationalFlowService implements OnModuleInit,OnModuleDestroy{
- private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(EvaOperationalFlowService.name);
+ private poller=new EvaPoller();private stopped=false;private busy=false;private log=new Logger(EvaOperationalFlowService.name);
  constructor(private db:SupabaseService,private closing:EvaAssistedClosingService,private ccee:CceeDataService,private costs:CceeDriCostService,private autofill:CalculationAutofillService){}
  enabled(){return process.env.EVA_CCEE_ORCHESTRATION_ENABLED==='true';}
  async action(t:TenantContext,action:string,b:any={}){
@@ -49,13 +51,13 @@ export class EvaOperationalFlowService implements OnModuleInit,OnModuleDestroy{
   return{enabled:true,...await this.rpc('eva_flow_action',{p_org:t.organizationId,p_actor:t.userId,p_action:action,p_unit:consumerUnitId,p_month:month,p_body:body})};
  }
  private async rpc(name:string,args:any){const r=await this.db.getClient().rpc(name,args);if(r.error){if(r.error.code==='42501')throw new ForbiddenException('Perfil, licença ou responsabilidade operacional indisponível.');if(['22023','40001','23505','22P02'].includes(r.error.code))throw new BadRequestException('O protocolo ou as fontes mudaram. Confira a proposta e sua justificativa.');throw Error('EVA_FLOW_'+name+'_UNCONFIRMED');}return r.data;}
- onModuleInit(){if(this.enabled())this.schedule();}
- onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
- private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('EVA_FLOW_STEP_PENDING')).finally(()=>this.schedule()),15000);this.timer.unref?.();}
+ onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(this.enabled())this.schedule();}
+ onModuleDestroy(){this.poller.stop();this.stopped=true;}
+ private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),15000,()=>this.log.warn('EVA_FLOW_STEP_PENDING'));}
  async runOnce(){
   if(!this.enabled()||this.busy||this.stopped)return;this.busy=true;
   try{
-   const claim=await this.rpc('eva_flow_worker',{p_action:'claim'});if(!claim)return;
+   const claim=await this.rpc('eva_flow_worker',{p_action:'claim'});if(!claim)return;this.poller.activity();
    const run=claim.run,args={p_id:run.id,p_lease:run.lease_id};let writing=false;
    const finish=(state:string,result:any,error?:string)=>this.rpc('eva_flow_worker',{...args,p_action:'finish',p_body:{state,result,...(error?{error}:{})}});
    try{

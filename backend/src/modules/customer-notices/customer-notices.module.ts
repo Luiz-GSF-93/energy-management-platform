@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {BadRequestException,Body,ConflictException,Controller,ForbiddenException,Get,Injectable,InternalServerErrorException,Logger,Module,OnModuleDestroy,OnModuleInit,Post} from '@nestjs/common';
 import {IsBoolean,IsInt,IsObject,IsOptional,IsUUID,Min} from 'class-validator';
 import {Tenant} from '../../common/decorators/tenant.decorator';
@@ -31,7 +32,7 @@ export class CustomerNoticesController{
 export class CustomerNoticeWorker implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private logger=new Logger(CustomerNoticeWorker.name);
  constructor(private db:SupabaseService,private templates:WhatsappTemplatesService){}
- onModuleInit(){if(process.env.CUSTOMER_NOTICES_ENABLED==='true')this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(process.env.CUSTOMER_NOTICES_ENABLED==='true')this.schedule();}
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.logger.warn('CUSTOMER_NOTICE_PENDING')).finally(()=>this.schedule());},15000);this.timer.unref?.();}
  async runOnce(){if(this.stopped||this.busy||process.env.CUSTOMER_NOTICES_ENABLED!=='true')return;this.busy=true;try{

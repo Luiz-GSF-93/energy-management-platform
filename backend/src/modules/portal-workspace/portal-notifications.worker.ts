@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {noticeReady,sendCustomerNotice} from '../customer-notices/customer-notice.transport';
@@ -12,7 +13,7 @@ export function portalDeliveryBudget(env:NodeJS.ProcessEnv=process.env){
 export class PortalNotificationsWorker implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private log=new Logger(PortalNotificationsWorker.name);
  constructor(private db:SupabaseService,private templates:WhatsappTemplatesService){}
- onModuleInit(){if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED==='true')this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(process.env.PORTAL_CLIENT_WORKSPACE_ENABLED==='true')this.schedule();}
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>void this.runOnce().catch(()=>this.log.warn('PORTAL_NOTICE_PENDING')).finally(()=>this.schedule()),30000);this.timer.unref?.();}
  async runOnce(){if(this.stopped||this.busy||process.env.PORTAL_CLIENT_WORKSPACE_ENABLED!=='true')return;this.busy=true;try{

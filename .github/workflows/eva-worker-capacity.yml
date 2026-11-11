@@ -1,0 +1,30 @@
+name: EVA worker capacity and process isolation
+on:
+  pull_request:
+    paths:
+      - 'backend/src/common/workers/**'
+      - 'backend/src/main*.ts'
+      - 'backend/src/modules/**/*worker*'
+      - 'backend/src/modules/portal-workspace/automatic-intake.service.ts'
+      - 'backend/src/modules/audit/**'
+      - 'backend/src/database/migrations/20261308_audit_alert_count.sql'
+      - '.github/workflows/eva-worker-capacity.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-workers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/common/workers src/modules/ocr/ocr.worker.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/portal-workers.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts
+        working-directory: backend
+      - run: node test/audit-workspaces.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend

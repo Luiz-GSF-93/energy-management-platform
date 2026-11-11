@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {ReportsService} from './reports.service';
@@ -7,7 +8,7 @@ import {reportProviderReady,sendReportDelivery,ReportAttachment} from './report-
 export class ReportDeliveryWorker implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setTimeout>;private stopped=false;private busy=false;private readonly logger=new Logger(ReportDeliveryWorker.name);
  constructor(private db:SupabaseService,private reports:ReportsService){}
- onModuleInit(){if(process.env.REPORTS_DELIVERY_ENABLED==='true')this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(process.env.REPORTS_DELIVERY_ENABLED==='true')this.schedule();}
  onModuleDestroy(){this.stopped=true;if(this.timer)clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.logger.warn('REPORT_DELIVERY_PENDING')).finally(()=>this.schedule());},15000);this.timer.unref?.();}
  async runOnce(){

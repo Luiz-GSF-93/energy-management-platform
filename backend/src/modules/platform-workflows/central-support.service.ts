@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {SUPPORT_ERRORS,supportFailure} from './central-support-thread.service';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,OnModuleDestroy,OnModuleInit,ServiceUnavailableException} from '@nestjs/common';
 import {randomUUID} from 'node:crypto';
@@ -9,7 +10,7 @@ import {generateSupportCode,supportCodeHash,supportEmail,supportInput,SUPPORT_AC
 export class CentralSupportService implements OnModuleInit,OnModuleDestroy{
  private timer?:ReturnType<typeof setInterval>;private running=false;
  constructor(private readonly db:SupabaseService){}
- onModuleInit(){this.timer=setInterval(()=>void this.tick(),15000);this.timer.unref?.();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;this.timer=setInterval(()=>void this.tick(),15000);this.timer.unref?.();}
  onModuleDestroy(){if(this.timer)clearInterval(this.timer);}
  private async rpc(name:string,args:Record<string,unknown>){
   let result:any;try{result=await this.db.getClient().rpc(name,args);}catch{throw new ServiceUnavailableException('Atendimento indisponível. Confira o protocolo antes de repetir.');}

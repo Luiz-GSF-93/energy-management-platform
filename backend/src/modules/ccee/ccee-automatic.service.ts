@@ -1,3 +1,4 @@
+import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Body,Controller,ForbiddenException,Get,Header,Injectable,Logger,OnModuleDestroy,OnModuleInit,Param,Post} from '@nestjs/common';
 import {Tenant} from '../../common/decorators/tenant.decorator';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -26,7 +27,7 @@ export class CceeAutomaticService implements OnModuleInit,OnModuleDestroy{
   if(action==='list')for(const policy of r.policies??[])if(policy.kind==='DRI')policy.latestDiagnostic=await this.data.rpc('ccee_dri_diagnostic_read',{p_org:t.organizationId,p_actor:t.userId,p_id:policy.authorization_id,p_latest:true});
   return{...r,canManage:workspace.canManage,enabled:this.enabled()};
  }
- onModuleInit(){if(this.enabled())this.schedule();}
+ onModuleInit(){if(!scheduledWorkEnabled('API'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.stopped=true;clearTimeout(this.timer);}
  private schedule(){if(this.stopped)return;this.timer=setTimeout(()=>{void this.runOnce().catch(()=>this.log.warn('CCEE_AUTOMATIC_STEP_UNCONFIRMED')).finally(()=>this.schedule());},30000);this.timer.unref?.();}
  async runOnce(){if(this.stopped||this.busy||!this.enabled())return;this.busy=true;
