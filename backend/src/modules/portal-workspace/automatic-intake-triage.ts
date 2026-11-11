@@ -5,7 +5,7 @@ import {supplierDocumentKind,supplierRecipientText} from '../ocr/supplier-invoic
 import {intakeMonthCandidates,IntakePage,IntakeCustomer,IntakeUnit} from './automatic-intake-context';
 const norm=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
 const compact=(s:string)=>norm(s).replace(/[^A-Z0-9]/g,'');
-type Field={key:string;label:string;status:'MATCH'|'MISMATCH'|'INCONCLUSIVE';expected:string;found:string[];pages:number[];reason:string};
+type Field={required?:boolean;key:string;label:string;status:'MATCH'|'MISMATCH'|'INCONCLUSIVE';expected:string;found:string[];pages:number[];reason:string};
 export function identityRegistration(c:IntakeCustomer,u:IntakeUnit,month:string){return {customerId:c.id,unitId:u.id,taxId:c.document,address:u.address,unitNumber:u.consumer_unit_number,month};}
 /** Content evidence is separated from a human decision. Missing text is never a mismatch.
  * Only the explicitly selected, authorized target can be rejected automatically. */
@@ -41,6 +41,7 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
   field('unit','UC / instalação',u.consumer_unit_number,uc,uc.length?(unknown.length?'MISMATCH':'MATCH'):proof.checks.unit==='MATCH'?'MATCH':'INCONCLUSIVE',unknown.length?'Código impresso diferente do cadastro e do histórico autorizado.':'Usar apenas código explícito, nunca medidor ou código de barras.'),
   field('period','Competência de fornecimento',month,months,months.length===1?(months[0]===month?'MATCH':'MISMATCH'):'INCONCLUSIVE','Emissão e vencimento não substituem competência.')
  ];
+ if(supplier&&uc.length===0)Object.assign(fields[2],{required:false,label:'UC (opcional na NF do fornecedor)',reason:'A NF será vinculada por CNPJ e endereço, com a competência conferida. A ausência de UC não bloqueia; divergência de endereço pode ser confirmada e justificada pelo operador.'});
  const identity=fields.slice(0,3),words=(raw?.pages??[]).flatMap((p:any)=>p.words??[]);
  const confident=(v:string)=>{if(!raw)return true;const a=compact(v);return a.length>=4&&words.some((_:any,i:number)=>{let s='';for(let j=i;j<Math.min(i+30,words.length);j++){if(!Number.isFinite(words[j].confidence)||words[j].confidence<=.85)break;s+=compact(String(words[j].content??''));if(s===a)return true;if(s.length>a.length)break;}return false;});};
  const reject=identity.every(f=>f.status==='MISMATCH'&&f.found.length===1&&confident(f.found[0]));

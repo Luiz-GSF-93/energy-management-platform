@@ -32,6 +32,7 @@ on:
       - 'backend/test/eva-identity-triage-sql.cjs'
       - 'backend/test/eva-commercial-source-wake.cjs'
       - 'backend/src/database/migrations/20261311_eva_commercial_completion_refresh.sql'
+      - 'backend/src/database/migrations/20261312_eva_supplier_optional_uc_confirmation.sql'
       - 'backend/src/modules/portal-workspace/xml-intake-context*'
       - 'backend/src/modules/ocr/fiscal-xml*'
       - 'backend/src/modules/ocr/supplier-unit-identity*'

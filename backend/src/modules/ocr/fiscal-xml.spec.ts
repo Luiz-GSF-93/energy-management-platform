@@ -1,3 +1,4 @@
+import {xmlIntakeDiagnostic} from '../portal-workspace/xml-intake-context';
 import {readFiscalXml,xmlUnitMatch,xmlSupplierProposal,fiscalSupplyMonths} from './fiscal-xml';
 import {inspectInvoiceUpload,intakePath} from '../portal-workspace/automatic-intake.service';
 
@@ -30,3 +31,5 @@ describe('preserved XML supply labels and unit-price precision',()=>{
  it('uses source unit-price precision and reconciles the fiscal amount rounded to cents',()=>{const bytes=Buffer.from(invoice('55','PERIODO DE SUPRIMENTO FORNECIMENTO: 10 2026; UC: 1234567').toString().replace('10.0000','80.9710').replace('20.00</vUnCom>','105.2900000000</vUnCom>').replace(/200\.00/g,'8525.44'));const x=readFiscalXml(bytes);expect(x.raw.xml.rows[0].price).toBeNull();const proposal=()=>xmlSupplierProposal(x,'2026-10','11444777000161',{documentId:'source',fileHash:x.fiscal.sourceHash},{unitNumber:'1234567',address:'Rua Exemplo 123 Centro'});expect(proposal()).toMatchObject({quantityMwh:'80.9710',pricePerMwh:'105.2900000000',amount:'8525.44',financialApproval:false});x.sourcePrices[0]='105.3000000000';expect(proposal()).toBeNull();});
  it('cannot infer competence from issue or payment dates',()=>{const x=readFiscalXml(invoice('55','EMISSAO: 10 2026; PAGAMENTO: 10/2026; UC: 1234567'));expect(fiscalSupplyMonths(x.fiscal)).toEqual([]);});
 });
+
+it('marks UC as optional on a supplier XML without losing its CNPJ/address identity',()=>{const x=readFiscalXml(invoice('55','Competencia: 07/2026')),c={id:'customer',document:'11444777000161',company_name:'Cliente sintetico'},u={id:'unit',customer_id:'customer',consumer_unit_number:'1234567',address:'Rua Exemplo, 123, Centro'};expect(xmlUnitMatch(x.fiscal,c,u,'2026-07').matched).toBe(true);expect(xmlIntakeDiagnostic(x,c,u,'2026-07').fields[2]).toMatchObject({required:false,found:[],status:'INCONCLUSIVE'});});
