@@ -22,4 +22,12 @@ Consolidado reúne unidades de um único cliente, ponderando soma dos custos / s
 
 O backoffice usa contexto, função, licença e relacionamentos vigentes; prévias internas exigem fontes históricas ainda válidas. Portal aceita somente consulta externa vinculada a um cliente e nunca lê estudos internos. Referência ACR publicada exige estudo íntegro, fonte vigente, revisão independente e confirmação pelo gestor; a publicação preserva snapshot e autoria imutáveis. Publicar referência de preço não aprova a migração ACL.
 
-Tabelas com RLS, sem acesso direto de anon/authenticated/service_role. Apenas RPCs específicos do backend, com validação de organização, ator, função e escopo. PLD possui tabela preparada; ingestão pelo adapter CCEE depende da habilitação da API e não está ativa nesta entrega.
+Tabelas com RLS, sem acesso direto de anon/authenticated/service_role. Apenas RPCs específicos do backend, com validação de organização, ator, função e escopo. A ingestão PLD depende da API habilitada e da agenda homologada, com os limites de requisições existentes.
+
+## Atualização após publicação
+
+A confirmação de publicação do PLD e da referência anual emite o aviso comum de atualização. O aviso entre abas contém somente um marcador temporal, nunca dados financeiros ou credenciais. Cada painel consulta novamente sua API autenticada e reconfere o recorte de empresa/unidades.
+
+O painel de preços usa uma única rotina de atualização a cada minuto, com a página visível, e consulta novamente ao retornar à aba. Se uma consulta estiver em andamento, avisos e ciclos periódicos são reunidos em uma única reconferência posterior, sem abortar a resposta por lentidão. Durante a conferência anual marcada ou a publicação, a reconferência aguarda o fim da ação. Mudanças de organização, empresa, unidade ou ano continuam descartando a resposta anterior. A tela mostra o horário da última consulta concluída em Brasília.
+
+O cartão PLD apresenta média de mês encerrado e sua competência; a publicação só utiliza todas as horas e os quatro submercados conferidos. A coleta horária continua na agenda própria, mas não transforma novembro parcial em média mensal definitiva nem altera fechamentos publicados. Referência ausente continua como lacuna, sem valor presumido.
