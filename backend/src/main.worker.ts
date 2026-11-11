@@ -1,7 +1,9 @@
+import {assertEvaWorkerConfiguration} from './common/workers/eva-worker-configuration';
 import {NestFactory} from '@nestjs/core';
 import {EvaWorkerModule} from './eva-worker.module';
 async function bootstrap(){
  process.env.ENERGYOS_PROCESS_ROLE='EVA_WORKER';
+ assertEvaWorkerConfiguration(process.env);
  const app=await NestFactory.createApplicationContext(EvaWorkerModule);
  app.enableShutdownHooks();
  console.log('EVA_WORKER_READY');
