@@ -11,3 +11,9 @@ CCEE_MONTHLY_ADVISORY_1 compares the latest consecutive months (up to three) wit
 Automatic documentary association is a separate authenticated GET to the existing guidance route. It uses bounded local Portuguese text search over currently eligible published releases. It never calls embeddings, Search, an LLM or CCEE SOAP. Role, organization, license and publication gates are delegated to the existing guarded publication functions; page content and hashes are rehydrated and revalidated before display. The operation records zero external requests/tokens/cost in the existing retrieval audit. The explicit POST guidance remains the separately budgeted expanded retrieval. No retrieved answers or normative contents are cached.
 
 Apply the compatible migration 20261228_ccee_market_assessment.sql before deploying the consumer. It adds two server-only functions and no tables. No credential, budget, continuous collection configuration, contract, settlement or access grant changes. Existing monthly/daily source reads remain available and identified separately from advisory and documentary results.
+
+### Visão automática pelo calendário
+
+No PLD do backoffice, a visão automática usa horas para um único dia, dias para intervalos de dois dias até dois meses de calendário e meses para períodos maiores. Alterar as datas reativa a escolha automática; a seleção manual continua disponível. A consulta usa apenas observações reais da granularidade escolhida; referências mensais não são convertidas em dados diários ou horários. O gráfico preserva a última consulta concluída enquanto carrega uma nova.
+
+A leitura do ponto e a média do período ficam em uma tabela abaixo do gráfico, sem sobreposição. A seleção permanece ao retirar o mouse, e as descrições acessíveis dos pontos substituem os balões nativos do SVG.
