@@ -1,9 +1,10 @@
 import {NestFactory} from '@nestjs/core';
-import {AppModule} from './app.module';
+import {EvaWorkerModule} from './eva-worker.module';
 async function bootstrap(){
  process.env.ENERGYOS_PROCESS_ROLE='EVA_WORKER';
- const app=await NestFactory.createApplicationContext(AppModule);
+ const app=await NestFactory.createApplicationContext(EvaWorkerModule);
  app.enableShutdownHooks();
+ console.log('EVA_WORKER_READY');
  // No public HTTP listener in the processing service.
  const keepAlive=setInterval(()=>undefined,60000);
  for(const signal of ['SIGTERM','SIGINT'] as const)process.once(signal,()=>clearInterval(keepAlive));
