@@ -5,9 +5,11 @@ import { TenantInterceptor } from './interceptors/tenant.interceptor';
 import { AuditInterceptor } from './interceptors/audit.interceptor';
 import { SupabaseService } from '../services/supabase.service';
 import { AuditService } from './services/audit.service';
+import {RuntimeObservabilityService} from './services/runtime-observability.service';
 
 @Module({
   providers: [
+    RuntimeObservabilityService,
     SupabaseService,
     AuditService,
     TenantGuard,

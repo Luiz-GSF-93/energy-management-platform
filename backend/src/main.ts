@@ -6,6 +6,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   if(processRole()==='EVA_WORKER')throw new Error('Use the private EVA worker entrypoint');
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.enableShutdownHooks();
   
   app.setGlobalPrefix('api/v1');
   
