@@ -11,6 +11,7 @@ function invoice(model='55',extra='Competencia: 07/2026; UC: 1234567'){
 }
 describe('Bounded fiscal XML intake',()=>{
  const customer={document:'11444777000161'},unit={consumer_unit_number:'1234567',address:'Rua Exemplo, 123, Centro'};
+ it('explains definitive format rejection without accepting non-fiscal XML',()=>{expect(()=>readFiscalXml(Buffer.from('<invoice><amount>100</amount></invoice>'))).toThrow('O conteúdo não é um XML fiscal');expect(()=>readFiscalXml(Buffer.from('<invoice>incomplete fiscal document'))).toThrow('malformado ou incompleto');expect(()=>readFiscalXml(Buffer.alloc(2097153))).toThrow('Tamanho do arquivo inválido');});
  it('extracts NF-e typed amounts and source key without OCR confidence or fiscal approval',()=>{
   const x=readFiscalXml(invoice());expect(x.fiscal).toMatchObject({model:'55',months:['2026-07'],amount:'200.00',signatureVerified:false,authorizationVerified:false});expect(x.raw.documents[0].fields.CustomerTaxId.confidence).toBeNull();
   expect(xmlUnitMatch(x.fiscal,customer,unit,'2026-07').matched).toBe(true);

@@ -58,3 +58,10 @@ Migração 20261293: o painel reutiliza a prova de publicação por documento/ha
 A conferência de identidade mantém a confirmação, a indicação do requisito pendente e as ações em um rodapé fixo no modal. “Continue e conclua” exige confirmação explícita, justificativa de pelo menos 20 caracteres e autorização atual do servidor para aquela fonte. Continuar não aprova valores. Para resultado incerto de fatura já lida, identificada e arquivada, “Continuar e concluir” utiliza a reconciliação existente: reconfere a prova preservada e retoma sem reenviar o arquivo ou repetir OCR. Sem essa evidência, permanece “Reconferir resultado preservado”.
 
 Cada lote aceita até 10 arquivos da mesma empresa e 50 MB no total, com até 15 MB por PDF/imagem e 2 MB por XML. O envio é sequencial e conserva a chave de cada arquivo: se a confirmação de recebimento ficar incerta, interrompe novos envios até reconferir; os itens recebidos não são enviados novamente. O worker dedicado continua separado da API, com concorrência limitada. Pendência de um documento não autoriza retirar isolamento de organização, validação de identidade ou aprovação financeira.
+
+
+### Rejeição individual e confirmação incerta
+
+No lote, respostas explícitas de validação 400/413/415/422 são rejeições anteriores ao recebimento: a interface identifica o arquivo como não recebido, conserva o motivo e continua os arquivos seguintes. Rejeitados não são reenviados automaticamente; podem ser retirados do lote e substituídos por originais corrigidos. Um XML recusado não impede o PDF seguinte.
+
+Perda de confirmação, 401/403, conflito/cota, limite de requisições e falhas de infraestrutura interrompem novos envios, preservando os identificadores para reconferência e retomada. Arquivos já recebidos nunca são reenviados. A validação fiscal continua recusando XML não fiscal, malformado, com chave incompatível ou entidades externas; agora informa o tipo de problema. Justificativa de identidade não transforma um arquivo inválido em fonte fiscal válida.
