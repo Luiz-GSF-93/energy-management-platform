@@ -65,3 +65,10 @@ Cada lote aceita até 10 arquivos da mesma empresa e 50 MB no total, com até 15
 No lote, respostas explícitas de validação 400/413/415/422 são rejeições anteriores ao recebimento: a interface identifica o arquivo como não recebido, conserva o motivo e continua os arquivos seguintes. Rejeitados não são reenviados automaticamente; podem ser retirados do lote e substituídos por originais corrigidos. Um XML recusado não impede o PDF seguinte.
 
 Perda de confirmação, 401/403, conflito/cota, limite de requisições e falhas de infraestrutura interrompem novos envios, preservando os identificadores para reconferência e retomada. Arquivos já recebidos nunca são reenviados. A validação fiscal continua recusando XML não fiscal, malformado, com chave incompatível ou entidades externas; agora informa o tipo de problema. Justificativa de identidade não transforma um arquivo inválido em fonte fiscal válida.
+
+
+### XML fiscal: declarações adicionais e competência do item
+
+Declarações de prefixo não utilizadas, como o namespace de assinatura declarado em `protNFe`, não são motivo de recusa. O leitor continua recusando alteração do namespace padrão dos campos fiscais e elementos fiscais com prefixos não suportados; não remove namespaces nem atesta assinatura ou autorização por conta dessa aceitação.
+
+As informações adicionais do item (`infAdProd`) integram a evidência textual, a leitura da competência explícita de fornecimento e eventual UC. Emissão e vencimento continuam não substituindo competência; meses conflitantes exigem conferência. O hash e o arquivo original permanecem inalterados. Ao retomar XML já recebido, a primeira extração persistida é preservada no RPC, enquanto a interpretação tipada usa o original novamente verificado por hash.

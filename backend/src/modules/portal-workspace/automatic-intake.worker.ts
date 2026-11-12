@@ -71,7 +71,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      if(original.error||!original.data||original.data.size!==i.size_bytes)throw Error('ORIGINAL_UNAVAILABLE');
      const bytes=Buffer.from(await original.data.arrayBuffer());if(createHash('sha256').update(bytes).digest('hex')!==i.file_hash)throw Error('ORIGINAL_HASH_MISMATCH');
      const xml=i.mime==='application/xml'?readFiscalXml(bytes):null;
-     if(xml){raw=xml.raw;await this.rpc('eva_intake_xml_source',{p_id:job.id,p_token:job.token,p_raw:raw});}
+     if(xml){raw=xml.raw;/* Preserve the immutable first extraction on replay; typed fields above come from the hash-checked original. */await this.rpc('eva_intake_xml_source',{p_id:job.id,p_token:job.token,p_raw:i.raw_result??raw});}
      if(i.state==='OCR_QUEUED'&&!xml){
       if(!this.connector.isConfigured()){await transition('review',{note:'OCR indisponível. O arquivo foi preservado.'});return;}
       await transition('begin_ocr');submitting=true;

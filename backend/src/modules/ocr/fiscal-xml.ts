@@ -35,10 +35,10 @@ export function readFiscalXml(bytes:Buffer){
  const tag=roots[0],model=['nfeProc','NFe'].includes(tag)?'55':['nf3eProc','NF3e'].includes(tag)?'66':null;if(!model)return fail('O conteúdo não é um XML fiscal NF-e (modelo 55) ou NF3e (modelo 66). É necessária a estrutura fiscal original.');
  const namespace=model==='55'?'http://www.portalfiscal.inf.br/nfe':'http://www.portalfiscal.inf.br/nf3e',wrapper=node(root[tag]);
  if(wrapper['@_xmlns']!==namespace)return fail('A identificação do formato fiscal (namespace) está ausente ou não é suportada.');
- // Reject namespace rebinding/prefixed fiscal fields rather than stripping a
- // namespace and accidentally accepting a different recipient or total.
- const walk=(v:any,inSignature=false)=>{if(Array.isArray(v)){for(const x of v)walk(x,inSignature);return;}if(!v||typeof v!=='object')return;
-  for(const [k,x] of Object.entries(v)){if(k==='Signature'||k==='ds:Signature')continue;if(k.startsWith('@_xmlns')&&x!==namespace)fail();if(!k.startsWith('@_')&&k.includes(':'))fail();walk(x,inSignature);}};walk(wrapper);
+ // Unused prefix declarations are metadata, not fiscal fields. Keep default
+ // namespace rebinding and prefixed fiscal elements rejected; never strip prefixes.
+ const walk=(v:any)=>{if(Array.isArray(v)){for(const x of v)walk(x);return;}if(!v||typeof v!=='object')return;
+  for(const [k,x] of Object.entries(v)){if(k==='Signature'||k==='ds:Signature')continue;if(k==='@_xmlns'&&x!==namespace)fail('O namespace dos campos fiscais foi alterado.');if(!k.startsWith('@_')&&k.includes(':'))fail('Campos fiscais com prefixo não suportado.');walk(x);}};walk(wrapper);
  const document=node(tag.endsWith('Proc')?wrapper[model==='55'?'NFe':'NF3e']:wrapper),info=node(document[model==='55'?'infNFe':'infNF3e']);
  const ide=node(info.ide),emit=node(info.emit),dest=node(info.dest),address=node(dest.enderDest),total=node(model==='55'?node(info.total).ICMSTot:info.total);
  if(str(ide.mod)!==model||str(ide.tpAmb)!=='1'||!/^\d{1,9}$/.test(str(ide.nNF))||!validTaxId(str(emit.CNPJ))||!validTaxId(str(dest.CNPJ))||!str(dest.xNome)||!str(emit.xNome)||!str(address.xLgr)||!str(address.nro))return fail();
@@ -48,18 +48,18 @@ export function readFiscalXml(bytes:Buffer){
  const amount=decimal(total.vNF,2);if(!amount)return fail();
  const extra=str(node(info.infAdic).infCpl);if(extra.length>12000)return fail();
  const items=model==='55'?list(info.det):list(info.NFdet).flatMap(g=>list(node(g).det));if(!items.length||items.length>500)return fail();
- const rows=items.map((d:any)=>{const p=model==='55'?node(d.prod):node(node(node(d).detItem).prod);return {description:str(p.xProd).slice(0,1000),unit:model==='55'?str(p.uCom):({'1':'KW','2':'KWH','3':'KVAR','4':'KVARH','5':'UN'} as Record<string,string>)[str(p.uMed)]??str(p.uMed),quantity:decimal(p.qCom??p.qFaturada),price:decimal(p.vUnCom??p.vItem),amount:decimal(p.vProd,2),classification:str(p.cClass),xmlItem:str(d['@_nItem']),taxes:model==='55'?node(d.imposto):node(p.imposto)};});
+ const rows=items.map((d:any)=>{const p=model==='55'?node(d.prod):node(node(node(d).detItem).prod);return {description:str(p.xProd).slice(0,1000),additionalInformation:str(d.infAdProd).slice(0,12000),unit:model==='55'?str(p.uCom):({'1':'KW','2':'KWH','3':'KVAR','4':'KVARH','5':'UN'} as Record<string,string>)[str(p.uMed)]??str(p.uMed),quantity:decimal(p.qCom??p.qFaturada),price:decimal(p.vUnCom??p.vItem),amount:decimal(p.vProd,2),classification:str(p.cClass),xmlItem:str(d['@_nItem']),taxes:model==='55'?node(d.imposto):node(p.imposto)};});
  const months=new Set<string>();const month=str(node(info.gFat).CompetFat);if(/^20\d{2}(0[1-9]|1[0-2])$/.test(month))months.add(month.slice(0,4)+'-'+month.slice(4));
- const referenceText=[extra,...rows.map(r=>r.description)].join('\n').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+ const referenceText=[extra,...rows.flatMap(r=>[r.description,r.additionalInformation])].join('\n').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
  for(const m of referenceText.matchAll(/(?:COMPETENCIA|REFERENCIA|MES DE REFERENCIA|FATURAMENTO REF)\s*[:.]?\s*(0?[1-9]|1[0-2])\/(20\d{2})\b/g))months.add(m[2]+'-'+m[1].padStart(2,'0'));
  const names=['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
  for(const m of referenceText.matchAll(/FORNECIDA\s+NO\s+MES\s+DE\s+([A-Z]+)\/(20\d{2})\b/g)){const n=names.indexOf(m[1]);if(n>=0)months.add(m[2]+'-'+String(n+1).padStart(2,'0'));}
  const units=new Set<string>();const access=str(node(info.acessante).idAcesso);if(/^[-.0-9]{5,32}$/.test(access))units.add(access);
- for(const code of supplierUnitCodes([extra,...rows.map(row=>row.description)].join('\n')))units.add(code);
+ for(const code of supplierUnitCodes([extra,...rows.flatMap(row=>[row.description,row.additionalInformation])].join('\n')))units.add(code);
  const recipientAddress=[address.xLgr,address.nro,address.xCpl,address.xBairro].map(str).filter(Boolean).join(', ');
  const delivery=node(info.entrega),deliveryAddress=[delivery.xLgr,delivery.nro,delivery.xCpl,delivery.xBairro].map(str).filter(Boolean).join(', ');
  // Content is a labelled field view, not a PDF page or OCR transcription.
- const content=[model==='66'?'NF3e · XML fiscal de energia':'NF-e · XML do fornecedor','Emitente: '+str(emit.xNome),'CNPJ do emitente: '+str(emit.CNPJ),'Destinatário: '+str(dest.xNome),'CNPJ: '+str(dest.CNPJ),'Endereço: '+recipientAddress,...[...units].map(u=>'UC: '+u),...[...months].map(m=>'Competência: '+m.slice(5)+'/'+m.slice(0,4)),'Valor total: '+amount,'Chave de acesso: '+key,...rows.map(r=>r.description+' | '+r.unit+' | '+(r.quantity??'não informado')+' | '+(r.amount??'não informado')),extra].join('\n');
+ const content=[model==='66'?'NF3e · XML fiscal de energia':'NF-e · XML do fornecedor','Emitente: '+str(emit.xNome),'CNPJ do emitente: '+str(emit.CNPJ),'Destinatário: '+str(dest.xNome),'CNPJ: '+str(dest.CNPJ),'Endereço: '+recipientAddress,...[...units].map(u=>'UC: '+u),...[...months].map(m=>'Competência: '+m.slice(5)+'/'+m.slice(0,4)),'Valor total: '+amount,'Chave de acesso: '+key,...rows.map(r=>r.description+' | '+r.unit+' | '+(r.quantity??'não informado')+' | '+(r.amount??'não informado')+(r.additionalInformation?'\nInformações adicionais do item: '+r.additionalInformation:'')),extra].join('\n');
  const field=(value:string)=>{const offset=content.indexOf(value);return {content:value,confidence:null,spans:[{offset,length:value.length}],boundingRegions:[{pageNumber:1}],evidenceKind:'XML_NODE'};};
  const fields={CustomerName:field(str(dest.xNome)),CustomerTaxId:field(str(dest.CNPJ)),ServiceAddress:field(recipientAddress),VendorName:field(str(emit.xNome)),VendorTaxId:field(str(emit.CNPJ)),InvoiceId:field(str(ide.nNF)),InvoiceTotal:field(amount)};
  const sourceHash=createHash('sha256').update(bytes).digest('hex');
@@ -71,8 +71,8 @@ export function readFiscalXml(bytes:Buffer){
 
 /** Explicit supply labels only: issue/payment dates are never competence. The
  * stored fiscal/raw object remains unchanged so preserved extractions replay. */
-export function fiscalSupplyMonths(fiscal:{months:string[];extra:string;rows:{description:string}[]}){
- const months=new Set(fiscal.months),text=[fiscal.extra,...fiscal.rows.map(r=>r.description)].join('\n').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+export function fiscalSupplyMonths(fiscal:{months:string[];extra:string;rows:{description:string;additionalInformation?:string}[]}){
+ const months=new Set(fiscal.months),text=[fiscal.extra,...fiscal.rows.flatMap(r=>[r.description,r.additionalInformation??''])].join('\n').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
  for(const m of text.matchAll(/PERIODO\s+DE\s+(?:SUPRIMENTO\s+)?FORNECIMENTO\s*[:.]?\s*(0?[1-9]|1[0-2])(?:\s*[/.-]\s*|\s+)(20\d{2})\b/g))months.add(m[2]+'-'+m[1].padStart(2,'0'));
  return [...months];
 }
