@@ -217,5 +217,14 @@ const optionalReview=async(n,change=()=>{})=>{
 };
 const optionalUc=await optionalReview(2200);ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[optionalUc.c.target,optionalUc.dg.fingerprint])).rows[0].data.continued===true);
 for(const [n,change] of [[2201,d=>{d.documentType='INVOICE_DISTRIBUTOR'}],[2202,d=>{Object.assign(d.fields[2],{status:'MISMATCH',found:['9999999']})}],[2203,d=>{d.fields[0].status='MISMATCH'}],[2204,d=>{d.fields[3].status='MISMATCH'}]]){const x=await optionalReview(n,change);ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[x.c.target,x.dg.fingerprint])).rows[0].data.continued===false);}
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261313_eva_matching_identity_confirmation.sql','utf8'));
+await db.exec(fs.readFileSync(__dirname+'/../src/database/migrations/20261313_eva_matching_identity_confirmation.sql','utf8'));
+const matchingChange=d=>{d.documentType='INVOICE_DISTRIBUTOR';d.fields=d.fields.map(f=>({...f,status:'MATCH'}));d.fields[2]={...d.fields[2],status:'MATCH',found:['1234567']};};
+const matching=await optionalReview(2300,matchingChange);
+ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[matching.c.target,matching.dg.fingerprint])).rows[0].data.continued===true);
+ok((await db.query('SELECT state FROM eva_automatic_intakes WHERE id=$1',[matching.c.target])).rows[0].state==='RECOGNIZING');
+const direct=await optionalReview(2301,matchingChange),directBody={fingerprint:direct.dg.fingerprint,decision:'CONTINUE',reason:'Operator checked every matching field on this preserved original invoice.'};
+ok((await db.query("SELECT eva_intake_identity_action('org',$1,'manager',false,'address',$2,$3) data",[actor,direct.c.target,JSON.stringify(directBody)])).rows[0].data.decision==='ADDRESS');
+for(const [n,key] of [[2302,'taxId'],[2303,'unit'],[2304,'period']]){const x=await optionalReview(n,d=>{matchingChange(d);d.fields.find(f=>f.key===key).status='MISMATCH'});ok((await db.query('SELECT eva_intake_continue_requested($1,$2) data',[x.c.target,x.dg.fingerprint])).rows[0].data.continued===false);}
 console.log('Identity SQL checks:',checks);
 }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,6 +1,13 @@
 import {identityContinuation,acceptedIdentityContinuation} from './identity-continuation';
 import {AutomaticIntakeService} from './automatic-intake.service';
 const review={diagnostic:{action:'REVIEW',documentType:'INVOICE_SUPPLIER',fields:[{key:'taxId',status:'MATCH'},{key:'address',status:'MISMATCH',found:['Fiscal street number 900']},{key:'unit',status:'INCONCLUSIVE'},{key:'period',status:'MATCH'}]}};
+it.each(['INVOICE_DISTRIBUTOR','INVOICE_SUPPLIER'])('offers explicit confirmation when all %s identity fields match but OCR confidence required review',documentType=>{
+ const r=structuredClone(review);r.diagnostic.documentType=documentType;r.diagnostic.fields.forEach(f=>f.status='MATCH');
+ for(const role of ['admin_org','gestor','operacional'])expect(identityContinuation(r,role)).toBe('ADDRESS');
+ expect(identityContinuation(r,'consulta')).toBeNull();
+ expect(acceptedIdentityContinuation({accepted:true,address:'Fiscal street number 900'},r.diagnostic)).toBe(true);
+ for(const key of ['taxId','period','unit']){const changed=structuredClone(r);changed.diagnostic.fields.find(f=>f.key===key)!.status='MISMATCH';expect(identityContinuation(changed,'admin_org')).toBeNull();}
+});
 describe('audited continuation of a specific document',()=>{
  it('exposes audited address confirmation to authorized internal document roles',()=>{expect(identityContinuation(review,'admin_org')).toBe('ADDRESS');for(const role of ['gestor','operacional'])expect(identityContinuation(review,role)).toBe('ADDRESS');expect(identityContinuation(review,'consulta')).toBeNull();});
  it('does not offer address continuation for conflicting unit, CNPJ, period or ambiguous address',()=>{for(const key of ['unit','taxId','period']){const r=structuredClone(review);r.diagnostic.fields.find(f=>f.key===key)!.status='MISMATCH';expect(identityContinuation(r,'admin_org')).toBeNull();}const r=structuredClone(review);r.diagnostic.fields[1].found!.push('Another fiscal street');expect(identityContinuation(r,'admin_org')).toBeNull();});

@@ -1,5 +1,6 @@
 import './globals.css';
 import './environment.css';
+import SoftwareVersion from '@/app/components/SoftwareVersion';
 import {UserEnvironmentProvider} from '@/app/providers/UserEnvironmentProvider';
 
 import { AuthProvider } from '@/app/providers';
@@ -20,6 +21,7 @@ export default function RootLayout({
         <AuthProvider>
           <UserEnvironmentProvider>{children}</UserEnvironmentProvider>
         </AuthProvider>
+        <SoftwareVersion />
       </body>
     </html>
   );
