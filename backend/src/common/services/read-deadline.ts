@@ -29,7 +29,17 @@ export function boundedRestReads(transport:typeof fetch=fetch,milliseconds=25000
   if(method!=='GET'||!url.pathname.startsWith('/rest/v1/'))return transport(input,init);
   const parent=init?.signal??(typeof Request!=='undefined'&&input instanceof Request?input.signal:null),controller=new AbortController();
   const abort=()=>controller.abort();if(parent?.aborted)abort();else parent?.addEventListener('abort',abort,{once:true});
-  const timer=setTimeout(abort,milliseconds);
-  try{return await transport(input,{...init,signal:controller.signal});}finally{clearTimeout(timer);parent?.removeEventListener('abort',abort);}
+  const timer=setTimeout(abort,milliseconds);timer.unref?.();
+  const cleanup=()=>{clearTimeout(timer);parent?.removeEventListener('abort',abort);};
+  try{
+   const response=await transport(input,{...init,signal:controller.signal});
+   if(!response.body){cleanup();return response;}
+   const reader=response.body.getReader();
+   const body=new ReadableStream<Uint8Array>({
+    async pull(target){try{const next=await reader.read();if(next.done){cleanup();target.close();}else target.enqueue(next.value);}catch(e){cleanup();target.error(e);}},
+    async cancel(reason){cleanup();await reader.cancel(reason);},
+   });
+   return new Response(body,{status:response.status,statusText:response.statusText,headers:response.headers});
+  }catch(e){cleanup();throw e;}
  }) as typeof fetch;
 }

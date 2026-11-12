@@ -22,11 +22,15 @@ describe('bounded read-only transport and RPC',()=>{
   }));
   const request=boundedRestReads(transport as typeof fetch,100)('https://example.invalid/rest/v1/documents');const rejected=expect(request).rejects.toThrow('aborted');await jest.advanceTimersByTimeAsync(100);await rejected;expect(transport).toHaveBeenCalledTimes(1);expect(jest.getTimerCount()).toBe(0);
  });
+ it('keeps the deadline active while a response body is still arriving',async()=>{
+  jest.useFakeTimers();const transport=jest.fn(async(_input:any,init?:any)=>new Response(new ReadableStream({start(target){init.signal.addEventListener('abort',()=>target.error(Error('body aborted')));}})));
+  const response=await boundedRestReads(transport as typeof fetch,100)('https://example.invalid/rest/v1/documents');const rejected=expect(response.text()).rejects.toThrow('body aborted');await jest.advanceTimersByTimeAsync(100);await rejected;expect(jest.getTimerCount()).toBe(0);expect(transport).toHaveBeenCalledTimes(1);
+ });
  it('does not alter mutations, uploads or authentication',async()=>{
   const transport=jest.fn(async(_input:any,_init?:RequestInit)=>new Response('{}'));const wrapped=boundedRestReads(transport as typeof fetch,100);
   for(const [path,method] of [['/rest/v1/documents','POST'],['/rest/v1/documents','PATCH'],['/rest/v1/documents','DELETE'],['/rest/v1/rpc/action','POST'],['/storage/v1/object/file','GET'],['/auth/v1/user','GET']]){const init={method};await wrapped('https://example.invalid'+path,init);expect(transport.mock.calls.at(-1)![1]).toBe(init);}
  });
  it('retains caller cancellation and does not retry a cancelled SELECT',async()=>{
-  const caller=new AbortController();caller.abort();const transport=jest.fn(async(_input:any,init:any)=>{expect(init.signal.aborted).toBe(true);return new Response('{}');});await boundedRestReads(transport as typeof fetch)('https://example.invalid/rest/v1/documents',{signal:caller.signal});expect(transport).toHaveBeenCalledTimes(1);
+  const caller=new AbortController();caller.abort();const transport=jest.fn(async(_input:any,init:any)=>{expect(init.signal.aborted).toBe(true);return new Response('{}');});await (await boundedRestReads(transport as typeof fetch)('https://example.invalid/rest/v1/documents',{signal:caller.signal})).text();expect(transport).toHaveBeenCalledTimes(1);
  });
 });
