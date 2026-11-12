@@ -1,3 +1,5 @@
+import {transientBackendError} from '../../common/services/transient-backend-error';
+import {readDeadline} from '../../common/services/read-deadline';
 import {memberPermissions} from '../../common/services/member-permissions';
 import { Injectable, BadRequestException, UnauthorizedException, ForbiddenException, InternalServerErrorException, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -182,7 +184,8 @@ export class AuthService {
   async validateToken(token: string) {
     try {
       const supabase = this.supabaseService.getClient();
-      const { data, error } = await supabase.auth.getUser(token);
+      const { data, error } = await readDeadline('auth:verify',()=>supabase.auth.getUser(token),15000) as any;
+      if(transientBackendError(error))throw new ServiceUnavailableException('Verificação de acesso temporariamente indisponível. Tente novamente.');
 
       if (error || !data.user) {
         throw new UnauthorizedException('Token inválido');
@@ -190,7 +193,8 @@ export class AuthService {
 
       return data.user;
     } catch (error) {
-      throw new UnauthorizedException('Token inválido');
+      if(error instanceof UnauthorizedException||error instanceof ServiceUnavailableException)throw error;
+      throw new ServiceUnavailableException('Verificação de acesso temporariamente indisponível. Tente novamente.');
     }
   }
 
