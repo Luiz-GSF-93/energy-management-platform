@@ -2,12 +2,19 @@ import {scheduledWorkEnabled} from './process-role';
 // Process-local admission, in addition to the existing durable database leases.
 let running=0;
 const pollers=new Set<EvaPoller>();
+/** Local scheduler pressure, not the number of documents in the durable queue. */
+export function evaPollingMetrics(){
+ let backingOff=0;
+ for(const poller of pollers)if(poller.isBackingOff())backingOff++;
+ return {registered:pollers.size,activeTasks:running,backingOff,concurrencyLimit:2};
+}
 export function wakeEvaWorkers(){for(const poller of pollers)poller.wake();}
 export class EvaPoller{
  private timer?:ReturnType<typeof setTimeout>;private stopped=true;private busy=false;
  private idle=0;private failures=0;private active=false;
  private task?:()=>Promise<unknown>;private onError?:()=>void;private base=5000;
  activity(){this.active=true;}
+ isBackingOff(){return this.failures>0;}
  start(task:()=>Promise<unknown>,base:number,onError:()=>void){
   if(!this.stopped||!scheduledWorkEnabled('EVA'))return;
   this.stopped=false;this.task=task;this.base=base;this.onError=onError;pollers.add(this);this.schedule(base);
