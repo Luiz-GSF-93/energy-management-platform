@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {AutomaticIntakeWorker} from './automatic-intake.worker';
 import {OcrProviderError} from '../ocr/azure-invoice.connector';
 import {createHash} from 'node:crypto';
+import {readFiscalXml} from '../ocr/fiscal-xml';
 describe('Automatic intake durable orchestration',()=>{
  const before={...process.env};afterEach(()=>{process.env=before;});
  function fixture(state='AWAITING_SOURCES',originalBytes?:Buffer){
@@ -23,6 +24,11 @@ describe('Automatic intake durable orchestration',()=>{
   const original=f.rpc.getMockImplementation()!;
   f.rpc.mockImplementation(async(name,b)=>name==='eva_intake_work_context'?{data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'gestor'},customers:[{id:'client',document:'11444777000161',company_name:'Cliente sintetico'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address:'Rua Exemplo, 123, Centro'}]}} as any:name==='eva_intake_xml_source'?{data:true} as any:original(name,b));
   await f.worker.runOnce();expect(f.actions.map(a=>a[0])).toEqual(['recognized','linked']);expect(f.actions[1][1].path).toMatch(/\.xml$/);expect(f.connector.submit).not.toHaveBeenCalled();expect(f.connector.poll).not.toHaveBeenCalled();expect(f.ocr.enqueue).not.toHaveBeenCalled();expect(f.rpc).toHaveBeenCalledWith('eva_intake_xml_source',expect.objectContaining({p_raw:expect.objectContaining({contentUnit:'XML_FIELDS'})}));
+ });
+ it('keeps a prior immutable XML extraction when replaying a newer deterministic reader',async()=>{
+  const bytes=readFileSync(join(__dirname,'../../../test/fixtures/fiscal-nf3e-synthetic.xml')),f=fixture('RECOGNIZING',bytes),preserved:any=readFiscalXml(bytes).raw;delete preserved.xml.rows[0].additionalInformation;f.intake.mime='application/xml';f.intake.raw_result=preserved;
+  const original=f.rpc.getMockImplementation()!;f.rpc.mockImplementation(async(name,b)=>name==='eva_intake_work_context'?{data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'gestor'},customers:[{id:'client',document:'11444777000161',company_name:'Cliente sintetico'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address:'Rua Exemplo, 123, Centro'}]}} as any:name==='eva_intake_xml_source'?{data:true} as any:original(name,b));
+  await f.worker.runOnce();expect(f.rpc).toHaveBeenCalledWith('eva_intake_xml_source',{p_id:'receipt',p_token:'lease',p_raw:preserved});expect(f.intake.raw_result).toBe(preserved);expect(preserved.xml.rows[0]).not.toHaveProperty('additionalInformation');expect(f.actions.map(a=>a[0])).toEqual(['recognized','linked']);expect(f.connector.submit).not.toHaveBeenCalled();
  });
  it('revisits a pre-rollout signature without resubmitting OCR',async()=>{const f=fixture();const source=createHash('sha256').update(JSON.stringify(f.rows)).digest('hex');f.intake.signature=createHash('sha256').update(JSON.stringify(['intake-fingerprint-3',source,null,supplementalTariffFlagReference(f.intake.month)??null])).digest('hex');await f.worker.runOnce();expect(f.closing.prepareInvoice).toHaveBeenCalledTimes(1);expect(f.connector.submit).not.toHaveBeenCalled();expect(f.actions.at(-1)[1].signature).not.toBe(f.intake.signature);});
  it('does not touch any source or provider while disabled',async()=>{const f=fixture();delete process.env.EVA_AUTOMATIC_INTAKE_ENABLED;await f.worker.runOnce();expect(f.rpc).not.toHaveBeenCalled();});
