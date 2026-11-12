@@ -5,6 +5,7 @@ import {OcrModule} from './modules/ocr/ocr.module';
 import {AutomaticIntakeWorker} from './modules/portal-workspace/automatic-intake.worker';
 import {AutomaticExplanationWorker} from './modules/portal-workspace/automatic-explanation.worker';
 import {PortalAutomationWorker} from './modules/portal-workspace/portal-automation.worker';
+import {EvaManualPreparationWorker} from './modules/ocr/eva-manual-preparation.worker';
 /** Private processing dependencies only; no AuthModule, admin or portal controllers. */
-@Module({imports:[ConfigModule.forRoot({isGlobal:true}),CommonModule,OcrModule],providers:[AutomaticIntakeWorker,AutomaticExplanationWorker,PortalAutomationWorker]})
+@Module({imports:[ConfigModule.forRoot({isGlobal:true}),CommonModule,OcrModule],providers:[AutomaticIntakeWorker,AutomaticExplanationWorker,PortalAutomationWorker,EvaManualPreparationWorker]})
 export class EvaWorkerModule{}

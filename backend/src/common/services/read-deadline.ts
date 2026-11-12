@@ -11,7 +11,7 @@ export async function readDeadline<T>(read:string,run:(signal:AbortSignal)=>Prom
  catch(e){if(e instanceof EvaReadUnavailable)throw e;if((e as any)?.getStatus?.()===503||['AbortError','TimeoutError'].includes((e as any)?.name))throw new EvaReadUnavailable(read);throw e;}
  finally{clearTimeout(timer!);}
 }
-const reads:Record<string,string[]|null>={eva_intake_operational_dashboard:null,eva_intake_action:['list'],eva_intake_administration:['list'],eva_intake_identity_action:['list','justifications'],eva_intake_published_completions:null,eva_intake_prepared_checkpoint:null,eva_intake_source_state:null,eva_scoped_closing_action:['history','capture']};
+const reads:Record<string,string[]|null>={eva_manual_preparation_action:['status'],eva_intake_operational_dashboard:null,eva_intake_action:['list'],eva_intake_administration:['list'],eva_intake_identity_action:['list','justifications'],eva_intake_published_completions:null,eva_intake_prepared_checkpoint:null,eva_intake_source_state:null,eva_scoped_closing_action:['history','capture']};
 export async function readRpc(db:any,name:string,args:any,milliseconds=25000){
  if(!(name in reads)||reads[name]&&!reads[name]!.includes(args.p_action))throw Error('READ_RPC_NOT_ALLOWLISTED');
  const read=name+':'+(args.p_action??'lookup');
