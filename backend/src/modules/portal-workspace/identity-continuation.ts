@@ -5,6 +5,9 @@ export function identityContinuation(review:any,role:string):'UC'|'ADDRESS'|null
  const fields=d?.fields;
  if(!['admin_org','gestor','operacional'].includes(role)||!['INVOICE_SUPPLIER','INVOICE_DISTRIBUTOR'].includes(d?.documentType)||!Array.isArray(fields)||fields.length!==4)return null;
  const field=(key:string)=>fields.find((f:any)=>f.key===key);
+ // OCR confidence can require human review even when every printed field matches.
+ // Reuse the source-bound attestation; never authorize an unresolved field here.
+ if(['taxId','address','unit','period'].every(key=>field(key)?.status==='MATCH'))return 'ADDRESS';
  const address=field('address');
  const supplierWithoutUc=d.documentType==='INVOICE_SUPPLIER'&&field('unit')?.status==='INCONCLUSIVE'&&Array.isArray(field('unit')?.found)&&field('unit').found.length===0;
  const addresses=Array.isArray(address?.found)?address.found:[];

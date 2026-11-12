@@ -81,6 +81,17 @@ describe('Automatic intake durable orchestration',()=>{
   await f.worker.runOnce();expect(f.actions.map(a=>a[0])).toEqual(accepted&&sameUnit?['recognized','linked']:['review']);expect(f.connector.submit).not.toHaveBeenCalled();expect(f.ai.interpret).not.toHaveBeenCalled();
  });
 
+ it.each([false,true])('requires an audited confirmation for matching fields with low OCR confidence: accepted=%s',async accepted=>{
+  const f=fixture('RECOGNIZING');f.intake.hints={unitId:'unit',month:'2026-07'};
+  const address='Rua Exemplo 123',text='Empresa sintética CNPJ 11.222.333/0001-81\nUC 1234567\n'+address+'\nReferência JUL/2026';
+  f.intake.raw_result={content:text,pages:[{pageNumber:1,lines:text.split('\n').map(content=>({content})),words:text.split(/\s/).map(content=>({content,confidence:.5}))}]};
+  const original=f.rpc.getMockImplementation()!;f.rpc.mockImplementation(async(name,b)=>{
+   if(name==='eva_intake_work_context')return {data:{intake:f.intake,delegate:{userId:'actor',roleId:'role',role:'gestor'},customers:[{id:'client',document:'11222333000181',company_name:'Empresa sintética'}],units:[{id:'unit',customer_id:'client',consumer_unit_number:'1234567',address}]}} as any;
+   if(name==='eva_intake_identity_resume_proof'){expect(b.p_diagnostic.fields.every((field:any)=>field.status==='MATCH')).toBe(true);return {data:{accepted,address:accepted?address:null}} as any;}
+   return original(name,b);
+  });
+  await f.worker.runOnce();expect(f.actions.map(a=>a[0])).toEqual(accepted?['recognized','linked']:['review']);expect(f.connector.submit).not.toHaveBeenCalled();expect(f.ai.interpret).not.toHaveBeenCalled();expect(f.closing.prepareInvoice).not.toHaveBeenCalled();
+ });
  it('honors a queued justified binding after the diagnostic without restarting OCR',async()=>{
   const f=fixture('OCR_POLLING'),previous=f.rpc.getMockImplementation()!;
   f.intake.hints={unitId:'unit',month:'2026-07'};

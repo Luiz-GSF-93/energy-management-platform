@@ -72,3 +72,20 @@ Perda de confirmação, 401/403, conflito/cota, limite de requisições e falhas
 Declarações de prefixo não utilizadas, como o namespace de assinatura declarado em `protNFe`, não são motivo de recusa. O leitor continua recusando alteração do namespace padrão dos campos fiscais e elementos fiscais com prefixos não suportados; não remove namespaces nem atesta assinatura ou autorização por conta dessa aceitação.
 
 As informações adicionais do item (`infAdProd`) integram a evidência textual, a leitura da competência explícita de fornecimento e eventual UC. Emissão e vencimento continuam não substituindo competência; meses conflitantes exigem conferência. O hash e o arquivo original permanecem inalterados. Ao retomar XML já recebido, a primeira extração persistida é preservada no RPC, enquanto a interpretação tipada usa o original novamente verificado por hash.
+
+
+### BETA 0.1.0-beta.20261112.1 · confirmação de campos correspondentes
+
+Quando a confiança de palavras do OCR exigir conferência, mas CNPJ, endereço,
+UC e competência corresponderem, o acesso interno autorizado pode justificar,
+confirmar e continuar. A decisão usa a trilha existente, vinculada ao hash do
+original, organização, cliente, unidade e competência; alterações cadastrais ou
+de fonte invalidam a decisão. O processamento reutiliza a leitura preservada.
+A mesma regra vale para organizações atuais e futuras, respeitando licença,
+permissões e isolamento. Não libera documento de outra organização, CNPJ de
+outra empresa, UC incompatível nem competência divergente. As conferências de
+valores e a aprovação/publicação financeira permanecem independentes.
+
+A identificação da versão BETA fica no rodapé global. Incrementar
+`SOFTWARE_VERSION` em cada entrega de produção e registrar os testes; a versão
+BETA não declara ausência de falhas nos módulos não verificados.
