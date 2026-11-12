@@ -1,4 +1,7 @@
+import {contractClosingDraftEnabled} from '../ocr/contract-closing-draft';
+import {documentedSettlementEnabled} from '../ocr/documented-tariff-period';
 import {EvaPoller} from '../../common/workers/eva-poller';
+import {readRpc,EvaReadUnavailable} from '../../common/services/read-deadline';
 import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {acceptedIdentityContinuation} from './identity-continuation';
 import {SUPPLIER_COST_DRAFT_VERSION} from '../ocr/supplier-invoice-cost-draft';
@@ -32,7 +35,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
  onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(intakeOrganizations().length)this.schedule();}
  onModuleDestroy(){this.poller.stop();this.stopped=true;}
  private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),5000,()=>this.log.warn('EVA_INTAKE_PENDING'));}
- private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
+ private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=name==='eva_intake_source_state'?await readRpc(this.db.getClient(),name,body):await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
  private async sourceState(i:any,job:{id:string;token:string}){
   const officialFlag=await this.officialFlags?.reference(i.organization_id,i.month);
   const state=await this.rpc('eva_intake_source_state',{p_id:job.id,p_token:job.token});
@@ -158,6 +161,16 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     if(i.signature===signature){await transition('wait',{note:i.note},before.revision);return;}
     // A failed read-only identity check has no uncertain financial writes.
     await this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id);
+    if(i.closing_id){
+     const mode=documentedSettlementEnabled()&&contractClosingDraftEnabled()?'DOCUMENTED':contractClosingDraftEnabled()?'CONTRACT':'BASE';
+     const checkpoint=(await readRpc(this.db.getClient(),'eva_intake_prepared_checkpoint',{p_id:job.id,p_token:job.token,p_mode:mode})).data;
+     const row=checkpoint?.row;
+     if(row){
+      if(checkpoint.sourcesCurrent!==true||row.organization_id!==i.organization_id||row.month!==i.month||!['READY_FOR_REVIEW','INCOMPLETE'].includes(row.state)||!row.report?.units?.some((u:any)=>u.id===i.unit_id&&u.documentId===i.document_id&&u.sourceHash===i.file_hash))throw Error('CHECKPOINT_SOURCE_MISMATCH');
+      await transition('begin_prepare');preparing=true;stage='FINAL_SOURCE_CHECK';const after=await this.sourceState(i,job),sourcesChanged=signature!==after.signature,complete=row.report.preparation?.percent===100||row.report.approvalEligible===true;
+      await transition('prepared',{closingId:row.id,signature:sourcesChanged?signature:after.signature,sourcesChanged,complete,note:sourcesChanged?'Uma fonte mudou durante a reconferência. A proposta foi preservada; a EVA consultará a competência novamente.':'Proposta preservada reconferida com todas as fontes atuais. Disponível para validar e encaminhar à aprovação conforme as confirmações financeiras.'},after.revision);return;
+     }
+    }
     stage='DRAFT_PREPARATION';await transition('begin_prepare');preparing=true;
     const drafts=await this.assistant.prepareAutomatic(i.document_id,t);
     if(drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED'))throw Error('UNCONFIRMED_DRAFT_WRITE');
@@ -172,6 +185,10 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     // Keep the earlier signature dirty; the next pass must consume new sources.
     await transition('prepared',{closingId:result.row.id,signature:sourcesChanged?signature:after.signature,sourcesChanged,complete,note:sourcesChanged?'Uma fonte mudou durante a preparação. Resultado preservado; a EVA vai reconferir a competência sem repetir OCR.':complete?'Preenchimento da proposta concluído. Revise somente as confirmações do resumo antes de aprovar.':'A EVA preencheu as fontes disponíveis e retomará automaticamente quando os documentos ou registros pendentes forem atualizados.'},after.revision);
    }catch(e){
+    if(!submitting&&['SOURCE_CHECK','CLOSING_PREPARATION','FINAL_SOURCE_CHECK'].includes(stage)&&e instanceof EvaReadUnavailable){
+     try{await this.rpc('eva_intake_retry_read',{p_id:job.id,p_token:job.token,p_read:(e.getResponse() as any).read});return;}
+     catch{this.log.warn('EVA_INTAKE_READ_RECOVERY_REQUIRES_RECONCILIATION');}
+    }
     const unknown=preparing||submitting;
     if(submitting&&e instanceof OcrProviderError&&e.code==='RATE_LIMITED'){
      try{await transition('retry_ocr',{error:'RATE_LIMITED',delay:e.retryAfterSeconds,note:'O provedor adiou a leitura antes de aceitá-la. Aguardando o prazo informado.'});}catch{this.log.warn('EVA_INTAKE_RATE_ACK_PENDING');}return;

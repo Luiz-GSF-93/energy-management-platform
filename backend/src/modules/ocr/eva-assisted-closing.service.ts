@@ -1,3 +1,4 @@
+import {readDeadline,readRpc} from '../../common/services/read-deadline';
 import {supplierInvoiceCostDraft,SUPPLIER_COST_DRAFT_VERSION} from './supplier-invoice-cost-draft';
 import {preparationPolicy} from './eva-preparation-policy';
 import {sharedClosingRequired,closingDocumentRequests} from './closing-coordination';
@@ -32,7 +33,8 @@ export class EvaAssistedClosingService{
   const disclose=action==='decide'&&this.publicationEnabled()&&body.disclose===true;
   const contractDraft=contractClosingDraftEnabled();
   const documented=documentedSettlementEnabled()&&contractDraft;
-  const r=await this.db.getClient().rpc('eva_scoped_closing_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_disclose:disclose,p_mode:documented?'DOCUMENTED':contractDraft?'CONTRACT':'BASE',p_scope:q.scopeKind??'CUSTOMER',p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body});
+  const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_disclose:disclose,p_mode:documented?'DOCUMENTED':contractDraft?'CONTRACT':'BASE',p_scope:q.scopeKind??'CUSTOMER',p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body};
+  const r=['history','capture'].includes(action)?await readRpc(this.db.getClient(),'eva_scoped_closing_action',args):await this.db.getClient().rpc('eva_scoped_closing_action',args);
   if(!r.error&&r.data!=null)return r.data;
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso restrito ao backoffice autorizado.');
   if(['23505','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
@@ -53,7 +55,7 @@ export class EvaAssistedClosingService{
   if(!this.enabled()||!ocrDraftRole(t)||!ocrDraftPermission(t)||!t.permissions?.includes(P.ENERGIA_OCR_PROCESS))throw new ForbiddenException('Preparação automática exige acesso interno aos rascunhos da organização.');
   this.scope(q);
   if(!uuid(documentId)||!/^[a-f0-9]{64}$/.test(sourceHash))throw new BadRequestException('Fonte da fatura inválida.');
-  const current:any=await this.autofill.inspect({consumerUnitId:q.consumerUnitId,month:q.month},t);
+  const current:any=await readDeadline('closing:inspect',()=>this.autofill.inspect({consumerUnitId:q.consumerUnitId,month:q.month},t),60000);
   if(!current.available||!current.canPrepare||current.documentId!==documentId||current.sourceHash!==sourceHash||current.unitId!==q.consumerUnitId||current.month!==q.month||!/^[a-f0-9]{64}$/.test(current.basis??''))throw new ConflictException('Atualize a fonte desta unidade e competência antes de preencher.');
   const sourceBasis=await this.rpc('capture',{...q,scopeKind:'UNIT'},t,null,{});
   const scopeKind=sharedClosingRequired(sourceBasis,q.month)?'CUSTOMER':'UNIT';
@@ -85,7 +87,7 @@ export class EvaAssistedClosingService{
   if(this.config.get('CALCULATION_AUTOFILL_ENABLED')==='true'&&ocrDraftRole(t)&&ocrDraftPermission(t)&&t.permissions?.includes(P.ENERGIA_OCR_PROCESS)){
    for(const u of [...all].filter(u=>q.scopeKind!=='UNIT'||u.id===q.consumerUnitId).sort((a,b)=>a.id.localeCompare(b.id))){
     if(u.status!=='ACTIVE'||(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state)))continue;
-    const candidate=await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);snapshots.set(u.id,candidate);
+    const candidate=await readDeadline('closing:snapshot',()=>this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t),60000);snapshots.set(u.id,candidate);
     if(!candidate.available||!(candidate.c.ready||candidate.c.proposalReady||supplierInvoiceCostDraft(candidate.c)))continue;
     const result=await this.autofill.prepare({consumerUnitId:u.id,month:q.month,requestId:resolutionId(['assisted-autofill-2',t.organizationId,q.month,u.id,candidate.basis]),token:candidate.token},t);
     if(!['PREPARED','PARTIAL'].includes(result.run?.state))throw new ServiceUnavailableException('Preparação dos rascunhos ainda não confirmada. Consulte o histórico antes de repetir.');
@@ -103,7 +105,7 @@ export class EvaAssistedClosingService{
   for(const u of [...selected].sort((a,b)=>a.id.localeCompare(b.id))){
    if(u.organization_id!==t.organizationId||u.customer_id!==primary.customer_id)throw new ForbiddenException('Fontes fora do escopo.');
    if(u.status!=='ACTIVE'){entries.push({unitId:u.id,name:u.name??u.id,unavailable:'Unidade inativa exige conferência da cobertura do cliente.'});continue;}
-   const c=(!preparedDrafts&&snapshots.get(u.id))||await this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t);
+   const c=(!preparedDrafts&&snapshots.get(u.id))||await readDeadline('closing:snapshot',()=>this.autofill.closingSnapshot({consumerUnitId:u.id,month:q.month},t),60000);
    const comparisonContext=c.available?closingDemandContext(c.c,{...sources.financial.tables,documents:sources.demandDocuments??sources.financial.tables.documents??[]},q.month):null;
    const uncertain=(sources.commercial??[]).some((r:any)=>r.consumer_unit_id===u.id&&['RUNNING','UNKNOWN'].includes(r.state));
    entries.push(c.available?{unitId:u.id,name:u.name??u.id,plan:c.plan,context:comparisonContext,...(this.config.get('EVA_INVOICE_COMPARISON_ENABLED')==='true'?{comparative:(this.config.get('EVA_COMPONENT_TAX_CLOSING_ENABLED')==='true'?invoiceComponentTaxV3:invoiceComparisonV2)(comparisonContext,c.plan,sources.libraries??[])}:{}),...(uncertain?{unavailable:'Há uma reserva de preparação comercial ainda não confirmada. Confira o histórico da origem antes de decidir.'}:{})}:{unitId:u.id,name:u.name??u.id,unavailable:c.observation});

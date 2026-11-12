@@ -1,3 +1,4 @@
+import {readRpc} from '../../common/services/read-deadline';
 import {wakeEvaWorkers} from '../../common/workers/eva-poller';
 import {identityContinuation} from './identity-continuation';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
@@ -34,7 +35,8 @@ export class AutomaticIntakeService{
  enabled(org:string){return intakeEnabled(org);}
  private async action(t:TenantContext,action:string,id:string|null,body:any,administration=false){
   if(!this.enabled(t.organizationId))throw new ServiceUnavailableException('Recebimento automático ainda não habilitado nesta organização.');
-  const r=await this.db.getClient().rpc(administration?'eva_intake_administration':'eva_intake_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});
+  const name=administration?'eva_intake_administration':'eva_intake_action',args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body};
+  const r=action==='list'?await readRpc(this.db.getClient(),name,args,8000):await this.db.getClient().rpc(name,args);
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo ou permissão de documentos indisponível.');
   if(r.error?.code==='P3391')throw new ConflictException('A cota de documentos está esgotada. O envio não foi iniciado.');
   if(r.error)throw new ConflictException('Recebimento não confirmado. Confira os envios antes de repetir.');
@@ -47,11 +49,11 @@ export class AutomaticIntakeService{
   const external=t.role==='consulta'&&!t.accessMode;
   const selection=external?{...query,queueOnly:'true'}:query;
   const present=(result:any)=>external?{...result,completed:[]}:result;
-  const administer=async(result:any)=>{if(external)return result;const admin=await this.action(t,'list',null,{},true);const ids=(result.rows??[]).filter((r:any)=>r.state==='REVIEW_REQUIRED').map((r:any)=>r.id);const items=ids.length?(await this.identityAction(t,'list',null,{ids:ids.slice(0,25)})).items:[];const diagnostics=new Map((items??[]).map((v:any)=>[v.id,v]));return {...result,dismissed:admin.dismissed??[],rows:(result.rows??[]).map((r:any)=>{const d:any=diagnostics.get(r.id);if(!d&&!(admin.dismissible??[]).includes(r.id))return r;return {...r,...(d?{identityReview:{...d,continuation:identityContinuation(d,t.role)}}:{}),status:{...r.status,...((admin.dismissible??[]).includes(r.id)?{canDismiss:true}:{}),...(d?.diagnostic?.read&&!r.status?.read?{read:true,percent:45}:{})}};})};};
+  const administer=async(result:any)=>{if(external)return result;const ids=(result.rows??[]).filter((r:any)=>r.state==='REVIEW_REQUIRED').map((r:any)=>r.id);const [admin,identity]=await Promise.all([this.action(t,'list',null,{},true),ids.length?this.identityAction(t,'list',null,{ids:ids.slice(0,25)}):Promise.resolve({items:[]})]);const items=identity.items;const diagnostics=new Map((items??[]).map((v:any)=>[v.id,v]));return {...result,dismissed:admin.dismissed??[],rows:(result.rows??[]).map((r:any)=>{const d:any=diagnostics.get(r.id);if(!d&&!(admin.dismissible??[]).includes(r.id))return r;return {...r,...(d?{identityReview:{...d,continuation:identityContinuation(d,t.role)}}:{}),status:{...r.status,...((admin.dismissible??[]).includes(r.id)?{canDismiss:true}:{}),...(d?.diagnostic?.read&&!r.status?.read?{read:true,percent:45}:{})}};})};};
   const data=present(await this.action(t,'list',null,selection));
   const candidates=[...(data.rows??[]),...(data.completed??[])].filter((r:any)=>r.documentId&&r.documentType==='INVOICE_DISTRIBUTOR'&&r.state==='UNKNOWN');
   const ids=[...new Set<string>(candidates.map((r:any)=>r.id))];if(!ids.length)return administer({enabled:true,...data});
-  const proof=await this.db.getClient().rpc('eva_intake_published_completions',{p_org:t.organizationId,p_ids:ids});
+  const proof=await readRpc(this.db.getClient(),'eva_intake_published_completions',{p_org:t.organizationId,p_ids:ids},8000);
   const validId=(v:any)=>typeof v==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
   if(proof.error||!Array.isArray(proof.data)||proof.data.length>ids.length||new Set(proof.data.map((p:any)=>p?.id)).size!==proof.data.length||proof.data.some((p:any)=>!p||!ids.includes(p.id)||!validId(p.closingId)||!validId(p.publicationId)||typeof p.publishedAt!=='string'||!Number.isFinite(Date.parse(p.publishedAt))))throw new ServiceUnavailableException('Não foi possível confirmar o andamento atual. Os documentos e as decisões anteriores foram preservados.');
   const completed=new Map(proof.data.map((p:any)=>[p.id,p]));
@@ -77,7 +79,8 @@ export class AutomaticIntakeService{
  }
  private async identityAction(t:TenantContext,action:string,id:string|null,body:any){
   if(!this.enabled(t.organizationId))throw new ServiceUnavailableException('Recebimento automático indisponível.');
-  const r=await this.db.getClient().rpc('eva_intake_identity_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});
+  const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body};
+  const r=['list','justifications'].includes(action)?await readRpc(this.db.getClient(),'eva_intake_identity_action',args,8000):await this.db.getClient().rpc('eva_intake_identity_action',args);
   if(r.error?.code==='42501')throw new ForbiddenException('A decisão de identidade exige acesso interno autorizado.');
   if(r.error)throw new ConflictException('A conferência mudou ou não foi confirmada. Atualize o andamento antes de repetir.');return r.data;
  }

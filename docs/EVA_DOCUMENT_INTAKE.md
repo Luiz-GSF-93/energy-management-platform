@@ -89,3 +89,35 @@ valores e a aprovação/publicação financeira permanecem independentes.
 A identificação da versão BETA fica no rodapé global. Incrementar
 `SOFTWARE_VERSION` em cada entrega de produção e registrar os testes; a versão
 BETA não declara ausência de falhas nos módulos não verificados.
+
+
+### BETA 0.1.0-beta.20261112.2 · consultas com prazo e retomada técnica
+
+A consulta de andamento não cancela o worker. Consultas de lista e histórico
+recebem prazo próprio; detalhes administrativos e de identidade são lidos em
+paralelo. REST SELECT recebe limite de transporte, sem repetir mutações,
+autenticação nem uploads. A tela mantém a última etapa e diferencia consulta
+indisponível de uma pendência humana.
+
+Uma falha comprovadamente de leitura na preparação (history/capture/inspect/
+snapshot) pode reagendar o mesmo trabalho. A RPC privada verifica a lease, o
+ator/licença/escopo atuais e recusa reservas financeiras RUNNING/UNKNOWN.
+Falhas em reserve/finish/decide ou gravações de resultado incerto continuam na
+reconciliação auditada; timeout não autoriza aprovar nem publicar. O original,
+a identificação confirmada e as respostas não são descartados.
+
+
+Se já existe uma proposta, o checkpoint compara a captura completa e atual de
+fontes dentro do banco, sem enviar a captura inteira por HTTP. Só retorna a
+mesma versão pronta/incompleta se hash, documento, unidade, competência,
+escopo, versão mais recente e snapshot continuarem correspondentes. Não cria
+outra versão, não aprova e não publica. Fonte alterada segue o preparo normal;
+reserva incerta continua exigindo reconciliação.
+
+
+O perfil Operacional com permissão de edição de Contratos pode validar os
+registros mensais e os custos conferidos (incluindo CCEE estimada com origem
+preservada). Validar um dado de entrada não aprova/publica o fechamento; essas
+decisões continuam exclusivas de Gestor/Administrador nas funções existentes.
+Cancelamentos por prazo na conferência são explicados em português, mantendo
+as respostas e a necessidade de confirmar qualquer gravação incerta.

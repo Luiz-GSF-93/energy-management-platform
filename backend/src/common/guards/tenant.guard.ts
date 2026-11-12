@@ -1,3 +1,5 @@
+import {transientBackendError} from '../services/transient-backend-error';
+import {readDeadline} from '../services/read-deadline';
 import {memberPermissions} from '../services/member-permissions';
 import {assertInvitePasswordSetup} from '../auth/invite-password-policy';
 import { resolvePlatformOperation, PLATFORM_SESSION_HEADER } from '../services/platform-operation';
@@ -67,7 +69,8 @@ export class TenantGuard implements CanActivate {
     try {
       // 3. Validar JWT com Supabase (PRESERVADO DO ORIGINAL - autenticação autoritativa)
 
-      const { data, error } = await this.supabaseService.getClient().auth.getUser(token);
+      const { data, error } = await readDeadline('auth:verify',()=>this.supabaseService.getClient().auth.getUser(token),15000) as any;
+      if(transientBackendError(error))throw new ServiceUnavailableException('A verificação do acesso está temporariamente indisponível. Tente novamente; a sessão não foi declarada expirada.');
 
       if (error || !data.user) {
         this.logger.error(`[SUPABASE_AUTH_FAIL] error=${error?.message}, user=${!data.user}`);
@@ -112,6 +115,7 @@ export class TenantGuard implements CanActivate {
         .eq('user_id', userId)
         .single();
 
+      if(transientBackendError(profileError))throw new ServiceUnavailableException('A consulta do perfil está temporariamente indisponível. Tente novamente.');
       if (profileError || !profile) {
         this.logger.error(`[PROFILE_MISSING] userId extraction, profileError=${profileError?.message}`);
         throw new UnauthorizedException('User profile not found');
@@ -337,7 +341,7 @@ export class TenantGuard implements CanActivate {
       }
       const error = err as Error;
       this.logger.error(`[EXCEPTION] ${error.message}`, error.stack);
-      throw new UnauthorizedException(`Guard failed: ${error.message}`);
+      throw new ServiceUnavailableException('Não foi possível verificar o acesso neste momento. Tente novamente; nenhuma permissão foi liberada.');
     }
   }
 }
