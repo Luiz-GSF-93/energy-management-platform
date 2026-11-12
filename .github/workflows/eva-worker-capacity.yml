@@ -11,6 +11,7 @@ on:
       - 'backend/src/common/workers/**'
       - 'backend/src/common/common.module.ts'
       - 'backend/src/common/services/runtime-observability*'
+      - 'backend/src/common/services/eva-stage-metrics*'
       - 'backend/src/services/supabase-readiness.spec.ts'
       - 'backend/src/main*.ts'
       - 'backend/src/eva-worker.module.ts'
@@ -33,7 +34,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand src/common/services/runtime-observability.service.spec.ts src/services/supabase-readiness.spec.ts src/common/workers src/modules/ocr/ocr.worker.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/portal-workers.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand src/common/services/runtime-observability.service.spec.ts src/common/services/eva-stage-metrics.spec.ts src/services/supabase-readiness.spec.ts src/common/workers src/modules/ocr/ocr.worker.spec.ts src/modules/portal-workspace/automatic-explanation.worker.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/portal-workspace/portal-workers.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts
         working-directory: backend
       - run: node test/audit-workspaces.cjs
         working-directory: backend

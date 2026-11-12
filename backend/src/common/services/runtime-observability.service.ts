@@ -4,6 +4,7 @@ import {monitorEventLoopDelay,performance} from 'node:perf_hooks';
 import {SupabaseService} from '../../services/supabase.service';
 import {processRole} from '../workers/process-role';
 import {evaPollingMetrics} from '../workers/eva-poller';
+import {snapshotEvaStages} from './eva-stage-metrics';
 
 const finite=(n:number)=>Number.isFinite(n)?Math.round(Math.max(0,n)*100)/100:null;
 
@@ -55,7 +56,7 @@ export class RuntimeObservabilityService implements OnModuleInit,OnModuleDestroy
    this.safeLog(JSON.stringify({event:'ENERGYOS_RUNTIME_SAMPLE',schemaVersion:1,role:this.role,
     windowMs:finite(windowMs),uptimeSeconds:finite(process.uptime()),cpuPercent,
     cpuBasis:'one_core_100_percent',rssBytes:memory.rss,heapUsedBytes:memory.heapUsed,
-    heapTotalBytes:memory.heapTotal,externalBytes:memory.external,eventLoop,polling:evaPollingMetrics()}));
+    heapTotalBytes:memory.heapTotal,externalBytes:memory.external,eventLoop,polling:evaPollingMetrics(),stages:snapshotEvaStages()}));
    // The private worker does not probe Auth; API and combined services use the existing cached probes.
    if(this.role!=='EVA_WORKER'){
     let timeout:ReturnType<typeof setTimeout>|undefined;

@@ -1,11 +1,13 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import {useAuth} from '@/app/providers';
 import {apiRequest} from '@/app/lib/api/client';
 import styles from './page.module.css';
+import {createOperationalRefresh,RefreshState} from './operational-refresh';
+import {serviceAvailability,Availability} from './service-availability';
 
 type Row={id:string;filename:string;state:string;group:string;note:string;month:string|null;customer:string|null;unit:string|null;documentId:string|null;closingId:string|null;updatedAt:string;nextAttemptAt:string|null;attempts:number;idleSeconds:number;leaseExpired:boolean;stage:string|null;code:string|null;requiredInputs:string[];identityDecision:{decision:string;at:string}|null;explanationState:string|null};
 type Data={enabled:boolean;generatedAt:string;windowDays:number;total:number;pageSize:number;automationConfigured:boolean;summary:{received30d:number;prepared30d:number;technical:number;human:number;sources:number;processing:number};rows:Row[]};
@@ -14,13 +16,36 @@ const states:Record<string,string>={RECEIVING:'Recebendo original',RECOGNIZING:'
 function elapsed(seconds:number){if(seconds<60)return 'menos de 1 minuto';if(seconds<3600)return Math.floor(seconds/60)+' min';if(seconds<86400)return Math.floor(seconds/3600)+' h';return Math.floor(seconds/86400)+' dia(s)';}
 function nextStep(r:Row){if(r.state==='RECEIVING')return 'Aguardar confirmação do armazenamento. Se a etapa não avançar, conferir o envio antes de repetir.';if(r.group==='TECHNICAL')return 'Conferir o histórico e reconciliar o resultado preservado antes de repetir qualquer operação.';if(r.group==='HUMAN')return 'Abrir a conferência do documento. Revisar identidade, vínculo e autorização; continuar com justificativa ou descontinuar quando solicitado.';if(r.group==='SOURCES')return 'Completar somente as fontes indicadas em Contratos ou Registros CCEE. A EVA mantém os campos preenchidos e retoma quando as fontes mudarem.';if(r.group==='PROCESSING')return r.leaseExpired?'Execução anterior expirou. Aguardar reconciliação técnica; não reenviar o arquivo.':'Aguardar a etapa em andamento. O original está preservado; não é necessário reenviar.';return r.state==='PROPOSAL_READY'?'Revisar a proposta no fluxo de fechamento antes de aprovar.':'Consultar o resultado e o histórico existentes.';}
 function Panel(){
- const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[group,setGroup]=useState('ALL'),[page,setPage]=useState(0),[revision,setRevision]=useState(0);
- useEffect(()=>{const id=setInterval(()=>{if(document.visibilityState==='visible')setRevision(n=>n+1);},30000);return()=>clearInterval(id);},[]);
- useEffect(()=>{const abort=new AbortController();let live=true;setBusy(true);const timeout=setTimeout(()=>abort.abort(),15000);apiRequest<Data>('/api/v1/portal/workspace/automatic-intakes/operations?group='+group+'&page='+page,{cache:'no-store',signal:abort.signal}).then(r=>{if(live){setData(r);setError('');}}).catch(()=>{if(live)setError('Não foi possível atualizar o painel. Os últimos dados exibidos permanecem identificados pela hora da consulta.');}).finally(()=>{clearTimeout(timeout);if(live)setBusy(false);});return()=>{live=false;clearTimeout(timeout);abort.abort();};},[group,page,revision]);
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[group,setGroup]=useState('ALL'),[page,setPage]=useState(0);
+ const [refreshState,setRefreshState]=useState<RefreshState>({mode:'updating',delayMs:0}),[availability,setAvailability]=useState<Availability>({database:'unknown',auth:'unknown',checkedAt:null});
+ const refresh=useRef<(()=>void)|null>(null),busy=refreshState.mode==='updating';
+ useEffect(()=>{
+  let live=true;
+  const loop=createOperationalRefresh<Data>({
+   canRead:()=>document.visibilityState==='visible'&&navigator.onLine!==false,
+   read:signal=>{
+    void serviceAvailability(signal).then(r=>{if(live&&!signal.aborted)setAvailability(r);});
+    return apiRequest<Data>('/api/v1/portal/workspace/automatic-intakes/operations?group='+group+'&page='+page,{cache:'no-store',signal});
+   },
+   result:r=>{if(live){setData(r);setError('');}},
+   error:e=>{if(live){if([401,403].includes((e as {status?:number})?.status??0))setData(null);setError('Não foi possível atualizar o painel. Os últimos dados exibidos permanecem identificados pela hora da consulta. A falha da consulta não cancela a fila da EVA; não reenvie o arquivo.');}},
+   state:s=>{if(live)setRefreshState(s);},
+  });
+  refresh.current=loop.refresh;
+  document.addEventListener('visibilitychange',loop.refresh);window.addEventListener('online',loop.refresh);window.addEventListener('offline',loop.refresh);
+  return()=>{live=false;refresh.current=null;loop.stop();document.removeEventListener('visibilitychange',loop.refresh);window.removeEventListener('online',loop.refresh);window.removeEventListener('offline',loop.refresh);};
+ },[group,page]);
  const cards=data?.summary;
  return <section className={'backoffice-page '+styles.page} aria-busy={busy}>
   <header><Link href="/backoffice/documents">← Documentos</Link><h1>Painel operacional da EVA</h1><p>Acompanhe a etapa real, a causa da espera e o próximo passo. Processamento, conferência e aprovação financeira são situações diferentes.</p></header>
-  <div className={styles.toolbar}><button onClick={()=>setRevision(n=>n+1)} disabled={busy}>{busy?'Atualizando…':'Atualizar painel'}</button>{data?.generatedAt&&<span>Consulta: {new Date(data.generatedAt).toLocaleString('pt-BR')} · atualização a cada 30 s com a página visível</span>}</div>
+  <section className={styles.availability} aria-label="Disponibilidade dos serviços">
+   <h2>Disponibilidade dos serviços</h2>
+   <div>{[['Banco de dados',availability.database],['Acesso e autenticação',availability.auth]].map(([label,state])=><span key={label} data-state={state}>{label}: <strong>{state==='up'?'disponível':state==='down'?'indisponível':'não confirmado'}</strong></span>)}</div>
+   <p>{availability.checkedAt?'Verificação dos serviços: '+new Date(availability.checkedAt).toLocaleString('pt-BR'):'Disponibilidade ainda não confirmada. A última etapa conhecida de cada documento permanece abaixo.'}</p>
+   {(availability.database==='down'||availability.auth==='down')&&<p role="status">Há indisponibilidade de infraestrutura. Justificar uma fatura não resolve essa espera. Preserve os envios e acompanhe a recuperação; não reenvie os arquivos.</p>}
+  </section>
+  <div className={styles.toolbar}><button onClick={()=>refresh.current?.()} disabled={busy}>{busy?'Atualizando…':'Atualizar painel'}</button>{data?.generatedAt&&<span>Consulta dos documentos: {new Date(data.generatedAt).toLocaleString('pt-BR')}</span>}</div>
+  <p role="status">{refreshState.mode==='paused'?'Atualização pausada enquanto a página está oculta ou sem conexão. A consulta será retomada ao retornar.':refreshState.mode==='updating'?'Consultando o andamento preservado…':`Próxima consulta em ${refreshState.delayMs/1000} s, com a página visível e conectada.`}</p>
   {error&&<p role="alert">{error}</p>}{data&&!data.enabled?<p>Recebimento automático temporariamente desligado nesta implantação.</p>:null}
   {data?.enabled&&<>
    {!data.automationConfigured&&<p role="alert">A delegação de automação ainda precisa ser configurada pelo administrador desta organização. Os módulos contratados e as permissões continuam obrigatórios.</p>}
@@ -37,7 +62,7 @@ function Panel(){
     {['PROCESSING','SOURCES'].includes(r.group)&&r.nextAttemptAt&&<p>Próxima verificação prevista: {new Date(r.nextAttemptAt).toLocaleString('pt-BR')}{new Date(r.nextAttemptAt).getTime()<Date.now()?' · aguardando disponibilidade do serviço':''}.</p>}
     {r.identityDecision&&<p>Decisão de identidade registrada: {r.identityDecision.decision==='STOP'?'descontinuar':r.identityDecision.decision==='ADDRESS'?'endereço justificado':'continuar com justificativa'} · {new Date(r.identityDecision.at).toLocaleString('pt-BR')}.</p>}
     {r.explanationState&&<p>Explicação opcional da IA: {({QUEUED:'aguardando',RUNNING:'em andamento',SUCCEEDED:'concluída',FAILED:'indisponível; proposta preservada',UNKNOWN:'confirmação pendente; proposta preservada'} as Record<string,string>)[r.explanationState]??r.explanationState}.</p>}
-    <div className={styles.links}>{r.documentId&&<Link href={'/backoffice/documents?ocrDocument='+encodeURIComponent(r.documentId)}>Conferir documento e histórico</Link>}{['SOURCES','DONE'].includes(r.group)&&<Link href="/backoffice/contracts">Conferir fontes e fechamento em Contratos</Link>}</div>
+    <div className={styles.links}><Link href="/backoffice/documents">{r.group==='HUMAN'?'Abrir envios para conferir e justificar':r.group==='TECHNICAL'?'Abrir envios para conferir o histórico':'Acompanhar envio em Documentos'}</Link>{r.documentId&&<Link href={'/backoffice/documents?ocrDocument='+encodeURIComponent(r.documentId)}>Conferir documento e histórico</Link>}{['SOURCES','DONE'].includes(r.group)&&<Link href="/backoffice/contracts">Conferir fontes e fechamento em Contratos</Link>}</div>
     <details><summary>Referências para suporte</summary><p>Envio: {r.id}{r.closingId?' · Fechamento: '+r.closingId:''}</p>{r.stage&&<p>Etapa registrada: {r.stage}{r.code?' · Código: '+r.code:''}</p>}</details>
    </article>)}</div>}
    <nav className={styles.toolbar} aria-label="Páginas do acompanhamento"><button disabled={busy||page===0} onClick={()=>{setPage(n=>n-1);setData(null);}}>Anterior</button><button disabled={busy||(page+1)*data.pageSize>=data.total} onClick={()=>{setPage(n=>n+1);setData(null);}}>Próxima</button></nav>
