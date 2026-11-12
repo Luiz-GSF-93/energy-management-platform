@@ -17,11 +17,13 @@ const money=(v:string)=>{const n=scaled(v);return n%1000000n===0n?(n/100000000n)
 const keyValid=(k:string)=>{if(!/^\d{44}$/.test(k))return false;let sum=0,w=2;for(let i=42;i>=0;i--){sum+=Number(k[i])*w;w=w===9?2:w+1;}const v=11-sum%11;return Number(k[43])===(v>=10?0:v);};
 
 export function readFiscalXml(bytes:Buffer){
- const fail=()=>{throw new BadRequestException('XML fiscal inválido ou não suportado. Envie XML NF-e/NF3e íntegro, sem entidades externas, de até 2 MB.');};
- if(!Buffer.isBuffer(bytes)||bytes.length<20||bytes.length>MAX_FISCAL_XML_BYTES) return fail();
- let text:string;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{return fail();}
+ const fail=(reason='Estrutura fiscal incompleta ou inválida.')=>{throw new BadRequestException({code:'EVA_XML_REJECTED',message:'XML não recebido. '+reason+' Envie o XML original NF-e/NF3e, de até 2 MB, ou utilize a nota em PDF.'});};
+ if(!Buffer.isBuffer(bytes)||bytes.length<20||bytes.length>MAX_FISCAL_XML_BYTES) return fail('Tamanho do arquivo inválido.');
+ let text:string;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{return fail('Codificação inválida: é necessário UTF-8.');}
  text=text.replace(/^\uFEFF/,'');
- if(/<!DOCTYPE|<!ENTITY|<\?(?!xml\s)|[\x00-\x08\x0b\x0c\x0e-\x1f]/i.test(text)||/encoding\s*=\s*['"](?!UTF-8['"])/i.test(text)||XMLValidator.validate(text)!==true)return fail();
+ if(/<!DOCTYPE|<!ENTITY|<\?(?!xml\s)|[\x00-\x08\x0b\x0c\x0e-\x1f]/i.test(text))return fail('O arquivo contém entidades, instruções ou caracteres não permitidos.');
+ if(/encoding\s*=\s*['"](?!UTF-8['"])/i.test(text))return fail('Codificação não suportada: é necessário UTF-8.');
+ if(XMLValidator.validate(text)!==true)return fail('O conteúdo está malformado ou incompleto.');
  // Bound nesting and node count before the parser allocates the object graph.
  let depth=0,count=0;for(const m of text.matchAll(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<\/?([A-Za-z_][^<>]*?)>/g)){
   if(!m[1])continue;if(++count>20000)return fail();if(m[0].startsWith('</'))depth--;else if(!m[0].endsWith('/>'))depth++;
@@ -30,9 +32,9 @@ export function readFiscalXml(bytes:Buffer){
  if(depth!==0)return fail();
  let root:any;try{root=new XMLParser({ignoreAttributes:false,parseTagValue:false,parseAttributeValue:false,trimValues:true,processEntities:true,allowBooleanAttributes:false}).parse(text);}catch{return fail();}
  const roots=Object.keys(root).filter(k=>k!=='?xml');if(roots.length!==1)return fail();
- const tag=roots[0],model=['nfeProc','NFe'].includes(tag)?'55':['nf3eProc','NF3e'].includes(tag)?'66':null;if(!model)return fail();
+ const tag=roots[0],model=['nfeProc','NFe'].includes(tag)?'55':['nf3eProc','NF3e'].includes(tag)?'66':null;if(!model)return fail('O conteúdo não é um XML fiscal NF-e (modelo 55) ou NF3e (modelo 66). É necessária a estrutura fiscal original.');
  const namespace=model==='55'?'http://www.portalfiscal.inf.br/nfe':'http://www.portalfiscal.inf.br/nf3e',wrapper=node(root[tag]);
- if(wrapper['@_xmlns']!==namespace)return fail();
+ if(wrapper['@_xmlns']!==namespace)return fail('A identificação do formato fiscal (namespace) está ausente ou não é suportada.');
  // Reject namespace rebinding/prefixed fiscal fields rather than stripping a
  // namespace and accidentally accepting a different recipient or total.
  const walk=(v:any,inSignature=false)=>{if(Array.isArray(v)){for(const x of v)walk(x,inSignature);return;}if(!v||typeof v!=='object')return;
@@ -40,9 +42,9 @@ export function readFiscalXml(bytes:Buffer){
  const document=node(tag.endsWith('Proc')?wrapper[model==='55'?'NFe':'NF3e']:wrapper),info=node(document[model==='55'?'infNFe':'infNF3e']);
  const ide=node(info.ide),emit=node(info.emit),dest=node(info.dest),address=node(dest.enderDest),total=node(model==='55'?node(info.total).ICMSTot:info.total);
  if(str(ide.mod)!==model||str(ide.tpAmb)!=='1'||!/^\d{1,9}$/.test(str(ide.nNF))||!validTaxId(str(emit.CNPJ))||!validTaxId(str(dest.CNPJ))||!str(dest.xNome)||!str(emit.xNome)||!str(address.xLgr)||!str(address.nro))return fail();
- const id=str(info['@_Id']),key=id.replace(model==='55'?/^NFe/:/^NF3e/,'');if(!keyValid(key)||key.slice(20,22)!==model||key.slice(6,20)!==str(emit.CNPJ))return fail();
+ const id=str(info['@_Id']),key=id.replace(model==='55'?/^NFe/:/^NF3e/,'');if(!keyValid(key)||key.slice(20,22)!==model||key.slice(6,20)!==str(emit.CNPJ))return fail('Chave de acesso ausente, inválida ou incompatível com o emitente e o modelo.');
  const protocol=node(node(wrapper[model==='55'?'protNFe':'protNF3e']).infProt),declaredStatus=str(protocol.cStat),protocolKey=str(protocol[model==='55'?'chNFe':'chNF3e']);
- if(declaredStatus&&declaredStatus!=='100'||protocolKey&&protocolKey!==key)return fail();
+ if(declaredStatus&&declaredStatus!=='100'||protocolKey&&protocolKey!==key)return fail('O protocolo informado não indica autorização aceita ou corresponde a outra chave.');
  const amount=decimal(total.vNF,2);if(!amount)return fail();
  const extra=str(node(info.infAdic).infCpl);if(extra.length>12000)return fail();
  const items=model==='55'?list(info.det):list(info.NFdet).flatMap(g=>list(node(g).det));if(!items.length||items.length>500)return fail();

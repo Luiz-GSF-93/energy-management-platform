@@ -19,5 +19,11 @@ const file=name=>new File(['x'.repeat(40)],name,{type:name.endsWith('.xml')?'app
  assert.equal(retry.complete,true);assert.deepEqual(calls.map(b=>b.get('requestId')),[originalId,'request-2']);assert.equal(retry.items.filter(i=>i.state==='received').length,3);
  calls=[];await sendEvaBatch(retry.items,'selected-company',async body=>calls.push(body),()=>{});assert.equal(calls.length,0,'Received originals must not be uploaded again');
  await sendEvaBatch([items[0]],undefined,async body=>assert(!body.has('customerId')),()=>{});
+ const rejectedItems=['bad.xml','good.pdf','supplier.xml'].map((name,i)=>({file:file(name),requestId:'rejection-'+i,state:'pending'}));calls=[];
+ const rejected=await sendEvaBatch(rejectedItems,'selected-company',async body=>{calls.push(body);if(body.get('requestId')==='rejection-0')throw Object.assign(new Error('XML fiscal inválido'),{status:400});},()=>{});
+ assert.equal(rejected.complete,false);assert.deepEqual(rejected.items.map(i=>i.state),['rejected','received','received']);assert.equal(calls.length,3,'A definitive XML rejection cannot block the following PDF');assert(rejected.items[0].message.includes('Não recebido'));
+ calls=[];await sendEvaBatch(rejected.items,'selected-company',async body=>calls.push(body),()=>{});assert.equal(calls.length,0,'Received and rejected originals are not replayed');
+ for(const status of [401,403,409,429,500,503]){calls=[];const stopped=await sendEvaBatch(rejectedItems,'selected-company',async body=>{calls.push(body);throw Object.assign(new Error('Request unavailable'),{status});},()=>{});assert.equal(calls.length,1);assert.deepEqual(stopped.items.map(i=>i.state),['uncertain','pending','pending'],'Access, quota and uncertain server failures still stop new sends');}
+ for(const status of [413,415,422]){calls=[];const continued=await sendEvaBatch(rejectedItems,'selected-company',async body=>{calls.push(body);if(body.get('requestId')==='rejection-0')throw Object.assign(new Error('File rejected'),{status});},()=>{});assert.equal(calls.length,3);assert.deepEqual(continued.items.map(i=>i.state),['rejected','received','received']);}
  console.log('PASS company-scoped sequential upload: limits, acknowledgement recovery, stable request IDs and no duplicate received uploads.');
 })().catch(error=>{console.error(error);process.exitCode=1});
