@@ -1,4 +1,5 @@
 import {EvaPoller} from '../../common/workers/eva-poller';
+import {observeEvaStage} from '../../common/services/eva-stage-metrics';
 import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {createHash} from 'node:crypto';
 import {invoiceIdentityWithHistory} from './invoice-identity-with-history';
@@ -39,7 +40,7 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
      if(stored.error)throw Error('OCR_PRESERVED_READ_UNAVAILABLE');
      if(stored.data?.result)preserved=stored.data;
     }
-    try{polled=preserved?{status:'succeeded' as const,result:preserved.result}:await this.connector.poll(job.operation_url);}
+    try{polled=preserved?{status:'succeeded' as const,result:preserved.result}:await observeEvaStage('OCR_POLL',()=>this.connector.poll(job.operation_url));}
     catch(e){
      const code=e instanceof OcrProviderError?e.code:'PROVIDER_UNAVAILABLE';
      const retry=['RATE_LIMITED','PROVIDER_UNAVAILABLE'].includes(code);
@@ -70,7 +71,7 @@ export class OcrWorker implements OnModuleInit,OnModuleDestroy {
    // Commit the intent BEFORE POST. A crash after this point becomes UNKNOWN, not a second POST.
    await this.change(job,'BEGIN_SUBMISSION');
    let submitted;
-   try{submitted=await this.connector.submit(file,job.file_hash);}
+   try{submitted=await observeEvaStage('OCR_SUBMIT',()=>this.connector.submit(file,job.file_hash));}
    catch(e){
     const code=e instanceof OcrProviderError?e.code:'SUBMISSION_UNKNOWN';
     await this.change(job,code==='RATE_LIMITED'?'RETRY_SUBMISSION':code==='SUBMISSION_UNKNOWN'?'UNKNOWN':'FAIL',{p_error:code,p_delay:e instanceof OcrProviderError?(e.retryAfterSeconds??30):30});return;

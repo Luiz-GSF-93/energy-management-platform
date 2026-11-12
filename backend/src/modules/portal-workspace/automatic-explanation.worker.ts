@@ -1,4 +1,5 @@
 import {EvaPoller} from '../../common/workers/eva-poller';
+import {observeEvaStage} from '../../common/services/eva-stage-metrics';
 import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {Injectable,Logger,OnModuleInit,OnModuleDestroy} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
@@ -25,9 +26,9 @@ export class AutomaticExplanationWorker implements OnModuleInit,OnModuleDestroy{
    try{
     const ctx=await action('assert');if(!organizations.includes(ctx.organizationId))throw Error('EXPLANATION_SCOPE_CHANGED');
     const t:TenantContext={scope:'organization',organizationId:ctx.organizationId,email:'',...ctx.delegate};
-    const plan=await this.assistant.inspect(ctx.documentId,t);
+    const plan=await observeEvaStage('EXPLANATION_INSPECT',()=>this.assistant.inspect(ctx.documentId,t));
     await action('assert');
-    const result=await this.ai.interpret(t,'Explique somente os preenchimentos comprovados e as confirmações restantes da proposta, sem inventar fontes ou valores.',assistantAiEvidence(plan),ctx.documentId);
+    const result=await observeEvaStage('AI_INTERPRETATION',()=>this.ai.interpret(t,'Explique somente os preenchimentos comprovados e as confirmações restantes da proposta, sem inventar fontes ou valores.',assistantAiEvidence(plan),ctx.documentId));
     await action('finish',result.state==='READY'?undefined:'EXPLANATION_UNAVAILABLE');
    }catch{try{await action('finish','EXPLANATION_UNCONFIRMED');}catch{/* Lost acknowledgement never repeats inference. */}}
   }finally{this.busy=false;}

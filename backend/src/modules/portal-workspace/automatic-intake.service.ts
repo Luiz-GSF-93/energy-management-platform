@@ -64,7 +64,7 @@ export class AutomaticIntakeService{
  async operations(t:TenantContext,q:Record<string,string>={}){
   if(Object.keys(q).some(k=>!['group','page'].includes(k))||q.group!==undefined&&!['ALL','TECHNICAL','HUMAN','SOURCES','PROCESSING','DONE'].includes(q.group)||q.page!==undefined&&!/^\d{1,4}$/.test(q.page))throw new BadRequestException('Filtro operacional inválido.');
   if(!this.enabled(t.organizationId))return {enabled:false};
-  const r=await this.db.getClient().rpc('eva_intake_operational_dashboard',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_group:q.group??'ALL',p_offset:Number(q.page??0)*25});
+  const r=await readRpc(this.db.getClient(),'eva_intake_operational_dashboard',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_group:q.group??'ALL',p_offset:Number(q.page??0)*25},8000);
   if(r.error?.code==='42501')throw new ForbiddenException('Painel restrito à equipe interna autorizada.');
   if(r.error)throw new ServiceUnavailableException('Não foi possível consultar o painel. O processamento foi preservado.');
   return {enabled:true,...r.data};

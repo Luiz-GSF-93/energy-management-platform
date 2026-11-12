@@ -58,6 +58,7 @@ on:
       - 'backend/src/modules/portal-workspace/portal-workspace.module.ts'
       - 'frontend/app/backoffice/documents/**'
       - 'frontend/test/eva-operations.cjs'
+      - 'frontend/test/eva-operational-resilience.cjs'
       - 'frontend/app/components/AutomaticInvoiceIntake*'
       - 'frontend/app/components/eva-upload-batch.ts'
       - 'frontend/test/eva-upload-batch.cjs'
@@ -92,7 +93,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/ccee-estimate-proposal.cjs && node test/management-fees.cjs && node test/eva-assisted-closing.cjs && node test/eva-guided-review.cjs && node test/guided-ccee-entry.cjs && node test/eva-operations.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/eva-upload-batch.cjs && node test/eva-company-upload.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
+      - run: node test/ccee-estimate-proposal.cjs && node test/management-fees.cjs && node test/eva-assisted-closing.cjs && node test/eva-guided-review.cjs && node test/guided-ccee-entry.cjs && node test/eva-operations.cjs && node test/eva-operational-resilience.cjs && node test/documents-upload-routing.cjs && node test/automatic-intake.cjs && node test/eva-upload-batch.cjs && node test/eva-company-upload.cjs && node test/automatic-intake-triage.cjs && node test/ocr-original-invoice.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

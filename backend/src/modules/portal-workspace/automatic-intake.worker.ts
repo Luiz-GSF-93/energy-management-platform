@@ -2,6 +2,7 @@ import {contractClosingDraftEnabled} from '../ocr/contract-closing-draft';
 import {documentedSettlementEnabled} from '../ocr/documented-tariff-period';
 import {EvaPoller} from '../../common/workers/eva-poller';
 import {readRpc,EvaReadUnavailable} from '../../common/services/read-deadline';
+import {observeEvaStage} from '../../common/services/eva-stage-metrics';
 import {scheduledWorkEnabled} from '../../common/workers/process-role';
 import {acceptedIdentityContinuation} from './identity-continuation';
 import {SUPPLIER_COST_DRAFT_VERSION} from '../ocr/supplier-invoice-cost-draft';
@@ -65,27 +66,27 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      let raw=i.raw_result;
      if(i.state==='OCR_POLLING'&&!raw){
       if(i.attempts>120){await transition('review',{note:'A leitura excedeu as tentativas permitidas. O arquivo foi preservado.'});return;}
-      const polled=await this.connector.poll(i.operation_url);
+      const polled=await observeEvaStage('OCR_POLL',()=>this.connector.poll(i.operation_url));
       if(polled.status==='running'){await transition('wait');return;}
       if(polled.status==='failed'){await transition('review',{note:'A leitura não foi concluída. Confira o arquivo original.'});return;}
       raw=polled.result;await transition('raw',{raw});
      }
-     const storage=this.db.getClient().storage.from(DOCUMENT_BUCKET),original=await storage.download(intakePath(i.organization_id,i.id,i.mime));
+     const storage=this.db.getClient().storage.from(DOCUMENT_BUCKET),original=await observeEvaStage('ORIGINAL_DOWNLOAD',()=>storage.download(intakePath(i.organization_id,i.id,i.mime)));
      if(original.error||!original.data||original.data.size!==i.size_bytes)throw Error('ORIGINAL_UNAVAILABLE');
      const bytes=Buffer.from(await original.data.arrayBuffer());if(createHash('sha256').update(bytes).digest('hex')!==i.file_hash)throw Error('ORIGINAL_HASH_MISMATCH');
-     const xml=i.mime==='application/xml'?readFiscalXml(bytes):null;
+     const xml=i.mime==='application/xml'?await observeEvaStage('XML_PARSE',()=>readFiscalXml(bytes)):null;
      if(xml){raw=xml.raw;/* Preserve the immutable first extraction on replay; typed fields above come from the hash-checked original. */await this.rpc('eva_intake_xml_source',{p_id:job.id,p_token:job.token,p_raw:i.raw_result??raw});}
      if(i.state==='OCR_QUEUED'&&!xml){
       if(!this.connector.isConfigured()){await transition('review',{note:'OCR indisponível. O arquivo foi preservado.'});return;}
       await transition('begin_ocr');submitting=true;
-      const result=await this.connector.submit({buffer:bytes,size:bytes.length,mimetype:i.mime,originalname:i.filename},i.file_hash);
+      const result=await observeEvaStage('OCR_SUBMIT',()=>this.connector.submit({buffer:bytes,size:bytes.length,mimetype:i.mime,originalname:i.filename},i.file_hash));
       await transition('accepted',{operation:result.url});return;
      }
      if(i.state!=='LINKING'){
       let pages:{page:number;text:string}[]=[];
       if(raw)pages=(raw.pages??[]).map((p:any)=>({page:p.pageNumber,text:(p.lines??[]).map((l:any)=>l.content).join('\n')||(p.spans??[]).map((s:any)=>String(raw.content??'').slice(s.offset,s.offset+s.length)).join('\n')}));
       else if(i.mime==='application/pdf'){
-       const extraction=await extractPdfText(bytes,20000);
+       const extraction=await observeEvaStage('PDF_TEXT',()=>extractPdfText(bytes,20000));
        if(!extraction.ocrRequired)pages=[...new Set(extraction.sections.map(s=>s.page))].map(page=>({page,text:extraction.sections.filter(s=>s.page===page).map(s=>s.text).join('\n')}));
       }
       if(!pages.length){await transition('need_ocr',{note:'Identificação por OCR necessária. Uma única leitura será usada também na preparação.'});return;}
@@ -127,7 +128,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
       await transition('recognized',{proof:matches[0]});Object.assign(i,{customer_id:matches[0].customerId,unit_id:matches[0].unitId,month:matches[0].month,document_type:matches[0].documentType,state:'LINKING'});
      }
      const path=i.organization_id+'/'+i.unit_id+'/eva-intake-'+i.id+(i.mime==='application/xml'?'.xml':i.mime==='application/pdf'?'.pdf':i.mime==='image/png'?'.png':'.jpg');
-     const saved=await storage.upload(path,bytes,{contentType:i.mime,upsert:false});
+     const saved=await observeEvaStage('ARCHIVE_COPY',()=>storage.upload(path,bytes,{contentType:i.mime,upsert:false}));
      if(saved.error){const same=await storage.download(path);if(same.error||!same.data||same.data.size!==bytes.length||createHash('sha256').update(Buffer.from(await same.data.arrayBuffer())).digest('hex')!==i.file_hash)throw Error('FINAL_COPY_UNCONFIRMED');}
      await transition('linked',{path,note:'Documento reconhecido e vinculado automaticamente. Fontes e original preservados.'});return;
     }
@@ -157,30 +158,30 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      approved=consolidated.rows?.find(matchesApproved);
     }
     if(approved){await transition('published',{closingId:approved.id,note:'Fechamento aprovado. Históricos preservados.'});return;}
-    const before=await this.sourceState(i,job),signature=before.signature;
+    const before=await observeEvaStage('SOURCE_CHECK',()=>this.sourceState(i,job)),signature=before.signature;
     if(i.signature===signature){await transition('wait',{note:i.note},before.revision);return;}
     // A failed read-only identity check has no uncertain financial writes.
-    await this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id);
+    await observeEvaStage('IDENTITY_CHECK',()=>this.ocr.assertAutomaticIdentity(i.organization_id,i.document_id));
     if(i.closing_id){
      const mode=documentedSettlementEnabled()&&contractClosingDraftEnabled()?'DOCUMENTED':contractClosingDraftEnabled()?'CONTRACT':'BASE';
-     const checkpoint=(await readRpc(this.db.getClient(),'eva_intake_prepared_checkpoint',{p_id:job.id,p_token:job.token,p_mode:mode})).data;
+     const checkpoint=(await observeEvaStage('PREPARED_CHECKPOINT',()=>readRpc(this.db.getClient(),'eva_intake_prepared_checkpoint',{p_id:job.id,p_token:job.token,p_mode:mode}))).data;
      const row=checkpoint?.row;
      if(row){
       if(checkpoint.sourcesCurrent!==true||row.organization_id!==i.organization_id||row.month!==i.month||!['READY_FOR_REVIEW','INCOMPLETE'].includes(row.state)||!row.report?.units?.some((u:any)=>u.id===i.unit_id&&u.documentId===i.document_id&&u.sourceHash===i.file_hash))throw Error('CHECKPOINT_SOURCE_MISMATCH');
-      await transition('begin_prepare');preparing=true;stage='FINAL_SOURCE_CHECK';const after=await this.sourceState(i,job),sourcesChanged=signature!==after.signature,complete=row.report.preparation?.percent===100||row.report.approvalEligible===true;
+      await transition('begin_prepare');preparing=true;stage='FINAL_SOURCE_CHECK';const after=await observeEvaStage('SOURCE_CHECK',()=>this.sourceState(i,job)),sourcesChanged=signature!==after.signature,complete=row.report.preparation?.percent===100||row.report.approvalEligible===true;
       await transition('prepared',{closingId:row.id,signature:sourcesChanged?signature:after.signature,sourcesChanged,complete,note:sourcesChanged?'Uma fonte mudou durante a reconferência. A proposta foi preservada; a EVA consultará a competência novamente.':'Proposta preservada reconferida com todas as fontes atuais. Disponível para validar e encaminhar à aprovação conforme as confirmações financeiras.'},after.revision);return;
      }
     }
     stage='DRAFT_PREPARATION';await transition('begin_prepare');preparing=true;
-    const drafts=await this.assistant.prepareAutomatic(i.document_id,t);
+    const drafts=await observeEvaStage('DRAFT_PREPARATION',()=>this.assistant.prepareAutomatic(i.document_id,t));
     if(drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED'))throw Error('UNCONFIRMED_DRAFT_WRITE');
-    if(this.drafts&&drafts.current)try{await this.drafts.fill(t,drafts.current);}catch{this.log.warn('EVA_INTAKE_FIELD_DRAFT_PENDING');}
-    stage='CLOSING_PREPARATION';const result=await this.closing.prepareInvoice(i.document_id,i.file_hash,{consumerUnitId:i.unit_id,month:i.month},t);
+    if(this.drafts&&drafts.current)try{await observeEvaStage('FIELD_DRAFT',()=>this.drafts!.fill(t,drafts.current!));}catch{this.log.warn('EVA_INTAKE_FIELD_DRAFT_PENDING');}
+    stage='CLOSING_PREPARATION';const result=await observeEvaStage('CLOSING_PREPARATION',()=>this.closing.prepareInvoice(i.document_id,i.file_hash,{consumerUnitId:i.unit_id,month:i.month},t));
     if(!['READY_FOR_REVIEW','INCOMPLETE'].includes(result.row?.state))throw Error('UNCONFIRMED_CLOSING_WRITE');
     const report=result.row.report,complete=report.preparation?.percent===100||report.approvalEligible===true;
     // The prepared transition atomically queues an optional explanation.
     // Model latency and failure never gate these deterministic fields.
-    stage='FINAL_SOURCE_CHECK';const after=await this.sourceState(i,job),sourcesChanged=signature!==after.signature;
+    stage='FINAL_SOURCE_CHECK';const after=await observeEvaStage('SOURCE_CHECK',()=>this.sourceState(i,job)),sourcesChanged=signature!==after.signature;
     // A later signature does not attest the inputs of the result just prepared.
     // Keep the earlier signature dirty; the next pass must consume new sources.
     await transition('prepared',{closingId:result.row.id,signature:sourcesChanged?signature:after.signature,sourcesChanged,complete,note:sourcesChanged?'Uma fonte mudou durante a preparação. Resultado preservado; a EVA vai reconferir a competência sem repetir OCR.':complete?'Preenchimento da proposta concluído. Revise somente as confirmações do resumo antes de aprovar.':'A EVA preencheu as fontes disponíveis e retomará automaticamente quando os documentos ou registros pendentes forem atualizados.'},after.revision);
