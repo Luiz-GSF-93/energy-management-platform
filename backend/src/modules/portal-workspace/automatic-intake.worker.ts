@@ -36,7 +36,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
  onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(intakeOrganizations().length)this.schedule();}
  onModuleDestroy(){this.poller.stop();this.stopped=true;}
  private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),5000,()=>this.log.warn('EVA_INTAKE_PENDING'));}
- private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=name==='eva_intake_source_state'?await readRpc(this.db.getClient(),name,body):await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
+ private async rpc(name:string,body:any){const scoped=['eva_intake_work_context','transition_eva_automatic_intake','eva_intake_reference_signature','eva_intake_unit_aliases'].includes(name)&&process.env.PORTAL_MULTI_CUSTOMER_ENABLED==='true';const r=process.env.EVA_MANUAL_PREPARATION_ASYNC_ENABLED==='true'&&body?.p_action==='begin_prepare'&&['transition_eva_automatic_intake','eva_intake_revision_transition'].includes(name)?await this.db.getClient().rpc('eva_coordinated_intake_begin',{p_name:name,p_args:body,p_scoped:scoped}):name==='eva_intake_source_state'?await readRpc(this.db.getClient(),name,body):await this.db.getClient().rpc(scoped?'portal_intake_scoped_rpc':name,scoped?{p_name:name,p_args:body}:body);if(r.error)throw Object.assign(Error('EVA_INTAKE_RPC_'+name),{code:r.error.code});return r.data;}
  private async sourceState(i:any,job:{id:string;token:string}){
   const officialFlag=await this.officialFlags?.reference(i.organization_id,i.month);
   const state=await this.rpc('eva_intake_source_state',{p_id:job.id,p_token:job.token});
@@ -168,11 +168,11 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      const row=checkpoint?.row;
      if(row){
       if(checkpoint.sourcesCurrent!==true||row.organization_id!==i.organization_id||row.month!==i.month||!['READY_FOR_REVIEW','INCOMPLETE'].includes(row.state)||!row.report?.units?.some((u:any)=>u.id===i.unit_id&&u.documentId===i.document_id&&u.sourceHash===i.file_hash))throw Error('CHECKPOINT_SOURCE_MISMATCH');
-      await transition('begin_prepare');preparing=true;stage='FINAL_SOURCE_CHECK';const after=await observeEvaStage('SOURCE_CHECK',()=>this.sourceState(i,job)),sourcesChanged=signature!==after.signature,complete=row.report.preparation?.percent===100||row.report.approvalEligible===true;
+      const beginning=await transition('begin_prepare');if(beginning?.deferred){await transition('wait',{note:'Outra preparação está sendo conferida nesta competência. O original e as respostas foram preservados; a EVA retomará sem repetir OCR.'});return;}preparing=true;stage='FINAL_SOURCE_CHECK';const after=await observeEvaStage('SOURCE_CHECK',()=>this.sourceState(i,job)),sourcesChanged=signature!==after.signature,complete=row.report.preparation?.percent===100||row.report.approvalEligible===true;
       await transition('prepared',{closingId:row.id,signature:sourcesChanged?signature:after.signature,sourcesChanged,complete,note:sourcesChanged?'Uma fonte mudou durante a reconferência. A proposta foi preservada; a EVA consultará a competência novamente.':'Proposta preservada reconferida com todas as fontes atuais. Disponível para validar e encaminhar à aprovação conforme as confirmações financeiras.'},after.revision);return;
      }
     }
-    stage='DRAFT_PREPARATION';await transition('begin_prepare');preparing=true;
+    stage='DRAFT_PREPARATION';const beginning=await transition('begin_prepare');if(beginning?.deferred){await transition('wait',{note:'Outra preparação está sendo conferida nesta competência. O original e as respostas foram preservados; a EVA retomará sem repetir OCR.'});return;}preparing=true;
     const drafts=await observeEvaStage('DRAFT_PREPARATION',()=>this.assistant.prepareAutomatic(i.document_id,t));
     if(drafts.receipts.some(r=>r.state==='VERIFY_REQUIRED'))throw Error('UNCONFIRMED_DRAFT_WRITE');
     if(this.drafts&&drafts.current)try{await observeEvaStage('FIELD_DRAFT',()=>this.drafts!.fill(t,drafts.current!));}catch{this.log.warn('EVA_INTAKE_FIELD_DRAFT_PENDING');}

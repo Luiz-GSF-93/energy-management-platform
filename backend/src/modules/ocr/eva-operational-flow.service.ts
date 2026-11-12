@@ -50,7 +50,7 @@ export class EvaOperationalFlowService implements OnModuleInit,OnModuleDestroy{
   }
   return{enabled:true,...await this.rpc('eva_flow_action',{p_org:t.organizationId,p_actor:t.userId,p_action:action,p_unit:consumerUnitId,p_month:month,p_body:body})};
  }
- private async rpc(name:string,args:any){const r=await this.db.getClient().rpc(name,args);if(r.error){if(r.error.code==='42501')throw new ForbiddenException('Perfil, licença ou responsabilidade operacional indisponível.');if(['22023','40001','23505','22P02'].includes(r.error.code))throw new BadRequestException('O protocolo ou as fontes mudaram. Confira a proposta e sua justificativa.');throw Error('EVA_FLOW_'+name+'_UNCONFIRMED');}return r.data;}
+ private async rpc(name:string,args:any){const r=process.env.EVA_MANUAL_PREPARATION_ASYNC_ENABLED==='true'&&name==='eva_flow_worker'&&args.p_action==='begin_write'?await this.db.getClient().rpc('eva_coordinated_flow_begin',{p_id:args.p_id,p_lease:args.p_lease}):await this.db.getClient().rpc(name,args);if(r.data?.deferred)throw Error('EVA_FLOW_PREPARATION_SLOT_BUSY');if(r.error){if(r.error.code==='42501')throw new ForbiddenException('Perfil, licença ou responsabilidade operacional indisponível.');if(['22023','40001','23505','22P02'].includes(r.error.code))throw new BadRequestException('O protocolo ou as fontes mudaram. Confira a proposta e sua justificativa.');throw Error('EVA_FLOW_'+name+'_UNCONFIRMED');}return r.data;}
  onModuleInit(){if(!scheduledWorkEnabled('EVA'))return;if(this.enabled())this.schedule();}
  onModuleDestroy(){this.poller.stop();this.stopped=true;}
  private schedule(){if(this.stopped)return;this.poller.start(()=>this.runOnce(),15000,()=>this.log.warn('EVA_FLOW_STEP_PENDING'));}

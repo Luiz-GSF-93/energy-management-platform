@@ -1,0 +1,43 @@
+name: EVA manual preparation durable queue
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'frontend/app/backoffice/contracts/**', 'frontend/app/lib/read-only-refresh.ts', 'frontend/test/eva-manual-preparation.cjs', '.github/workflows/eva-manual-preparation.yml']
+  pull_request:
+    paths: ['backend/src/modules/ocr/**', 'backend/src/modules/portal-workspace/automatic-intake.worker*', 'backend/src/database/migrations/20261315*', 'backend/src/common/**', 'backend/src/eva-worker.module.ts', 'backend/test/eva-manual-preparation-queue.cjs', 'frontend/app/backoffice/contracts/**', 'frontend/app/lib/read-only-refresh.ts', 'frontend/app/backoffice/documents/operations/operational-refresh.ts', 'frontend/test/eva-manual-preparation.cjs', '.github/workflows/eva-manual-preparation.yml']
+permissions:
+  contents: read
+jobs:
+  queue-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: npm test -- --runInBand src/modules/ocr/eva-manual-preparation.spec.ts src/modules/ocr/eva-preparation-coordination.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts src/common/workers src/common/services/eva-stage-metrics.spec.ts
+        working-directory: backend
+      - run: node test/eva-manual-preparation-queue.cjs && node test/eva-assisted-closing.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: node test/eva-worker-bootstrap.cjs
+        working-directory: backend
+  async-review-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/eva-manual-preparation.cjs && node test/eva-assisted-closing.cjs && node test/eva-operational-resilience.cjs && node test/eva-operations.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

@@ -1,0 +1,66 @@
+// Disposable synthetic database, no application credentials, OCR or external API.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+(async()=>{const db=new PGlite();let checks=0;const ok=x=>{assert(x);checks++;},deny=async(fn,code)=>{await assert.rejects(fn,e=>!code||e.code===code);checks++;};try{
+ const baseline=fs.readFileSync(path.join(__dirname,'calculation-autofill.cjs'),'utf8').split('await db.exec(`')[1].split('`);')[0].replace(/\$\{id\((\d+)\)\}/g,(_,n)=>id(n)).replace(/\$\{'a'\.repeat\(64\)\}/g,'a'.repeat(64));await db.exec(baseline);
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261109_calculation_autofill.sql'),'utf8'));
+ await db.exec(`ALTER TABLE organization_members ADD COLUMN permission_limit jsonb;
+ CREATE FUNCTION preserve_operation_history() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'immutable' USING ERRCODE='23514';END$$;
+ CREATE TABLE eva_assisted_closing_versions(id uuid PRIMARY KEY,organization_id text,customer_id text,month text,report jsonb);
+ CREATE TABLE eva_assisted_closing_events(closing_id uuid,sequence integer,state text);
+ CREATE TABLE eva_automatic_intakes(id uuid PRIMARY KEY,organization_id text,customer_id text,unit_id text,month text,state text,lease_token uuid,lease_until timestamptz);
+ CREATE TABLE eva_operational_runs(id uuid PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,month text,kind text,state text,write_started boolean,lease_id uuid,lease_until timestamptz);
+ CREATE FUNCTION calculation_preparation_effective_state(text,uuid) RETURNS text LANGUAGE sql AS $$SELECT state FROM public.calculation_preparation_run_events WHERE organization_id=$1 AND run_id=$2 ORDER BY sequence DESC LIMIT 1$$;
+ CREATE FUNCTION transition_eva_automatic_intake(uuid,uuid,text,jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN UPDATE public.eva_automatic_intakes SET state='PREPARING' WHERE id=$1 AND lease_token=$2;RETURN '{"began":true}';END$$;
+ CREATE FUNCTION eva_flow_worker(text,uuid,uuid,jsonb) RETURNS jsonb LANGUAGE plpgsql AS $$BEGIN UPDATE public.eva_operational_runs SET write_started=true WHERE id=$2 AND lease_id=$3;RETURN '{"began":true}';END$$;
+ INSERT INTO roles VALUES('admin','org','organization','admin_org','["8f105b02-4443-49de-b188-847e0284e7ed","60f9690a-145b-4dba-b23f-9f945baca296","92e1b670-ab10-483a-b825-c6e16799496d","beb6ec90-8ba8-40ce-a156-aeef6cc75cce"]');
+ INSERT INTO organization_members(organization_id,user_id,role_id,status,affiliation_type) VALUES('org','${id(24)}','admin','ACTIVE','internal');
+ INSERT INTO consumer_units VALUES('${id(3)}','org','customer','ACTIVE');`);
+ const migration=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261315_eva_manual_preparation_queue.sql'),'utf8');await db.exec(migration);await db.exec(migration);
+ const action=(name,job=null,body={},unit=id(1),scope='UNIT',actor=id(20),role='operator',org='org')=>db.query('SELECT eva_manual_preparation_action($1,$2,$3,$4,$5,$6,$7,$8,$9) data',[org,actor,role,name,unit,'2026-08',scope,job,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const work=(name,claim={},body={})=>db.query('SELECT eva_manual_preparation_worker($1,$2,$3,$4) data',[name,claim.id??null,claim.token??null,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const count=async table=>Number((await db.query('SELECT count(*) n FROM '+table)).rows[0].n);
+ ok((await action('status')).job===null);
+ await db.exec(`INSERT INTO roles SELECT 'other-operator','other',scope,name,permissions FROM roles WHERE id='operator';INSERT INTO organization_members(organization_id,user_id,role_id,status,affiliation_type) VALUES('other','${id(80)}','other-operator','ACTIVE','internal')`);
+ for(const [actor,role] of [[id(22),'client'],[id(23),'viewer'],[id(50),'operator']])await deny(()=>action('request',id(100),{},id(1),'UNIT',actor,role),'42501');
+ await deny(()=>action('request',id(100),{},id(11)),'42501');
+ await db.exec(`UPDATE organization_members SET permission_limit='["8f105b02-4443-49de-b188-847e0284e7ed","60f9690a-145b-4dba-b23f-9f945baca296"]' WHERE user_id='${id(20)}'`);
+ await deny(()=>action('request',id(100)),'42501');await db.exec(`UPDATE organization_members SET permission_limit=NULL WHERE user_id='${id(20)}'`);
+ const first=await action('request',id(100));ok(first.job.state==='QUEUED');ok((await action('request',id(100))).replayed);ok((await action('request',id(101))).job.id===id(100));ok(await count('eva_manual_preparations')===1);ok(await count('eva_manual_preparation_requests')===2);
+ ok((await action('status',id(101))).job.id===id(100));await deny(()=>action('request',id(100),{},id(3)),'40001');await deny(()=>action('request',id(100),{},id(1),'UNIT',id(24),'admin'),'40001');
+ await action('request',id(110),{},id(1),'CUSTOMER');const claim=await work('claim');ok(claim.id===id(100));ok(await work('claim')===null);
+ ok((await action('request',id(111),{},id(3),'CUSTOMER')).job.id===id(110));await deny(()=>action('request',id(110),{},id(3),'CUSTOMER'),'40001');
+ await action('request',id(180),{},id(11),'UNIT',id(80),'other-operator','other');const otherClaim=await work('claim');ok(otherClaim.id===id(180));ok((await work('context',otherClaim)).job.organizationId==='other');await deny(()=>action('status',claim.id,{},id(11),'UNIT',id(80),'other-operator','other'),'42501');await work('finish',otherClaim,{state:'FAILED',code:'SYNTHETIC_STOP_BEFORE_WRITES'});
+ const ctx=await work('context',claim);ok(ctx.job.organizationId==='org'&&ctx.delegate.role==='operacional');ok(!JSON.stringify(ctx).includes('lease_token'));
+ await deny(()=>work('context',{...claim,token:id(999)}),'40001');
+ // The intake has the shared execution slot first: manual execution defers without writes.
+ await db.exec(`INSERT INTO eva_automatic_intakes VALUES('${id(400)}','org','customer','${id(1)}','2026-08','PREPARING','${id(401)}',now()+interval '5 minutes')`);
+ ok((await work('begin',claim)).deferred);ok((await work('defer',claim)).state==='QUEUED');ok((await db.query('SELECT write_started FROM eva_manual_preparations WHERE id=$1',[claim.id])).rows[0].write_started===false);
+ await db.exec(`UPDATE eva_automatic_intakes SET state='WAITING_OCR';UPDATE eva_manual_preparations SET next_attempt_at=now() WHERE id='${claim.id}'`);
+ const c2=await work('claim');ok(c2.id===claim.id);ok((await work('begin',c2)).accepted);await deny(()=>work('begin',c2),'40001');ok((await work('heartbeat',c2)).alive);await deny(()=>work('finish',c2,{state:'FAILED',code:'FAILED'}),'40001');
+ const coordinated=await db.query('SELECT eva_coordinated_intake_begin($1,$2,false) result',['transition_eva_automatic_intake',JSON.stringify({p_id:id(400),p_token:id(401),p_action:'begin_prepare',p_body:{}})]);ok(coordinated.rows[0].result.deferred===true);
+ await db.exec(`INSERT INTO eva_operational_runs VALUES('${id(410)}','org','customer','${id(1)}','2026-08','CLOSING','RUNNING',false,'${id(411)}',now()+interval '5 minutes')`);
+ ok((await db.query('SELECT eva_coordinated_flow_begin($1,$2) data',[id(410),id(411)])).rows[0].data.deferred);ok((await work('finish',c2,{state:'UNKNOWN',code:'WRITE_ACK_PENDING'})).state==='UNKNOWN');
+ ok((await action('request',id(102))).job.id===claim.id);ok(await work('claim')===null);await deny(()=>action('reconcile',claim.id,{reason:'Conferência técnica com fontes preservadas.',confirmed:true}),'42501');
+ await db.exec(`INSERT INTO calculation_preparation_runs(id,organization_id,customer_id,consumer_unit_id,month,document_id,source_hash,source_basis,plan,actor_id) VALUES('${id(500)}','org','customer','${id(1)}','2026-08','${id(2)}','${'a'.repeat(64)}','${'b'.repeat(64)}','{}','${id(20)}');INSERT INTO calculation_preparation_run_events(run_id,organization_id,sequence,state,actor_id,receipts) VALUES('${id(500)}','org',1,'RUNNING','${id(20)}','[]')`);
+ await deny(()=>action('reconcile',claim.id,{reason:'Histórico conferido sem aprovação financeira.',confirmed:true},id(1),'UNIT',id(24),'admin'),'40001');
+ await db.exec(`INSERT INTO calculation_preparation_run_events(run_id,organization_id,sequence,state,actor_id,receipts) VALUES('${id(500)}','org',2,'PARTIAL','${id(20)}','[]')`);
+ const resumed=await action('reconcile',claim.id,{reason:'Histórico conferido com gravações comprovadas.',confirmed:true},id(1),'UNIT',id(24),'admin');ok(resumed.job.generation===2&&resumed.job.state==='QUEUED');
+ const c3=await work('claim');const ctx3=await work('context',c3);ok(ctx3.delegate.role==='admin_org');ok(ctx3.job.executionId!==claim.id);
+ await db.exec(`UPDATE eva_operational_runs SET state='WAITING';UPDATE eva_automatic_intakes SET state='WAITING_OCR'`);
+ ok((await work('begin',c3)).accepted);await db.exec(`INSERT INTO eva_assisted_closing_versions VALUES('${id(600)}','org','customer','2026-08','{"unitIds":["${id(1)}"],"scope":{"kind":"UNIT"}}');INSERT INTO eva_assisted_closing_events VALUES('${id(600)}',1,'READY_FOR_REVIEW')`);
+ await deny(()=>work('finish',c3,{state:'SUCCEEDED',closingId:id(999)}),'40001');ok((await work('finish',c3,{state:'SUCCEEDED',closingId:id(600)})).state==='SUCCEEDED');
+ // Replay of a coalesced request after completion must not create a new job.
+ ok((await action('request',id(101))).job.id===claim.id);ok(await count('eva_manual_preparations')===3);
+ const customerClaim=await work('claim');ok(customerClaim.id===id(110));await db.exec(`UPDATE organization_members SET status='INACTIVE' WHERE user_id='${id(20)}'`);await deny(()=>work('context',customerClaim),'42501');ok((await work('finish',customerClaim,{state:'FAILED',code:'ACTOR_REVOKED'})).state==='FAILED');await db.exec(`UPDATE organization_members SET status='ACTIVE' WHERE user_id='${id(20)}'`);
+ // Expired leases before writes may be reclaimed; after the boundary they remain UNKNOWN.
+ await action('request',id(120));const exp=await work('claim');await db.exec(`UPDATE eva_manual_preparations SET lease_until=now()-interval '1 second' WHERE id='${exp.id}'`);const exp2=await work('claim');ok(exp2.id===exp.id&&exp2.token!==exp.token);await work('begin',exp2);await db.exec(`UPDATE eva_manual_preparations SET lease_until=now()-interval '1 second' WHERE id='${exp.id}'`);ok(await work('claim')===null);ok((await action('status',exp.id)).job.state==='UNKNOWN');
+ for(const table of ['eva_manual_preparations','eva_manual_preparation_events','eva_manual_preparation_requests'])for(const role of ['anon','authenticated','service_role'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) p',[role,table,privilege])).rows[0].p);
+ for(const fn of ['eva_manual_preparation_action(text,text,text,text,text,text,text,uuid,jsonb)','eva_manual_preparation_worker(text,uuid,uuid,jsonb)','eva_coordinated_intake_begin(text,jsonb,boolean)','eva_coordinated_flow_begin(uuid,uuid)'])for(const role of ['anon','authenticated'])ok(!(await db.query('SELECT has_function_privilege($1,$2,$3) p',[role,fn,'EXECUTE'])).rows[0].p);
+ for(let n=0;n<21;n++)await db.query('INSERT INTO consumer_units VALUES($1,$2,$3,$4)',[id(8000+n),'org','customer','ACTIVE']);
+ for(let n=0;n<20;n++)await action('request',id(9000+n),{},id(8000+n));
+ await deny(()=>action('request',id(9020),{},id(8020)),'P3410');
+ await deny(()=>db.exec('UPDATE eva_manual_preparation_requests SET actor_id=actor_id'),'23514');
+ await deny(()=>db.exec('UPDATE eva_manual_preparation_events SET body=body'),'23514');ok((await db.query("SELECT count(*) n FROM eva_manual_preparation_events WHERE body->'financialApproval'='true'")).rows[0].n===0);
+ console.log('PASS '+checks+' manual preparation SQL checks: tenant/license/role, persisted aliases, leases, shared slots, revocation, uncertain writes, explicit reconciliation and privileges.');
+}finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

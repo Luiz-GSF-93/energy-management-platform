@@ -120,4 +120,9 @@ describe('Automatic intake durable orchestration',()=>{
   await f.worker.runOnce();expect(f.actions.at(-1)[0]).toBe('review');expect(f.rpc).toHaveBeenCalledWith('eva_intake_continue_requested',expect.objectContaining({p_id:'receipt',p_fingerprint:expect.stringMatching(/^[a-f0-9]{64}$/)}));expect(f.connector.submit).not.toHaveBeenCalled();expect(f.ocr.enqueue).not.toHaveBeenCalled();
  });
 
+ it('defers automated financial preparation while the manual execution slot is occupied',async()=>{
+  const f=fixture();process.env.EVA_MANUAL_PREPARATION_ASYNC_ENABLED='true';const previous=f.rpc.getMockImplementation()!;
+  f.rpc.mockImplementation(async(name,b):Promise<any>=>name==='eva_coordinated_intake_begin'?{data:{deferred:true}}:previous(name,b));
+  await f.worker.runOnce();expect(f.assistant.prepareAutomatic).not.toHaveBeenCalled();expect(f.closing.prepareInvoice).not.toHaveBeenCalled();expect(f.actions.at(-1)[0]).toBe('wait');expect(f.rpc).toHaveBeenCalledWith('eva_coordinated_intake_begin',expect.objectContaining({p_name:'transition_eva_automatic_intake',p_args:expect.objectContaining({p_action:'begin_prepare'})}));
+ });
 });

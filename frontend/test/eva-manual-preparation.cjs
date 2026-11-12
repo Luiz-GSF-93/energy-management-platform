@@ -1,0 +1,37 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost',pretendToBeVisual:true});for(const k of ['window','document','navigator','HTMLElement','Event','MouseEvent'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+require.extensions['.css']=m=>m.exports={};require('./eva-processing-dom.cjs')();
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),original=Module._load;
+const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0'),props={unitId:id(1),customerId:'customer',month:'2026-08',onEnabled:()=>{}};
+let context={scope:'organization',user:{id:'actor'},currentOrganization:{id:'org',role:'operacional'}},job=null,available=true,accepting=true,lostAck=false,statusDenied=false,version=1,requests=[];
+const makeJob=(requestId,state='QUEUED')=>({id:requestId,state,consumerUnitId:props.unitId,customerId:'customer',month:props.month,scopeKind:'UNIT',closingId:null,updatedAt:'2026-11-12T21:00:00Z'});
+const info=()=>({enabled:true,available,accepting,job});
+const row=()=>({id:id(400+version),version,payload_hash:'a'.repeat(64),month:props.month,customer_id:'customer',state:'INCOMPLETE',report:{organizationId:context.currentOrganization.id,customerId:'customer',month:props.month,scope:{kind:'UNIT'},unitIds:[props.unitId],approvalEligible:false,financial:{status:'INCOMPLETE'},units:[],missing:['Fonte financeira sintética'],observations:[],recommendations:[]}});
+const api=async(url,options={})=>{
+ requests.push({url,options});
+ if(url.endsWith('/preparation-requests')&&options.method==='POST'){job=makeJob(options.body.requestId);if(lostAck)throw Error('Lost request acknowledgement');return info();}
+ if(url.includes('/preparation-requests?')){if(statusDenied)throw Object.assign(Error('denied'),{status:403});return info();}
+ if(url.endsWith('/preparation-requests/reconcile'))throw Object.assign(Error('Financial acknowledgement still uncertain'),{status:409});
+ if(url==='/api/v1/eva-assisted-closing'&&options.method==='POST')assert.fail('Heavy legacy preparation must not run when the queue is enabled');
+ if(url.startsWith('/api/v1/eva-assisted-closing?'))return {enabled:true,canPrepare:true,canManage:false,unitId:props.unitId,month:props.month,total:1,rows:[row()],preparationQueue:info()};
+ return {enabled:false,rows:[]};
+};
+Module._load=function(n,p,m){if(n==='@/app/providers')return {useAuth:()=>({context,hasPermission:()=>true})};if(n==='@/app/lib/api/client')return {apiRequest:api};if(['./EvaGuidedReview','./DocumentedSupplierSettlement'].includes(n))return {__esModule:true,default:()=>null};if(n==='next/link')return {__esModule:true,default:({href,children})=>React.createElement('a',{href},children)};if(n==='@/app/components/BotEnergyAvatar')return {__esModule:true,default:()=>null};if(n==='@/app/components/ui')return {Card:({title,children})=>React.createElement('section',null,title,children),Button:({children,...rest})=>React.createElement('button',rest,children),Alert:({children})=>React.createElement('p',{role:'alert'},children)};return original.call(this,n,p,m);};
+const View=require('../app/backoffice/contracts/AssistedClosingReview.tsx').default,root=createRoot(document.getElementById('root'));
+const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text),render=async key=>act(async()=>root.render(React.createElement(View,{...props,key})));
+const posts=()=>requests.filter(r=>r.options.method==='POST');
+(async()=>{try{
+ await render('first');await act(async()=>button('Reconferir fontes pela EVA').click());assert.equal(posts().length,1);assert(posts()[0].url.endsWith('/preparation-requests'));assert(document.body.textContent.includes('Você pode fechar'));assert(button('Reconferir fontes pela EVA').disabled);assert(!button('Atualizar histórico').disabled);
+ const persisted=job.id;await render('reopened');assert(document.body.textContent.includes(persisted));assert.equal(posts().length,1,'Reopening resumes status, not the write');
+ job={...job,state:'SUCCEEDED',closingId:id(402)};version=2;await act(async()=>button('Consultar andamento da preparação').click());assert(document.body.textContent.includes('Preparação registrada'));assert.equal(posts().length,1);
+ job=null;lostAck=true;version=1;await render('lost-ack');await act(async()=>button('Reconferir fontes pela EVA').click());assert(job);assert(document.body.textContent.includes(job.id));assert(!document.body.textContent.includes('Lost request acknowledgement'));assert.equal(posts().length,2,'Lost acknowledgements are confirmed by GET, not repeated POST');lostAck=false;
+ statusDenied=true;await act(async()=>button('Consultar andamento da preparação').click());assert(document.body.textContent.includes('acesso mudou'));assert(!document.body.textContent.includes(job.id));statusDenied=false;
+ job=makeJob(id(600),'UNKNOWN');await render('unknown');assert(button('Reconferir fontes pela EVA').disabled);assert(!button('Reconferir e retomar o protocolo'),'Operator cannot reconcile uncertain writes as administrator');
+ context={...context,currentOrganization:{id:'org',role:'admin_org'}};await render('admin');assert(button('Reconferir e retomar o protocolo').disabled);assert(document.body.textContent.includes('não aprova valores financeiros'));
+ job=null;available=false;await render('unavailable');assert(button('Reconferir fontes pela EVA').disabled);assert(!button('Consultar andamento da preparação').disabled);available=true;await act(async()=>button('Consultar andamento da preparação').click());assert(!button('Reconferir fontes pela EVA').disabled);assert.equal(posts().length,2);
+ accepting=false;await render('drain');assert(button('Reconferir fontes pela EVA').disabled);assert(document.body.textContent.includes('Novas solicitações estão pausadas'));accepting=true;
+ job={...makeJob(id(700)) ,customerId:'foreign'};await render('foreign');assert(document.body.textContent.includes('fora da seleção'));assert(!document.body.textContent.includes(id(700)));
+ assert(requests.filter(r=>r.options.method==='POST').every(r=>r.url.endsWith('/preparation-requests')),'No approval, publication, OCR or upload is invoked');
+ console.log('PASS manual async UI: queued intent, reopening, completion, lost acknowledgement, denial, administrator-only reconciliation, draining and scope validation.');
+}finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1});
