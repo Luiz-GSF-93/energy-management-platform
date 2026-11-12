@@ -51,3 +51,10 @@ Não é necessária uma troca imediata para RabbitMQ/Azure Service Bus. As filas
 Migração 20261292: funções service-only, índices e projeção; nenhum resultado financeiro, licença, vínculo ou delegação é alterado. Implantar migração antes de ativar o código global. Rollback do código: ALLOWLIST; manter funções/índices e históricos, sem desfazer resultados.
 
 Migração 20261293: o painel reutiliza a prova de publicação por documento/hash, versão, decisão e publicação vigentes, em lotes de até 100 IDs. Uma publicação comprovada prevalece na apresentação sobre um erro antigo do recibo. O recibo e o histórico originais não são reescritos; retirada de publicação ou fonte alterada desfaz essa projeção.
+
+
+### Conferência e continuidade do lote
+
+A conferência de identidade mantém a confirmação, a indicação do requisito pendente e as ações em um rodapé fixo no modal. “Continue e conclua” exige confirmação explícita, justificativa de pelo menos 20 caracteres e autorização atual do servidor para aquela fonte. Continuar não aprova valores. Para resultado incerto de fatura já lida, identificada e arquivada, “Continuar e concluir” utiliza a reconciliação existente: reconfere a prova preservada e retoma sem reenviar o arquivo ou repetir OCR. Sem essa evidência, permanece “Reconferir resultado preservado”.
+
+Cada lote aceita até 10 arquivos da mesma empresa e 50 MB no total, com até 15 MB por PDF/imagem e 2 MB por XML. O envio é sequencial e conserva a chave de cada arquivo: se a confirmação de recebimento ficar incerta, interrompe novos envios até reconferir; os itens recebidos não são enviados novamente. O worker dedicado continua separado da API, com concorrência limitada. Pendência de um documento não autoriza retirar isolamento de organização, validação de identidade ou aprovação financeira.
