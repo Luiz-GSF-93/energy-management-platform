@@ -1,6 +1,6 @@
 import {performance} from 'node:perf_hooks';
 
-const stages=['ORIGINAL_DOWNLOAD','OCR_SUBMIT','OCR_POLL','PDF_TEXT','XML_PARSE','IDENTITY_CHECK','ARCHIVE_COPY','SOURCE_CHECK','PREPARED_CHECKPOINT','DRAFT_PREPARATION','FIELD_DRAFT','CLOSING_PREPARATION','EXPLANATION_INSPECT','AI_INTERPRETATION','MANUAL_PREPARATION'] as const;
+const stages=['ORIGINAL_DOWNLOAD','OCR_SUBMIT','OCR_POLL','PDF_TEXT','XML_PARSE','IDENTITY_CHECK','ARCHIVE_COPY','SOURCE_CHECK','PREPARED_CHECKPOINT','DRAFT_PREPARATION','FIELD_DRAFT','CLOSING_PREPARATION','CCEE_HISTORY_READ','EXPLANATION_INSPECT','AI_INTERPRETATION','MANUAL_PREPARATION'] as const;
 export type EvaStage=typeof stages[number];
 type Window={active:number;completed:number;failed:number;timed:number;totalMs:number;maxMs:number};
 const windows=new Map<EvaStage,Window>();

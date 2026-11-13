@@ -39,3 +39,9 @@ An explicit preparation replay may complete the existing finish receipt of a PRE
 ## Conservative process admission
 
 After repeated PostgreSQL restarts, shared EVA pollers default to one active task across the private process. `EVA_WORKER_MAX_CONCURRENCY=2` is the only accepted expansion; absent or invalid values retain one slot. Runtime telemetry exposes the effective limit. Stopping a poller does not release its active slot until its promise settles. Durable queues, leases, uncertainty handling and financial approval rules are unchanged. This bounds process pressure, not API/browser reads or other replicas, and is containment rather than a proven database root-cause correction. Do not increase replicas or concurrency without representative load measurements.
+
+## Historical CCEE query pressure
+
+The commercial preparation context previously launched six months times two scopes through Promise.all. It now reads each month/scope/page in the same deterministic order, one request at a time, using the existing read-only RPC deadline and unchanged authorization arguments. History remains fresh, complete within the existing per-scope page limits, and tenant/customer/month checked; no cross-request cache or financial mutation was introduced. CCEE_HISTORY_READ aggregates duration/failure counts with a fixed stage key and no identifiers or document content. A failed read stops the scan before another scope starts.
+
+A production size-only probe of a preserved snapshot found approximately 7.88 MB of financial sources, including 7.68 MB of OCR results, compared with about 53 KB of tariff libraries. The tariff library was not the dominant payload in this sample. Further snapshot refactoring must preserve reproducible evidence and require equivalence tests; this change limits query fan-out rather than removing financial/OCR evidence.
