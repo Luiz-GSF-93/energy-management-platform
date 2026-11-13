@@ -7,6 +7,7 @@ import {useAuth} from '@/app/providers';
 import {apiRequest} from '@/app/lib/api/client';
 import styles from './page.module.css';
 import {createOperationalRefresh,RefreshState} from './operational-refresh';
+import ManualPreparationOperations from './ManualPreparationOperations';
 import {serviceAvailability,Availability} from './service-availability';
 
 type Row={id:string;filename:string;state:string;group:string;note:string;month:string|null;customer:string|null;unit:string|null;documentId:string|null;closingId:string|null;updatedAt:string;nextAttemptAt:string|null;attempts:number;idleSeconds:number;leaseExpired:boolean;stage:string|null;code:string|null;requiredInputs:string[];identityDecision:{decision:string;at:string}|null;explanationState:string|null};
@@ -15,7 +16,7 @@ const groups=[['ALL','Todos'],['TECHNICAL','Conferência técnica'],['HUMAN','De
 const states:Record<string,string>={RECEIVING:'Recebendo original',RECOGNIZING:'Identificando documento',OCR_QUEUED:'Na fila de leitura',OCR_SUBMITTING:'Confirmando envio à leitura',OCR_POLLING:'Aguardando provedor de leitura',LINKING:'Vinculando documento',WAITING_OCR:'Conferindo leitura preservada',PREPARING:'Preparando rascunhos e fechamento',AWAITING_SOURCES:'Aguardando fontes complementares',PROPOSAL_READY:'Proposta pronta para revisão',REVIEW_REQUIRED:'Conferência necessária',UNKNOWN:'Resultado técnico a reconciliar',PUBLISHED:'Publicado',SOURCE_READY:'Fonte disponível',DISMISSED:'Envio encerrado'};
 function elapsed(seconds:number){if(seconds<60)return 'menos de 1 minuto';if(seconds<3600)return Math.floor(seconds/60)+' min';if(seconds<86400)return Math.floor(seconds/3600)+' h';return Math.floor(seconds/86400)+' dia(s)';}
 function nextStep(r:Row){if(r.state==='RECEIVING')return 'Aguardar confirmação do armazenamento. Se a etapa não avançar, conferir o envio antes de repetir.';if(r.group==='TECHNICAL')return 'Conferir o histórico e reconciliar o resultado preservado antes de repetir qualquer operação.';if(r.group==='HUMAN')return 'Abrir a conferência do documento. Revisar identidade, vínculo e autorização; continuar com justificativa ou descontinuar quando solicitado.';if(r.group==='SOURCES')return 'Completar somente as fontes indicadas em Contratos ou Registros CCEE. A EVA mantém os campos preenchidos e retoma quando as fontes mudarem.';if(r.group==='PROCESSING')return r.leaseExpired?'Execução anterior expirou. Aguardar reconciliação técnica; não reenviar o arquivo.':'Aguardar a etapa em andamento. O original está preservado; não é necessário reenviar.';return r.state==='PROPOSAL_READY'?'Revisar a proposta no fluxo de fechamento antes de aprovar.':'Consultar o resultado e o histórico existentes.';}
-function Panel(){
+function Panel({organizationId}:{organizationId:string}){
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[group,setGroup]=useState('ALL'),[page,setPage]=useState(0);
  const [refreshState,setRefreshState]=useState<RefreshState>({mode:'updating',delayMs:0}),[availability,setAvailability]=useState<Availability>({database:'unknown',auth:'unknown',checkedAt:null});
  const refresh=useRef<(()=>void)|null>(null),busy=refreshState.mode==='updating';
@@ -44,6 +45,7 @@ function Panel(){
    <p>{availability.checkedAt?'Verificação dos serviços: '+new Date(availability.checkedAt).toLocaleString('pt-BR'):'Disponibilidade ainda não confirmada. A última etapa conhecida de cada documento permanece abaixo.'}</p>
    {(availability.database==='down'||availability.auth==='down')&&<p role="status">Há indisponibilidade de infraestrutura. Justificar uma fatura não resolve essa espera. Preserve os envios e acompanhe a recuperação; não reenvie os arquivos.</p>}
   </section>
+  <ManualPreparationOperations key={organizationId} organizationId={organizationId}/><h2>Recebimentos de documentos</h2>
   <div className={styles.toolbar}><button onClick={()=>refresh.current?.()} disabled={busy}>{busy?'Atualizando…':'Atualizar painel'}</button>{data?.generatedAt&&<span>Consulta dos documentos: {new Date(data.generatedAt).toLocaleString('pt-BR')}</span>}</div>
   <p role="status">{refreshState.mode==='paused'?'Atualização pausada enquanto a página está oculta ou sem conexão. A consulta será retomada ao retornar.':refreshState.mode==='updating'?'Consultando o andamento preservado…':`Próxima consulta em ${refreshState.delayMs/1000} s, com a página visível e conectada.`}</p>
   {error&&<p role="alert">{error}</p>}{data&&!data.enabled?<p>Recebimento automático temporariamente desligado nesta implantação.</p>:null}
@@ -51,7 +53,7 @@ function Panel(){
    {!data.automationConfigured&&<p role="alert">A delegação de automação ainda precisa ser configurada pelo administrador desta organização. Os módulos contratados e as permissões continuam obrigatórios.</p>}
    <div className={styles.cards}>{[['Recebidos · 30 dias',cards?.received30d],['Com proposta · recebidos em 30 dias',cards?.prepared30d],['Em processamento',cards?.processing],['Conferência técnica',cards?.technical],['Decisão humana',cards?.human],['Fontes pendentes',cards?.sources]].map(([label,value])=><article key={String(label)}><span>{label}</span><strong>{value??'—'}</strong></article>)}</div>
    <p>O acompanhamento inclui pendências antigas. Contagens de recebimento e propostas usam os documentos recebidos nos últimos 30 dias. Explicação da IA é opcional e não bloqueia o preenchimento.</p>
-   <label>Mostrar <select value={group} onChange={e=>{setGroup(e.target.value);setPage(0);setData(null);}}>{groups.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+   <label>Mostrar <select aria-label="Filtrar envios recebidos" value={group} onChange={e=>{setGroup(e.target.value);setPage(0);setData(null);}}>{groups.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
    <p>{data.total} envio(s) neste filtro · página {page+1}</p>
    {!data.rows.length?<p>Nenhum envio neste filtro.</p>:<div className={styles.list}>{data.rows.map(r=><article className={styles.item} key={r.id} data-category={r.group}>
     <header><h2>{r.filename}</h2><strong>{states[r.state]??r.state}</strong></header>
@@ -69,4 +71,4 @@ function Panel(){
   </>}
  </section>;
 }
-export default function EvaOperationsPage(){const {context,hasPermission}=useAuth();const org=context?.scope==='organization'?context.currentOrganization.id:'';const allowed=!!org&&hasPermission('8f105b02-4443-49de-b188-847e0284e7ed')&&hasPermission('8f3ff5eb-157a-468a-91af-6f89d92e23a7')&&context?.scope==='organization'&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation');return <ProtectedRoute><BackofficeShell>{allowed?<Panel key={org+':'+context?.user.id}/>:<p role="alert">Selecione uma organização e entre com as permissões de consulta e envio de documentos para acessar o painel.</p>}</BackofficeShell></ProtectedRoute>;}
+export default function EvaOperationsPage(){const {context,hasPermission}=useAuth();const org=context?.scope==='organization'?context.currentOrganization.id:'';const allowed=!!org&&hasPermission('8f105b02-4443-49de-b188-847e0284e7ed')&&hasPermission('8f3ff5eb-157a-468a-91af-6f89d92e23a7')&&context?.scope==='organization'&&(['admin_org','gestor','operacional'].includes(context.currentOrganization.role)||context.accessMode==='platform_operation');return <ProtectedRoute><BackofficeShell>{allowed?<Panel key={org+':'+context?.user.id} organizationId={org}/>:<p role="alert">Selecione uma organização e entre com as permissões de consulta e envio de documentos para acessar o painel.</p>}</BackofficeShell></ProtectedRoute>;}

@@ -11,6 +11,7 @@ import {EvaAssistedClosingService} from './eva-assisted-closing.service';
 export class EvaAssistedClosingController{
  constructor(private service:EvaAssistedClosingService,@Optional() private dialogue?:EvaClosingDialogueService,@Optional() private changes?:EvaClosingChangesService,@Optional() private queue?:EvaManualPreparationQueue){}
  @Get('preparation-requests') @RequirePermission([P.ENERGIA_OCR_PROCESS]) preparationStatus(@Query() q:any,@Tenant() t:TenantContext){return this.queue!.status(q,t);}
+ @Get('preparation-requests/operations') @RequirePermission([P.DOCUMENTS_VIEW,P.DOCUMENTS_UPLOAD]) preparationOperations(@Query() q:any,@Tenant() t:TenantContext){return this.queue!.operations(q,t);}
  @Post('preparation-requests') @HttpCode(202) @RequirePermission([P.ENERGIA_OCR_PROCESS]) requestPreparation(@Body() b:any,@Tenant() t:TenantContext){return this.queue!.request(b,t);}
  @Post('preparation-requests/reconcile') @RequirePermission([P.ENERGIA_OCR_PROCESS]) reconcilePreparation(@Body() b:any,@Tenant() t:TenantContext){return this.queue!.reconcile(b,t);}
  @Post('changes/preview') @RequirePermission([P.INTELLIGENCE_AI_USE,P.ENERGIA_OCR_PROCESS]) previewChange(@Body() b:any,@Tenant() t:TenantContext){return this.changes!.preview(b,t);}
