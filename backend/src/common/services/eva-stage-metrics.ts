@@ -1,7 +1,12 @@
 import {performance} from 'node:perf_hooks';
 
-const stages=['ORIGINAL_DOWNLOAD','OCR_SUBMIT','OCR_POLL','PDF_TEXT','XML_PARSE','IDENTITY_CHECK','ARCHIVE_COPY','SOURCE_CHECK','PREPARED_CHECKPOINT','DRAFT_PREPARATION','FIELD_DRAFT','CLOSING_PREPARATION','CCEE_HISTORY_READ','EXPLANATION_INSPECT','AI_INTERPRETATION','MANUAL_PREPARATION'] as const;
+export const EVA_STAGES=['ORIGINAL_DOWNLOAD','OCR_SUBMIT','OCR_POLL','PDF_TEXT','XML_PARSE','IDENTITY_CHECK','ARCHIVE_COPY','SOURCE_CHECK','PREPARED_CHECKPOINT','DRAFT_PREPARATION','FIELD_DRAFT','CLOSING_PREPARATION','CCEE_HISTORY_READ','EXPLANATION_INSPECT','AI_INTERPRETATION','MANUAL_PREPARATION'] as const;
+const stages=EVA_STAGES;
 export type EvaStage=typeof stages[number];
+export const EVA_DURATION_BOUNDS_SECONDS=[.025,.05,.1,.25,.5,1,2,5,10,30,60,120,300,600,1800] as const;
+type Total={stage:EvaStage;completed:number;failed:number;count:number;sumSeconds:number;bucketCounts:number[]};
+const totals=new Map<EvaStage,Total>();
+const startedAtUnixNano=String(BigInt(Date.now())*1000000n);
 type Window={active:number;completed:number;failed:number;timed:number;totalMs:number;maxMs:number};
 const windows=new Map<EvaStage,Window>();
 const enabled=()=> (process.env.ENERGYOS_RUNTIME_OBSERVABILITY_ENABLED??'true')==='true';
@@ -23,11 +28,23 @@ export async function observeEvaStage<T>(stage:EvaStage,run:()=>T):Promise<Await
   try{
    if(window&&started!==undefined){
     window.active=Math.max(0,window.active-1);window.completed++;if(failed)window.failed++;
+    let total=totals.get(stage);
+    if(!total){total={stage,completed:0,failed:0,count:0,sumSeconds:0,bucketCounts:Array(EVA_DURATION_BOUNDS_SECONDS.length+1).fill(0)};totals.set(stage,total);}
+    total.completed++;if(failed)total.failed++;
     const ms=performance.now()-started;
-    if(Number.isFinite(ms)&&ms>=0){window.timed++;window.totalMs+=ms;window.maxMs=Math.max(window.maxMs,ms);}
+    if(Number.isFinite(ms)&&ms>=0){
+     window.timed++;window.totalMs+=ms;window.maxMs=Math.max(window.maxMs,ms);
+     const seconds=ms/1000;let bucket=EVA_DURATION_BOUNDS_SECONDS.findIndex(bound=>seconds<=bound);if(bucket<0)bucket=EVA_DURATION_BOUNDS_SECONDS.length;
+     total.count++;total.sumSeconds+=seconds;total.bucketCounts[bucket]++;
+    }
    }
   }catch{/* The original task result/error remains authoritative. */}
  }
+}
+
+/** Non-draining cumulative histograms; a fixed number of counters, never individual durations. */
+export function snapshotEvaStageTotals(){
+ return {startedAtUnixNano,stages:[...totals.values()].map(t=>({...t,bucketCounts:[...t.bucketCounts]}))};
 }
 
 /** Drains completed-window counters, retaining only in-flight counts across windows. */

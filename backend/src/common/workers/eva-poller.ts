@@ -13,7 +13,7 @@ export function evaPollingMetrics(){
 export function wakeEvaWorkers(){for(const poller of pollers)poller.wake();}
 export class EvaPoller{
  private timer?:ReturnType<typeof setTimeout>;private stopped=true;private busy=false;
- private idle=0;private failures=0;private active=false;
+ private idle=0;private failures=0;private active=false;private waiting=false;
  private task?:()=>Promise<unknown>;private onError?:()=>void;private base=5000;
  activity(){this.active=true;}
  isBackingOff(){return this.failures>0;}
@@ -21,19 +21,22 @@ export class EvaPoller{
   if(!this.stopped||!scheduledWorkEnabled('EVA'))return;
   this.stopped=false;this.task=task;this.base=base;this.onError=onError;pollers.add(this);this.schedule(base);
  }
- stop(){this.stopped=true;clearTimeout(this.timer);pollers.delete(this);}
- wake(){if(this.stopped||this.busy||this.failures)return;this.idle=0;clearTimeout(this.timer);this.schedule(1000);}
+ stop(){this.stopped=true;this.waiting=false;clearTimeout(this.timer);pollers.delete(this);}
+ wake(){if(this.stopped||this.busy||this.failures)return;this.waiting=false;this.idle=0;clearTimeout(this.timer);this.schedule(1000);}
  private schedule(delay:number){if(this.stopped)return;this.timer=setTimeout(()=>void this.tick(),delay);this.timer.unref?.();}
  private async tick(){
   if(this.stopped)return;
-  if(running>=evaConcurrencyLimit()){this.schedule(this.base);return;}
-  running++;this.busy=true;this.active=false;
+  if(running>=evaConcurrencyLimit()){this.waiting=true;this.schedule(this.base);return;}
+  this.waiting=false;running++;this.busy=true;this.active=false;
   try{await this.task!();this.failures=0;this.idle=this.active?0:Math.min(6,this.idle+1);}
-  catch{this.failures=Math.min(5,this.failures+1);this.onError?.();}
+  catch{this.failures=Math.min(5,this.failures+1);try{this.onError?.();}catch{/* Diagnostics cannot reject the scheduler. */}}
   finally{
    running--;this.busy=false;
+   // Give blocked pollers the next timers before rescheduling this one. No extra claims or capacity.
+   let available=evaConcurrencyLimit()-running;
+   for(const poller of pollers)if(available>0&&poller.waiting&&!poller.busy&&!poller.failures){poller.wake();available--;}
    // An uncertain write is never replayed here: the next iteration claims a durable job.
-   const delay=this.failures?Math.min(300000,30000*2**(this.failures-1)):Math.min(30000,this.base*2**this.idle);
+   const delay=this.failures?Math.min(300000,30000*2**(this.failures-1)):this.active?1000:Math.min(30000,this.base*2**this.idle);
    this.schedule(Math.min(300000,Math.round(delay*(1+Math.random()*.1))));
   }
  }
