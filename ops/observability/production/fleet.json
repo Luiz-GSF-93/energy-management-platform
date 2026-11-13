@@ -1,16 +1,78 @@
 {
-  "version": 1,
-  "status": "PROPOSED_REQUIRES_COST_APPROVAL",
+  "version": 2,
+  "status": "DEPLOYED_BETA_MONITORING",
   "projectId": "72d67664-f362-4230-95ab-238f297f6d2f",
   "environmentId": "26c3d3b6-9907-4da6-b911-7beca0d81d63",
   "rootDirectory": "/ops/observability",
-  "watchPatterns": ["/ops/observability/**"],
+  "watchPatterns": [
+    "/ops/observability/**",
+    "ops/observability/**",
+    "production/**"
+  ],
   "replicas": 1,
   "services": [
-    {"name": "energyos-otel-collector", "dockerfile": "production/Dockerfile.collector", "memoryGB": 0.25, "vCPUs": 0.5, "public": false, "volume": null, "port": 4318},
-    {"name": "energyos-prometheus", "dockerfile": "production/Dockerfile.prometheus", "memoryGB": 0.375, "vCPUs": 0.5, "public": false, "volume": {"sizeGB": 1, "mountPath": "/data"}, "port": 9090},
-    {"name": "energyos-grafana", "dockerfile": "production/Dockerfile.grafana", "memoryGB": 0.375, "vCPUs": 0.5, "public": "AUTHENTICATED_HTTPS_OWNER_ONLY", "volume": {"sizeGB": 1, "mountPath": "/data"}, "port": 3000}
+    {
+      "name": "energyos-otel-collector",
+      "dockerfile": "production/Dockerfile.collector",
+      "memoryGB": 0.25,
+      "vCPUs": 0.5,
+      "public": false,
+      "volume": null,
+      "port": 4318,
+      "serviceId": "e7cf4def-1ef8-407c-9703-e3f20a9ee5a8"
+    },
+    {
+      "name": "energyos-prometheus",
+      "dockerfile": "production/Dockerfile.prometheus",
+      "memoryGB": 0.375,
+      "vCPUs": 0.5,
+      "public": false,
+      "volume": {
+        "id": "6c47a407-7f81-48ca-830a-dc273a3f1ef2",
+        "logicalCapacityGB": 50,
+        "targetUsedBudgetGB": 1,
+        "billing": "ACTUAL_USED_INCLUDING_METADATA",
+        "mountPath": "/data",
+        "providerCanShrink": false
+      },
+      "port": 9090,
+      "serviceId": "0977eac3-e9d4-4034-80d8-0f471b2e91cc"
+    },
+    {
+      "name": "energyos-grafana",
+      "dockerfile": "production/Dockerfile.grafana",
+      "memoryGB": 0.375,
+      "vCPUs": 0.5,
+      "public": "AUTHENTICATED_HTTPS_OWNER_ONLY",
+      "volume": {
+        "id": "f8491fcd-1997-46ad-9712-b41dca80b5ff",
+        "logicalCapacityGB": 50,
+        "targetUsedBudgetGB": 1,
+        "billing": "ACTUAL_USED_INCLUDING_METADATA",
+        "mountPath": "/data",
+        "providerCanShrink": false
+      },
+      "port": 3000,
+      "serviceId": "3d3d51c2-2f23-44a4-a276-6bfa9cf7fe27"
+    }
   ],
-  "approval": {"additionalMonthlyBudgetUSD": 50, "taxesIncluded": false, "automaticPlatformShutdown": false},
-  "pricingBasis": {"checkedOn": "2026-11-13", "source": "https://railway.com/pricing", "memoryGBSecondUSD": 0.00000386, "vCPUSecondUSD": 0.00000772, "volumeGBSecondUSD": 0.00000006, "fullCap30DayComputeAndVolumeUSD": 40.33, "fullCap31DayComputeAndVolumeUSD": 41.67, "buildsAndPublicEgressIncluded": false}
+  "approval": {
+    "additionalMonthlyBudgetUSD": 50,
+    "taxesIncluded": false,
+    "automaticPlatformShutdown": false,
+    "authorizedOn": "2026-11-13",
+    "hardBillingCap": false
+  },
+  "pricingBasis": {
+    "checkedOn": "2026-11-13",
+    "source": "https://railway.com/pricing",
+    "memoryGBSecondUSD": 3.86e-06,
+    "vCPUSecondUSD": 7.72e-06,
+    "volumeGBSecondUSD": 6e-08,
+    "fullCap30DayComputeAndVolumeUSD": 40.33,
+    "fullCap31DayComputeAndVolumeUSD": 41.67,
+    "buildsAndPublicEgressIncluded": false,
+    "storageEstimateAssumesUsedGB": 2,
+    "providerMetadataMayAddUsage": true
+  }
 }
