@@ -8,6 +8,18 @@ import {observeEvaStage} from '../../common/services/eva-stage-metrics';
 import {EvaAssistedClosingService} from './eva-assisted-closing.service';
 import {EvaManualPreparationQueue} from './eva-manual-preparation.queue';
 
+function preparationDiagnostic(error:unknown){
+ try{
+  const response=(error as any)?.getResponse?.();
+  if(response?.code==='EVA_CLOSING_SOURCE_TIMEOUT'&&['capture','reserve','finish'].includes(response.stage))return 'PREPARATION_'+String(response.stage).toUpperCase()+'_TIMEOUT';
+  if(response?.code==='EVA_READ_UNAVAILABLE'){
+   const reads:Record<string,string>={'closing:snapshot':'PREPARATION_SNAPSHOT_TIMEOUT','eva_scoped_closing_action:capture':'PREPARATION_CAPTURE_TIMEOUT','eva_scoped_closing_action:history':'PREPARATION_HISTORY_TIMEOUT'};
+   if(typeof response.read==='string'&&Object.prototype.hasOwnProperty.call(reads,response.read))return reads[response.read];
+  }
+ }catch{/* Only fixed diagnostics may enter the journal. */}
+ return 'PREPARATION_RECONCILIATION_REQUIRED';
+}
+
 /** Executes a persisted intent once. Expired/uncertain writes never become automatic retries. */
 @Injectable()
 export class EvaManualPreparationWorker implements OnModuleInit,OnModuleDestroy{
@@ -36,8 +48,8 @@ export class EvaManualPreparationWorker implements OnModuleInit,OnModuleDestroy{
     const result=await observeEvaStage('MANUAL_PREPARATION',()=>this.closing.prepare({consumerUnitId:job.consumerUnitId,month:job.month,scopeKind:job.scopeKind,requestId:job.executionId},t));
     if(!result?.row?.id||result.row.organization_id!==job.organizationId||result.row.customer_id!==job.customerId||result.row.month!==job.month||!result.row.report?.unitIds?.includes(job.consumerUnitId))throw Error('MANUAL_PREPARATION_RESULT_INVALID');
     await this.rpc('finish',claim.id,claim.token,{state:'SUCCEEDED',closingId:result.row.id});
-   }catch{
-    try{await this.rpc('finish',claim.id,claim.token,{state:writing?'UNKNOWN':'FAILED',code:writing?'PREPARATION_RECONCILIATION_REQUIRED':'PREPARATION_ACCESS_OR_SOURCE_UNAVAILABLE'});}catch{this.log.warn('EVA_MANUAL_RESULT_UNCONFIRMED');}
+   }catch(error){
+    try{await this.rpc('finish',claim.id,claim.token,{state:writing?'UNKNOWN':'FAILED',code:writing?preparationDiagnostic(error):'PREPARATION_ACCESS_OR_SOURCE_UNAVAILABLE'});}catch{this.log.warn('EVA_MANUAL_RESULT_UNCONFIRMED');}
    }finally{done=true;clearTimeout(heartbeat);}
   }finally{this.busy=false;}
  }

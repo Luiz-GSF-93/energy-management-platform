@@ -9,10 +9,11 @@ const {createHash}=require('node:crypto');
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const fail=code=>{parentPort.postMessage({error:code});};
 (async()=>{
- let pdf;
+ let pdf, task;
  try{
   const lib=await import(workerData.module);
-  pdf=await lib.getDocument({data:workerData.bytes,verbosity:0,enableXfa:false,standardFontDataUrl:workerData.fontDir,cMapUrl:workerData.cMapDir,cMapPacked:true,wasmUrl:workerData.wasmDir,isEvalSupported:false,useSystemFonts:false,disableFontFace:true,useWorkerFetch:false,disableAutoFetch:true,disableStream:true,stopAtErrors:true}).promise;
+  task=lib.getDocument({data:workerData.bytes,verbosity:0,enableXfa:false,standardFontDataUrl:workerData.fontDir,cMapUrl:workerData.cMapDir,cMapPacked:true,wasmUrl:workerData.wasmDir,isEvalSupported:false,useSystemFonts:false,disableFontFace:true,useWorkerFetch:false,disableAutoFetch:true,disableStream:true,stopAtErrors:true});
+  pdf=await task.promise;
   if(pdf.numPages<1||pdf.numPages>100){fail('LIMIT');return;}
   const sections=[];let textBytes=0,ocrRequired=false;
   for(let page=1;page<=pdf.numPages;page++){
@@ -49,7 +50,9 @@ const fail=code=>{parentPort.postMessage({error:code});};
   const result={pageCount:pdf.numPages,sections,ocrRequired};
   parentPort.postMessage({...result,contentHash:digest(JSON.stringify(result))});
  }catch(e){fail(e?.name==='PasswordException'?'PDF_INVALID':'EXTRACTION_FAILED');}
- finally{if(pdf)await pdf.destroy();}
+ // PDF.js owns teardown on the loading task. A teardown error must not race
+ // the already-posted extraction result or replace a meaningful limit error.
+ finally{if(task)try{await task.destroy();}catch{}}
 })();`;
 export async function extractPdfText(bytes:Buffer,timeoutMs=EXTRACTION_LIMITS.timeoutMs):Promise<ExtractionResult>{
  if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>EXTRACTION_LIMITS.timeoutMs)throw new ExtractionError('LIMIT');

@@ -12,7 +12,7 @@ export class EvaManualPreparationQueue{
  constructor(private db:SupabaseService,private config:ConfigService){}
  enabled(){return this.config.get('EVA_MANUAL_PREPARATION_ASYNC_ENABLED')==='true';}
  accepting(){return this.config.get('EVA_MANUAL_PREPARATION_ACCEPTING')!=='false';}
- availableFor(t:TenantContext){return this.enabled()&&!t.accessMode&&!t.portalCustomerScope&&['admin_org','gestor','operacional'].includes(t.role);}
+ availableFor(t:TenantContext){return this.enabled()&&(!t.accessMode||t.accessMode==='platform_operation'&&t.role==='admin_org')&&!t.portalCustomerScope&&['admin_org','gestor','operacional'].includes(t.role);}
  async operations(q:any,t:TenantContext){
   if(!q||Object.keys(q).some(k=>!['filter','page'].includes(k))||q.filter!==undefined&&!['ALL','ACTIVE','ATTENTION','SUCCEEDED'].includes(q.filter)||q.page!==undefined&&(typeof q.page!=='string'||!/^\d{1,4}$/.test(q.page)))throw new BadRequestException('Filtro da fila de preparação inválido.');
   if(!t.organizationId||!t.userId||!t.roleId||t.portalCustomerScope||!['admin_org','gestor','operacional'].includes(t.role))throw new ForbiddenException('Painel exclusivo da equipe interna autorizada.');
@@ -28,8 +28,8 @@ export class EvaManualPreparationQueue{
  }
  private async action(action:'request'|'status'|'reconcile',q:any,t:TenantContext){
   if(!this.availableFor(t)||!t.organizationId||!t.userId||!t.roleId)throw new ForbiddenException('Fila de preparação indisponível neste contexto.');
-  const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_action:action,...this.scope(q),p_id:action==='request'?q.requestId:q.jobId??null,p_body:action==='reconcile'?{reason:q.reason.trim(),confirmed:true}:{}};
-  const r=action==='status'?await readRpc(this.db.getClient(),'eva_manual_preparation_action',args,8000):await manualPreparationCommand(this.db.getClient(),'eva_manual_preparation_action',args);
+  const args={p_org:t.organizationId,p_platform:t.accessMode==='platform_operation',p_actor:t.userId,p_role:t.roleId,p_action:action,...this.scope(q),p_id:action==='request'?q.requestId:q.jobId??null,p_body:action==='reconcile'?{reason:q.reason.trim(),confirmed:true}:{}};
+  const r=action==='status'?await readRpc(this.db.getClient(),'eva_manual_preparation_action_context',args,8000):await manualPreparationCommand(this.db.getClient(),'eva_manual_preparation_action_context',args);
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo, licença ou permissão de preparação indisponível.');
   if(r.error?.code==='P3410')throw new HttpException('A fila desta organização atingiu o limite. Acompanhe as solicitações existentes antes de iniciar outras.',429);
   if(r.error&&['40001','23505'].includes(r.error.code))throw new ConflictException('O protocolo ou uma gravação anterior exige reconferência. Consulte o andamento antes de repetir.');

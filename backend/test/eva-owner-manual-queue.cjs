@@ -1,0 +1,61 @@
+// Disposable SQL exercise. No production credentials, OCR, documents or financial values.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+(async()=>{const db=new PGlite();let checks=0;const ok=x=>{assert(x);checks++;},deny=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};try{
+ await require('./eva-manual-preparation-fixture.cjs')(db);
+ await db.exec(`CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY,deleted_at timestamptz,banned_until timestamptz);
+ CREATE TABLE user_profiles(user_id uuid PRIMARY KEY);CREATE TABLE user_roles(user_id uuid,role_id text);
+ CREATE TABLE platform_team_members(user_id uuid PRIMARY KEY,active boolean,profile text);
+ INSERT INTO auth.users VALUES('${id(99)}',NULL,NULL);INSERT INTO user_profiles VALUES('${id(99)}');
+ INSERT INTO roles VALUES('global-owner','platform','global','admin_platform','["82e7fc71-479a-4dd6-8b22-4fba6eaa6841"]');
+ INSERT INTO user_roles VALUES('${id(99)}','global-owner');INSERT INTO platform_team_members VALUES('${id(99)}',true,'OWNER');
+ INSERT INTO platform_organization_sessions VALUES('org','${id(99)}',now()+interval '1 hour',NULL);`);
+ const team=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261010_platform_team.sql'),'utf8');
+ await db.exec('CREATE OR REPLACE FUNCTION public.platform_team_owner'+team.split('CREATE OR REPLACE FUNCTION public.platform_team_owner')[1].split('CREATE OR REPLACE FUNCTION public.platform_team_lock')[0]);
+ const migration=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261319_eva_owner_manual_queue.sql'),'utf8');await db.exec(migration);await db.exec(migration);
+ const action=(name,job=null,body={},actor=id(99),platform=true,role='admin',unit=id(1),org='org')=>db.query('SELECT eva_manual_preparation_action_context($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) data',[org,platform,actor,role,name,unit,'2026-08','UNIT',job,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const work=(name,claim={},body={})=>db.query('SELECT eva_manual_preparation_worker($1,$2,$3,$4) data',[name,claim.id??null,claim.token??null,JSON.stringify(body)]).then(r=>r.rows[0].data);
+ const count=async table=>Number((await db.query('SELECT count(*) n FROM '+table)).rows[0].n);
+ const a=await action('request',id(1000));ok(a.job.state==='QUEUED');ok((await db.query('SELECT platform_actor FROM eva_manual_preparations WHERE id=$1',[id(1000)])).rows[0].platform_actor);
+ const repeated=await Promise.all(Array.from({length:100},()=>action('request',id(1000))));ok(repeated.every(r=>r.job.id===id(1000)));ok(await count('eva_manual_preparations')===1);ok(await count('eva_manual_preparation_events')===1);
+ const before=await count('eva_manual_preparation_events');await action('status',id(1000));ok(await count('eva_manual_preparation_events')===before);
+ for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_manual_preparation_action_context(text,boolean,text,text,text,text,text,text,uuid,jsonb)','EXECUTE') p",[role])).rows[0].p);
+ ok(!(await db.query("SELECT has_table_privilege('service_role','eva_manual_preparations','UPDATE') p")).rows[0].p);
+ await deny(()=>action('request',id(1001),{},id(20),true,'operator'),'42501');
+ await deny(()=>action('request',id(1001),{},id(24),true,'admin'),'42501');
+ await deny(()=>action('request',id(1001),{},id(99),false),'42501');
+ await deny(()=>action('request',id(1001),{},id(99),null),'42501');
+ await deny(()=>action('request',id(1001),{},id(99),true,'operator'),'42501');
+ await deny(()=>action('request',id(1001),{},id(99),true,'admin',id(11)),'42501');
+ await deny(()=>action('request',id(1001),{},id(99),true,'admin',id(11),'other'),'42501');
+ const claim=await work('claim'),context=await work('context',claim);ok(context.delegate.accessMode==='platform_operation'&&context.delegate.userId===id(99));ok((await work('begin',claim)).accepted);
+ await db.exec(`UPDATE platform_team_members SET active=false WHERE user_id='${id(99)}'`);await deny(()=>work('heartbeat',claim),'42501');await db.exec(`UPDATE platform_team_members SET active=true WHERE user_id='${id(99)}'`);
+ await db.exec("UPDATE platform_organization_sessions SET expires_at=now()-interval '1 second'");await deny(()=>work('heartbeat',claim),'42501');await db.exec("UPDATE platform_organization_sessions SET expires_at=now()+interval '1 hour'");
+ await db.exec(`UPDATE auth.users SET banned_until=now()+interval '1 day' WHERE id='${id(99)}'`);await deny(()=>work('finish',claim,{state:'UNKNOWN',code:'TEST_UNCONFIRMED'}),'42501');await db.exec('UPDATE auth.users SET banned_until=NULL');
+ await db.exec(`INSERT INTO eva_assisted_closing_versions VALUES('${id(1100)}','org','customer','2026-08','{"unitIds":["${id(1)}"],"scope":{"kind":"UNIT"}}');INSERT INTO eva_assisted_closing_events VALUES('${id(1100)}',1,'INCOMPLETE')`);
+ ok((await work('finish',claim,{state:'SUCCEEDED',closingId:id(1100)})).state==='SUCCEEDED');
+ ok((await db.query('SELECT bool_and(body->\'financialApproval\'=\'false\'::jsonb AND body->\'platformActor\'=\'true\'::jsonb) safe FROM eva_manual_preparation_events WHERE job_id=$1',[id(1000)])).rows[0].safe);
+ // Explicit member context keeps original permissions and the compatible old RPC.
+ const member=await db.query('SELECT eva_manual_preparation_action($1,$2,$3,$4,$5,$6,$7,$8,$9) data',['org',id(20),'operator','request',id(1),'2026-08','UNIT',id(1200),'{}']);ok(member.rows[0].data.job.state==='QUEUED');
+ const memberClaim=await work('claim'),memberContext=await work('context',memberClaim);ok(memberContext.delegate.accessMode===undefined&&memberContext.delegate.role==='operacional');
+ await db.exec(`UPDATE organization_members SET permission_limit='[]' WHERE user_id='${id(20)}'`);await deny(()=>work('begin',memberClaim),'42501');await db.exec('UPDATE organization_members SET permission_limit=NULL');await work('finish',memberClaim,{state:'FAILED',code:'BEFORE_WRITE'});
+ // Uncertain completion still blocks the shared scope and requires audited reconciliation.
+ await action('request',id(1300));const uncertain=await work('claim');await work('begin',uncertain);await work('finish',uncertain,{state:'UNKNOWN',code:'TEST_UNCONFIRMED'});
+ ok(await work('claim')===null);await deny(()=>action('reconcile',id(1300),{reason:'Operator must not override uncertainty',confirmed:true},id(20),false,'operator'),'42501');
+ await deny(()=>action('reconcile',id(1300),{reason:'Audited technical review of preserved receipts',confirmed:false}),'42501');
+ const resolved=await action('reconcile',id(1300),{reason:'Audited technical review of preserved receipts; no financial approval',confirmed:true});ok(resolved.job.state==='QUEUED'&&resolved.job.generation===2);
+ ok((await db.query('SELECT execution_id<>id different,platform_actor FROM eva_manual_preparations WHERE id=$1',[id(1300)])).rows[0].different);
+ ok((await db.query("SELECT count(*) n FROM eva_manual_preparation_events WHERE job_id=$1 AND state='UNKNOWN'",[id(1300)])).rows[0].n===1);
+ // Revocation before the write boundary must prevent delegated execution.
+ const revoked=await work('claim');await db.exec(`UPDATE auth.users SET deleted_at=now() WHERE id='${id(99)}'`);await deny(()=>work('context',revoked),'42501');await db.exec('UPDATE auth.users SET deleted_at=NULL');
+ await db.exec(`INSERT INTO user_roles VALUES('${id(99)}','global-owner')`);await deny(()=>work('context',revoked),'42501');await db.exec(`DELETE FROM user_roles WHERE ctid IN(SELECT ctid FROM user_roles WHERE user_id='${id(99)}' LIMIT 1)`);
+ await db.exec(`UPDATE platform_team_members SET profile='SUPPORT' WHERE user_id='${id(99)}'`);await deny(()=>work('context',revoked),'42501');await db.exec("UPDATE platform_team_members SET profile='OWNER'");
+ await db.exec("UPDATE licenses SET active=false WHERE organization_id='org'");await deny(()=>work('context',revoked),'42501');await db.exec("UPDATE licenses SET active=true WHERE organization_id='org'");
+ ok(await count('documents')===1);ok(await count('calculation_preparation_runs')===0);
+ await work('begin',revoked);await work('finish',revoked,{state:'UNKNOWN',code:'TEST_UNCONFIRMED'});
+ await db.query('INSERT INTO calculation_preparation_runs(id,organization_id,customer_id,consumer_unit_id,month,document_id,source_hash,source_basis,plan,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[id(1500),'org','customer',id(1),'2026-08',id(2),'a'.repeat(64),'b'.repeat(64),'{}',id(99)]);
+ await db.query("INSERT INTO calculation_preparation_run_events(run_id,organization_id,sequence,state,actor_id,receipts) VALUES($1,'org',1,'RUNNING',$2,'[]'),($1,'org',2,'UNKNOWN',$2,'[]')",[id(1500),id(99)]);
+ await deny(()=>action('reconcile',id(1300),{reason:'Owner cannot override an uncertain financial effect',confirmed:true}),'40001');
+ ok((await action('status',id(1300))).job.state==='UNKNOWN');
+ console.log('PASS '+checks+' Owner manual queue SQL checks: actual Owner gate, live session/license, member compatibility, 100 repeated deliveries, revocation, uncertainty, audit and no financial execution.');
+}finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

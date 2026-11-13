@@ -59,3 +59,11 @@ PR #644: oito checks aprovados, 59 testes direcionados, build do backend, regres
 O recorte anterior à release .9 abrangeu 218 amostras de API e 215 de worker, cerca de 3h37/3h34. Não completa a etapa B. A admissão padrão de uma tarefa foi mantida; a espera por capacidade usa ordem de chegada entre pollers. Resultados financeiros incertos continuam exigindo reconciliação, sem reset ou replay.
 
 A aplicação dos padrões de deploy conferiu que os demais comandos, diretório de origem e configurações do ambiente permaneceram iguais. A lista deve persistir como configuração do serviço, pois o CLI oficial anunciou depreciação de Config as Code em favor de IaC, com suporte aos arquivos antigos até 01/12/2026. Esta entrega não executa uma migração indiscriminada de IaC de todo o projeto.
+
+## Continuidade BETA 20261113.10 — Owner na fila durável
+
+A operação explícita do Owner em uma organização passa pelo mesmo protocolo assíncrono HTTP 202; deixa de executar a preparação pesada na requisição web. O contexto fica vinculado ao job e é revalidado no worker com a identidade Owner existente, usuário ativo, sessão de operação, unidade e licença. Não cria vínculo interno nem amplia permissões de operadores, gestores ou administradores de organização. O modo de membro continua sujeito ao limite individual, mesmo quando o mesmo usuário também é Owner.
+
+A migração 20261319 é aditiva e preserva o RPC antigo como contexto de membro para instâncias anteriores. A auditoria distingue a origem da plataforma. Revogação, bloqueio, exclusão, ambiguidade do perfil global ou expiração da sessão impedem a execução delegada. Resultados incertos e efeitos financeiros continuam exigindo reconciliação; o Owner não ganha um caminho para ignorar esses recibos. Diagnósticos conhecidos de timeout registram somente códigos fixos de etapa, sem texto bruto de erro, documento ou credencial.
+
+Testes SQL descartáveis usam a função Owner real e as migrações existentes, verificam 100 entregas repetidas do mesmo protocolo sem duplicar a intenção, compatibilidade de membros, sessão/licença, revogação, auditoria e preservação de incerteza. Não equivalem a carga de documentos/OCR/IA nem encerram F ou G.

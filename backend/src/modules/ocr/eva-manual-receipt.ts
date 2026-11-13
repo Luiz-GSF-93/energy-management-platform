@@ -8,7 +8,7 @@ export class UnconfirmedPreparationReceipt extends ServiceUnavailableException{
  * here: persisted nonces, leases and the caller's uncertainty boundary decide
  * recovery. This helper cannot wrap arbitrary financial RPCs. */
 export async function manualPreparationCommand(db:any,name:string,args:any,milliseconds=MANUAL_PREPARATION_RECEIPT_MS):Promise<any>{
- const allowed:Record<string,string[]>={eva_manual_preparation_action:['request','reconcile'],eva_manual_preparation_worker:['claim','context','begin','defer','heartbeat','finish']};
+ const allowed:Record<string,string[]>={eva_manual_preparation_action:['request','reconcile'],eva_manual_preparation_action_context:['request','reconcile'],eva_manual_preparation_worker:['claim','context','begin','defer','heartbeat','finish']};
  if(!Object.prototype.hasOwnProperty.call(allowed,name)||!allowed[name].includes(args?.p_action))throw Error('MANUAL_PREPARATION_COMMAND_NOT_ALLOWLISTED');
  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new UnconfirmedPreparationReceipt());},milliseconds);timer.unref?.();});
