@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "watchPatterns": [
+      "/backend/**",
+      "/Dockerfile*",
+      "/railway.json",
+      "/railway.toml",
+      "/railpack.json",
+      "/nixpacks.toml",
+      "/.railwayignore",
+      "/.dockerignore"
+    ]
+  }
+}

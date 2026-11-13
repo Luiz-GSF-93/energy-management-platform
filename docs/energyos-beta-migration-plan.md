@@ -37,3 +37,11 @@ A execução comercial da Cerealista em maio/2026 tem nove recibos de rascunho g
 A migração do monitor é aditiva e somente de leitura para os usuários; não muda licenças, funções, documentos ou cálculos. API e frontend podem ser revertidos sem eliminar filas e trilhas. Se for necessário conter processamento, interromper novas intenções e drenar/reconciliar as existentes antes de desligar coordenação. O Small de 2 GB deve permanecer enquanto se mede capacidade; não reduzir recursos durante tarefas ativas sem avaliação.
 
 A visão de estabilidade atualiza enquanto a página está aberta e conectada. A página pública expõe somente disponibilidade sanitizada de banco e Auth. Alertas externos permanentes permanecem na etapa D. O Owner responde pela operação contínua; esta entrega não cria envio automático de mensagens a terceiros.
+
+## Separação dos disparos de publicação
+
+API e worker usam o diretório de origem `/backend`. O arquivo raiz `railway.json` limita os disparos aos arquivos do backend e às configurações de build/deploy da raiz. Alterações apenas em `frontend/` ou `docs/` devem preservar as instâncias de API e worker. A alteração inicial dessa regra ainda exige aplicar a nova configuração; validar os padrões efetivos na implantação. Incluir novos diretórios compartilhados nos padrões se a arquitetura passar a depender de arquivos fora de `/backend`.
+
+A configuração mantém os comandos e variáveis próprios de cada serviço. Não altera recursos, réplicas, chaves, rede, permissões ou cálculos. Evitar reinícios desnecessários não substitui os testes de drenagem, reordenação, rollback e falhas previstos em F e G.
+
+Referência: [watch paths do Railway](https://docs.railway.com/builds/build-configuration). Os padrões partem da raiz do repositório mesmo quando há Root Directory definido.
