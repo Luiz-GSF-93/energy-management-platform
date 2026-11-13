@@ -1,9 +1,11 @@
+import {readRpc} from '../../common/services/read-deadline';
+import {energyosMigrationPlan} from './energyos-migration-plan';
 import {ConfigService} from '@nestjs/config';
 import {BadRequestException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {PlatformCostsService} from '../platform-costs/platform-costs.service';
 export const uuid=/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-const fields:Record<string,string[]>={team:['search','profile','active'],audit:['search','actor','target','from','to'],support:['search','status','organization','priority','assignee','from','to'],finance:['search','status','organization','month'],support_history:[],finance_history:[],sales_detail:[],sales_history:[],sales_consolidated_detail:[],costs:['search','organization','month']};
+const fields:Record<string,string[]>={stability:['search'],team:['search','profile','active'],audit:['search','actor','target','from','to'],support:['search','status','organization','priority','assignee','from','to'],finance:['search','status','organization','month'],support_history:[],finance_history:[],sales_detail:[],sales_history:[],sales_consolidated_detail:[],costs:['search','organization','month']};
 export function administrationQuery(kind:string,q:Record<string,unknown>){
  const allowed=fields[kind];if(!allowed||Object.entries(q).some(([k,v])=>!['page',...allowed].includes(k)||typeof v!=='string'||v.length>150))throw new BadRequestException('Filtros inválidos.');
  const page=String(q.page??'0');if(!/^\d{1,4}$/.test(page)||Number(page)>1000)throw new BadRequestException('Página inválida.');
@@ -19,6 +21,14 @@ export function administrationQuery(kind:string,q:Record<string,unknown>){
 @Injectable()
 export class PlatformAdministrationService{
  constructor(private readonly db:SupabaseService,private readonly costs:PlatformCostsService,private readonly config?:ConfigService){}
+ async stability(actor:string,q:Record<string,unknown>){
+  const {page,filter}=administrationQuery('stability',q);
+  const result=await readRpc(this.db.getClient(),'platform_eva_stability',{p_actor:actor,p_search:filter.search??'',p_offset:page*25},8000);
+  if(result.error?.code==='42501')throw new ForbiddenException('Acompanhamento global exclusivo do Owner da Plataforma.');
+  if(result.error?.code==='22023')throw new BadRequestException('Filtros inválidos.');
+  if(result.error||!result.data||result.data.responsible!=='OWNER')throw new ServiceUnavailableException('Acompanhamento global temporariamente indisponível.');
+  return {...result.data,plan:energyosMigrationPlan};
+ }
  async read(actor:string,kind:string,q:Record<string,unknown>,id?:string){
   if(kind.startsWith('sales_')&&(this.config?.get('SALES_ASAAS_FINANCE_READ_ENABLED')!=='true'||this.config?.get('SALES_ASAAS_SANDBOX_ENABLED')!=='true'||kind==='sales_consolidated_detail'&&this.config?.get('SALES_ASAAS_CONSOLIDATED_ENABLED')!=='true'))throw new ServiceUnavailableException('Acompanhamento financeiro sandbox desligado.');
   const {page,filter}=administrationQuery(kind,q);if(id!==undefined&&!uuid.test(id))throw new BadRequestException('Identificador inválido.');

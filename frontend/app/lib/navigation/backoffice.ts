@@ -17,6 +17,7 @@ export interface BackofficeNavigationItem {
 export const backofficeNavigation:
   readonly BackofficeNavigationItem[] = [
     {href:'/backoffice/audit',label:'Auditoria',permission:'dbb580ca-d940-4e80-97fb-e9f9619a0001',scope:'organization'},
+    {href:'/backoffice/platform-stability',label:'Estabilidade EnergyOS',permission:'82e7fc71-479a-4dd6-8b22-4fba6eaa6841',scope:'global'},
     {href:'/backoffice/platform-audit',label:'Auditoria Global',permission:'dbb580ca-d940-4e80-97fb-e9f9619a0004',scope:'global'},
     {
       href: '/backoffice/dashboard',
