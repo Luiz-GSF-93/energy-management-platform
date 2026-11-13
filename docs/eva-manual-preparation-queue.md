@@ -18,6 +18,12 @@ Manual preparation, automatic intake and operational CCEE closing share a short 
 
 First set API `EVA_MANUAL_PREPARATION_ACCEPTING=false`. Keep asynchronous status and the worker enabled to drain QUEUED/RUNNING work. Reconcile UNKNOWN with evidence. Only after no active or uncertain jobs remain may asynchronous coordination be disabled or old code restored. Do not drop queue tables or audit history. Existing frontend clients using the old synchronous endpoint receive a refresh instruction once asynchronous mode is enabled.
 
+## Transport acknowledgements
+
+Manual request/reconciliation commands and private queue control commands have a 12 second acknowledgement deadline, above their existing 8 second SQL statement limit. Their HTTP transport is aborted when supported. A timeout is explicitly an unconfirmed receipt, not evidence of rollback. This helper accepts only the two manual queue RPCs and their documented commands, never arbitrary financial mutations, and performs no retries.
+
+A lost claim cannot start calculation without a confirmed context and begin receipt. A lost begin response cannot invoke preparation; the durable write marker remains authoritative. A lost finish response cannot invoke preparation a second time, and the existing lease/state gate prevents overwriting an already committed success. Heartbeat commands also terminate, allowing the next heartbeat/backoff instead of hanging the process indefinitely. Status remains on the separate read-only deadline path. These limits bound control requests, not the total duration of a legitimate calculation.
+
 ## Validation and remaining limits
 
 Disposable SQL checks cover authorization, persisted request aliases, shared reservations, lease recovery, revocation, immutable audit, queue limits and privileges. Backend tests cover the API/worker boundary and ambiguous acknowledgements. UI tests cover reopen, read-only polling, lost response, denied access, paused intake and explicit reconciliation. These are correctness checks, not production load measurements. Representative load and a 24–72 hour observation period remain necessary. External OpenTelemetry/Prometheus/Grafana rollout is a separate stage; this phase reuses the existing bounded runtime/stage telemetry.
