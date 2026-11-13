@@ -45,3 +45,7 @@ As regras de alerta são locais, sem destinatário externo configurado. Alertam 
 Rollback: reverter a release ou deixar `ENERGYOS_OTLP_METRICS_ENABLED` ausente/false e reiniciar controladamente. O stack isolado pode ser encerrado pelo projeto Compose `energyos-telemetry-test`, sem tocar API, banco ou worker de produção. Não apagar/repetir recibos, documentos ou cálculos para testar observabilidade.
 
 Referências: [OTLP JSON](https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding), [modelo de métricas](https://opentelemetry.io/docs/specs/otel/metrics/data-model/), [histogramas no Prometheus](https://prometheus.io/docs/practices/histograms/).
+
+## Evidência de validação
+
+[PR #644](https://github.com/Luiz-GSF-93/energy-management-platform/pull/644) e [ensaio isolado aprovado](https://github.com/Luiz-GSF-93/energy-management-platform/actions/runs/43483808311): oito checks e 59 testes direcionados aprovados. Histograma recebido, dashboard provisionado por API autenticada, canários ausentes e recuperação demonstrada. O trabalho CPU sintético levou 83 ms, 26 ms durante a indisponibilidade e 30 ms após recuperação; esses valores não medem OCR/IA, documentos nem o prazo de fechamento. A validação não habilitou exportação ou criou serviços em produção.
