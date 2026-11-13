@@ -6,7 +6,7 @@ import {createOperationalRefresh,RefreshState} from '../../../lib/read-only-refr
 import styles from './page.module.css';
 
 type State='QUEUED'|'RUNNING'|'UNKNOWN'|'FAILED'|'SUCCEEDED';
-type Row={id:string;customerId:string;consumerUnitId:string;customer:string|null;unit:string|null;month:string;scopeKind:'UNIT'|'CUSTOMER';state:State;recordedState:State;attempts:number;attention:boolean;delayed:boolean;leaseExpired:boolean;createdAt:string;updatedAt:string;heartbeatAt:string|null;nextAttemptAt:string|null;elapsedSeconds:number;closingId:string|null;errorCode:string|null};
+type Row={id:string;customerId:string;consumerUnitId:string;customer:string|null;unit:string|null;month:string;scopeKind:'UNIT'|'CUSTOMER';state:State;recordedState:State;attempts:number;attention:boolean;delayed:boolean;leaseExpired:boolean;waitingOnUncertainPreparation?:boolean;createdAt:string;updatedAt:string;heartbeatAt:string|null;nextAttemptAt:string|null;elapsedSeconds:number;closingId:string|null;errorCode:string|null};
 type Data={enabled:boolean;accepting:boolean;organizationId:string;generatedAt:string;windowDays:number;pageSize:number;total:number;attentionThresholdSeconds:number;summary:{queued:number;running:number;uncertain:number;failed:number;succeeded:number;attention:number;delayed:number};rows:Row[]};
 const states:Record<State,string>={QUEUED:'Na fila',RUNNING:'EVA preparando',UNKNOWN:'Resultado a reconferir',FAILED:'Preparação não iniciada',SUCCEEDED:'Preparação registrada'};
 const filters=[['ALL','Todas'],['ACTIVE','Na fila e em execução'],['ATTENTION','Precisam de atenção'],['SUCCEEDED','Preparações registradas']];
@@ -18,6 +18,7 @@ export function validateManualOperations(r:Data,org:string){
 function duration(seconds:number){if(seconds<60)return 'menos de 1 min';if(seconds<3600)return Math.floor(seconds/60)+' min';if(seconds<86400)return Math.floor(seconds/3600)+' h';return Math.floor(seconds/86400)+' dia(s)';}
 function guidance(r:Row){
  if(r.state==='UNKNOWN')return 'O resultado da gravação precisa de reconferência técnica pelo administrador. Não repita a preparação nem reenvie os documentos. Justificativas e fontes permanecem preservadas.';
+ if(r.waitingOnUncertainPreparation)return 'Esta solicitação aguarda a reconferência de outra preparação deste cliente e competência. Confira o protocolo com resultado incerto; não crie pedidos repetidos.';
  if(r.leaseExpired)return 'O contato da execução anterior expirou. Acompanhe a recuperação do processador antes de repetir qualquer ação.';
  if(r.state==='FAILED')return 'A preparação não chegou a iniciar os cálculos. Confira o acesso e as fontes no fechamento antes de solicitar novamente.';
  if(r.state==='SUCCEEDED')return 'Confira a proposta e as fontes pendentes no fechamento. Preparação registrada não significa aprovação nem publicação financeira.';
