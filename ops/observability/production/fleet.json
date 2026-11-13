@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "status": "PROPOSED_REQUIRES_COST_APPROVAL",
+  "projectId": "72d67664-f362-4230-95ab-238f297f6d2f",
+  "environmentId": "26c3d3b6-9907-4da6-b911-7beca0d81d63",
+  "rootDirectory": "/ops/observability",
+  "watchPatterns": ["/ops/observability/**"],
+  "replicas": 1,
+  "services": [
+    {"name": "energyos-otel-collector", "dockerfile": "production/Dockerfile.collector", "memoryGB": 0.25, "vCPUs": 0.5, "public": false, "volume": null, "port": 4318},
+    {"name": "energyos-prometheus", "dockerfile": "production/Dockerfile.prometheus", "memoryGB": 0.375, "vCPUs": 0.5, "public": false, "volume": {"sizeGB": 1, "mountPath": "/data"}, "port": 9090},
+    {"name": "energyos-grafana", "dockerfile": "production/Dockerfile.grafana", "memoryGB": 0.375, "vCPUs": 0.5, "public": "AUTHENTICATED_HTTPS_OWNER_ONLY", "volume": {"sizeGB": 1, "mountPath": "/data"}, "port": 3000}
+  ],
+  "approval": {"additionalMonthlyBudgetUSD": 50, "taxesIncluded": false, "automaticPlatformShutdown": false},
+  "pricingBasis": {"checkedOn": "2026-11-13", "source": "https://railway.com/pricing", "memoryGBSecondUSD": 0.00000386, "vCPUSecondUSD": 0.00000772, "volumeGBSecondUSD": 0.00000006, "fullCap30DayComputeAndVolumeUSD": 40.33, "fullCap31DayComputeAndVolumeUSD": 41.67, "buildsAndPublicEgressIncluded": false}
+}

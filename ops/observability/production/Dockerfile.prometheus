@@ -1,0 +1,11 @@
+FROM golang:1.27.4-alpine AS initializer
+WORKDIR /src
+COPY production/drop-user.go .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /drop-user drop-user.go
+FROM prom/prometheus:v3.16.0
+USER 0
+ENV GOMEMLIMIT=256MiB
+COPY --from=initializer /drop-user /usr/local/bin/drop-user
+COPY production/prometheus.yaml /etc/prometheus/prometheus.yml
+COPY production/alerts.yaml /etc/prometheus/alerts.yaml
+ENTRYPOINT ["/usr/local/bin/drop-user", "prometheus"]

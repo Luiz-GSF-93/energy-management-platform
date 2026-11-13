@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: EnergyOS
+    orgId: 1
+    folder: EnergyOS
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

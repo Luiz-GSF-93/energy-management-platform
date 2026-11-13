@@ -1,0 +1,61 @@
+# Disposable persistent-volume rehearsal. No cloud resources or production credentials.
+services:
+  collector:
+    build: {context: .., dockerfile: production/Dockerfile.collector}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment: {GOMEMLIMIT: 192MiB}
+    networks:
+      telemetry:
+        aliases: [energyos-otel-collector.railway.internal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+  prometheus:
+    build: {context: .., dockerfile: production/Dockerfile.prometheus}
+    volumes: ["prometheus:/data"]
+    networks:
+      telemetry:
+        aliases: [energyos-prometheus.railway.internal]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+  grafana:
+    build: {context: .., dockerfile: production/Dockerfile.grafana}
+    environment:
+      GF_SECURITY_ADMIN_USER: energyosowner
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Isolated test credential required}
+    volumes: ["grafana:/data"]
+    tmpfs: ["/tmp:uid=472,gid=472,size=33554432"]
+    networks: [telemetry]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+  verifier:
+    image: node:24-alpine
+    user: "1000:1000"
+    command: ["node", "-e", "setInterval(()=>{},60000)"]
+    environment:
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Isolated test credential required}
+      ENERGYOS_SYNTHETIC_ENDPOINT: http://energyos-otel-collector.railway.internal:4318/v1/metrics
+    volumes:
+      - ../../../backend/dist:/suite/backend/dist:ro
+      - ../:/suite/ops/observability:ro
+    networks: [telemetry]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+networks:
+  telemetry: {internal: true}
+volumes:
+  prometheus:
+  grafana:

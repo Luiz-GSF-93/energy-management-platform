@@ -1,0 +1,36 @@
+name: EVA persistent telemetry rehearsal
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['ops/observability/**', '.github/workflows/eva-persistent-observability.yml']
+permissions:
+  contents: read
+jobs:
+  persistent-volume-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts && npm run build
+        working-directory: backend
+      - name: Persistent volume, privilege drop and outage rehearsal
+        shell: bash
+        run: |
+          export GRAFANA_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          export ENERGYOS_TELEMETRY_TEST_PROFILE=persistent
+          compose=(docker compose -p energyos-telemetry-test -f ops/observability/production/compose-test.yaml)
+          cleanup() {
+            outcome=$?
+            if [ "$outcome" -ne 0 ]; then
+              "${compose[@]}" ps -a
+              "${compose[@]}" logs --tail=30 collector prometheus grafana
+            fi
+            "${compose[@]}" down --volumes --remove-orphans
+            exit "$outcome"
+          }
+          trap cleanup EXIT
+          "${compose[@]}" build
+          python3 ops/observability/verify.py
