@@ -8,9 +8,9 @@ describe('bounded, private runtime observations',()=>{
  let h:any;
  let db:any;
  let log:jest.SpyInstance;
- const originalRole=process.env.ENERGYOS_PROCESS_ROLE;
+ const originalRole=process.env.ENERGYOS_PROCESS_ROLE,originalLimit=process.env.EVA_WORKER_MAX_CONCURRENCY;
  beforeEach(()=>{
-  jest.useFakeTimers();process.env.ENERGYOS_PROCESS_ROLE='API';
+  jest.useFakeTimers();process.env.ENERGYOS_PROCESS_ROLE='API';delete process.env.EVA_WORKER_MAX_CONCURRENCY;
   h={enable:jest.fn(),disable:jest.fn(),reset:jest.fn(),count:2,max:120000000,percentile:jest.fn((n:number)=>n===95?30000000:90000000)};
   (monitorEventLoopDelay as jest.Mock).mockReturnValue(h);
   (performance.now as jest.Mock).mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(60000);
@@ -19,12 +19,12 @@ describe('bounded, private runtime observations',()=>{
   log=jest.spyOn(Logger.prototype,'log').mockImplementation(()=>undefined);
   monitor=new RuntimeObservabilityService({get:()=>undefined} as any,db);
  });
- afterEach(()=>{monitor.onModuleDestroy();jest.useRealTimers();jest.restoreAllMocks();jest.clearAllMocks();if(originalRole===undefined)delete process.env.ENERGYOS_PROCESS_ROLE;else process.env.ENERGYOS_PROCESS_ROLE=originalRole;});
- it('samples once per minute, converts nanoseconds and uses CPU per one core',async()=>{
+ afterEach(()=>{if(originalLimit===undefined)delete process.env.EVA_WORKER_MAX_CONCURRENCY;else process.env.EVA_WORKER_MAX_CONCURRENCY=originalLimit;monitor.onModuleDestroy();jest.useRealTimers();jest.restoreAllMocks();jest.clearAllMocks();if(originalRole===undefined)delete process.env.ENERGYOS_PROCESS_ROLE;else process.env.ENERGYOS_PROCESS_ROLE=originalRole;});
+ it.each([1,2])('samples once per minute with the configured admission limit %s',async limit=>{process.env.EVA_WORKER_MAX_CONCURRENCY=String(limit);
   monitor.onModuleInit();monitor.onModuleInit();
   await jest.advanceTimersByTimeAsync(59999);expect(log).not.toHaveBeenCalled();
   await jest.advanceTimersByTimeAsync(1);
-  const r=JSON.parse(log.mock.calls[0][0]);expect(r).toMatchObject({event:'ENERGYOS_RUNTIME_SAMPLE',role:'API',windowMs:60000,cpuPercent:25,eventLoop:{p95Ms:30,p99Ms:90,maxMs:120},polling:{concurrencyLimit:2}});
+  const r=JSON.parse(log.mock.calls[0][0]);expect(r).toMatchObject({event:'ENERGYOS_RUNTIME_SAMPLE',role:'API',windowMs:60000,cpuPercent:25,eventLoop:{p95Ms:30,p99Ms:90,maxMs:120},polling:{concurrencyLimit:limit}});
   expect(h.reset).toHaveBeenCalledTimes(1);expect(monitorEventLoopDelay).toHaveBeenCalledTimes(1);
   expect(JSON.parse(log.mock.calls[1][0])).toEqual({event:'ENERGYOS_DEPENDENCY_SAMPLE',schemaVersion:1,role:'API',database:'up',auth:'down'});
   expect(JSON.stringify(log.mock.calls)).not.toContain('MUST_NOT_LOG');
