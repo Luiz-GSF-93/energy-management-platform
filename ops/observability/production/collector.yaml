@@ -1,0 +1,58 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "[::]:4318"
+        max_request_body_size: 65536
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  filter/privacy:
+    error_mode: propagate
+    metrics:
+      metric:
+        - 'not IsMatch(name, "^energyos_(runtime_(rss_bytes|heap_used_bytes|cpu_percent|uptime_seconds|sample_timestamp_seconds)|event_loop_(p95|p99|max)_milliseconds|poller_(active|backing_off|limit)|eva_stage_(duration_seconds|completed_total|failed_total))$")'
+      datapoint:
+        - 'attributes["stage"] != nil and not IsMatch(attributes["stage"], "^(ORIGINAL_DOWNLOAD|OCR_SUBMIT|OCR_POLL|PDF_TEXT|XML_PARSE|IDENTITY_CHECK|ARCHIVE_COPY|SOURCE_CHECK|PREPARED_CHECKPOINT|DRAFT_PREPARATION|FIELD_DRAFT|CLOSING_PREPARATION|CCEE_HISTORY_READ|EXPLANATION_INSPECT|AI_INTERPRETATION|MANUAL_PREPARATION)$")'
+  transform/privacy:
+    error_mode: propagate
+    metric_statements:
+      - context: resource
+        statements:
+          - 'keep_keys(attributes, ["service.name", "service.instance.id", "process.role"])'
+          - 'set(attributes["service.name"], "energyos-unknown") where not IsMatch(attributes["service.name"], "^energyos-(api|eva_worker|combined)$")'
+          - 'set(attributes["process.role"], "UNKNOWN") where not IsMatch(attributes["process.role"], "^(API|EVA_WORKER|COMBINED)$")'
+          - 'set(attributes["service.instance.id"], "unknown") where not IsMatch(attributes["service.instance.id"], "^[0-9a-f-]{36}$")'
+      - context: datapoint
+        statements:
+          - 'keep_keys(attributes, ["stage"])'
+      - context: metric
+        statements:
+          - 'set(description, "")'
+  batch:
+    timeout: 1s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+exporters:
+  prometheus:
+    endpoint: "[::]:8889"
+    translation_strategy: UnderscoreEscapingWithoutSuffixes
+    without_scope_info: true
+    resource_constant_labels:
+      included: [service.name, service.instance.id, process.role]
+    metric_expiration: 3m
+extensions:
+  health_check:
+    endpoint: "[::]:13133"
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: error
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/privacy, transform/privacy, batch]
+      exporters: [prometheus]
