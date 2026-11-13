@@ -1,3 +1,4 @@
+import {commercialClosingHistory} from './commercial-closing-history';
 import {supplierInvoiceCostDraft,supplierInvoiceCostIdentity} from './supplier-invoice-cost-draft';
 import {MonthlyCostsService} from '../contracts/services/monthly-costs.service';
 import {withInvoiceDemand} from './invoice-demand-reference';
@@ -79,13 +80,8 @@ export class CalculationAutofillService{
    const history:any[]=[];
    for(const m of months){const candidates=historical.data.filter((r:any)=>String(r.month).slice(0,7)===m),top=candidates[0];if(candidates.filter((r:any)=>r.version_number===top.version_number).length!==1)continue;const r=await db.from('monthly_energy_settlements').select('*').eq('organization_id',t.organizationId).eq('customer_id',u.customer_id).eq('consumer_unit_id',unit).eq('id',top.id).maybeSingle();if(r.error||!r.data||r.data.financial_hash!==top.financial_hash)throw new ConflictException('Histórico CCEE mudou durante a preparação.');history.push(r.data);}
    const previous=Array.from({length:6},(_,i)=>{const n=Number(month.slice(0,4))*12+Number(month.slice(5))-i-2;return String(Math.floor(n/12))+'-'+String(n%12+1).padStart(2,'0');});
-   const closingHistory=await Promise.all(previous.flatMap(m=>['CUSTOMER','UNIT'].map(async scopeKind=>{
-    const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:'history',p_disclose:false,p_mode:contractClosingDraftEnabled()?(documentedSettlementEnabled()?'DOCUMENTED':'CONTRACT'):'BASE',p_scope:scopeKind,p_unit:unit,p_month:m,p_id:null};
-    const rows:any[]=[];
-    for(let page=0;page<10;page++){const h=this.fail(await db.rpc('eva_scoped_closing_action',{...args,p_body:{page}}));if(!Array.isArray(h.rows)||!Number.isInteger(h.total)||h.total>100)throw new ServiceUnavailableException('Histórico CCEE aprovado incompleto.');if(h.rows.some((r:any)=>r.organization_id!==t.organizationId||r.customer_id!==u.customer_id||r.month!==m))throw new ConflictException('Histórico CCEE fora do escopo.');rows.push(...h.rows);if(rows.length>=h.total)break;if(!h.rows.length||page===9)throw new ServiceUnavailableException('Histórico CCEE truncado.');}
-    return rows.map(r=>({...r,evidenceFormat:'EVA_APPROVED',version_number:r.version}));
-   })));
-   history.push(...closingHistory.flat());
+   const closingHistory=await commercialClosingHistory(db,t,unit,u.customer_id,previous,contractClosingDraftEnabled()?(documentedSettlementEnabled()?'DOCUMENTED':'CONTRACT'):'BASE');
+   history.push(...closingHistory);
    c.cceeEstimate=cceeCostEstimate(history,u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
    }
   }

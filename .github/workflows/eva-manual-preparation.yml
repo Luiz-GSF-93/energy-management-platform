@@ -19,7 +19,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: npm test -- --runInBand src/modules/ocr/eva-manual-receipt.spec.ts src/modules/ocr/eva-manual-preparation.spec.ts src/modules/ocr/eva-preparation-coordination.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts src/common/workers src/common/services/eva-stage-metrics.spec.ts
+      - run: npm test -- --runInBand src/modules/ocr/commercial-closing-history.spec.ts src/modules/ocr/eva-manual-receipt.spec.ts src/modules/ocr/eva-manual-preparation.spec.ts src/modules/ocr/eva-preparation-coordination.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts src/common/workers src/common/services/eva-stage-metrics.spec.ts
         working-directory: backend
       - run: node test/eva-manual-preparation-queue.cjs && node test/eva-assisted-closing.cjs && node test/eva-automatic-intake.cjs
         working-directory: backend
