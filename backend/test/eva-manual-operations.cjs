@@ -3,8 +3,8 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 (async()=>{const db=new PGlite();let checks=0;const ok=x=>{assert(x);checks++;},deny=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};try{
  const baseline=fs.readFileSync(path.join(__dirname,'calculation-autofill.cjs'),'utf8').split('await db.exec(`')[1].split('`);')[0].replace(/\$\{id\((\d+)\)\}/g,(_,n)=>id(n)).replace(/\$\{'a'\.repeat\(64\)\}/g,'a'.repeat(64));await db.exec(baseline);
- await db.exec(`ALTER TABLE customers ADD COLUMN name text;ALTER TABLE consumer_units ADD COLUMN name text;ALTER TABLE organization_members ADD COLUMN permission_limit jsonb;
- UPDATE customers SET name=CASE WHEN organization_id='org' THEN 'Authorized customer' ELSE 'FOREIGN CUSTOMER' END;UPDATE consumer_units SET name='Synthetic unit';
+ await db.exec(`ALTER TABLE customers ADD COLUMN company_name text;ALTER TABLE consumer_units ADD COLUMN name text;ALTER TABLE organization_members ADD COLUMN permission_limit jsonb;
+ UPDATE customers SET company_name=CASE WHEN organization_id='org' THEN 'Authorized customer' ELSE 'FOREIGN CUSTOMER' END;UPDATE consumer_units SET name='Synthetic unit';
  UPDATE roles SET permissions=permissions||'["8f3ff5eb-157a-468a-91af-6f89d92e23a7"]' WHERE id='operator';
  CREATE TABLE eva_manual_preparations(id uuid PRIMARY KEY,organization_id text,customer_id text,consumer_unit_id text,month text,scope_kind text,scope_key text,actor_id text,role_id text,execution_id uuid,state text,write_started boolean,lease_token uuid,lease_until timestamptz,attempts integer,closing_id uuid,error_code text,next_attempt_at timestamptz,created_at timestamptz,updated_at timestamptz);
  CREATE FUNCTION portal_workspace_actor(p_org text,p_actor text,p_role text,p_platform boolean,p_kind text) RETURNS jsonb LANGUAGE plpgsql SET search_path=pg_catalog AS $$BEGIN
