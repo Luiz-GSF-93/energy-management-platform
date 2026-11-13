@@ -9,3 +9,4 @@ COPY --from=initializer /drop-user /usr/local/bin/drop-user
 COPY production/prometheus.yaml /etc/prometheus/prometheus.yml
 COPY production/alerts.yaml /etc/prometheus/alerts.yaml
 ENTRYPOINT ["/usr/local/bin/drop-user", "prometheus"]
+CMD []

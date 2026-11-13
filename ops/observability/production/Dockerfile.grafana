@@ -4,6 +4,7 @@ COPY production/drop-user.go .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /drop-user drop-user.go
 FROM grafana/grafana:13.3.1
 USER 0
+COPY --from=initializer /drop-user /usr/local/bin/drop-user
 ENV GOMEMLIMIT=256MiB GF_PATHS_DATA=/data/grafana GF_PATHS_PLUGINS=/data/grafana/plugins GF_PATHS_LOGS=/data/grafana/logs
 ENV GF_AUTH_ANONYMOUS_ENABLED=false GF_USERS_ALLOW_SIGN_UP=false GF_ANALYTICS_REPORTING_ENABLED=false GF_ANALYTICS_CHECK_FOR_UPDATES=false GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false GF_SECURITY_DISABLE_GRAVATAR=true GF_INSTALL_PLUGINS=""
 ENV GF_SECURITY_ADMIN_USER=energyosowner GF_SECURITY_COOKIE_SECURE=true GF_SECURITY_STRICT_TRANSPORT_SECURITY=true GF_SECURITY_CONTENT_SECURITY_POLICY=true GF_SNAPSHOTS_EXTERNAL_ENABLED=false GF_SECURITY_ALLOW_EMBEDDING=false
@@ -11,3 +12,4 @@ COPY production/datasource.yaml /etc/grafana/provisioning/datasources/energyos.y
 COPY production/dashboard-provider.yaml /etc/grafana/provisioning/dashboards/energyos.yaml
 COPY production/dashboard.json /etc/grafana/dashboards/energyos.json
 ENTRYPOINT ["/usr/local/bin/drop-user", "grafana"]
+CMD []
