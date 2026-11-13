@@ -7,8 +7,9 @@ services:
       GOMEMLIMIT: 192MiB
     volumes:
       - ./collector.yaml:/etc/otelcol/config.yaml:ro
-    ports: ["127.0.0.1:14318:4318"]
-    networks: [telemetry]
+    networks:
+      telemetry:
+        aliases: [energyos-otel-collector.railway.internal]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -22,7 +23,6 @@ services:
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
       - ./alerts.yaml:/etc/prometheus/alerts.yaml:ro
-    ports: ["127.0.0.1:19090:9090"]
     networks: [telemetry]
     read_only: true
     tmpfs: ["/prometheus:uid=65534,gid=65534,size=167772160"]
@@ -47,7 +47,6 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["127.0.0.1:13000:3000"]
     networks: [telemetry]
     read_only: true
     tmpfs: ["/var/lib/grafana:uid=472,gid=0,size=67108864", "/tmp:uid=472,gid=0,size=33554432"]
@@ -56,6 +55,24 @@ services:
     mem_limit: 384m
     cpus: 0.5
     pids_limit: 100
+    restart: "no"
+  verifier:
+    image: node:24-alpine
+    user: "1000:1000"
+    command: ["node", "-e", "setInterval(()=>{},60000)"]
+    environment:
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set a unique isolated-test password}
+      ENERGYOS_SYNTHETIC_ENDPOINT: http://energyos-otel-collector.railway.internal:4318/v1/metrics
+    volumes:
+      - ../../backend/dist:/suite/backend/dist:ro
+      - ./:/suite/ops/observability:ro
+    networks: [telemetry]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 40
     restart: "no"
 networks:
   telemetry:

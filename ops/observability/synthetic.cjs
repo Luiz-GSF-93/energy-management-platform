@@ -4,7 +4,7 @@ const {observeEvaStage}=require('../../backend/dist/common/services/eva-stage-me
 const {performance}=require('node:perf_hooks');
 async function main(){
  const unavailable=process.argv.includes('--unavailable');
- const exporter=new RuntimeMetricsExporter('true','http://127.0.0.1:14318/v1/metrics');
+ const exporter=new RuntimeMetricsExporter('true',process.env.ENERGYOS_SYNTHETIC_ENDPOINT??'http://127.0.0.1:14318/v1/metrics');
  const at=performance.now();
  for(let i=0;i<10000;i++)await observeEvaStage('XML_PARSE',()=>i);
  exporter.send({role:'EVA_WORKER',rssBytes:unavailable?202:101,heapUsedBytes:40,cpuPercent:1,uptimeSeconds:123,

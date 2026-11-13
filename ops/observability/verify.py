@@ -1,29 +1,23 @@
 """Actual isolated Collector -> Prometheus -> Grafana test. No production data/credentials."""
-import base64
 import json
 import os
 from pathlib import Path
 import subprocess
 import time
-from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ["docker", "compose", "-p", "energyos-telemetry-test", "-f", str(ROOT / "ops/observability/compose.yaml")]
 
 def request(url, payload=None, auth=False):
-    headers = {"Content-Type": "application/json"}
-    if auth:
-        credential = "energyosowner:" + os.environ["GRAFANA_ADMIN_PASSWORD"]
-        headers["Authorization"] = "Basic " + base64.b64encode(credential.encode()).decode()
-    with urlopen(Request(url, data=None if payload is None else json.dumps(payload).encode(), headers=headers), timeout=4) as response:
-        body = response.read(65537)
-        if len(body) > 65536:
-            raise RuntimeError("Isolated response size limit")
-        return json.loads(body) if body else {}
+    args = COMPOSE + ["exec", "-T", "verifier", "node", "/suite/ops/observability/http-fixture.cjs", url] + (["--auth"] if auth else [])
+    result = subprocess.run(args, input="" if payload is None else json.dumps(payload), text=True, capture_output=True, timeout=10)
+    if result.returncode:
+        raise RuntimeError("Isolated HTTP unavailable")
+    return json.loads(result.stdout)
 
 def collector_ready():
-    receipt = request("http://127.0.0.1:14318/v1/metrics", {"resourceMetrics": []})
+    receipt = request("http://collector:4318/v1/metrics", {"resourceMetrics": []})
     return isinstance(receipt, dict) and str(receipt.get("partialSuccess", {}).get("rejectedDataPoints", "0")) == "0"
 
 def wait(check, message, seconds=75):
@@ -38,10 +32,10 @@ def wait(check, message, seconds=75):
     raise RuntimeError(message)
 
 def query(expr):
-    return request("http://127.0.0.1:19090/api/v1/query?" + urlencode({"query": expr}))["data"]["result"]
+    return request("http://prometheus:9090/api/v1/query?" + urlencode({"query": expr}))["data"]["result"]
 
 def run_fixture(unavailable=False):
-    args = ["node", "ops/observability/synthetic.cjs"] + (["--unavailable"] if unavailable else [])
+    args = COMPOSE + ["exec", "-T", "verifier", "node", "/suite/ops/observability/synthetic.cjs"] + (["--unavailable"] if unavailable else [])
     subprocess.run(args, cwd=ROOT, check=True, timeout=15)
 
 def main():
@@ -51,8 +45,8 @@ def main():
     wait(collector_ready, "Collector not ready")
     run_fixture()
     wait(lambda: bool(query("energyos_eva_stage_duration_seconds_count{stage=\"XML_PARSE\"} >= 10000")), "Histogram not received")
-    wait(lambda: request("http://127.0.0.1:13000/api/health").get("database") == "ok", "Grafana not ready")
-    wait(lambda: request("http://127.0.0.1:13000/api/dashboards/uid/energyos-eva-isolated", auth=True).get("dashboard", {}).get("uid") == "energyos-eva-isolated", "Dashboard not provisioned")
+    wait(lambda: request("http://grafana:3000/api/health").get("database") == "ok", "Grafana not ready")
+    wait(lambda: request("http://grafana:3000/api/dashboards/uid/energyos-eva-isolated", auth=True).get("dashboard", {}).get("uid") == "energyos-eva-isolated", "Dashboard not provisioned")
     now = str(time.time_ns())
     gauge = lambda name, attrs=[]: {"name": name, "description": "PRIVATE_CANARY_DESCRIPTION", "gauge": {"dataPoints": [{"timeUnixNano": now, "asDouble": 1, "attributes": attrs}]}}
     resource = {"attributes": [
@@ -64,10 +58,10 @@ def main():
     fixture = {"resourceMetrics": [{"resource": resource, "scopeMetrics": [{"scope": {"name": "PRIVATE_CANARY_SCOPE"}, "metrics": [
         gauge("energyos_runtime_rss_bytes", attrs), gauge("PRIVATE_CANARY_DOCUMENT"),
         gauge("energyos_poller_active", [{"key": "stage", "value": {"stringValue": "PRIVATE_CANARY_STAGE"}}])]}]}]}
-    request("http://127.0.0.1:14318/v1/metrics", fixture)
+    request("http://collector:4318/v1/metrics", fixture)
     wait(lambda: bool(query('energyos_runtime_rss_bytes{process_role="API"}')), "Privacy fixture not observed")
-    series = request("http://127.0.0.1:19090/api/v1/series?" + urlencode({"match[]": '{job="energyos-isolated"}'}))
-    metadata = request("http://127.0.0.1:19090/api/v1/metadata")
+    series = request("http://prometheus:9090/api/v1/series?" + urlencode({"match[]": '{job="energyos-isolated"}'}))
+    metadata = request("http://prometheus:9090/api/v1/metadata")
     if "PRIVATE_CANARY" in json.dumps([series, metadata]):
         raise RuntimeError("Privacy canary reached telemetry output")
     subprocess.run(COMPOSE + ["stop", "collector"], check=True)

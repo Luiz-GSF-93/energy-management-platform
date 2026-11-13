@@ -39,5 +39,16 @@ describe('EVA process placement and bounded polling',()=>{
    await jest.advanceTimersByTimeAsync(1);expect(run).toHaveBeenCalledTimes(2);
   }finally{p.stop();}
  });
+ it('serves three continuously busy pollers in waiting order without starving the third',async()=>{
+  process.env.ENERGYOS_PROCESS_ROLE='EVA_WORKER';jest.useFakeTimers();jest.spyOn(Math,'random').mockReturnValue(0);
+  const ps=[new EvaPoller(),new EvaPoller(),new EvaPoller()],order:number[]=[],releases:Array<()=>void>=[];
+  ps.forEach((p,i)=>p.start(async()=>{order.push(i);p.activity();await new Promise<void>(r=>releases.push(r));},5000,jest.fn()));
+  try{await jest.advanceTimersByTimeAsync(5000);expect(order).toEqual([0]);
+   releases[0]();await jest.advanceTimersByTimeAsync(1000);expect(order).toEqual([0,1]);
+   releases[1]();await jest.advanceTimersByTimeAsync(1000);expect(order).toEqual([0,1,2]);
+   releases[2]();await jest.advanceTimersByTimeAsync(1000);expect(order).toEqual([0,1,2,0]);expect(evaPollingMetrics().activeTasks).toBe(1);
+  }finally{ps.forEach(p=>p.stop());releases.forEach(r=>r());await jest.advanceTimersByTimeAsync(0);}
+  expect(evaPollingMetrics().activeTasks).toBe(0);expect(jest.getTimerCount()).toBe(0);
+ });
 
 });
