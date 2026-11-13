@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['backend/**', 'frontend/app/backoffice/contracts/**', 'frontend/app/lib/read-only-refresh.ts', 'frontend/test/eva-manual-preparation.cjs', '.github/workflows/eva-manual-preparation.yml']
   pull_request:
-    paths: ['backend/src/modules/ocr/**', 'backend/src/modules/portal-workspace/automatic-intake.worker*', 'backend/src/database/migrations/20261315*', 'backend/src/common/**', 'backend/src/eva-worker.module.ts', 'backend/test/eva-manual-preparation-queue.cjs', 'frontend/app/backoffice/contracts/**', 'frontend/app/lib/read-only-refresh.ts', 'frontend/app/backoffice/documents/operations/operational-refresh.ts', 'frontend/test/eva-manual-preparation.cjs', '.github/workflows/eva-manual-preparation.yml']
+    paths: ['backend/src/modules/ocr/**', 'backend/src/modules/portal-workspace/automatic-intake.worker*', 'backend/src/database/migrations/20261315*', 'backend/src/database/migrations/20261319*', 'backend/src/common/**', 'backend/src/eva-worker.module.ts', 'backend/test/eva-manual-preparation-queue.cjs', 'backend/test/eva-manual-preparation-fixture.cjs', 'backend/test/eva-owner-manual-queue.cjs', 'frontend/app/backoffice/contracts/**', 'frontend/app/lib/read-only-refresh.ts', 'frontend/app/backoffice/documents/operations/operational-refresh.ts', 'frontend/test/eva-manual-preparation.cjs', '.github/workflows/eva-manual-preparation.yml']
 permissions:
   contents: read
 jobs:
@@ -21,7 +21,9 @@ jobs:
         working-directory: backend
       - run: npm test -- --runInBand src/modules/ocr/commercial-closing-history.spec.ts src/modules/ocr/eva-manual-receipt.spec.ts src/modules/ocr/eva-manual-preparation.spec.ts src/modules/ocr/eva-preparation-coordination.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/ocr/eva-operational-flow.service.spec.ts src/common/workers src/common/services/eva-stage-metrics.spec.ts
         working-directory: backend
-      - run: node test/eva-manual-preparation-queue.cjs && node test/eva-assisted-closing.cjs && node test/eva-automatic-intake.cjs
+      - run: node test/eva-manual-preparation-queue.cjs && node test/eva-owner-manual-queue.cjs && node test/eva-assisted-closing.cjs && node test/eva-automatic-intake.cjs
+        working-directory: backend
+      - run: EVA_TEST_OWNER_QUEUE_MIGRATION=true node test/eva-manual-preparation-queue.cjs
         working-directory: backend
       - run: npm run build
         working-directory: backend

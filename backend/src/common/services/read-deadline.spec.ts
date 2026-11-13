@@ -12,6 +12,12 @@ describe('bounded read-only transport and RPC',()=>{
  it('forbids reserve, finish and decide in the read RPC helper before calling the database',async()=>{
   const db={rpc:jest.fn()};for(const action of ['reserve','finish','decide'])await expect(readRpc(db,'eva_scoped_closing_action',{p_action:action})).rejects.toThrow('NOT_ALLOWLISTED');expect(db.rpc).not.toHaveBeenCalled();
  });
+ it('only permits status on the context-bound manual RPC and never retries its writes',async()=>{
+  const db={rpc:jest.fn(async()=>({data:{job:null}}))};
+  expect(await readRpc(db,'eva_manual_preparation_action_context',{p_action:'status',p_platform:true})).toEqual({data:{job:null}});
+  for(const action of ['request','reconcile','finish'])await expect(readRpc(db,'eva_manual_preparation_action_context',{p_action:action,p_platform:true})).rejects.toThrow('NOT_ALLOWLISTED');
+  expect(db.rpc).toHaveBeenCalledTimes(1);
+ });
  it('distinguishes a database read timeout from permission and source errors',async()=>{
   const db={rpc:jest.fn(async()=>({error:{code:'57014'}}))};await expect(readRpc(db,'eva_scoped_closing_action',{p_action:'capture'})).rejects.toBeInstanceOf(EvaReadUnavailable);
   for(const code of ['42501','40001']){db.rpc.mockResolvedValue({error:{code}});expect(await readRpc(db,'eva_scoped_closing_action',{p_action:'history'})).toEqual({error:{code}});}

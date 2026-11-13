@@ -27,7 +27,7 @@ describe('bounded manual preparation acknowledgements without command replay',()
   const denial={error:{code:'42501'}};expect(await manualPreparationCommand({rpc:async()=>denial},'eva_manual_preparation_action',{p_action:'request'})).toBe(denial);expect(jest.getTimerCount()).toBe(0);
  });
  it('bounds API submission and keeps the same caller-supplied request protocol',async()=>{
-  const rpc=jest.fn(()=>new Promise(()=>{})),queue=new EvaManualPreparationQueue({getClient:()=>({rpc})} as any,config);const result=expect(queue.request({consumerUnitId:unit,month:'2026-04',scopeKind:'UNIT',requestId:id},actor)).rejects.toMatchObject({status:503});await flush();await jest.advanceTimersByTimeAsync(MANUAL_PREPARATION_RECEIPT_MS);await result;expect(rpc).toHaveBeenCalledTimes(1);expect(rpc).toHaveBeenCalledWith('eva_manual_preparation_action',expect.objectContaining({p_id:id,p_action:'request'}));
+  const rpc=jest.fn(()=>new Promise(()=>{})),queue=new EvaManualPreparationQueue({getClient:()=>({rpc})} as any,config);const result=expect(queue.request({consumerUnitId:unit,month:'2026-04',scopeKind:'UNIT',requestId:id},actor)).rejects.toMatchObject({status:503});await flush();await jest.advanceTimersByTimeAsync(MANUAL_PREPARATION_RECEIPT_MS);await result;expect(rpc).toHaveBeenCalledTimes(1);expect(rpc).toHaveBeenCalledWith('eva_manual_preparation_action_context',expect.objectContaining({p_id:id,p_action:'request'}));
  });
  function workerFixture(hang:'claim'|'begin'|'finish'){
   let finished=false;const job={id,organizationId:'org',customerId:'customer',consumerUnitId:unit,month:'2026-04',scopeKind:'UNIT',executionId:id};
