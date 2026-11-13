@@ -12,6 +12,15 @@ export class EvaManualPreparationQueue{
  enabled(){return this.config.get('EVA_MANUAL_PREPARATION_ASYNC_ENABLED')==='true';}
  accepting(){return this.config.get('EVA_MANUAL_PREPARATION_ACCEPTING')!=='false';}
  availableFor(t:TenantContext){return this.enabled()&&!t.accessMode&&!t.portalCustomerScope&&['admin_org','gestor','operacional'].includes(t.role);}
+ async operations(q:any,t:TenantContext){
+  if(!q||Object.keys(q).some(k=>!['filter','page'].includes(k))||q.filter!==undefined&&!['ALL','ACTIVE','ATTENTION','SUCCEEDED'].includes(q.filter)||q.page!==undefined&&(typeof q.page!=='string'||!/^\d{1,4}$/.test(q.page)))throw new BadRequestException('Filtro da fila de preparação inválido.');
+  if(!t.organizationId||!t.userId||!t.roleId||t.portalCustomerScope||!['admin_org','gestor','operacional'].includes(t.role))throw new ForbiddenException('Painel exclusivo da equipe interna autorizada.');
+  if(!this.enabled())return {enabled:false};
+  const r=await readRpc(this.db.getClient(),'eva_manual_preparation_operations',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_filter:q.filter??'ALL',p_offset:Number(q.page??0)*25},8000);
+  if(r.error?.code==='42501')throw new ForbiddenException('Vínculo, licença ou permissão de consulta indisponível.');
+  if(r.error||!r.data||r.data.organizationId!==t.organizationId||!Array.isArray(r.data.rows))throw new ServiceUnavailableException('A consulta da fila não foi confirmada. Os protocolos permanecem preservados.');
+  return {...r.data,enabled:true,accepting:this.accepting()};
+ }
  private scope(q:any){
   if(!q||Object.keys(q).some(k=>!['consumerUnitId','month','scopeKind','requestId','jobId','reason','confirmed'].includes(k))||!uuid(q.consumerUnitId)||typeof q.month!=='string'||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(q.month)||!['UNIT','CUSTOMER'].includes(q.scopeKind??'CUSTOMER'))throw new BadRequestException('Confira unidade, competência e escopo da preparação.');
   return {p_unit:q.consumerUnitId,p_month:q.month,p_scope:q.scopeKind??'CUSTOMER'};

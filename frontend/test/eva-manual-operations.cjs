@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/backoffice/documents/operations',pretendToBeVisual:true});for(const k of ['window','document','navigator','HTMLElement','Event'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);require.extensions['.css']=m=>m.exports={};
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),original=Module._load,id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+let org='tenant-a',failure=null,foreign=false,enabled=true,requests=[];
+const row={id:id(1),consumerUnitId:id(2),customerId:'customer',customer:'Authorized customer',unit:'Synthetic unit',month:'2026-04',scopeKind:'CUSTOMER',state:'UNKNOWN',recordedState:'RUNNING',attempts:1,attention:true,delayed:false,leaseExpired:true,createdAt:'2026-11-13T10:00:00Z',updatedAt:'2026-11-13T10:01:00Z',elapsedSeconds:180,closingId:id(3),errorCode:'WRITE_ACK_PENDING'};
+const payload=()=>({enabled,accepting:true,organizationId:foreign?'foreign':org,generatedAt:'2026-11-13T10:04:00Z',windowDays:30,pageSize:25,total:26,attentionThresholdSeconds:300,summary:{queued:1,running:0,uncertain:1,failed:0,succeeded:24,attention:1,delayed:0},rows:[{...row,customer:org+' customer'},{...row,id:id(4),state:'QUEUED',waitingOnUncertainPreparation:true,customer:org+' waiting customer'}]});
+Module._load=function(n,p,m){if(n==='@/app/lib/api/client')return {apiRequest:async(url,options)=>{requests.push({url,options,org});if(failure)throw Object.assign(Error('unavailable'),{status:failure});return payload();}};if(n==='next/link')return {__esModule:true,default:({href,children})=>React.createElement('a',{href},children)};return original.call(this,n,p,m);};
+const {default:Panel,validateManualOperations}=require('../app/backoffice/documents/operations/ManualPreparationOperations.tsx'),root=createRoot(document.getElementById('root'));
+const render=()=>root.render(React.createElement(Panel,{key:org,organizationId:org}));
+const refresh=()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Atualizar preparações').click();
+(async()=>{try{
+ await act(async()=>render());assert(document.body.textContent.includes('Resultado a reconferir'));assert(document.body.textContent.includes('não repete o cálculo'));assert(document.body.textContent.includes('reconferência técnica pelo administrador'));assert(document.body.textContent.includes(id(1)));assert(document.body.textContent.includes('aguarda a reconferência de outra preparação'));assert(![...document.querySelectorAll('button')].some(b=>/aprovar|retomar|reenviar|reconciliar/i.test(b.textContent)));
+ assert(requests.every(r=>!r.options.method||r.options.method==='GET'));assert(requests.every(r=>r.options.cache==='no-store'&&!r.url.includes('organizationId')));assert(document.querySelector('a[href="/backoffice/contracts"]'));
+ const select=document.querySelector('select[aria-label="Filtrar preparações manuais"]');await act(async()=>{select.value='ATTENTION';select.dispatchEvent(new Event('change',{bubbles:true}));});assert(requests.at(-1).url.includes('filter=ATTENTION'));
+ await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Próximas preparações').click());assert(requests.at(-1).url.includes('page=1'));
+ failure=503;await act(async()=>refresh());assert(document.querySelector('[role="alert"]'));assert(document.body.textContent.includes('tenant-a customer'),'temporary outage keeps timestamped own-tenant data');
+ failure=null;foreign=true;await act(async()=>refresh());assert(document.querySelector('[role="alert"]'));assert(!document.body.textContent.includes('foreign customer'));foreign=false;
+ org='tenant-b';await act(async()=>render());assert(!document.body.textContent.includes('tenant-a customer'));assert(document.body.textContent.includes('tenant-b customer'));
+ failure=403;await act(async()=>refresh());assert(!document.body.textContent.includes('tenant-b customer'));failure=null;
+ await act(async()=>refresh());assert(document.body.textContent.includes('tenant-b customer'));
+ for(const bad of [{...payload(),organizationId:'foreign'},{...payload(),summary:{}},{...payload(),rows:[{...row,state:'PUBLISHED'}]},{...payload(),rows:[{...row,consumerUnitId:'foreign'}]}])assert.throws(()=>validateManualOperations(bad,org));
+ enabled=false;await act(async()=>refresh());assert.equal(document.body.textContent,'');
+ assert(requests.every(r=>!r.options.method||r.options.method==='GET'),'monitoring never submits, retries or approves');
+ console.log('PASS manual operations UI: read-only queries, alerts, pagination, stale own data, denied access, tenant changes and malformed/foreign responses.');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1});
