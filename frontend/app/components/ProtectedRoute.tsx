@@ -52,6 +52,7 @@ export default function ProtectedRoute({
           }}
         >
           <a href="/auth/login">Entrar novamente</a>
+          <a href="/status">Verificar disponibilidade dos serviços</a>
           <Button
             variant="secondary"
             onClick={() => {

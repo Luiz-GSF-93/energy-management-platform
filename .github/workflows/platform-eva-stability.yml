@@ -1,0 +1,41 @@
+name: Owner stability and public availability
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['backend/src/modules/platform-administration/**', 'backend/src/database/migrations/20261318*', 'backend/test/platform-eva-stability.cjs', 'frontend/app/backoffice/platform-stability/**', 'frontend/app/status/**', 'frontend/app/components/ServiceAvailabilityPanel.tsx', '.github/workflows/platform-eva-stability.yml']
+  pull_request:
+    paths: ['backend/src/modules/platform-administration/**', 'backend/src/database/migrations/20261318*', 'backend/test/platform-eva-stability.cjs', 'frontend/app/backoffice/platform-stability/**', 'frontend/app/status/**', 'frontend/app/components/ServiceAvailabilityPanel.tsx', 'frontend/test/platform-eva-stability.cjs', '.github/workflows/platform-eva-stability.yml']
+permissions:
+  contents: read
+jobs:
+  owner-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node test/platform-eva-stability.cjs
+        working-directory: backend
+      - run: npm test -- --runInBand src/modules/platform-administration/platform-stability.spec.ts src/common/services/read-deadline.spec.ts src/common/guards/tenant.guard.platform.spec.ts src/common/guards/role.guard.access-context.spec.ts
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  owner-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/platform-eva-stability.cjs && node test/eva-operations.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

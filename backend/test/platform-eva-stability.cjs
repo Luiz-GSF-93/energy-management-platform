@@ -1,0 +1,40 @@
+// Disposable database: real established Owner function, synthetic organizations only.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+(async()=>{const db=new PGlite();let checks=0;const ok=x=>{assert(x);checks++;},deny=async(fn,code)=>{await assert.rejects(fn,e=>e.code===code);checks++;};try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;CREATE SCHEMA auth;
+ CREATE TABLE auth.users(id uuid PRIMARY KEY,deleted_at timestamptz,banned_until timestamptz);
+ CREATE TABLE public.roles(id text PRIMARY KEY,organization_id text,scope text,name text,permissions jsonb);
+ CREATE TABLE public.user_roles(user_id uuid,role_id text);CREATE TABLE public.user_profiles(user_id uuid PRIMARY KEY);
+ CREATE TABLE public.platform_team_members(user_id uuid PRIMARY KEY,active boolean,profile text);
+ CREATE TABLE public.organizations(id text PRIMARY KEY,name text,deleted_at timestamptz);
+ CREATE TABLE public.licenses(organization_id text,active boolean,status text,start_date date,end_date date);
+ CREATE TABLE public.eva_manual_preparations(id uuid PRIMARY KEY,organization_id text,created_at timestamptz,state text,lease_until timestamptz,write_started boolean,private_reason text,execution_id uuid);
+ CREATE TABLE public.eva_automatic_intakes(id uuid PRIMARY KEY,organization_id text,created_at timestamptz,state text,lease_until timestamptz,raw_result jsonb,filename text,closing_id uuid);
+ CREATE TABLE public.eva_assisted_closing_versions(id uuid PRIMARY KEY,organization_id text,created_at timestamptz,source_snapshot jsonb);
+ CREATE TABLE public.eva_assisted_closing_events(closing_id uuid,sequence integer,state text);
+ INSERT INTO roles VALUES('owner','platform','global','admin_platform','["82e7fc71-479a-4dd6-8b22-4fba6eaa6841"]'),('org-admin','org-00','organization','admin_org','["82e7fc71-479a-4dd6-8b22-4fba6eaa6841"]');`);
+ const team=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261010_platform_team.sql'),'utf8');
+ const owner='CREATE OR REPLACE FUNCTION public.platform_team_owner'+team.split('CREATE OR REPLACE FUNCTION public.platform_team_owner')[1].split('CREATE OR REPLACE FUNCTION public.platform_team_lock')[0];await db.exec(owner);
+ for(let n=1;n<=8;n++){await db.query('INSERT INTO auth.users(id,deleted_at,banned_until) VALUES($1,CASE WHEN $2=6 THEN now() END,CASE WHEN $2=7 THEN now()+interval \'1 day\' END)',[id(n),n]);if(n!==8)await db.query('INSERT INTO user_profiles VALUES($1)',[id(n)]);await db.query('INSERT INTO user_roles VALUES($1,$2)',[id(n),n===2?'org-admin':'owner']);await db.query('INSERT INTO platform_team_members VALUES($1,$2,$3)',[id(n),n!==5,n===3?'SUPPORT':'OWNER']);}await db.query('INSERT INTO user_roles VALUES($1,$2)',[id(4),'owner']);
+ for(let n=0;n<26;n++){const org='org-'+String(n).padStart(2,'0');await db.query('INSERT INTO organizations VALUES($1,$2,NULL)',[org,'Empresa '+String(n).padStart(2,'0')]);await db.query("INSERT INTO licenses VALUES($1,true,'ACTIVE',CURRENT_DATE-1,NULL)",[org]);}
+ await db.exec("INSERT INTO licenses VALUES('org-01',true,'active',CURRENT_DATE-1,NULL);INSERT INTO organizations VALUES('expired','Expired',NULL),('future','Future',NULL),('suspended','Suspended',NULL),('inactive','Inactive',NULL),('deleted','Deleted',now());INSERT INTO licenses VALUES('expired',true,'ACTIVE',CURRENT_DATE-10,CURRENT_DATE-1),('future',true,'ACTIVE',CURRENT_DATE+1,NULL),('suspended',true,'SUSPENDED',CURRENT_DATE-1,NULL),('inactive',false,'ACTIVE',CURRENT_DATE-1,NULL),('deleted',true,'ACTIVE',CURRENT_DATE-1,NULL);");
+ const job=async(n,state,age,write=false,lease=null)=>db.query("INSERT INTO eva_manual_preparations VALUES($1,'org-00',now()-$2::interval,$3,CASE WHEN $4::text IS NULL THEN NULL ELSE now()+$4::interval END,$5,'PRIVATE_REASON',NULL)",[id(n),age,state,lease,write]);
+ await job(100,'UNKNOWN','60 days');await job(101,'RUNNING','10 minutes',true,'-1 minute');await job(102,'RUNNING','8 minutes',false,'-1 minute');await job(103,'RUNNING','1 minute',true,'5 minutes');await job(104,'SUCCEEDED','1 day');await job(105,'SUCCEEDED','60 days');await job(106,'FAILED','1 day');
+ for(const [n,state,lease,age] of [[201,'UNKNOWN',null,'60 days'],[202,'REVIEW_REQUIRED',null,'60 days'],[203,'AWAITING_SOURCES',null,'60 days'],[204,'PREPARING','-1 minute','10 minutes'],[205,'PREPARING','5 minutes','1 minute'],[206,'PROPOSAL_READY',null,'1 day']])await db.query("INSERT INTO eva_automatic_intakes VALUES($1,'org-00',now()-$2::interval,$3,CASE WHEN $4::text IS NULL THEN NULL ELSE now()+$4::interval END,'{\"secret\":\"PRIVATE_OCR\"}','PRIVATE_FILENAME',NULL)",[id(n),age,state,lease]);
+ for(const [n,state,age] of [[301,'PREPARING','1 day'],[302,'PREPARING','1 minute'],[303,'INCOMPLETE','1 day'],[304,'UNKNOWN','1 day'],[305,'PREPARING','1 day']]){await db.query("INSERT INTO eva_assisted_closing_versions VALUES($1,'org-00',now()-$2::interval,'{\"secret\":\"PRIVATE_SNAPSHOT\"}')",[id(n),age]);await db.query('INSERT INTO eva_assisted_closing_events VALUES($1,1,$2)',[id(n),state]);}await db.query('UPDATE eva_manual_preparations SET execution_id=$1 WHERE id=$2',[id(305),id(103)]);
+ const migration=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261318_platform_eva_stability.sql'),'utf8');await db.exec(migration);await db.exec(migration);
+ const read=(actor=id(1),search='',offset=0)=>db.query('SELECT public.platform_eva_stability($1,$2,$3) data',[actor,search,offset]).then(r=>r.rows[0].data);
+ const before=(await db.query('SELECT to_jsonb(j) j FROM eva_manual_preparations j ORDER BY id')).rows;
+ const a=await read(),b=await read(id(1),'',25);ok(a.total===26&&a.rows.length===25&&b.rows.length===1);ok(a.responsible==='OWNER');ok(!a.rows.some(r=>b.rows.some(x=>x.organizationId===r.organizationId)));
+ const r=a.rows.find(x=>x.organizationId==='org-00');ok(r.manual.queued===1&&r.manual.running===1&&r.manual.uncertain===2);ok(r.manual.succeeded30d===1&&r.manual.failed30d===1&&r.manual.oldestQueueSeconds>=480);ok(r.intakes.technical===2&&r.intakes.human===1&&r.intakes.sources===1&&r.intakes.processing===1&&r.intakes.proposals30d===1);ok(r.attention&&r.closingReceipts===2);
+ ok(a.rows.find(x=>x.organizationId==='org-01').activeLicenses===2&&a.rows.find(x=>x.organizationId==='org-01').attention);ok(a.rows.find(x=>x.organizationId==='org-02').attention===false);
+ for(const key of ['Expired','Future','Suspended','Inactive','Deleted','PRIVATE_REASON','PRIVATE_OCR','PRIVATE_FILENAME','PRIVATE_SNAPSHOT','lease_until','actor_id'])ok(!JSON.stringify(a).includes(key));
+ ok((await read(id(1),'EMPRESA 00')).total===1);ok((await read(id(1),'no matches')).total===0);
+ for(let n=2;n<=8;n++)await deny(()=>read(id(n)),'42501');await deny(()=>read(id(99)),'42501');await deny(()=>read(null),'42501');
+ for(const [search,offset] of [['x'.repeat(151),0],[null,0],['',-25],['',1],['',25025],['',null]])await deny(()=>read(id(1),search,offset),'22023');
+ for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'platform_eva_stability(uuid,text,integer)','EXECUTE') p",[role])).rows[0].p);ok((await db.query("SELECT has_function_privilege('service_role','platform_eva_stability(uuid,text,integer)','EXECUTE') p")).rows[0].p);
+ await db.exec('BEGIN READ ONLY');await read();await db.exec('ROLLBACK');ok(true);assert.deepEqual((await db.query('SELECT to_jsonb(j) j FROM eva_manual_preparations j ORDER BY id')).rows,before);checks++;
+ await db.query('UPDATE platform_team_members SET active=false WHERE user_id=$1',[id(1)]);await deny(()=>read(),'42501');
+ console.log('PASS '+checks+' platform stability SQL checks: actual Owner gate, active licenses, old pending jobs, pagination, safe aggregates and no financial writes.');
+ }finally{await db.close();}})().catch(e=>{console.error(e);process.exitCode=1});

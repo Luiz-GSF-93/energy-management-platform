@@ -9,6 +9,7 @@ import {PlatformAdministrationService} from './platform-administration.service';
 @Controller('admin/platform-administration') @PlatformScope()
 export class PlatformAdministrationController{
  constructor(private readonly service:PlatformAdministrationService){}
+ @Get('stability') @RequirePermission([TEAM_MANAGE]) @Header('Cache-Control','private, no-store') stability(@Req() r:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){return this.service.stability(r.authenticatedUser.userId,q);}
  @Get('team') @RequirePermission([TEAM_MANAGE]) @Header('Cache-Control','no-store') team(@Req() r:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){return this.service.read(r.authenticatedUser.userId,'team',q);}
  @Get('audit') @RequirePermission([TEAM_MANAGE]) @Header('Cache-Control','no-store') audit(@Req() r:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){return this.service.read(r.authenticatedUser.userId,'audit',q);}
  @Get('support') @RequirePermission([CASES,ASSIGNED]) @Header('Cache-Control','no-store') support(@Req() r:RequestWithAuthenticatedUser,@Query() q:Record<string,unknown>){return this.service.read(r.authenticatedUser.userId,'support',q);}
