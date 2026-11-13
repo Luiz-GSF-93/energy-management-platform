@@ -29,5 +29,14 @@ jobs:
         shell: bash
         run: |
           export GRAFANA_ADMIN_PASSWORD="$(openssl rand -hex 24)"
-          trap 'docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml down --remove-orphans' EXIT
+          cleanup() {
+            outcome=$?
+            if [ "$outcome" -ne 0 ]; then
+              docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml ps -a
+              docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml logs --tail=30 collector
+            fi
+            docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml down --remove-orphans
+            exit "$outcome"
+          }
+          trap cleanup EXIT
           python3 ops/observability/verify.py

@@ -17,7 +17,14 @@ def request(url, payload=None, auth=False):
         credential = "energyosowner:" + os.environ["GRAFANA_ADMIN_PASSWORD"]
         headers["Authorization"] = "Basic " + base64.b64encode(credential.encode()).decode()
     with urlopen(Request(url, data=None if payload is None else json.dumps(payload).encode(), headers=headers), timeout=4) as response:
-        return json.load(response)
+        body = response.read(65537)
+        if len(body) > 65536:
+            raise RuntimeError("Isolated response size limit")
+        return json.loads(body) if body else {}
+
+def collector_ready():
+    receipt = request("http://127.0.0.1:14318/v1/metrics", {"resourceMetrics": []})
+    return isinstance(receipt, dict) and str(receipt.get("partialSuccess", {}).get("rejectedDataPoints", "0")) == "0"
 
 def wait(check, message, seconds=75):
     end = time.monotonic() + seconds
@@ -41,7 +48,7 @@ def main():
     if not os.environ.get("GRAFANA_ADMIN_PASSWORD"):
         raise RuntimeError("Provide isolated-test Grafana credential")
     subprocess.run(COMPOSE + ["up", "-d", "--wait", "--wait-timeout", "120"], check=True)
-    wait(lambda: request("http://127.0.0.1:14318/v1/metrics", {"resourceMetrics": []}) == {}, "Collector not ready")
+    wait(collector_ready, "Collector not ready")
     run_fixture()
     wait(lambda: bool(query("energyos_eva_stage_duration_seconds_count{stage=\"XML_PARSE\"} >= 10000")), "Histogram not received")
     wait(lambda: request("http://127.0.0.1:13000/api/health").get("database") == "ok", "Grafana not ready")
@@ -66,7 +73,7 @@ def main():
     subprocess.run(COMPOSE + ["stop", "collector"], check=True)
     run_fixture(unavailable=True)
     subprocess.run(COMPOSE + ["start", "collector"], check=True)
-    wait(lambda: request("http://127.0.0.1:14318/v1/metrics", {"resourceMetrics": []}) == {}, "Collector did not recover")
+    wait(collector_ready, "Collector did not recover")
     run_fixture()
     wait(lambda: bool(query('up{job="energyos-isolated"} == 1')), "Scraper did not recover")
     print(json.dumps({"isolated": True, "histogram": "received", "dashboard": "provisioned", "privacyCanaries": "absent", "collectorOutage": "business_not_blocked", "recovery": "demonstrated", "productionExport": "disabled"}))

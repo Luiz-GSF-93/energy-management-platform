@@ -22,6 +22,10 @@ describe('isolated bounded metrics export',()=>{
   expect(payload.resourceMetrics[0].resource.attributes.map((a:any)=>a.key)).toEqual(['service.name','service.instance.id','process.role']);
   expect(body.length).toBeLessThan(32768);expect(exporter.status().inFlight).toBe(false);
  });
+ it.each(['','{"partialSuccess":{}}'])('accepts valid empty/non-rejected OTLP receipts',async receipt=>{
+  server.on('request',(_req,res)=>res.end(receipt));exporter=new RuntimeMetricsExporter('true',endpoint);exporter.send(sample);
+  await until(()=>exporter!.status().sent===1);expect(exporter.status().failures).toBe(0);
+ });
  it('does not block business work or overlap requests when the collector stalls',async()=>{
   let calls=0;server.on('request',()=>calls++);exporter=new RuntimeMetricsExporter('true',endpoint);exporter.send(sample);
   exporter.send(sample);expect(await observeEvaStage('XML_PARSE',()=>42)).toBe(42);
