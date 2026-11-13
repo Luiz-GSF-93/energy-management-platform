@@ -1,3 +1,4 @@
+import {manualPreparationCommand} from './eva-manual-receipt';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
@@ -15,7 +16,7 @@ export class EvaManualPreparationWorker implements OnModuleInit,OnModuleDestroy{
  onModuleInit(){if(this.queue.enabled()&&scheduledWorkEnabled('EVA'))this.poller.start(()=>this.runOnce(),5000,()=>this.log.warn('EVA_MANUAL_QUEUE_PENDING'));}
  onModuleDestroy(){this.stopped=true;this.poller.stop();}
  private async rpc(action:string,id?:string,token?:string,body:any={}){
-  const r=await this.db.getClient().rpc('eva_manual_preparation_worker',{p_action:action,...(id?{p_id:id,p_token:token}:{}),p_body:body});
+  const r=await manualPreparationCommand(this.db.getClient(),'eva_manual_preparation_worker',{p_action:action,...(id?{p_id:id,p_token:token}:{}),p_body:body});
   if(r.error)throw Error('MANUAL_PREPARATION_ACK_PENDING');return r.data;
  }
  async runOnce(){

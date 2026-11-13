@@ -1,3 +1,4 @@
+import {manualPreparationCommand} from './eva-manual-receipt';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException,HttpException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -28,7 +29,7 @@ export class EvaManualPreparationQueue{
  private async action(action:'request'|'status'|'reconcile',q:any,t:TenantContext){
   if(!this.availableFor(t)||!t.organizationId||!t.userId||!t.roleId)throw new ForbiddenException('Fila de preparação indisponível neste contexto.');
   const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_action:action,...this.scope(q),p_id:action==='request'?q.requestId:q.jobId??null,p_body:action==='reconcile'?{reason:q.reason.trim(),confirmed:true}:{}};
-  const r=action==='status'?await readRpc(this.db.getClient(),'eva_manual_preparation_action',args,8000):await this.db.getClient().rpc('eva_manual_preparation_action',args);
+  const r=action==='status'?await readRpc(this.db.getClient(),'eva_manual_preparation_action',args,8000):await manualPreparationCommand(this.db.getClient(),'eva_manual_preparation_action',args);
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo, licença ou permissão de preparação indisponível.');
   if(r.error?.code==='P3410')throw new HttpException('A fila desta organização atingiu o limite. Acompanhe as solicitações existentes antes de iniciar outras.',429);
   if(r.error&&['40001','23505'].includes(r.error.code))throw new ConflictException('O protocolo ou uma gravação anterior exige reconferência. Consulte o andamento antes de repetir.');
