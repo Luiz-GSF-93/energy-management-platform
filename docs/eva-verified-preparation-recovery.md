@@ -40,3 +40,5 @@ imutabilidade e digest financeiro; limites HTTP com uma Ãºnica RPC; build e CI.
 Os testes de transformaÃ§Ã£o SQL usam rotinas sintÃ©ticas com assinaturas mÃ­nimas,
 preservando atributos/ACLs e diferenciando conflito de aplicaÃ§Ã£o e serializaÃ§Ã£o.
 Eles nÃ£o substituem carga representativa nem a janela BETA de 24â€“72 horas.
+
+A migração 20261324 permite que a execução posterior contenha somente a confirmação de alocação integral de uma NF de fornecedor verificada, da mesma organização/cliente/competência e unidade (ou NF compartilhada). Isso não modifica a prova dos IDs/valores ACR. A execução original permanece sem overrides; outras alterações manuais continuam recusadas.

@@ -2,10 +2,10 @@ name: EVA verified preparation recovery
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['backend/src/database/migrations/2026132[123]*', 'backend/test/verified-preparation-receipts.cjs', 'backend/test/eva-calculation-domain-conflicts.cjs', 'backend/src/modules/ocr/**', 'backend/src/modules/operations/eva-invoice-attention.service.ts', '.github/workflows/eva-verified-preparation-receipts.yml']
+    paths: ['backend/src/database/migrations/2026132[1234]*', 'backend/test/verified-preparation-receipts.cjs', 'backend/test/eva-calculation-domain-conflicts.cjs', 'backend/src/modules/ocr/**', 'backend/src/modules/operations/eva-invoice-attention.service.ts', '.github/workflows/eva-verified-preparation-receipts.yml']
   push:
     branches: [main]
-    paths: ['backend/src/database/migrations/2026132[123]*', 'backend/test/verified-preparation-receipts.cjs', 'backend/test/eva-calculation-domain-conflicts.cjs', '.github/workflows/eva-verified-preparation-receipts.yml']
+    paths: ['backend/src/database/migrations/2026132[1234]*', 'backend/test/verified-preparation-receipts.cjs', 'backend/test/eva-calculation-domain-conflicts.cjs', '.github/workflows/eva-verified-preparation-receipts.yml']
 permissions:
   contents: read
 jobs:
