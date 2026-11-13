@@ -24,6 +24,8 @@ Manual request/reconciliation commands and private queue control commands have a
 
 A lost claim cannot start calculation without a confirmed context and begin receipt. A lost begin response cannot invoke preparation; the durable write marker remains authoritative. A lost finish response cannot invoke preparation a second time, and the existing lease/state gate prevents overwriting an already committed success. Heartbeat commands also terminate, allowing the next heartbeat/backoff instead of hanging the process indefinitely. Status remains on the separate read-only deadline path. These limits bound control requests, not the total duration of a legitimate calculation.
 
+Financial question dialogs are not mounted while the background queue is queued, running, uncertain or unavailable. Their local saving lock must not trap the user over the protocol status or administrator reconciliation controls. Financial actions remain disabled at the parent boundary; questions become available again after the queue result is confirmed. Existing synchronous form-saving safeguards are unchanged.
+
 ## Validation and remaining limits
 
 Disposable SQL checks cover authorization, persisted request aliases, shared reservations, lease recovery, revocation, immutable audit, queue limits and privileges. Backend tests cover the API/worker boundary and ambiguous acknowledgements. UI tests cover reopen, read-only polling, lost response, denied access, paused intake and explicit reconciliation. These are correctness checks, not production load measurements. Representative load and a 24–72 hour observation period remain necessary. External OpenTelemetry/Prometheus/Grafana rollout is a separate stage; this phase reuses the existing bounded runtime/stage telemetry.
