@@ -29,3 +29,9 @@ Financial question dialogs are not mounted while the background queue is queued,
 ## Validation and remaining limits
 
 Disposable SQL checks cover authorization, persisted request aliases, shared reservations, lease recovery, revocation, immutable audit, queue limits and privileges. Backend tests cover the API/worker boundary and ambiguous acknowledgements. UI tests cover reopen, read-only polling, lost response, denied access, paused intake and explicit reconciliation. These are correctness checks, not production load measurements. Representative load and a 24–72 hour observation period remain necessary. External OpenTelemetry/Prometheus/Grafana rollout is a separate stage; this phase reuses the existing bounded runtime/stage telemetry.
+
+## Compact checkpoints and owned draft receipts
+
+Migration `20261317_eva_checkpoint_projection.sql` projects only the existing public version fields before building a checkpoint response. Immutable source snapshots remain stored and compared in PostgreSQL, but are no longer converted into JSON merely to remove them from the response. Actor, license, lease and financial reservation gates are unchanged. This removes an observed allocation cost; it does not establish the cause of an unexpected database restart.
+
+An explicit preparation replay may complete the existing finish receipt of a PREPARING version only when the current actor owns that version and its organization, unit, month and scope match. The existing finish RPC still checks current sources and authorization. This path performs no OCR, capture, autofill, approval or publication. Other authors and uncertain versions are not adopted. A lost finish acknowledgement is not retried within the request; subsequent history is authoritative.
