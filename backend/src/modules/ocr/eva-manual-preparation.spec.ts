@@ -41,6 +41,9 @@ describe('manual preparation gateway and private worker',()=>{
  it('does not hide denied access when obtaining history metadata',async()=>{
   const f=fixture();f.rpc.mockResolvedValue({error:{code:'42501'}});await expect(f.queue.forHistory({consumerUnitId:unit,month:'2026-08'},tenant)).rejects.toMatchObject({status:403});f.rpc.mockResolvedValue({error:{code:'PGRST002'}});expect(await f.queue.forHistory({consumerUnitId:unit,month:'2026-08'},tenant)).toMatchObject({enabled:true,available:false});
  });
+ it.each(['PT409','40001'])('returns a domain conflict for %s without replaying a preparation command',async code=>{
+  const f=fixture();f.rpc.mockResolvedValue({error:{code}});await expect(f.queue.request({consumerUnitId:unit,month:'2026-08',scopeKind:'UNIT',requestId:id},tenant)).rejects.toMatchObject({status:409});expect(f.rpc).toHaveBeenCalledTimes(1);expect(f.closing.prepare).not.toHaveBeenCalled();
+ });
  it('executes the existing financial preparation once with the current delegated requester',async()=>{
   const f=fixture();await f.worker.runOnce();expect(f.closing.prepare).toHaveBeenCalledTimes(1);expect(f.closing.prepare).toHaveBeenCalledWith({consumerUnitId:unit,month:'2026-08',scopeKind:'UNIT',requestId:id},expect.objectContaining({organizationId:'org',userId:'actor',role:'operacional'}));expect(f.rpc).toHaveBeenCalledWith('eva_manual_preparation_worker',expect.objectContaining({p_action:'finish',p_body:{state:'SUCCEEDED',closingId:'closing'}}));
  });

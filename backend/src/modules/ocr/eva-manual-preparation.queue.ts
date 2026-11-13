@@ -32,7 +32,7 @@ export class EvaManualPreparationQueue{
   const r=action==='status'?await readRpc(this.db.getClient(),'eva_manual_preparation_action_context',args,8000):await manualPreparationCommand(this.db.getClient(),'eva_manual_preparation_action_context',args);
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo, licença ou permissão de preparação indisponível.');
   if(r.error?.code==='P3410')throw new HttpException('A fila desta organização atingiu o limite. Acompanhe as solicitações existentes antes de iniciar outras.',429);
-  if(r.error&&['40001','23505'].includes(r.error.code))throw new ConflictException('O protocolo ou uma gravação anterior exige reconferência. Consulte o andamento antes de repetir.');
+  if(r.error&&['PT409','40001','23505'].includes(r.error.code))throw new ConflictException('O protocolo ou uma gravação anterior exige reconferência. Consulte o andamento antes de repetir.');
   if(r.error?.code==='22023')throw new BadRequestException('Dados do protocolo de preparação inválidos.');
   if(r.error)throw new ServiceUnavailableException('Solicitação não confirmada. Consulte o andamento; não inicie outra preparação para repetir a mesma ação.');
   if(!r.data||!Object.prototype.hasOwnProperty.call(r.data,'job'))throw new ServiceUnavailableException('Andamento não confirmado. Preserve o protocolo e consulte novamente.');

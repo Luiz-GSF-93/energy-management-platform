@@ -1,13 +1,14 @@
 import {readRpc} from '../../common/services/read-deadline';
 import {wakeEvaWorkers} from '../../common/workers/eva-poller';
 import {identityContinuation} from './identity-continuation';
-import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
+import {BadRequestException,ConflictException,ForbiddenException,HttpException,Injectable,Logger,ServiceUnavailableException,StreamableFile} from '@nestjs/common';
 import {createHash,randomUUID} from 'node:crypto';
 import {SupabaseService} from '../../services/supabase.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {DocumentFile,DOCUMENT_BUCKET,inspectDocumentUpload} from '../documents/services/document-file';
 import {assertPortalInvoiceUpload} from './portal-invoice-kind';
 import {readFiscalXml} from '../ocr/fiscal-xml';
+import {intakeReconciliationError} from './intake-reconciliation-error';
 
 export async function inspectInvoiceUpload(file:DocumentFile){
  if(/\.xml$/i.test(file?.originalname??'')||['application/xml','text/xml'].includes(file?.mimetype)){
@@ -31,6 +32,7 @@ export async function intakeWorkerOrganizations(db:any,kind:'INTAKE'|'EXPLANATIO
 export const intakePath=(org:string,id:string,mime:string)=>org+'/eva-intake/'+id+(mime==='application/xml'?'.xml':mime==='application/pdf'?'.pdf':mime==='image/png'?'.png':'.jpg');
 @Injectable()
 export class AutomaticIntakeService{
+ private readonly log=new Logger(AutomaticIntakeService.name);
  constructor(private db:SupabaseService){}
  enabled(org:string){return intakeEnabled(org);}
  private async action(t:TenantContext,action:string,id:string|null,body:any,administration=false){
@@ -39,6 +41,11 @@ export class AutomaticIntakeService{
   const r=action==='list'?await readRpc(this.db.getClient(),name,args,8000):await this.db.getClient().rpc(name,args);
   if(r.error?.code==='42501')throw new ForbiddenException('Vínculo ou permissão de documentos indisponível.');
   if(r.error?.code==='P3391')throw new ConflictException('A cota de documentos está esgotada. O envio não foi iniciado.');
+  if(r.error&&action==='reconcile_preparation'){
+   const failure=intakeReconciliationError(r.error);
+   this.log.warn('EVA_INTAKE_RECOVERY '+(failure.getResponse() as {code:string}).code);
+   throw failure;
+  }
   if(r.error)throw new ConflictException('Recebimento não confirmado. Confira os envios antes de repetir.');
   if(['stored','resolve','resume','retry'].includes(action))wakeEvaWorkers();
   return r.data;
@@ -71,7 +78,12 @@ export class AutomaticIntakeService{
  }
  async reconcile(t:TenantContext,id:string,body:any){
   if(!this.enabled(t.organizationId)||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Reconciliação inválida.');
-  return this.action(t,'reconcile_preparation',id,{reason:'Reconferência técnica do resultado preservado solicitada pela equipe interna autorizada.'},true);
+  let result:any;
+  try{result=await this.action(t,'reconcile_preparation',id,{reason:'Reconferência técnica do resultado preservado solicitada pela equipe interna autorizada.'},true);}
+  catch(e){if(e instanceof HttpException)throw e;throw intakeReconciliationError({});}
+  if(result?.id!==id||result?.state!=='AWAITING_SOURCES')throw intakeReconciliationError({});
+  wakeEvaWorkers();
+  return result;
  }
  async retry(t:TenantContext,id:string,body:any){
   if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Retomada inválida.');
