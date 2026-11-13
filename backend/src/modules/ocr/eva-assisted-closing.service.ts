@@ -77,7 +77,7 @@ export class EvaAssistedClosingService{
   if(!b||!['consumerUnitId,month,requestId','consumerUnitId,month,requestId,scopeKind'].includes(Object.keys(b).sort().join(','))||!uuid(b.requestId))throw new BadRequestException('Preparação inválida.');
   const q=this.scope({consumerUnitId:b.consumerUnitId,month:b.month,...(b.scopeKind?{scopeKind:b.scopeKind}:{})});
   const rights=await this.rpc('history',q,t,null,{page:0});if(!rights.canPrepare)throw new ForbiddenException('Sem permissão para preparar.');
-  const prior=rights.rows.find((r:any)=>r.id===b.requestId);if(prior)return {row:prior,replayed:true};
+  const prior=rights.rows.find((r:any)=>r.id===b.requestId);if(prior)return {row:await this.completeOwnedDraftReceipt(prior,q,t),replayed:true};
   let sources=await this.rpc('capture',q,t,null,{});const all=sources?.financial?.tables?.consumer_units;
   if(!Array.isArray(all)||!all.length||all.length>100||new Set(all.map((u:any)=>u.id)).size!==all.length)throw new ConflictException('Conjunto completo de unidades indisponível.');
   const primary=all.find((u:any)=>u.id===q.consumerUnitId);if(!primary)throw new ForbiddenException('Unidade fora do escopo.');
@@ -127,8 +127,15 @@ export class EvaAssistedClosingService{
   const latest=rights.rows[0];
   if(latest?.state==='INCOMPLETE'&&latest.payload_hash===hash&&latest.customer_id===primary.customer_id&&latest.month===q.month&&autofillHash(latest.report)===hash)return {row:latest,replayed:true};
   const r=await this.rpc('reserve',q,t,b.requestId,{basis,hash,report,sources});
-  if(!r.acquired)return {row:r.row,replayed:true};
+  if(!r.acquired)return {row:await this.completeOwnedDraftReceipt(r.row,q,t),replayed:true};
   return {row:await this.rpc('finish',q,t,r.row.id,{}),replayed:false};
+ }
+ private async completeOwnedDraftReceipt(row:any,q:any,t:TenantContext){
+  // Reconcile only the existing finish receipt of an already calculated draft.
+  // No OCR/draft replay and no approval decision belong to this recovery path.
+  if(row?.state!=='PREPARING'||row.created_by!==t.userId)return row;
+  if(row.organization_id!==t.organizationId||row.month!==q.month||!row.report?.unitIds?.includes(q.consumerUnitId)||(row.report?.scope?.kind??'CUSTOMER')!==(q.scopeKind??'CUSTOMER'))throw new ForbiddenException('Recibo de preparação fora do escopo atual.');
+  return this.rpc('finish',q,t,row.id,{});
  }
  async decide(input:any,t:TenantContext){
   const {scopeKind,...b}=input??{};if(scopeKind!==undefined&&!['UNIT','CUSTOMER'].includes(scopeKind))throw new BadRequestException('Escopo inválido.');
