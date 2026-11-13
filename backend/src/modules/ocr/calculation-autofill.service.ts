@@ -38,7 +38,7 @@ export class CalculationAutofillService{
   await this.licenses.requireEntitlement(t.organizationId,'free_market_management');await this.licenses.requireEntitlement(t.organizationId,'document_management');
  }
  private query(q:Record<string,unknown>){if(!q||Object.keys(q).sort().join(',')!=='consumerUnitId,month'||!uuid(q.consumerUnitId)||typeof q.month!=='string'||!/^(20|21)\d{2}-(0[1-9]|1[0-2])$/.test(q.month))throw new BadRequestException('Selecione unidade e competência válidas.');return {unit:q.consumerUnitId as string,month:q.month};}
- private fail(r:any){if(!r?.error&&r?.data!==null&&r?.data!==undefined)return r.data;if(r?.error?.code==='42501')throw new ForbiddenException('Contexto ou acesso da preparação indisponível.');if(['23505','40001'].includes(r?.error?.code))throw new ConflictException('Fontes ou execução mudaram. Reconfira o histórico.');throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');}
+ private fail(r:any){if(!r?.error&&r?.data!==null&&r?.data!==undefined)return r.data;if(r?.error?.code==='42501')throw new ForbiddenException('Contexto ou acesso da preparação indisponível.');if(['23505','PT409','40001'].includes(r?.error?.code))throw new ConflictException('Fontes ou execução mudaram. Reconfira o histórico.');throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');}
  private async savedCommercial(scope:{unit:string;month:string},document:{id:string;file_hash:string},customer:string,t:TenantContext){
   const history=await this.rpc('history',scope,t,null,{page:0});
   if(!Array.isArray(history?.rows))throw new ServiceUnavailableException('Histórico comercial indisponível.');

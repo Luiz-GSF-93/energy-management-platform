@@ -16,7 +16,7 @@ export async function commercialClosingHistory(db:any,t:TenantContext,unit:strin
      p_action:'history',p_disclose:false,p_mode:mode,p_scope:scope,p_unit:unit,p_month:month,p_id:null,p_body:{page},
     }));
     if(response?.error?.code==='42501')throw new ForbiddenException('Contexto ou acesso da preparação indisponível.');
-    if(['23505','40001'].includes(response?.error?.code))throw new ConflictException('Fontes ou execução mudaram. Reconfira o histórico.');
+    if(['23505','PT409','40001'].includes(response?.error?.code))throw new ConflictException('Fontes ou execução mudaram. Reconfira o histórico.');
     if(response?.error||!response?.data)throw new ServiceUnavailableException('Histórico CCEE temporariamente indisponível.');
     const h=response.data;
     if(!Array.isArray(h.rows)||!Number.isInteger(h.total)||h.total<0||h.total>100)throw new ServiceUnavailableException('Histórico CCEE aprovado incompleto.');

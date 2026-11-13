@@ -24,7 +24,7 @@ export class EvaTariffWorkbenchService{
   const r=await this.db.getClient().rpc('eva_tariff_workbench_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body});
   if(!r.error&&r.data!=null)return r.data;
   if(r.error?.code==='42501')throw new ForbiddenException('Biblioteca restrita ao backoffice autorizado.');
-  if(['40001','23505'].includes(r.error?.code))throw new ConflictException('A fonte ou versão mudou. Consulte o histórico antes de repetir.');
+  if(['PT409','40001','23505'].includes(r.error?.code))throw new ConflictException('A fonte ou versão mudou. Consulte o histórico antes de repetir.');
   if(r.error?.code==='22023')throw new BadRequestException('Confira os campos e a fonte.');
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }

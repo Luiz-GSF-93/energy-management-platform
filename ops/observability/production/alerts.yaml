@@ -25,3 +25,15 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: Atraso elevado no event loop; investigar antes de ampliar concorrência.
+      - alert: EnergyOSApiSamplesAbsent
+        expr: absent(energyos_runtime_sample_timestamp_seconds{process_role="API"})
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: Sem amostras da API; verificar serviço e exportação.
+      - alert: EnergyOSWorkerSamplesAbsent
+        expr: absent(energyos_runtime_sample_timestamp_seconds{process_role="EVA_WORKER"})
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: Sem amostras do worker EVA; verificar serviço e exportação.
