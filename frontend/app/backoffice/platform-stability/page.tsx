@@ -25,6 +25,7 @@ function Workspace({actor}:{actor:string}){
  return <section className="backoffice-page"><h1>Estabilidade EnergyOS · Plataforma</h1>
   <p>Responsável: Owner / Administrador da Plataforma. Acompanhe as organizações com licença ativa; correções gerais pertencem à operação da plataforma.</p>
   <p><Link href="/backoffice/platform-audit">Abrir Auditoria Global</Link> · <Link href="/backoffice/platform-costs">Custos e performance</Link></p>
+  <p><a href="https://energyos-grafana-production.up.railway.app" target="_blank" rel="noopener noreferrer">Abrir monitoramento Grafana</a> · Acesso com a conta técnica exclusiva do Owner; login separado do EnergyOS.</p>
   <ServiceAvailabilityPanel/><p><Link href="/status">Abrir disponibilidade sem depender do login</Link></p>
   <form onSubmit={e=>{e.preventDefault();setPage(0);setSearch(draft.trim());}}><label>Buscar organização<input value={draft} maxLength={150} onChange={e=>setDraft(e.target.value)}/></label><Button type="submit">Buscar</Button></form>
   <Button disabled={refresh.mode==='updating'} onClick={()=>action.current?.()}>Atualizar organizações</Button>
@@ -41,7 +42,7 @@ function Workspace({actor}:{actor:string}){
    <nav aria-label="Páginas da estabilidade"><Button disabled={page===0} onClick={()=>setPage(v=>v-1)}>Anteriores</Button><span> Página {page+1} </span><Button disabled={(page+1)*data.pageSize>=data.total} onClick={()=>setPage(v=>v+1)}>Próximas</Button></nav>
    <section aria-label="Plano de migração sem parada planejada"><h2>Plano de migração sem parada planejada</h2><p>{data.plan.organizationRole} {data.plan.rolloutScope}</p><p>{data.plan.ownerAccess}</p>
     {data.plan.steps.map(s=><article key={s.id}><h3>{s.id} · {s.status}</h3><p>{s.description}</p></article>)}
-    <p>O acompanhamento técnico dentro do EnergyOS depende dos serviços disponíveis. Exportação e alertas externos contínuos permanecem na etapa D.</p>
+    <p>O acompanhamento dentro do EnergyOS depende dos serviços disponíveis. O Grafana mantém o histórico técnico externo; canais de notificação ainda precisam ser configurados na etapa D.</p>
    </section></>:null}
  </section>;
 }
