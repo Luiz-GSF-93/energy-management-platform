@@ -2,6 +2,7 @@ import {scheduledWorkEnabled} from './process-role';
 // Process-local admission, in addition to the existing durable database leases.
 let running=0;
 const pollers=new Set<EvaPoller>();
+const waiters=new Set<EvaPoller>();
 /** Conservative default for shared database pressure; scaling remains explicitly bounded. */
 export function evaConcurrencyLimit(){return process.env.EVA_WORKER_MAX_CONCURRENCY==='2'?2:1;}
 /** Local scheduler pressure, not the number of documents in the durable queue. */
@@ -21,19 +22,22 @@ export class EvaPoller{
   if(!this.stopped||!scheduledWorkEnabled('EVA'))return;
   this.stopped=false;this.task=task;this.base=base;this.onError=onError;pollers.add(this);this.schedule(base);
  }
- stop(){this.stopped=true;clearTimeout(this.timer);pollers.delete(this);}
- wake(){if(this.stopped||this.busy||this.failures)return;this.idle=0;clearTimeout(this.timer);this.schedule(1000);}
+ stop(){this.stopped=true;waiters.delete(this);clearTimeout(this.timer);pollers.delete(this);}
+ wake(){if(this.stopped||this.busy||this.failures)return;waiters.delete(this);this.idle=0;clearTimeout(this.timer);this.schedule(1000);}
  private schedule(delay:number){if(this.stopped)return;this.timer=setTimeout(()=>void this.tick(),delay);this.timer.unref?.();}
  private async tick(){
   if(this.stopped)return;
-  if(running>=evaConcurrencyLimit()){this.schedule(this.base);return;}
-  running++;this.busy=true;this.active=false;
+  if(running>=evaConcurrencyLimit()){waiters.add(this);this.schedule(this.base);return;}
+  waiters.delete(this);running++;this.busy=true;this.active=false;
   try{await this.task!();this.failures=0;this.idle=this.active?0:Math.min(6,this.idle+1);}
-  catch{this.failures=Math.min(5,this.failures+1);this.onError?.();}
+  catch{this.failures=Math.min(5,this.failures+1);try{this.onError?.();}catch{/* Diagnostics cannot reject the scheduler. */}}
   finally{
    running--;this.busy=false;
+   // Arrival order prevents two busy pollers from starving a third. No extra claims or capacity.
+   let available=evaConcurrencyLimit()-running;
+   for(const poller of waiters)if(available>0&&!poller.busy&&!poller.failures){poller.wake();available--;}
    // An uncertain write is never replayed here: the next iteration claims a durable job.
-   const delay=this.failures?Math.min(300000,30000*2**(this.failures-1)):Math.min(30000,this.base*2**this.idle);
+   const delay=this.failures?Math.min(300000,30000*2**(this.failures-1)):this.active?1000:Math.min(30000,this.base*2**this.idle);
    this.schedule(Math.min(300000,Math.round(delay*(1+Math.random()*.1))));
   }
  }

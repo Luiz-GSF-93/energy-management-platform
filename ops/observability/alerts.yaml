@@ -1,0 +1,27 @@
+groups:
+  - name: energyos-isolated
+    rules:
+      - alert: EnergyOSCollectorUnavailable
+        expr: up{job="energyos-isolated"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Collector indisponível; isso não confirma queda da API.
+      - alert: EnergyOSRuntimeSampleStale
+        expr: time() - energyos_runtime_sample_timestamp_seconds > 180
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Amostra de processo desatualizada; verificar serviço e exportação.
+      - alert: EnergyOSRuntimeSampleAbsent
+        expr: absent(energyos_runtime_sample_timestamp_seconds)
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: Sem amostras EnergyOS; disponibilidade não confirmada.
+      - alert: EnergyOSEventLoopHigh
+        expr: energyos_event_loop_p99_milliseconds > 200
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Atraso elevado no event loop; investigar antes de ampliar concorrência.

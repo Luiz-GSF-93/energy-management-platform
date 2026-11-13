@@ -1,5 +1,5 @@
 import {performance} from 'node:perf_hooks';
-import {observeEvaStage,snapshotEvaStages} from './eva-stage-metrics';
+import {observeEvaStage,snapshotEvaStages,snapshotEvaStageTotals,EVA_DURATION_BOUNDS_SECONDS} from './eva-stage-metrics';
 jest.mock('node:perf_hooks',()=>({performance:{now:jest.fn()}}));
 describe('bounded per-stage measurements without job effects',()=>{
  const before=process.env.ENERGYOS_RUNTIME_OBSERVABILITY_ENABLED;
@@ -35,5 +35,17 @@ describe('bounded per-stage measurements without job effects',()=>{
  it('reports missing elapsed measurements as null rather than zero latency',async()=>{
   (performance.now as jest.Mock).mockReturnValueOnce(10).mockReturnValueOnce(NaN);
   await observeEvaStage('IDENTITY_CHECK',()=>true);expect(snapshotEvaStages()).toEqual([expect.objectContaining({completed:1,timed:0,averageMs:null,maxMs:null})]);
+ });
+ it('assigns exact bucket boundaries and overflow without counting invalid elapsed time',async()=>{
+  const before=snapshotEvaStageTotals().stages.find(t=>t.stage==='CCEE_HISTORY_READ');
+  for(const ms of [0,25,25.001,1000,1800000,1801000,NaN]){
+   (performance.now as jest.Mock).mockReturnValueOnce(0).mockReturnValueOnce(ms);
+   await observeEvaStage('CCEE_HISTORY_READ',()=>true);
+  }
+  const after=snapshotEvaStageTotals().stages.find(t=>t.stage==='CCEE_HISTORY_READ')!;
+  const difference=after.bucketCounts.map((n,i)=>n-(before?.bucketCounts[i]??0));
+  expect(difference).toEqual([2,1,0,0,0,1,0,0,0,0,0,0,0,0,1,1]);
+  expect(after.count-(before?.count??0)).toBe(6);expect(after.completed-(before?.completed??0)).toBe(7);
+  expect(difference).toHaveLength(EVA_DURATION_BOUNDS_SECONDS.length+1);
  });
 });

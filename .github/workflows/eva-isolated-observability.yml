@@ -1,0 +1,42 @@
+name: EVA isolated telemetry and scheduler
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['backend/src/common/services/*metrics*', 'backend/src/common/services/runtime-observability*', 'backend/src/common/workers/eva-poller*', 'ops/observability/**', '.github/workflows/eva-isolated-observability.yml']
+  pull_request:
+    paths: ['backend/src/common/services/*metrics*', 'backend/src/common/services/runtime-observability*', 'backend/src/common/workers/eva-poller*', 'ops/observability/**', '.github/workflows/eva-isolated-observability.yml']
+permissions:
+  contents: read
+jobs:
+  isolated-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: npm test -- --runInBand src/common/services/runtime-metrics-exporter.spec.ts src/common/services/runtime-observability.service.spec.ts src/common/services/eva-stage-metrics.spec.ts src/common/workers/eva-poller.spec.ts
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - name: Collector configuration
+        run: docker run --rm -v "$PWD/ops/observability/collector.yaml:/etc/otelcol/config.yaml:ro" otel/opentelemetry-collector-contrib:0.165.0 validate --config=/etc/otelcol/config.yaml
+      - name: Isolated end-to-end and exporter outage
+        shell: bash
+        run: |
+          export GRAFANA_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          cleanup() {
+            outcome=$?
+            if [ "$outcome" -ne 0 ]; then
+              docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml ps -a
+              docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml logs --tail=30 collector
+            fi
+            docker compose -p energyos-telemetry-test -f ops/observability/compose.yaml down --remove-orphans
+            exit "$outcome"
+          }
+          trap cleanup EXIT
+          python3 ops/observability/verify.py

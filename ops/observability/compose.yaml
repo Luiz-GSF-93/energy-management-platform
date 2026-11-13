@@ -1,0 +1,79 @@
+# Isolated validation only. No production credentials, database or document volumes.
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      GOMEMLIMIT: 192MiB
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+    networks:
+      telemetry:
+        aliases: [energyos-otel-collector.railway.internal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 80
+    restart: "no"
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=24h", "--storage.tsdb.retention.size=128MB", "--query.timeout=5s", "--query.max-concurrency=2", "--query.max-samples=100000"]
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yaml:/etc/prometheus/alerts.yaml:ro
+    networks: [telemetry]
+    read_only: true
+    tmpfs: ["/prometheus:uid=65534,gid=65534,size=167772160"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 80
+    restart: "no"
+  grafana:
+    image: grafana/grafana:13.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: energyosowner
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set a unique isolated-test password}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [telemetry]
+    read_only: true
+    tmpfs: ["/var/lib/grafana:uid=472,gid=0,size=67108864", "/tmp:uid=472,gid=0,size=33554432"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 100
+    restart: "no"
+  verifier:
+    image: node:24-alpine
+    user: "1000:1000"
+    command: ["node", "-e", "setInterval(()=>{},60000)"]
+    environment:
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set a unique isolated-test password}
+      ENERGYOS_SYNTHETIC_ENDPOINT: http://energyos-otel-collector.railway.internal:4318/v1/metrics
+    volumes:
+      - ../../backend/dist:/suite/backend/dist:ro
+      - ./:/suite/ops/observability:ro
+    networks: [telemetry]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 40
+    restart: "no"
+networks:
+  telemetry:
+    internal: true
