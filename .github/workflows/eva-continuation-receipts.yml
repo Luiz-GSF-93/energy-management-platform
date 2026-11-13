@@ -1,0 +1,41 @@
+name: EVA continuation receipts and bounded conflicts
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['backend/src/modules/portal-workspace/**', 'backend/src/modules/ocr/eva-manual-preparation.queue.ts', 'backend/src/database/migrations/20261320*', 'backend/test/eva-continuation-conflicts.cjs', 'frontend/app/components/AutomaticInvoiceIntake.tsx', 'frontend/test/automatic-intake-triage.cjs', '.github/workflows/eva-continuation-receipts.yml']
+  push:
+    branches: [main]
+    paths: ['backend/src/modules/portal-workspace/**', 'backend/src/modules/ocr/eva-manual-preparation.queue.ts', 'backend/src/database/migrations/20261320*', 'backend/test/eva-continuation-conflicts.cjs', 'frontend/app/components/AutomaticInvoiceIntake.tsx', 'frontend/test/automatic-intake-triage.cjs', '.github/workflows/eva-continuation-receipts.yml']
+permissions:
+  contents: read
+jobs:
+  receipt-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: npx jest src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/ocr/eva-manual-preparation.spec.ts --runInBand
+        working-directory: backend
+      - run: node test/eva-continuation-conflicts.cjs && node test/eva-automatic-intake.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+  continuation-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: node test/automatic-intake-triage.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend
