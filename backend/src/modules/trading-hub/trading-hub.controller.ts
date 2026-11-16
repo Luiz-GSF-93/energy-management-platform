@@ -15,6 +15,7 @@ export class TradingHubController {
  @Get() list(@Tenant() t:TenantContext){return this.service.list(t);}
 
  @Get('documents') documents(@Tenant() t:TenantContext){return this.service.documents(t);}
+ @Get('records/:id/attachments') attachments(@Param('id') id:string,@Tenant() t:TenantContext){return this.service.attachments(id,t);}
  @Get(':id/history') history(@Param('id') id:string,@Tenant() t:TenantContext){return this.service.history(id,t);}
 
  @Post(':kind') create(@Param('kind') kind:string,@Body() body:unknown,@Tenant() t:TenantContext){return this.service.save(kind,null,body,t);}

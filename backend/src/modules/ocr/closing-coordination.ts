@@ -6,7 +6,7 @@ export function activeManagementContracts(rows:any[],month:string){
 }
 export function sharedClosingRequired(sources:any,month:string){
  const tables=sources?.financial?.tables??{};
- return (tables.consumer_units??[]).filter((unit:any)=>unit.status==='ACTIVE').length>1&&activeManagementContracts(tables.management_contracts??[],month).some(row=>Number(row.savings_percentage)>0);
+ return (tables.consumer_units??[]).filter((unit:any)=>unit.status==='ACTIVE').length>1&&activeManagementContracts(tables.management_contracts??[],month).some(row=>{if(!(Number(row.savings_percentage)>0))return false;const rule=(tables.management_fee_allocations??[]).filter((r:any)=>r.contract_id===row.id&&r.month===month).sort((a:any,b:any)=>b.version-a.version)[0];return !(rule?.variable_fee_basis==='PER_UNIT'&&rule.fixed_fee_basis==='PER_UNIT'&&rule.source&&Array.isArray(rule.allocations)&&rule.allocations.length===0);});
 }
 
 /** These are document requests, not an alternative financial validation engine. */

@@ -14,8 +14,10 @@ import {object,text,uuid,validateTrading} from './trading-validation';
 
 
 import {compareTrading} from './trading-comparison';
+import {assertQuotationReady,quotationExpired} from './trading-terms';
 
 
+const beyondExpiry=(r:any)=>quotationExpired(r.data);
 export const TRADING_SUPPLIERS_MANAGE='f1c2d3a4-7c53-4b05-8ed3-f32b88f32131';
 export const TRADING_VIEW='60f9690a-145b-4dba-b23f-9f945baca296',TRADING_MANAGE='beb6ec90-8ba8-40ce-a156-aeef6cc75cce';
 
@@ -46,11 +48,20 @@ export class TradingHubService {
 
 
  async history(id:string,t:TenantContext){await this.allowed(t);await this.one(id,t);const r=await this.client().from('trading_history').select('*').eq('organization_id',t.organizationId).eq('record_id',id).order('revision',{ascending:false});this.fail(r.error);return r.data;}
+ async attachments(id:string,t:TenantContext){
+  await this.allowed(t);const proposal=await this.one(id,t);if(proposal.kind!=='proposal')throw new BadRequestException('Selecione uma proposta recebida.');
+  const ids=proposal.data.documents??[];if(!Array.isArray(ids)||ids.length>10)throw new BadRequestException('Lista de anexos inválida.');if(!ids.length)return [];
+  const fileIds=ids.filter((id:string)=>/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id));const files=fileIds.length?await this.client().from('trading_files').select('id,filename').eq('organization_id',t.organizationId).in('id',fileIds):{data:[],error:null};this.fail(files.error);
+  const found=new Map<string,string>((files.data??[]).map((f:any)=>[f.id,f.filename]));const missing=ids.filter((id:string)=>!found.has(id));
+  if(missing.length){const docs=await this.client().from('documents').select('id,original_filename').eq('organization_id',t.organizationId).eq('file_verified',true).in('id',missing);this.fail(docs.error);for(const d of docs.data??[])found.set(d.id,d.original_filename);}
+  return ids.filter((id:string)=>found.has(id)).map((id:string)=>({id,name:found.get(id)}));
+ }
 
 
  async save(kind:string,id:string|null,input:unknown,t:TenantContext){await this.allowed(t,true,kind==='supplier');if(id)uuid(id);const b=object(input);if(Object.keys(b).some(k=>!['revision','parentId','data','reason'].includes(k))||!Number.isInteger(b.revision)||b.revision<(id?1:0))throw new BadRequestException('Revisão ou campos inválidos.');const d=validateTrading(kind,b.data);const parent=kind==='proposal'?uuid(b.parentId):null;const opportunity=parent?await this.one(parent,t):null;if(opportunity&&(opportunity.kind!=='opportunity'||!['DRAFT','OPEN','ANALYSIS'].includes(opportunity.status)||opportunity.data.energyType!==d.energyType))throw new BadRequestException('Proposta fora da cotação ou modalidade.');
 
 
+  if(kind==='proposal'&&opportunity&&quotationExpired(opportunity.data))throw new BadRequestException('Cotação expirada; crie uma nova rodada.');
   if(kind==='proposal'){const s=await this.one(d.supplierId,t);if(s.kind!=='supplier'||s.status!=='ACTIVE')throw new BadRequestException('Selecione fornecedor ativo desta organização.');}
 
 
@@ -68,7 +79,7 @@ export class TradingHubService {
 
  async legacyWorkflowGuard(id:string,t:TenantContext){uuid(id);const r=await this.client().from('trading_approval_workflows').select('id').eq('organization_id',t.organizationId).eq('proposal_id',id).maybeSingle();if(r.error)throw new ServiceUnavailableException('Workflow unavailable.');if(r.data)throw new ConflictException('Use o acompanhamento de aprovacao desta proposta.');}
  async contract(id:string,input:unknown,t:TenantContext){await this.allowed(t,true);await this.legacyWorkflowGuard(id,t);const b=object(input);uuid(id);if(!Number.isInteger(b.revision)||Object.keys(b).some(k=>!['revision','documentId','reference','reason'].includes(k)))throw new BadRequestException('Campos ou revisão inválidos.');const r=await this.client().rpc('contract_trading_proposal',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_revision:b.revision,p_document:text(b.documentId,1,200),p_reference:text(b.reference,3,200),p_reason:text(b.reason,3,500)});this.fail(r.error);return r.data;}
- async transition(id:string,input:unknown,t:TenantContext){await this.allowed(t);uuid(id);await this.legacyWorkflowGuard(id,t);const record=await this.one(id,t);await this.allowed(t,true,record.kind==='supplier');const b=object(input);if(Object.keys(b).some(k=>!['status','revision','reason'].includes(k))||!Number.isInteger(b.revision)||b.revision<1)throw new BadRequestException('Revisão inválida.');if(b.status==='MANAGER_APPROVED'&&!(['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation'))throw new ForbiddenException('Aprovação exige gestor ou administrador.');const r=await this.client().rpc('transition_trading_record',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_revision:b.revision,p_status:text(b.status,1,30),p_reason:text(b.reason,3,500)});this.fail(r.error);return r.data;}
+ async transition(id:string,input:unknown,t:TenantContext){await this.allowed(t);uuid(id);await this.legacyWorkflowGuard(id,t);const record=await this.one(id,t);await this.allowed(t,true,record.kind==='supplier');if(record.kind==='opportunity'&&beyondExpiry(record))throw new BadRequestException('Cotação expirada; crie uma nova rodada.');if(record.kind==='opportunity'&&object(input).status==='OPEN'&&(process.env.TRADING_QUOTATION_TERMS_REQUIRED==='true'||record.data.commercialTermsVersion===2))assertQuotationReady(record.data);if(record.kind==='proposal'){const opportunity=await this.one(record.parent_id,t);if(quotationExpired(opportunity.data))throw new BadRequestException('Cotação expirada; crie uma nova rodada.');}const b=object(input);if(Object.keys(b).some(k=>!['status','revision','reason'].includes(k))||!Number.isInteger(b.revision)||b.revision<1)throw new BadRequestException('Revisão inválida.');if(b.status==='MANAGER_APPROVED'&&!(['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation'))throw new ForbiddenException('Aprovação exige gestor ou administrador.');const r=await this.client().rpc('transition_trading_record',{p_org:t.organizationId,p_actor:t.userId,p_id:id,p_revision:b.revision,p_status:text(b.status,1,30),p_reason:text(b.reason,3,500)});this.fail(r.error);return r.data;}
 
 
 }

@@ -4,6 +4,7 @@ export class ManagementAllocationQueryDto {@IsUUID() contractId!:string;@Matches
 class AllocationItem {@IsUUID() consumerUnitId!:string;@IsString() @Matches(/^(100(\.0{1,4})?|[0-9]{1,2}(\.[0-9]{1,4})?)$/) percentage!:string;}
 export class ManagementAllocationDto extends ManagementAllocationQueryDto {
  @IsIn(['PER_UNIT']) fixedFeeBasis!:'PER_UNIT';
+ @IsOptional() @IsIn(['CONSOLIDATED','PER_UNIT']) variableFeeBasis?:'CONSOLIDATED'|'PER_UNIT';
  @IsArray() @ArrayMinSize(0) @ArrayMaxSize(500) @ValidateNested({each:true}) @Type(()=>AllocationItem) allocations!:AllocationItem[];
  @IsString() @Matches(/\S/) @MaxLength(2000) source!:string;
  @IsOptional() @IsUUID() previousId?:string;
