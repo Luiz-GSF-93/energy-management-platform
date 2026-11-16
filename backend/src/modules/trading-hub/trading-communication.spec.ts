@@ -6,7 +6,7 @@ const id='00000000-0000-4000-8000-000000000001';
 describe('Trading communication boundaries and receipts',()=>{
  const tenant={organizationId:'authorized-org',userId:'actor'} as any;
  const message=()=>({invitationId:id,requestId:id,text:'Qual é o prazo de faturamento?',urgency:3,status:'WAITING_SUPPLIER'});
- const setup=(rpc=jest.fn(),flag='true')=>{const allowed=jest.fn().mockResolvedValue(undefined),service=new TradingCommunicationService({createAuthClient:()=>({rpc})} as any,{allowed} as any,{get:()=>flag} as any);return {service,allowed,rpc};};
+ const setup=(rpc=jest.fn(),flag='true')=>{const allowed=jest.fn().mockResolvedValue(undefined),service=new TradingCommunicationService({createAuthClient:()=>({rpc:(...args:any[])=>({abortSignal:(signal:AbortSignal)=>{expect(signal).toBeInstanceOf(AbortSignal);return rpc(...args);}})})} as any,{allowed} as any,{get:()=>flag} as any);return {service,allowed,rpc};};
  beforeEach(()=>jest.clearAllMocks());
  it('rejects forged routing, recipient and unbounded message fields',()=>{for(const patch of [{email:'foreign@example.test'},{organizationId:'foreign'},{urgency:4},{text:'x'.repeat(2001)}])expect(()=>communicationBody({...message(),...patch},true)).toThrow();expect(()=>communicationBody(message(),false)).toThrow();});
  it('binds the office actor and tenant from authorization context',async()=>{const s=setup(jest.fn().mockResolvedValue({data:{recorded:true}}));await s.service.message(tenant,message());expect(s.allowed).toHaveBeenCalledWith(tenant,true);expect(s.rpc).toHaveBeenCalledWith('trading_quote_exchange',expect.objectContaining({p_org:'authorized-org',p_actor:'actor',p_session:null,p_action:'BACKOFFICE_MESSAGE'}));});
