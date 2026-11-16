@@ -19,8 +19,8 @@ function Countdown({data,onExpired}:{data:MonitorData;onExpired:()=>void}){
 }
 export default function TradingClientDashboard({data,onExpired}:{data:MonitorData;onExpired?:()=>void}){
  const [expired,setExpired]=useState(false);const expire=useCallback(()=>{setExpired(true);onExpired?.();},[onExpired]);
- useEffect(()=>setExpired(Date.parse(data.expiresAt)<=Date.parse(data.serverNow)),[data.serverNow,data.expiresAt]);
- if(expired)return <Card title='Rodada encerrada'><p>O prazo de acompanhamento terminou. Solicite uma nova rodada ao backoffice.</p></Card>;
+ useEffect(()=>{const due=Date.parse(data.expiresAt)<=Date.parse(data.serverNow);setExpired(due);if(due)onExpired?.();},[data.serverNow,data.expiresAt,onExpired]);
+ if(expired||Date.parse(data.expiresAt)<=Date.parse(data.serverNow))return <Card title='Rodada encerrada'><p>O prazo de acompanhamento terminou. Solicite uma nova rodada ao backoffice.</p></Card>;
  const labels:Record<string,string>={issued:'Convites disparados',responded:'Respostas recebidas',pending:'Aguardando resposta',declined:'Não participam',revoked:'Revogados',expired:'Expirados',emailAccepted:'E-mails aceitos pelo provedor'};
  const history=data.history.map(h=>({at:h.at,value:h.priceBrlMwh,label:data.proposals.find(p=>p.id===h.proposalId)?.supplier??'Proposta'}));
  for(const p of data.proposals)history.push({at:p.receivedAt,value:p.priceBrlMwh,label:p.supplier});

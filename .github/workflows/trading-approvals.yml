@@ -8,6 +8,8 @@ on:
       - 'backend/src/database/migrations/20261326*.sql'
       - 'backend/src/database/migrations/20261327*.sql'
       - 'backend/src/database/migrations/20261328*.sql'
+      - 'backend/src/database/migrations/20261329*.sql'
+      - 'backend/test/database/owner-verified-publications.test.mjs'
       - 'backend/src/modules/ocr/eva-unit-fees.spec.ts'
       - 'frontend/app/components/TradingClientDashboard.tsx'
       - 'frontend/test/trading-client-monitor.cjs'
@@ -43,7 +45,7 @@ jobs:
         working-directory: backend
       - run: npm test -- --runInBand --runTestsByPath src/modules/trading-hub/trading-client-monitor.service.spec.ts src/modules/trading-hub/trading-client-monitor.model.spec.ts src/modules/ocr/eva-unit-fees.spec.ts src/modules/trading-hub/trading-mail-budget.spec.ts src/modules/trading-hub/trading-terms.spec.ts src/modules/trading-hub/trading-communication.spec.ts src/modules/trading-hub/trading-workflow.spec.ts src/modules/trading-hub/trading.spec.ts src/modules/trading-hub/trading-portal.spec.ts src/modules/trading-hub/trading-resend.spec.ts src/modules/trading-hub/trading-mail.spec.ts src/modules/trading-hub/trading-email-template.spec.ts
         working-directory: backend
-      - run: node test/database/trading-client-monitor.test.mjs && node test/database/trading-workflow.test.mjs && node test/database/trading-quotes.test.mjs && node test/database/trading-workflow-expiry.test.mjs
+      - run: node test/database/owner-verified-publications.test.mjs && node test/database/trading-client-monitor.test.mjs && node test/database/trading-workflow.test.mjs && node test/database/trading-quotes.test.mjs && node test/database/trading-workflow-expiry.test.mjs
         working-directory: backend
       - run: npm run build && node test/database/verify-management-allocations.mjs
         working-directory: backend

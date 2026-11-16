@@ -10,13 +10,15 @@ The client dashboard refreshes every thirty seconds only while visible/online. I
 
 The countdown uses server time plus monotonic elapsed time. The round deadline and earlier link expiry are distinct. Countdown ticks update their own component, not the whole chart. At link expiry, the client view is cleared; every server read also checks licence, round, customer contact, revocation and session. No raw token/session is persisted in browser storage or a URL query string. Tokens are delivered in fragments, removed from the address bar, and hashed in storage.
 
+The Owner stability projection also recognizes already approved and published historical intakes through the existing strict completion proof. Their original uncertain receipts remain immutable; verified publications are excluded from actionable technical counts. The proof batch is bounded to 100 per organization, and unmatched records continue to require attention.
+
 ## Monthly fee basis
 
 Existing immutable monthly fee rules keep `CONSOLIDATED` as their default. A manager/administrator can explicitly register `PER_UNIT` for a hybrid contract and competence. It applies the existing contractual percentage independently to each unit's positive savings before fees, rounds each unit to cents, then sums. Negative savings in another unit do not offset that base. No allocation percentages are accepted in this mode. The fixed fee per unit and contractual percentage are preserved. Corrections create a new monthly rule version, preserving the previous rule and its source. This change does not approve or publish closings.
 
 ## Rollout and rollback
 
-1. Apply migrations 20261325–20261328 in order. These extend the schema without changing existing financial or commercial records. Verify marker functions, RLS and grants. Never rerun original creation migrations on production.
+1. Apply migrations 20261325–20261329 in order. These extend the schema without changing existing financial or commercial records. Verify marker functions, RLS and grants. Never rerun original creation migrations on production.
 2. Publish compatible API, existing EVA worker and frontend. Keep the existing worker; no new OCR consumer or broker is added.
 3. Enable `TRADING_COMMUNICATIONS_ENABLED=true` and `TRADING_CLIENT_MONITOR_ENABLED=true` on the API after schema availability. Delivery uses the existing scheduled worker and configured transactional email sender. Set the separately approved quotation-notice limits `TRADING_QUOTE_MAIL_MAX_DAILY=50` and `TRADING_QUOTE_MAIL_MONTHLY_BUDGET_MICRO_USD=5000000`; preserve the existing conservative `PORTAL_NOTIFICATION_EMAIL_COST_MICRO_USD=10000`. These limits are checked per organization; they do not raise the existing SMS/WhatsApp or legacy portal limits. OTP requests retain their separate per-link protections. This is an internal notice-queue budget, not a provider account spending cap.
 4. Enable `TRADING_QUOTATION_TERMS_REQUIRED=true` only after the updated frontend/API are available. Old drafts then require completion before sending; existing invitations keep their normal expiry.
