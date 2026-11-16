@@ -1,6 +1,6 @@
 /** Release-controlled facts. Observation windows and SLOs are never inferred from deployment success. */
 export const energyosMigrationPlan={
- updatedOn:'2026-11-13',responsible:'Owner / Administrador da Plataforma',
+ updatedOn:'2026-11-16',responsible:'Owner / Administrador da Plataforma',
  organizationRole:'Acompanhar a estabilidade da própria organização em modo de consulta.',
  rolloutScope:'Melhorias gerais para organizações com licença ativa, incluindo novas organizações elegíveis.',
  ownerAccess:'Owner possui acesso a todos os módulos; contexto da organização e auditoria permanecem obrigatórios.',

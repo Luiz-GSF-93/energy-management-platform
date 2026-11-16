@@ -1,0 +1,31 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/backoffice/dashboard',pretendToBeVisual:true});
+for(const k of ['window','document','navigator','HTMLElement','Event'])Object.defineProperty(global,k,{value:dom.window[k],configurable:true});global.IS_REACT_ACT_ENVIRONMENT=true;
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
+const React=require('react'),{act}=React,{createRoot}=require('react-dom/client'),original=Module._load;
+let scope='organization',role='admin_platform',allowed=true,actor='owner',denied=false,requests=[];
+const end=1794826800,points=n=>[{at:end-60,value:n},{at:end,value:n+1}];
+let monitoring={status:'AVAILABLE',receivedAt:new Date(end*1000).toISOString(),windowStart:end-1800,windowEnd:end,roles:['API','EVA_WORKER'].map(role=>({role,state:'FRESH',sampledAt:new Date(end*1000).toISOString(),memoryMiB:points(20),cpuPercent:points(2),eventLoopMs:points(10)}))};
+Module._load=function(n,p,m){
+ if(n==='@/app/providers')return {useAuth:()=>({context:{scope,role,user:{id:actor}},hasPermission:()=>allowed})};
+ if(n==='@/app/lib/api/client')return {apiRequest:async(url,options)=>{requests.push({url,options});if(denied)throw Object.assign(Error('PRIVATE_DIAGNOSTIC_CANARY'),{status:403});return {responsible:'OWNER',monitoring,generatedAt:new Date(end*1000).toISOString(),total:1,rows:[{intakes:{processing:0,technical:2,human:1,sources:4},manual:{queued:0,running:0,uncertain:0}}]};}};
+ if(n==='next/link')return {__esModule:true,default:({href,children})=>React.createElement('a',{href},children)};
+ if(n.startsWith('@/'))return original.call(this,path.resolve(__dirname,'..',n.slice(2)),p,m);
+ return original.call(this,n,p,m);
+};
+const Owner=require('../app/components/OwnerMonitoring.tsx').default,root=createRoot(document.getElementById('root'));
+const render=()=>act(async()=>root.render(React.createElement(Owner)));
+(async()=>{try{
+ await render();assert.equal(requests.length,0);assert(!document.body.textContent.includes('Grafana'));
+ scope='global';role='platform_administrator';await render();assert.equal(requests.length,0);
+ role='admin_platform';allowed=false;await render();assert.equal(requests.length,0);
+ allowed=true;await render();assert(document.body.textContent.includes('Monitoramento EnergyOS · Grafana'));assert(document.body.textContent.includes('21 MiB'));assert(document.body.textContent.includes('Worker da EVA'));assert(document.body.textContent.includes('login técnico separado'));
+ assert.equal(document.querySelectorAll('iframe').length,0);const link=[...document.querySelectorAll('a')].find(x=>x.textContent.includes('Grafana completo'));assert.equal(link.href,'https://energyos-grafana-production.up.railway.app/');assert(link.rel.includes('noopener'));assert(document.querySelector('a[href="/backoffice/platform-stability"]'));
+ assert.equal(document.querySelectorAll('svg').length,0);await act(async()=>[...document.querySelectorAll('button')].find(x=>x.textContent==='Ver gráficos dos últimos 30 minutos').click());assert.equal(document.querySelectorAll('svg').length,6);
+ assert(requests.every(x=>x.url==='/api/v1/admin/platform-administration/stability'&&!x.options.method));assert(requests.every(x=>x.options.signal instanceof AbortSignal));
+ monitoring={...monitoring,status:'PARTIAL',roles:monitoring.roles.map((r,i)=>({...r,state:i===0?'STALE':'FRESH'}))};await act(async()=>[...document.querySelectorAll('button')].find(x=>x.textContent==='Atualizar monitoramento').click());assert(document.body.textContent.includes('Amostra antiga'));
+ denied=true;await act(async()=>[...document.querySelectorAll('button')].find(x=>x.textContent==='Atualizar monitoramento').click());assert(!document.body.textContent.includes('21 MiB'));assert(document.querySelector('[role="alert"]'));assert(!document.body.textContent.includes('PRIVATE_DIAGNOSTIC_CANARY'));assert(!document.body.textContent.includes('Documentos com ocorrência técnica'));
+ const count=requests.length;scope='organization';await render();assert.equal(requests.length,count);assert(!document.body.textContent.includes('Grafana'));
+ denied=false;actor='other-owner';scope='global';monitoring={...monitoring,status:'UNAVAILABLE',roles:monitoring.roles.map(r=>({...r,state:'MISSING',sampledAt:null,memoryMiB:[],cpuPercent:[],eventLoopMs:[]}))};await render();assert(document.body.textContent.includes('Sem métricas confirmadas'));assert(!document.body.textContent.includes('0 MiB'));assert(!document.body.textContent.includes('21 MiB'));
+ console.log('PASS Owner native monitoring: Owner-only requests, scoped GET, charts, stale/missing states, no iframe/credentials, revocation clearing and organization isolation.');
+ }finally{await act(async()=>root.unmount());dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1});

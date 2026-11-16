@@ -4,13 +4,14 @@ import Link from 'next/link';
 import BackofficeShell from '@/app/components/BackofficeShell';
 import ProtectedRoute from '@/app/components/ProtectedRoute';
 import ServiceAvailabilityPanel from '@/app/components/ServiceAvailabilityPanel';
+import {OwnerMonitoringPanel,OwnerMonitoringSnapshot} from '@/app/components/OwnerMonitoring';
 import {useAuth} from '@/app/providers';
 import {apiRequest} from '@/app/lib/api/client';
 import {createOperationalRefresh,RefreshState} from '@/app/lib/read-only-refresh';
 import {Alert,Button} from '@/app/components/ui';
 const manage='82e7fc71-479a-4dd6-8b22-4fba6eaa6841';
 type Row={organizationId:string;organizationName:string;activeLicenses:number;attention:boolean;closingReceipts:number;manual:{queued:number;running:number;uncertain:number;failed30d:number;succeeded30d:number;oldestQueueSeconds:number};intakes:{technical:number;human:number;sources:number;processing:number;proposals30d:number}};
-type Data={responsible:string;generatedAt:string;total:number;pageSize:number;windowDays:number;rows:Row[];plan:{responsible:string;organizationRole:string;rolloutScope:string;ownerAccess:string;updatedOn:string;steps:{id:string;status:string;description:string}[]}};
+type Data={responsible:string;generatedAt:string;total:number;pageSize:number;windowDays:number;rows:Row[];monitoring?:OwnerMonitoringSnapshot;plan:{responsible:string;organizationRole:string;rolloutScope:string;ownerAccess:string;updatedOn:string;steps:{id:string;status:string;description:string}[]}};
 function Workspace({actor}:{actor:string}){
  const [page,setPage]=useState(0),[search,setSearch]=useState(''),[draft,setDraft]=useState(''),[data,setData]=useState<Data|null>(null),[error,setError]=useState('');
  const [refresh,setRefresh]=useState<RefreshState>({mode:'updating',delayMs:0});const action=useRef<(()=>void)|null>(null);
@@ -25,7 +26,7 @@ function Workspace({actor}:{actor:string}){
  return <section className="backoffice-page"><h1>Estabilidade EnergyOS · Plataforma</h1>
   <p>Responsável: Owner / Administrador da Plataforma. Acompanhe as organizações com licença ativa; correções gerais pertencem à operação da plataforma.</p>
   <p><Link href="/backoffice/platform-audit">Abrir Auditoria Global</Link> · <Link href="/backoffice/platform-costs">Custos e performance</Link></p>
-  <p><a href="https://energyos-grafana-production.up.railway.app" target="_blank" rel="noopener noreferrer">Abrir monitoramento Grafana</a> · Acesso com a conta técnica exclusiva do Owner; login separado do EnergyOS.</p>
+  <OwnerMonitoringPanel snapshot={data?.monitoring} updating={refresh.mode==='updating'} paused={refresh.mode==='paused'} onRefresh={()=>action.current?.()}/>
   <ServiceAvailabilityPanel/><p><Link href="/status">Abrir disponibilidade sem depender do login</Link></p>
   <form onSubmit={e=>{e.preventDefault();setPage(0);setSearch(draft.trim());}}><label>Buscar organização<input value={draft} maxLength={150} onChange={e=>setDraft(e.target.value)}/></label><Button type="submit">Buscar</Button></form>
   <Button disabled={refresh.mode==='updating'} onClick={()=>action.current?.()}>Atualizar organizações</Button>
