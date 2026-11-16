@@ -1,4 +1,4 @@
-# BETA 20261116.3 — company conversations and scoped Owner review
+# BETA 20261116.4 — company conversations and scoped Owner review
 
 The backoffice now loads a paginated company summary, then a modal with open negotiations and immutable historical conversations. Round and message pagination keeps old questions accessible without loading every body on the initial screen. Sending uses the existing audited, idempotent message action and email outbox; no message editing/deletion or new sending worker is introduced. Expired negotiations remain read-only on the server and in the modal.
 
@@ -13,3 +13,9 @@ EVA review: the application accepts only the canonical delegated Owner organizat
 Rollout: apply additive migrations 20261330 and 20261331, then publish API/worker/frontend together. Verify company list, active and expired modals, client preview, and Owner justification/status. No real invitation or email is needed for verification. If rolling back application code, preserve immutable messages/events and additive database functions. The functions can remain unused until compatible code is restored.
 
 Plan A/C: this fixes a specific Owner review access defect, not every outstanding financial source. B: representative 24–72h measurements remain open. D: alert/export failure validation remains open. E: stage outbox/consumer migration remains open; existing Trading email outboxes do not complete it. F: targeted SQL/UI/auth tests do not replace load/fault tests. G: BETA exit requires measured SLO, isolation, recovery, no duplicate financial writes and tested rollback. Do not promise zero failures.
+
+The responsive refinement uses a short company action label with an accessible supplier name and moves urgency below the company name. Price bars adapt to narrow screens for up to six proposals. Larger sets retain chart-only horizontal scrolling.
+
+When the review queue no longer contains the selected version because a later overlapping preparation exists, the handoff explicitly explains the stale state. Authorized preparers can request a refresh through the existing durable preparation protocol. This action is explicit and does not resend originals. The UI disables approval of a known-stale version; all source/hash/backend decision checks remain unchanged. Independent per-unit fees permit each current unit to be handed off separately; a later consolidated revision can supersede earlier overlapping drafts, so no stale version is automatically submitted.
+
+The document review queue and notice now accept the canonical delegated Owner frontend context. Other platform-marked organization roles remain hidden; server-side Owner/session/license authorization is still required. The three June Bálsamo unit versions were handed off for manager decision, with no approval or publication.

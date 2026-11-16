@@ -9,6 +9,11 @@ on:
       - 'backend/test/eva-scoped-owner-review.cjs'
       - 'frontend/app/backoffice/trading-hub/**'
       - 'frontend/app/components/Trading*'
+      - 'frontend/app/backoffice/contracts/EvaReviewHandoff.tsx'
+      - 'frontend/app/backoffice/contracts/AssistedClosingReview.tsx'
+      - 'frontend/test/eva-stale-handoff.cjs'
+      - 'frontend/test/eva-document-review-queue.cjs'
+      - 'frontend/app/components/EvaDocumentReviewQueue.tsx'
       - 'frontend/test/trading-*.cjs'
       - '.github/workflows/trading-company-eva-owner.yml'
 permissions:
@@ -30,7 +35,7 @@ jobs:
         working-directory: backend
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: frontend
-      - run: node test/trading-company-conversations.cjs && node test/trading-client-monitor.cjs
+      - run: node test/trading-company-conversations.cjs && node test/trading-client-monitor.cjs && node test/eva-stale-handoff.cjs && node test/eva-document-review-queue.cjs
         working-directory: frontend
       - run: npx tsc --noEmit --incremental false
         working-directory: frontend
