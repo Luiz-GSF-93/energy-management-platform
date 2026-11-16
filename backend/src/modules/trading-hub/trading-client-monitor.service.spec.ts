@@ -1,7 +1,7 @@
 import {TradingClientMonitorService} from './trading-client-monitor.service';
 import {sendTradingMail} from './trading-mail';
 jest.mock('./trading-mail',()=>({...jest.requireActual('./trading-mail'),tradingMailConfigured:()=>true,sendTradingMail:jest.fn(),otp:()=> '123456',otpDigest:()=> 'b'.repeat(64)}));
-jest.mock('../portal-workspace/portal-notifications.worker',()=>({portalDeliveryBudget:()=>({daily:50,budget:5000000,costs:{EMAIL:10000}})}));
+jest.mock('./trading-mail-budget',()=>({quotationMailBudget:()=>({daily:50,budget:5000000,costs:{EMAIL:10000}})}));
 const id='00000000-0000-4000-8000-000000000001',tenant={organizationId:'authorized-org',userId:'actor'} as any;
 function setup(flag='true'){
  const rpc=jest.fn(),allowed=jest.fn().mockResolvedValue(undefined),signals:AbortSignal[]=[];

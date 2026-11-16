@@ -6,7 +6,7 @@ import {TradingHubService} from './trading-hub.service';
 import {object,text,uuid} from './trading-validation';
 import {digest,otp,otpDigest,randomToken,sendTradingMail,tradingMailConfigured,tradingMailFailure} from './trading-mail';
 import {tradingEmailHtml} from './trading-email-template';
-import {portalDeliveryBudget} from '../portal-workspace/portal-notifications.worker';
+import {quotationMailBudget} from './trading-mail-budget';
 
 export function communicationBody(input:unknown,office:boolean){
  const b=object(input),allowed=office?['invitationId','requestId','text','urgency','status']:['requestId','text','urgency'];
@@ -35,7 +35,7 @@ export class TradingCommunicationService{
  async deliverOnce(){
   if(this.config.get('TRADING_COMMUNICATIONS_ENABLED')!=='true')return;
   await this.rpc('expire_trading_quotes',{});
-  if(!tradingMailConfigured())return;const budget=portalDeliveryBudget();if(!budget)return;
+  if(!tradingMailConfigured())return;const budget=quotationMailBudget();if(!budget)return;
   const token=randomToken(),args={p_action:'CLAIM',p_id:null,p_lease:null,p_token:digest(token),p_daily:budget.daily,p_budget:budget.budget,p_costs:budget.costs,p_result:null};
   const d=await this.rpc('trading_quote_mail',args);if(!d)return;
   const started=await this.rpc('trading_quote_mail',{...args,p_action:'START',p_id:d.id,p_lease:d.lease});if(!started)return;

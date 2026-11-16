@@ -1,7 +1,7 @@
 import {TradingCommunicationService,communicationBody,thanksText} from './trading-communication.service';
 import {sendTradingMail} from './trading-mail';
 jest.mock('./trading-mail',()=>({...jest.requireActual('./trading-mail'),tradingMailConfigured:()=>true,sendTradingMail:jest.fn(),otp:()=> '123456',otpDigest:()=> 'c'.repeat(64)}));
-jest.mock('../portal-workspace/portal-notifications.worker',()=>({portalDeliveryBudget:()=>({daily:10,budget:1000,costs:{EMAIL:1}})}));
+jest.mock('./trading-mail-budget',()=>({quotationMailBudget:()=>({daily:10,budget:1000,costs:{EMAIL:1}})}));
 const id='00000000-0000-4000-8000-000000000001';
 describe('Trading communication boundaries and receipts',()=>{
  const tenant={organizationId:'authorized-org',userId:'actor'} as any;
