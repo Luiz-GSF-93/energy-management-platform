@@ -1,0 +1,36 @@
+name: Trading company conversations and scoped EVA Owner
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/trading-hub/**'
+      - 'backend/src/modules/ocr/eva-document-review*'
+      - 'backend/src/database/migrations/2026133*.sql'
+      - 'backend/test/database/trading-company-conversations.test.mjs'
+      - 'backend/test/eva-scoped-owner-review.cjs'
+      - 'frontend/app/backoffice/trading-hub/**'
+      - 'frontend/app/components/Trading*'
+      - 'frontend/test/trading-*.cjs'
+      - '.github/workflows/trading-company-eva-owner.yml'
+permissions:
+  contents: read
+jobs:
+  company-history-and-owner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: backend
+      - run: npx jest --runInBand src/modules/ocr/eva-document-review.service.spec.ts src/modules/trading-hub/trading-client-monitor.model.spec.ts src/modules/trading-hub/trading-communication.spec.ts
+        working-directory: backend
+      - run: node test/database/trading-company-conversations.test.mjs && node test/eva-scoped-owner-review.cjs
+        working-directory: backend
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: frontend
+      - run: node test/trading-company-conversations.cjs && node test/trading-client-monitor.cjs
+        working-directory: frontend
+      - run: npx tsc --noEmit --incremental false
+        working-directory: frontend

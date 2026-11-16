@@ -1,0 +1,15 @@
+'use client';
+import {useState} from 'react';
+import {Card} from '@/app/components/ui';
+type Proposal={id:string;supplier:string;priceBrlMwh:number};
+export const proposalColor=(id:string)=>{let hash=0;for(const c of id)hash=(hash*31+c.charCodeAt(0))>>>0;return `hsl(${hash%360} 75% 62%)`;};
+export default function TradingClientPriceBars({proposals,startMonth,months}:{proposals:Proposal[];startMonth:string;months:number}){
+ const start=Number(startMonth?.slice(0,4)),firstMonth=Number(startMonth?.slice(5,7));
+ const years=Number.isInteger(start)&&Number.isInteger(firstMonth)&&firstMonth>=1&&firstMonth<=12&&months>0?Array.from({length:Math.ceil((firstMonth-1+months)/12)},(_,i)=>start+i):[];
+ const [selected,setSelected]=useState<number>(),[tip,setTip]=useState('');const year=years.includes(selected!)?selected!:years[0];
+ const rows=proposals.filter(p=>Number.isFinite(p.priceBrlMwh)&&p.priceBrlMwh>0),max=Math.max(1,...rows.map(p=>p.priceBrlMwh))*1.1,width=Math.max(680,rows.length*90+90);
+ const money=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),label=(p:Proposal)=>`${p.supplier} · ${year} · ${money(p.priceBrlMwh)}/MWh · proposta ${p.id.slice(0,8)}`;
+ return <Card title="Preços por fornecedor e ano"><p>Preço único declarado na proposta, aplicável ao período de fornecimento. Não representa uma curva anual de preços diferentes.</p>{years.length?<label>Ano do fornecimento<select className="ds-input" value={year} onChange={e=>{setSelected(Number(e.target.value));setTip('');}}>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label>:null}
+  {rows.length&&years.length?<><div style={{overflowX:'auto'}}><svg role="img" aria-label={'Barras verticais de preços por fornecedor em '+year} viewBox={`0 0 ${width} 290`} style={{width:'100%',minWidth:width}}><text x="4" y="20" fill="currentColor">R$/MWh</text>{[0,.25,.5,.75,1].map(f=><g key={f}><line x1="65" x2={width-15} y1={230-185*f} y2={230-185*f} stroke="currentColor" opacity=".15"/><text x="3" y={234-185*f} fill="currentColor" fontSize="11">{(max*f).toFixed(0)}</text></g>)}{rows.map((p,i)=><g key={p.id}><rect data-proposal-bar={p.id} x={80+i*90} y={230-185*p.priceBrlMwh/max} width="48" height={185*p.priceBrlMwh/max} fill={proposalColor(p.id)} tabIndex={0} role="graphics-symbol" aria-label={label(p)} onMouseEnter={()=>setTip(label(p))} onFocus={()=>setTip(label(p))} onMouseLeave={()=>setTip('')} onBlur={()=>setTip('')}><title>{label(p)}</title></rect><text x={104+i*90} y="251" textAnchor="middle" fill="currentColor" fontSize="10">{p.supplier.slice(0,12)}</text></g>)}<text x={width/2} y="280" textAnchor="middle" fill="currentColor">Fornecedor · {year}</text></svg></div><p role="status" style={{background:'transparent',minHeight:24}}>{tip}</p><div aria-label="Legenda das propostas" style={{display:'flex',flexWrap:'wrap',gap:16}}>{rows.map(p=><span key={p.id}><span style={{color:proposalColor(p.id)}}>● </span>{p.supplier} · {p.id.slice(0,8)}</span>)}</div></>:<p>Aguardando propostas válidas e período de fornecimento.</p>}
+ </Card>;
+}
