@@ -94,7 +94,10 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
   let allocationSource=a?'Rateio '+a.id+' v'+a.version+' · '+a.source:'';
   if(!allocation&&feeReference?.allocation?.percentage!==null&&feeReference?.allocation?.percentage!==undefined){allocation=[{consumerUnitId:u.id,percentage:feeReference.allocation.percentage}];allocationSource=reference.source+' · rateio histórico proposto, não confirmado';}
   if(!allocation&&c.customerUnits?.length===1&&c.customerUnits[0].id===u.id&&c.customerUnits[0].status==='ACTIVE'){allocation=[{consumerUnitId:u.id,percentage:'100'}];allocationSource='Cadastro atual: única unidade do cliente · proposta de rateio, sem confirmação mensal';}
-  add('fee:allocation','Rateio variável proposto',allocation,'','ACL',allocationSource,allocation&&!a?'Rateio proposto para conferência; nenhuma confirmação mensal foi registrada.':null);
+  const perUnit=a?.variable_fee_basis==='PER_UNIT'&&a?.fixed_fee_basis==='PER_UNIT'&&!!a.source&&Array.isArray(a.allocations)&&a.allocations.length===0;
+  add('fee:basis','Base do honorário variável',perUnit?'PER_UNIT':'CONSOLIDATED','','ACL',perUnit?'Regra mensal '+a.id+' v'+a.version+' · '+a.source:feeSource,perUnit?'Percentual sobre a economia positiva de cada unidade, antes dos honorários. Sem compensar perdas de outra unidade.':null);
+  if(perUnit){const f=fields.find(f=>f.key==='fee:percentage');if(f)f.observation='Percentual aplicado separadamente à economia positiva de cada unidade, antes dos honorários.';}
+  add('fee:allocation',perUnit?'Sem rateio: cálculo por unidade':'Rateio variável proposto',perUnit?[]:allocation,'','ACL',perUnit?'Regra mensal '+a.id:allocationSource,perUnit?'Regra por unidade confirmada para esta competência.':allocation&&!a?'Rateio proposto para conferência; nenhuma confirmação mensal foi registrada.':null);
  }
  const contractEvidence=c.sourcePreparation?.documents??[];
  if(sourcePreparationEnabled()&&contractEvidence.length===1){

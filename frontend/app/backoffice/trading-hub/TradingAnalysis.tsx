@@ -1,5 +1,6 @@
 'use client';
 import {useState} from 'react';
+import Plot from './TradingPricePlot';
 import {Card,Input} from '@/app/components/ui';
 import OperationChoice from '@/app/components/OperationChoice';
 import {observations,filterObservations,monthIndex,monthValue,purchaseLabels,termLabels,type TradingRow,type Observation} from './trading-analysis';
@@ -9,14 +10,6 @@ const energies:Record<string,string>={CONVENTIONAL:'Convencional',INCENTIVIZED_5
 const markets:Record<string,string>={SE_CO:'Sudeste/Centro-Oeste',S:'Sul',NE:'Nordeste',N:'Norte'};
 const statuses:Record<string,string>={RECEIVED:'Recebida',ANALYSIS:'Em análise',MANAGER_APPROVED:'Aprovada pelo gestor',CLIENT_APPROVED:'Aprovada pelo cliente',CONTRACTED:'Contratada'};
 const colors=['#0891b2','#db2777','#16a34a','#d97706','#7c3aed','#475569'];
-function Plot({rows,axis}:{rows:Observation[];axis:'received'|'supply'}){
- const points=rows.map(r=>({row:r,x:axis==='supply'?r.start:monthIndex(r.proposal.created_at.slice(0,7))!}));
- if(!points.length)return <p>Nenhum preço elegível neste recorte.</p>;
- const min=Math.min(...points.map(p=>p.x)),max=Math.max(...points.map(p=>p.x)),peak=Math.max(...rows.map(r=>r.price));
- const x=(n:number)=>65+(n-min)*730/Math.max(1,max-min),y=(n:number)=>215-n/peak*170;
- const suppliers=Array.from(new Set(rows.map(r=>r.supplier.id)));const ticks=Array.from(new Set(points.map(p=>p.x))).sort((a,b)=>a-b);const step=Math.max(1,Math.ceil(ticks.length/8));
- return <><svg viewBox="0 0 880 270" role="img" aria-label={`Preços nominais por ${axis==='supply'?'início do fornecimento':'mês de recebimento'}`} style={{width:'100%',minWidth:320}}><line x1="65" y1="215" x2="810" y2="215" stroke="currentColor"/><text x="5" y="40" fill="currentColor">{Math.round(peak)}</text><text x="25" y="215" fill="currentColor">0</text>{ticks.filter((_,i)=>i%step===0||i===ticks.length-1).map(t=><text key={t} x={x(t)} y="245" textAnchor="middle" fontSize="12" fill="currentColor">{monthValue(t)}</text>)}{points.map(p=><circle key={p.row.proposal.id} cx={x(p.x)} cy={y(p.row.price)} r="6" fill={colors[suppliers.indexOf(p.row.supplier.id)%colors.length]} tabIndex={0}><title>{p.row.supplier.data.tradeName} · {monthValue(p.x)} · {money(p.row.price)}/MWh · {p.row.opportunity.data.title} · {statuses[p.row.proposal.status]}</title></circle>)}</svg><div className={styles.actions}>{suppliers.map((id,i)=><span key={id} style={{color:colors[i%colors.length]}}>● {rows.find(r=>r.supplier.id===id)!.supplier.data.tradeName}</span>)}</div><p className={styles.small}>Pontos observados em R$/MWh, sem interpolar meses ausentes. Os valores e condições completos estão na tabela abaixo.</p></>;
-}
 export default function TradingAnalysis({rows,receivedIds}:{rows:TradingRow[];receivedIds:string[]}){
  const [filters,setFilters]=useState({purchase:'',band:'',supplier:'',submarket:'',energy:'',from:'',to:''});
  const [axis,setAxis]=useState('received');const all=observations(rows,new Set(receivedIds)),visible=filterObservations(all,filters);

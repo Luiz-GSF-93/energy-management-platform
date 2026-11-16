@@ -18,7 +18,7 @@ export function observations(rows:TradingRow[],receivedIds:Set<string>):Observat
  }
  result.sort((a,b)=>Date.parse(a.proposal.created_at)-Date.parse(b.proposal.created_at)||a.proposal.id.localeCompare(b.proposal.id));
  const previous=new Map<string,number>();
- for(const row of result){const d=row.proposal.data;const key=JSON.stringify([row.opportunity.id,row.supplier.id,d.energyType,d.flexibility,d.modulation,d.guarantees,d.conditions]);const last=previous.get(key);row.variation=last===undefined?null:(row.price/last-1)*100;row.difference=last===undefined?null:row.price-last;previous.set(key,row.price);}
+ for(const row of result){const d=row.proposal.data;const key=JSON.stringify([row.opportunity.id,row.supplier.id,d.energyType,d.flexibility,d.modulation,d.guarantees,d.conditions,d.flexibilityUpperPercent,d.flexibilityLowerPercent,d.seasonality,d.correctionIndex,d.billingTerms]);const last=previous.get(key);row.variation=last===undefined?null:(row.price/last-1)*100;row.difference=last===undefined?null:row.price-last;previous.set(key,row.price);}
  return result;
 }
 export function filterObservations(rows:Observation[],f:{purchase:string;band:string;supplier:string;submarket:string;energy:string;from:string;to:string}){
