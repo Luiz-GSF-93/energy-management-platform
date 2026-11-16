@@ -8,6 +8,8 @@ import {TradingCommunicationService} from './trading-communication.service';
 export class TradingCommunicationController{
  constructor(private service:TradingCommunicationService){}
  @Get('tasks') @Header('Cache-Control','no-store') tasks(@Tenant() t:TenantContext){return this.service.tasks(t);}
+ @Get('companies') @Header('Cache-Control','no-store') companies(@Tenant() t:TenantContext,@Query('page') page='0'){return this.service.companies(t,Number(page));}
+ @Get('companies/:id') @Header('Cache-Control','no-store') company(@Tenant() t:TenantContext,@Param('id') id:string,@Query('page') page='0',@Query('threadId') thread?:string,@Query('messagePage') messagePage='0'){return this.service.companies(t,Number(page),id,thread,Number(messagePage));}
  @Get() @Header('Cache-Control','no-store') inbox(@Tenant() t:TenantContext,@Query('page') page='0'){return this.service.inbox(t,Number(page));}
  @Post('messages') message(@Tenant() t:TenantContext,@Body() b:unknown){return this.service.message(t,b);}
  @Get('proposals/:id/thanks') @Header('Cache-Control','no-store') preview(@Tenant() t:TenantContext,@Param('id') id:string){return this.service.preview(t,id);}

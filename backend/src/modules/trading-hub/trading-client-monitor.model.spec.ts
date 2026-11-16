@@ -1,4 +1,4 @@
-import {clientMonitorSnapshot} from './trading-client-monitor.model';
+import {clientMonitorSnapshot,guaranteeSummary} from './trading-client-monitor.model';
 const terms={energyType:'CONVENTIONAL',flexibilityUpperPercent:40,flexibilityLowerPercent:-20,seasonality:'Flat',correctionIndex:'IPCA',billingTerms:'5DU após NF'};
 function fixture(){return {serverNow:'2026-11-16T12:00:00Z',expiresAt:'2026-11-18T12:00:00Z',opportunity:{data:{...terms,title:'Round',annualReferencePrices:[{year:2027,priceBrlMwh:210}]}},proposals:[200,220].map((price,i)=>({id:'p'+i,status:'RECEIVED',created_at:'2026-11-16',data:{...terms,supplierId:'s'+i,priceBrlMwh:price,validUntil:'2026-12-01',documents:['private-id']}})),suppliers:[{id:'s0',data:{tradeName:'Supplier',quotationContacts:[{email:'private@example.test'}]}}],counts:{issued:2},pld:[{month:'2026-09-01',mean_brl_mwh:100,source:'CCEE',published_at:'2026-10-01'},{month:'2026-10-01',mean_brl_mwh:110,source:'CCEE',published_at:'2026-11-01'}],history:[{proposalId:'foreign',priceBrlMwh:1,at:'2026-10-01'}]};}
 describe('client monitor projection',()=>{
@@ -6,4 +6,9 @@ describe('client monitor projection',()=>{
  it('does not assign financial score or rank to unlike/missing terms and expired proposals',()=>{const f:any=fixture();f.proposals[0].data.correctionIndex='IGPM';f.proposals[1].data.validUntil='2026-11-15';const r=clientMonitorSnapshot(f);expect(r.proposals).toHaveLength(1);expect(r.proposals[0].rank).toBeNull();expect(r.proposals[0].score).toBeNull();});
  it('flags stale and discontinuous PLD without inventing variation or zero references',()=>{const f=fixture();f.pld[1].month='2026-07-01';const r=clientMonitorSnapshot(f);expect(r.pld.fresh).toBe(false);expect(r.pld.variationPercent).toBeNull();f.pld=[];expect(clientMonitorSnapshot(f).pld.rows).toEqual([]);});
  it('uses tied ranking and rejects no terms as a comparable price',()=>{const f:any=fixture();f.proposals[1].data.priceBrlMwh=200;expect(clientMonitorSnapshot(f).proposals.map((p:any)=>p.rank)).toEqual([1,1]);delete f.opportunity.data.billingTerms;expect(clientMonitorSnapshot(f).proposals.every((p:any)=>p.score===null)).toBe(true);});
+});
+
+describe('explicit guarantee strengths',()=>{
+ it('recognizes only explicit complete waivers and never conditional or ambiguous wording',()=>{expect(guaranteeSummary('Não exige garantia').waived).toBe(true);for(const text of ['Sem garantia adicional','Sem garantia se aprovado','Não informada','Fiança de 3 meses','sem garantia, sujeito a análise'])expect(guaranteeSummary(text).waived).toBe(false);});
+ it('limits top five to comparable proposals and keeps prudential research unverified',()=>{const f:any=fixture();f.proposals[0].data.guarantees='Sem garantia';const r=clientMonitorSnapshot(f);expect(r.topFive[0].strengths).toContain('Dispensa de garantia declarada');expect(r.prudential.status).toBe('NOT_VERIFIED');expect(r.prudential.checkedAt).toBeNull();f.proposals[0].data.billingTerms='Outra condição';expect(clientMonitorSnapshot(f).topFive).toHaveLength(1);});
 });
