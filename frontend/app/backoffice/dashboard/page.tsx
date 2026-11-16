@@ -11,6 +11,7 @@ import FinancialAnalyticsPanel from '@/app/components/FinancialAnalyticsPanel';
 import EnergyPriceDashboard from '@/app/components/EnergyPriceDashboard';
 import PublishedFinancialDashboard from '@/app/components/PublishedFinancialDashboard';
 import IntegrationRenewal from '@/app/components/IntegrationRenewal';
+import OwnerMonitoring from '@/app/components/OwnerMonitoring';
 
 import CceeIntegration from '@/app/components/CceeIntegration';
 import './dashboard.css';
@@ -31,6 +32,7 @@ export default function DashboardPage() {
               Visão consolidada do ambiente de Administração.
             </p>
           </header>
+          <OwnerMonitoring/>
 
           <section className="ds-card">
             <h2>{context?.scope === 'global' ? 'Administração da plataforma' : 'Organização em operação'}</h2>
