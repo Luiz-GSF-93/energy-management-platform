@@ -20,6 +20,7 @@ CREATE TABLE public.legal_audit_jobs(
 );
 CREATE INDEX legal_audit_ready ON public.legal_audit_jobs(next_attempt_at,created_at) WHERE state IN('QUEUED','OCR_POLLING','ANALYZING','REPORTING');
 CREATE INDEX legal_audit_organization_recent ON public.legal_audit_jobs(organization_id,created_at DESC,id DESC);
+CREATE INDEX legal_audit_live_leases ON public.legal_audit_jobs(lease_until) WHERE lease_until IS NOT NULL;
 CREATE TABLE public.legal_audit_events(
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,job_id uuid NOT NULL REFERENCES public.legal_audit_jobs(id),organization_id text NOT NULL,
  state text NOT NULL,kind text NOT NULL,body jsonb NOT NULL DEFAULT '{}',actor_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now()
