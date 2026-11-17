@@ -73,6 +73,17 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 
  // Regression: explicit monthly unit fees must pass the SQL approval gate too.
  await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261332_eva_unit_fee_approval.sql'),'utf8'));
+
+ // Production already contains the dated active-contract guard. Accept that exact
+ // baseline as well, preserving the later period correction.
+ const productionGuard="IF p_scope='UNIT' AND p_action IN('publish','decide') AND (p_action='publish' OR p_body->>'decision'='APPROVE') AND (SELECT count(*) FROM public.consumer_units WHERE organization_id=p_org AND customer_id=r.customer_id AND status='ACTIVE')>1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(r.source_snapshot#>'{financial,tables,management_contracts}','[]')) m WHERE m->>'status'='ACTIVE' AND coalesce(m->>'start_date','')<=to_char((p_month||'-01')::date+interval '1 month'-interval '1 day','YYYY-MM-DD') AND coalesce(m->>'end_date','9999-12-31')>=p_month||'-01' AND coalesce(nullif(m->>'savings_percentage',''),'0')::numeric>0) THEN RAISE EXCEPTION 'Shared variable fee requires consolidated closing' USING ERRCODE='22023';END IF;";
+ const scopedSignature='public.eva_scoped_closing_action(text,text,text,boolean,text,text,text,uuid,jsonb,text,text,boolean)';
+ const patchedDefinition=(await db.query('SELECT pg_get_functiondef($1::regprocedure) d',[scopedSignature])).rows[0].d;
+ const currentGuard=patchedDefinition.match(/IF p_scope='UNIT' AND p_action IN\('publish','decide'\)[^;]*;END IF;/)[0];
+ await db.exec(patchedDefinition.replace(currentGuard,productionGuard));
+ await db.exec('DROP FUNCTION public.eva_unit_fee_requires_consolidation(jsonb,text,text,text)');
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261332_eva_unit_fee_approval.sql'),'utf8'));
+ ok((await db.query('SELECT pg_get_functiondef($1::regprocedure) d',[scopedSignature])).rows[0].d.includes('AND public.eva_unit_fee_requires_consolidation'));
  const contract={id:'fee',organization_id:'org',customer_id:'customer',status:'ACTIVE',start_date:'2026-01-01',end_date:'2026-12-31',savings_percentage:8};
  const rule={id:'unit-rule',organization_id:'org',customer_id:'customer',contract_id:'fee',month:'2026-08',version:1,source:'Explicit unit fee rule',fixed_fee_basis:'PER_UNIT',variable_fee_basis:'PER_UNIT',allocations:[]};
  const snap=(contracts=[contract],rules=[rule])=>({financial:{tables:{management_contracts:contracts,management_fee_allocations:rules}}});
