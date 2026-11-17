@@ -7,7 +7,7 @@ import {feeMoney,allocateFee,allocationUnits} from '../contracts/services/manage
 import {tariffProduct} from '../contracts/services/tariff-preview';
 import {clientPublishedInsight} from '../portal-insights/portal-insights.model';
 import {canContinueWithReservation,isPreparationReservation,preparationPolicy} from './eva-preparation-policy';
-export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;comparative?:InvoiceComparison;unavailable?:string};
+export type ClosingEntry={unitId:string;name:string;plan?:any;context?:any;comparative?:InvoiceComparison;unavailable?:string;scopeRequirement?:string};
 const money=(value:unknown)=>{const v=typeof value==='number'&&Number.isFinite(value)?String(value):value;if(typeof v!=='string'||!/^-?(0|[1-9][0-9]{0,11})(\.\d{1,2})?$/.test(v))throw Error('Valor monetário sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*100n+BigInt(f.padEnd(2,'0')))*(v.startsWith('-')?-1n:1n);};
 const scale=(v:unknown,p=6)=>{if(typeof v!=='string'||!new RegExp('^-?(0|[1-9][0-9]{0,11})(\\.\\d{1,'+p+'})?$').test(v))throw Error('Decimal sem base');const [w,f='']=v.replace('-','').split('.');return (BigInt(w)*10n**BigInt(p)+BigInt(f.padEnd(p,'0')))*(v.startsWith('-')?-1n:1n);};
 const fixed=(v:bigint,p:number)=>{const s=(v<0n?-v:v).toString().padStart(p+1,'0');return (v<0n?'-':'')+s.slice(0,-p)+'.'+s.slice(-p);};
@@ -49,7 +49,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
  const add=(s:string)=>{if(!observations.includes(s))observations.push(s);};
  let estimated=false;
  for(const e of entries){
-  const p=e.plan,c=e.context,ownMissing:string[]=[],o=p?.operational;
+  const p=e.plan,c=e.context,ownMissing:string[]=e.scopeRequirement?[e.scopeRequirement]:[],o=p?.operational;
   const draft=contractClosingDraftEnabled()&&p?.contractDraft&&c?.contractDraft&&indexMemoryHash(p.contractDraft)===indexMemoryHash(c.contractDraft)?p.contractDraft:null;
   if(draft)pendingActions.push(...draft.requirements.map((r:any)=>({...r,unitId:e.unitId})));
   if(contractClosingDraftEnabled()&&e.comparative?.missing.length){
@@ -179,6 +179,8 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
   if(p.referenceUsed)recommendations.push('Atualize o cadastro e mantenha o contrato/preço vigente para as próximas competências.');
  }
  for(const u of units)for(const m of u.missing)if(!missing.includes(u.name+': '+m))missing.push(u.name+': '+m);
+ let knownAcr:string|null=null;try{if(units.length&&units.length===entries.length&&new Set(units.map(u=>u.id)).size===units.length)knownAcr=fmt(units.reduce((sum:bigint,u:any)=>sum+money(u.acr),0n));}catch{/* Partial tariff subtotals never become a complete ACR preview. */}
+ const comparisonPreview={state:knownAcr===null?'PENDING':'AVAILABLE',acr:knownAcr,financialApproval:false};
  const financial:any={status:'INCOMPLETE',acr:null,aclBeforeFees:null,fixedFee:null,variableFee:null,totalFees:null,aclAfterFees:null,savings:null,savingsPercent:null};
  if(!entries.length||new Set(entries.map(e=>e.unitId)).size!==entries.length)missing.push('O conjunto de unidades está ausente ou duplicado.');
  const estimateReviewOnly=missing.length>0&&missing.every(m=>estimateReviews.has(m));
@@ -211,5 +213,5 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
  }
  const completeness=missing.length?'INCOMPLETE':estimated?'ESTIMATED':'COMPLETE';
  const policy=preparationPolicy({units,missing,financial},[...policyReservations,...units.flatMap(u=>(u.sources.costReservations??[]).map((r:any)=>({unitId:u.id,code:'COST_TAX_RESERVATION',message:'Custo nominal preservado com ressalva tributária: '+r.label,source:r.source})))]);
- return {preparationPolicy:policy,...(proposalFinancial?{proposalFinancial,preparation:{state:'COMPLETE_REVIEW_REQUIRED',percent:100}}:{}),formatVersion:'eva-assisted-closing-1.0',methodology:entries.find(e=>e.comparative)?.comparative?.method??'SOURCE_BILLING_V1',organizationId:org,customerId:customer,month,unitIds:entries.map(e=>e.unitId).sort(),completeness,approvalEligible:!missing.length,financial,units,missing:[...new Set(missing)],pendingActions,observations:[...new Set(observations)],recommendations:[...new Set(recommendations)],justification:proposalFinancial?'Preenchimento da proposta concluído pela EVA. Cobertura da nota, tratamento tributário proposto, valores estimados e totais provisórios aguardam revisão do backoffice antes da aprovação.':missing.length?'A EVA preencheu as fontes disponíveis. O fechamento permanece incompleto pelas evidências relacionadas no resumo; nenhum total parcial foi convertido em resultado final.':estimated?'Fechamento preparado com referências identificadas e memória preservada. Confira as condições e diferenças antes da decisão.':'Fechamento preparado com fontes da competência e cálculos preservados para decisão.',publicationAllowed:false,automaticApproval:false};
+ return {comparisonPreview,preparationPolicy:policy,...(proposalFinancial?{proposalFinancial,preparation:{state:'COMPLETE_REVIEW_REQUIRED',percent:100}}:{}),formatVersion:'eva-assisted-closing-1.0',methodology:entries.find(e=>e.comparative)?.comparative?.method??'SOURCE_BILLING_V1',organizationId:org,customerId:customer,month,unitIds:entries.map(e=>e.unitId).sort(),completeness,approvalEligible:!missing.length,financial,units,missing:[...new Set(missing)],pendingActions,observations:[...new Set(observations)],recommendations:[...new Set(recommendations)],justification:proposalFinancial?'Preenchimento da proposta concluído pela EVA. Cobertura da nota, tratamento tributário proposto, valores estimados e totais provisórios aguardam revisão do backoffice antes da aprovação.':missing.length?'A EVA preencheu as fontes disponíveis. O fechamento permanece incompleto pelas evidências relacionadas no resumo; nenhum total parcial foi convertido em resultado final.':estimated?'Fechamento preparado com referências identificadas e memória preservada. Confira as condições e diferenças antes da decisão.':'Fechamento preparado com fontes da competência e cálculos preservados para decisão.',publicationAllowed:false,automaticApproval:false};
 }

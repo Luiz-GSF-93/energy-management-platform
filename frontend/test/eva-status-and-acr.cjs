@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('../../backend/node_modules/typescript');
+function load(file){const module={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:module.exports,module,Intl,Date,Set,BigInt});return module.exports;}
+const status=load('app/backoffice/ocr-audit/legal-audit-status.ts'),acr=load('app/backoffice/contracts/closing-known-acr.ts');
+assert.equal(status.legalActive('TECHNICAL_REVIEW'),false);
+assert.equal(status.legalActive('ANALYZING'),true);
+assert.equal(status.legalState('TECHNICAL_REVIEW'),'Conferência técnica necessária');
+assert.equal(status.legalEvent('REQUESTED'),'Solicitação recebida');
+assert.equal(status.legalEvent('FAIL'),'Interrupção registrada');
+assert.equal(status.legalDateOnly('2026-11-17'),'17/11/2026');
+assert.match(status.legalDateTime('2026-11-17T01:15:00Z'),/16\/11\/2026.*22:15:00.*Brasília/);
+assert.doesNotMatch(status.legalNote('AI_RESULT_UNKNOWN — confira histórico técnico'),/AI_RESULT_UNKNOWN/);
+assert.match(status.legalNote('AI_RESULT_UNKNOWN'),/consumo antes/);
+assert.equal(status.legalTopic('CESSAO'),'Cessão de direitos e obrigações');
+assert.equal(acr.knownClosingAcr({comparisonPreview:{state:'AVAILABLE',acr:'1000.31',financialApproval:false}}),'1000.31');
+assert.equal(acr.knownClosingAcr({units:[{id:'a',acr:'0.00'},{id:'b',acr:null,prepared:{acr:{identifiedAmount:'20.00'}}}]}),null);
+assert.equal(acr.knownClosingAcr({units:[{id:'a',acr:'100.00'},{id:'a',acr:'100.00'}]}),null);
+assert.equal(acr.knownClosingAcr({units:[]}),null);
+assert.equal(acr.knownClosingAcr({units:[{id:'a',acr:'12.345'}]}),null);
+assert.equal(acr.knownClosingAcr({comparisonPreview:{state:'PENDING',acr:'1000.31',financialApproval:false}}),null);
+assert.equal(acr.knownClosingAcr({comparisonPreview:{state:'AVAILABLE',acr:'1000.31',financialApproval:true}}),null);
+console.log('17 checks passed: Portuguese stages, Brasília dates, no false processing state and complete backend ACR only.');
