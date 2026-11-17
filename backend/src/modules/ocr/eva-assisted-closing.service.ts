@@ -40,7 +40,15 @@ export class EvaAssistedClosingService{
   if(['23505','PT409','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
   if(r.error?.code==='57014'&&action==='history')throw new ServiceUnavailableException('A consulta do histórico excedeu o prazo. Suas confirmações anteriores foram preservadas. Atualize o histórico antes de preparar outra versão.');
   if(r.error?.code==='57014')throw new ServiceUnavailableException({message:'A atualização da proposta excedeu o tempo de consulta. Os registros já salvos foram preservados. Consulte o histórico antes de repetir.',code:'EVA_CLOSING_SOURCE_TIMEOUT',stage:action});
-  if(r.error?.code==='22023')throw new BadRequestException('Dados insuficientes ou decisão inválida.');
+  if(r.error?.code==='22023'){
+   const known:Record<string,[string,string]>={
+    'Shared variable fee requires consolidated closing':['EVA_UNIT_FEE_REQUIRES_CONSOLIDATION','O honorário variável desta competência exige fechamento consolidado. Confira a regra mensal do contrato; a aprovação por unidade exige base por unidade explicitamente registrada.'],
+    'Report scope mismatch':['EVA_CLOSING_SCOPE_MISMATCH','A proposta não corresponde ao escopo selecionado. Abra o fechamento da unidade ou o consolidado correto antes de decidir.'],
+    'Invalid explicit closing scope':['EVA_CLOSING_SCOPE_INVALID','Selecione uma unidade e competência válidas antes de decidir.']
+   };
+   const issue=known[r.error.message];
+   throw new BadRequestException({code:issue?.[0]??'EVA_CLOSING_DECISION_INVALID',message:issue?.[1]??'A decisão não foi aceita. Confira a justificativa, as confirmações obrigatórias e a versão atual no histórico. Os preenchimentos foram preservados.',stage:action});
+  }
   throw new ServiceUnavailableException('Resultado não confirmado. Consulte o histórico antes de repetir.');
  }
  async history(q:any,t:TenantContext){if(!this.enabled())return {enabled:false};const {page='0',...scope}=q;this.scope(scope);if(typeof page!=='string'||!/^\d{1,3}$/.test(page))throw new BadRequestException('Página inválida.');const history=await this.rpc('history',scope,t,null,{page:Number(page)});let publications:any[]=[];if(this.publicationEnabled()&&history.rows?.length){const r=await this.db.getClient().rpc('read_eva_closing_publications',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:false,p_from:scope.month,p_to:scope.month,p_customer:history.rows[0].customer_id});if(r.error||!Array.isArray(r.data))throw new ServiceUnavailableException('Não foi possível conferir a divulgação.');publications=r.data.map((p:any)=>({id:p.id,closingId:p.closingId,state:p.state}));}return {enabled:true,guidedReviewEnabled:process.env.EVA_GUIDED_REVIEW_ENABLED!=='false',approvalPublishes:this.publicationEnabled(),publications,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',contextEnabled:this.config.get('EVA_CLOSING_CONTEXT_ENABLED')==='true',changesEnabled:this.config.get('EVA_CLOSING_CHANGES_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...history};}
