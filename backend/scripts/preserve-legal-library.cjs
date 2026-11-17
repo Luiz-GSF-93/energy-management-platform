@@ -35,13 +35,17 @@ function sourceIdentity(source,row){const u=new URL(row.url);let authority,famil
    if(src.state!=='REGISTERED')throw Error('Public source suspended');
    if(!entry.documentId){const body=command('prepare',entry);body.sourceId??=entry.sourceId;body.expectedSourceEventId??=src.eventId;body.expectedSourceRevisionHash??=src.revisionHash;body.metadata??={title:source.title.slice(0,155),edition:row.sourceId==='ons-procedimentos'?'Submódulo 8.1 PR · revisão 2025.06':row.sourceId==='cnpe-resolucoes'?'Resolução CNPE 8/2026 · DOU 13/05/2026':source.edition.slice(0,100),url:src.metadata.url,publishedOn:null,validFrom:null,validTo:null,provenance:('Captura HTTPS oficial em 17/11/2026. Arquivo: '+row.url+'. SHA-256 '+row.sha256+'. '+(row.sourceId==='lei-seguros'?'DOU com múltiplos atos: identificar limites da Lei 15.040; não atribuir outros atos à lei. ':'')+'Extração nativa contextual, sem declaração de revisão normativa.').slice(0,1000)};persist();entry.documentId=(await originals.prepare(actor,null,body)).documentId;persist();}
    let doc=await originals.detail(actor,entry.documentId);
-   if(doc.state==='PREPARED'){const body=command('upload',entry);if(!body.expectedEventId){body.expectedEventId=doc.eventId;body.expectedRevisionHash=doc.revisionHash;body.fileHash=row.sha256;persist();}await originals.upload(actor,entry.documentId,body,{buffer:bytes,size:bytes.length,originalname:row.sourceId+'.pdf',mimetype:'application/pdf'});doc=await originals.detail(actor,entry.documentId);}
+   if(['UNKNOWN','RESERVED','RECONCILING'].includes(doc.state)){
+    const recovery=command('reconcile',entry);if(!recovery.expectedEventId){recovery.expectedEventId=doc.eventId;recovery.expectedRevisionHash=doc.revisionHash;persist();}
+    await originals.reconcile(actor,entry.documentId,doc.operationId,recovery);doc=await originals.detail(actor,entry.documentId);
+   }
+   if(doc.state==='PREPARED'||doc.state==='FAILED'&&doc.diagnostic==='NOT_FOUND'){const body=command(doc.state==='FAILED'?'verifiedMissingUpload':'upload',entry);if(!body.expectedEventId){body.expectedEventId=doc.eventId;body.expectedRevisionHash=doc.revisionHash;body.fileHash=row.sha256;persist();}await originals.upload(actor,entry.documentId,body,{buffer:bytes,size:bytes.length,originalname:row.sourceId+'.pdf',mimetype:'application/pdf'});doc=await originals.detail(actor,entry.documentId);}
    if(doc.state!=='PRESERVED')throw Error('Storage receipt '+doc.state+'; reconcile before retrying, never resubmit blindly');
-   entry.result=await indexFile(row.sourceId,entry.documentId,bytes);persist();console.log(JSON.stringify({sourceId:row.sourceId,state:'PRESERVED_CONTEXT',pages:entry.result.pageCount}));
+   entry.result=await indexFile(row.sourceId,entry.documentId,bytes);delete entry.error;persist();console.log(JSON.stringify({sourceId:row.sourceId,state:'PRESERVED_CONTEXT',pages:entry.result.pageCount}));
   }catch(e){entry.error={message:e.message,code:e.code??null};persist();console.log(JSON.stringify({sourceId:row.sourceId,state:'PENDING',...entry.error}));}
  }
  // Reuse the previously preserved ANEEL original and CCEE procedures; never upload them again.
- const existing=(await originals.list(actor,{page:'0',state:'PRESERVED'})).rows;
+ const existing=[];for(let page=0;page<20;page++){const batch=await originals.list(actor,{page:String(page),state:'PRESERVED'});existing.push(...batch.rows);if((page+1)*batch.pageSize>=batch.total)break;}
  for(const doc of existing){
   if(/homologa|parte|lote|trecho/i.test(doc.title))continue;
   const sourceId=/1000/.test(doc.title)?'aneel1000':/1[. ,]?[68]/.test(doc.title)?'ccee-pdc':null;if(!sourceId||indexed.some(f=>f.documentId===doc.id))continue;
