@@ -70,6 +70,40 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  await scoped('reserve',id(1),id(44),sharedBody);await scoped('finish',id(1),id(44),{});
  await deny(()=>scoped('decide',id(1),id(44),{...decision,hash:sharedBody.hash},'UNIT',id(24),'manager'));
  ok((await scoped('history',id(1),null,{page:0})).rows[0].state==='READY_FOR_REVIEW');
+
+ // Regression: explicit monthly unit fees must pass the SQL approval gate too.
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261332_eva_unit_fee_approval.sql'),'utf8'));
+ const contract={id:'fee',organization_id:'org',customer_id:'customer',status:'ACTIVE',start_date:'2026-01-01',end_date:'2026-12-31',savings_percentage:8};
+ const rule={id:'unit-rule',organization_id:'org',customer_id:'customer',contract_id:'fee',month:'2026-08',version:1,source:'Explicit unit fee rule',fixed_fee_basis:'PER_UNIT',variable_fee_basis:'PER_UNIT',allocations:[]};
+ const snap=(contracts=[contract],rules=[rule])=>({financial:{tables:{management_contracts:contracts,management_fee_allocations:rules}}});
+ const requires=async(snapshot,org='org',customer='customer',month='2026-08')=>(await db.query('SELECT public.eva_unit_fee_requires_consolidation($1,$2,$3,$4) blocked',[JSON.stringify(snapshot),org,customer,month])).rows[0].blocked;
+ ok(!await requires(snap()));
+ for(const patch of [{month:'2026-07'},{organization_id:'other'},{customer_id:'other'},{contract_id:'other'},{source:'  '},{variable_fee_basis:'CONSOLIDATED'},{fixed_fee_basis:'CONSOLIDATED'},{allocations:[{consumerUnitId:id(1),percentage:'100'}]},{version:0}])ok(await requires(snap([contract],[{...rule,...patch}])));
+ ok(await requires(snap([contract],[])));ok(await requires(snap([contract],[rule,{...rule,id:'duplicate'}])));
+ ok(await requires(snap([contract],[rule,{...rule,version:2,variable_fee_basis:'CONSOLIDATED'}])));
+ ok(!await requires(snap([contract],[{...rule,variable_fee_basis:'CONSOLIDATED'}, {...rule,version:2}])));
+ ok(await requires(snap(),'other'));ok(await requires(snap(),'org','other'));ok(await requires(snap(),'org','customer','2026-09'));
+ ok(!await requires(snap([{...contract,end_date:'2026-07-31'}],[])));
+ ok(await requires(snap([contract,{...contract,id:'unconfigured'}])));
+ ok(await requires(snap([{...contract,status:null}])));
+ for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_function_privilege($1,'public.eva_unit_fee_requires_consolidation(jsonb,text,text,text)','EXECUTE') allowed",[role])).rows[0].allowed);
+ // The current scoped function keeps downstream membership, financial freshness and hash checks.
+ const capture=async rules=>db.exec(`CREATE OR REPLACE FUNCTION capture_financial_sources(text,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT jsonb_build_object('tables',jsonb_build_object('consumer_units',(SELECT jsonb_agg(to_jsonb(u)) FROM public.consumer_units u WHERE organization_id=$1 AND customer_id=$2),'management_contracts','${JSON.stringify([contract])}'::jsonb,'management_fee_allocations','${JSON.stringify(rules)}'::jsonb))$$;`);
+ await capture([rule]);sources=await scoped('capture',id(1),null,{});
+ const unitBody={...ub,basis:'4'.repeat(64),sources};
+ await scoped('reserve',id(1),id(45),unitBody);await scoped('finish',id(1),id(45),{});
+ await deny(()=>scoped('decide',id(1),id(45),decision));
+ await deny(()=>scoped('decide',id(1),id(45),{...decision,hash:'0'.repeat(64)},'UNIT',id(24),'manager'));
+ ok((await scoped('decide',id(1),id(45),decision,'UNIT',id(24),'manager')).state==='APPROVED');
+ const eventCount=(await db.query('SELECT count(*) n FROM eva_assisted_closing_events WHERE closing_id=$1',[id(45)])).rows[0].n;
+ ok((await scoped('decide',id(1),id(45),decision,'UNIT',id(24),'manager')).state==='APPROVED');
+ ok((await db.query('SELECT count(*) n FROM eva_assisted_closing_events WHERE closing_id=$1',[id(45)])).rows[0].n===eventCount);
+ await capture([{...rule,version:2,variable_fee_basis:'CONSOLIDATED'}]);
+ sources=await scoped('capture',id(1),null,{});const blockedBody={...ub,basis:'5'.repeat(64),sources};
+ await scoped('reserve',id(1),id(46),blockedBody);await scoped('finish',id(1),id(46),{});
+ await assert.rejects(()=>scoped('decide',id(1),id(46),decision,'UNIT',id(24),'manager'),e=>e.message==='Shared variable fee requires consolidated closing');checks++;
+ ok((await scoped('history',id(1),null,{page:0})).rows[0].state==='READY_FOR_REVIEW');
+
  console.log('Assisted closing SQL:',checks,'checks passed');
  }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
 
