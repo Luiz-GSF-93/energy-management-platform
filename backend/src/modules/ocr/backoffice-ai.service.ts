@@ -13,6 +13,7 @@ export class BackofficeAiService {
  private readonly active=new Set<string>();
  private readonly recent=new Map<string,number[]>();
  constructor(private connector:AzureBackofficeAiConnector,private audit:AuditService,@Optional() private budget?:BotEnergyBudgetService,@Optional() private licenses?:BotEnergyLicenseService){}
+ async connectionStatus(){return this.connector.connectionStatus();}
  async available(t:TenantContext){return !!t.organizationId&&!!t.userId&&(t.scope as string)!=='global'&&(['operacional','gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions.includes(P.INTELLIGENCE_AI_USE)&&this.connector.available(t.organizationId)&&(process.env.BOT_ENERGY_LICENSE_MODE!=='true'||!!this.licenses&&await this.licenses.available(t.organizationId));}
  async interpret(t:TenantContext,question:string,evidence:AiEvidence[],document?:string,module:'OCR'|'BOT_ENERGY'|'CHAT'|'AUDITORIA'|'ANALISES'='OCR',options:{settleRejectedUsage?:boolean;legalProfile?:boolean}={}):Promise<AiReview>{
   const checkedAt=new Date().toISOString();
@@ -45,7 +46,7 @@ export class BackofficeAiService {
     try{await this.budget.settle(reservation,error.usage);settled=true;}catch{/* Keep reservation pending; no retry or invented zero cost. */}
    }
    const consumptionState=reservation?(settled?'SETTLED':'PENDING'):'NOT_RESERVED';
-   try{await log('FAILED',{errorCode:code,evidenceCount:evidence.length,consumptionState});}catch{/* Keep source-backed drafts even if diagnostic auditing is unavailable. */}
+   try{await log('FAILED',{errorCode:code,evidenceCount:evidence.length,consumptionState,...(error instanceof BackofficeAiError&&error.providerStatus?{providerStatus:error.providerStatus}:{})});}catch{/* Keep source-backed drafts even if diagnostic auditing is unavailable. */}
    const message=code==='PROVIDER_TIMEOUT'?'A IA excedeu o tempo de resposta. Os campos extraídos e rascunhos estão preservados; tente novamente.':error instanceof Error&&error.message.startsWith('Preços Azure')?error.message:'Não foi possível concluir a interpretação com fontes válidas. Os campos extraídos estão preservados. Confira as evidências e tente novamente; aprovação financeira continua separada.';
    return {state:'FAILED',message:options.settleRejectedUsage?'A interpretação não foi concluída. Os campos preparados estão preservados. Consulte o histórico antes de repetir; nenhuma nova tentativa foi iniciada automaticamente.':message,checkedAt,consumptionState};
   }
