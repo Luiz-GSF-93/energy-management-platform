@@ -7,21 +7,21 @@ import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {AuditService} from '../../common/services/audit.service';
 import {AiEvidence,AI_PROMPT_VERSION,AzureBackofficeAiConnector,BackofficeAiError} from './azure-backoffice-ai.connector';
 
-export type AiReview={state:'READY'|'NOT_CONFIGURED'|'NOT_AUTHORIZED'|'FAILED'|'NO_EVIDENCE';message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:AiEvidence[];model?:string;promptVersion?:string;checkedAt:string;consumptionState?:'SETTLED'|'PENDING'|'NOT_RESERVED'};
+export type AiReview={state:'READY'|'NOT_CONFIGURED'|'NOT_AUTHORIZED'|'FAILED'|'NO_EVIDENCE';message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:AiEvidence[];model?:string;promptVersion?:string;checkedAt:string;consumptionState?:'SETTLED'|'PENDING'|'NOT_RESERVED';retryAfterSeconds?:number};
 @Injectable()
 export class BackofficeAiService {
  private readonly active=new Set<string>();
  private readonly recent=new Map<string,number[]>();
  constructor(private connector:AzureBackofficeAiConnector,private audit:AuditService,@Optional() private budget?:BotEnergyBudgetService,@Optional() private licenses?:BotEnergyLicenseService){}
  async available(t:TenantContext){return !!t.organizationId&&!!t.userId&&(t.scope as string)!=='global'&&(['operacional','gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation')&&t.permissions.includes(P.INTELLIGENCE_AI_USE)&&this.connector.available(t.organizationId)&&(process.env.BOT_ENERGY_LICENSE_MODE!=='true'||!!this.licenses&&await this.licenses.available(t.organizationId));}
- async interpret(t:TenantContext,question:string,evidence:AiEvidence[],document?:string,module:'OCR'|'BOT_ENERGY'|'CHAT'|'AUDITORIA'|'ANALISES'='OCR',options:{settleRejectedUsage?:boolean}={}):Promise<AiReview>{
+ async interpret(t:TenantContext,question:string,evidence:AiEvidence[],document?:string,module:'OCR'|'BOT_ENERGY'|'CHAT'|'AUDITORIA'|'ANALISES'='OCR',options:{settleRejectedUsage?:boolean;legalProfile?:boolean}={}):Promise<AiReview>{
   const checkedAt=new Date().toISOString();
   if(!t.organizationId||!t.userId||(t.scope as string)==='global'||!['operacional','gestor','admin_org'].includes(t.role)&&t.accessMode!=='platform_operation'||!t.permissions.includes(P.INTELLIGENCE_AI_USE))return {state:'NOT_AUTHORIZED',message:'Interpretação generativa disponível somente para o backoffice autorizado.',checkedAt};
   if(!this.connector.available(t.organizationId))return {state:'NOT_CONFIGURED',message:'Azure OpenAI aguardando configuração do recurso e modelo. A leitura OCR e os preenchimentos pelas regras existentes continuam disponíveis.',checkedAt};
   const key=t.organizationId+':'+t.userId,now=Date.now();
   for(const [k,times] of this.recent)if(!times.some(n=>now-n<60000))this.recent.delete(k);
   const times=(this.recent.get(key)??[]).filter(n=>now-n<60000);
-  if(this.active.has(key)||times.length>=6||this.active.size>=8||this.recent.size>=1000)return {state:'FAILED',message:'A IA está ocupada. Consulte o status ou tente novamente depois; nenhum valor foi alterado.',checkedAt};
+  if(this.active.has(key)||times.length>=6||this.active.size>=8||this.recent.size>=1000)return {state:'FAILED',message:'A IA está ocupada. Consulte o status ou tente novamente depois; nenhum valor foi alterado.',checkedAt,...(options.legalProfile?{retryAfterSeconds:60}:{})};
   this.active.add(key);this.recent.set(key,[...times,now]);
   const requestId=randomUUID(),evidenceHash=createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
   const log=async(state:string,extra:Record<string,unknown>={})=>this.audit.logCreate({userId:t.userId,organizationId:t.organizationId,resourceType:'backoffice_ai_interpretation',resourceId:requestId,after:{state,documentId:document??null,promptVersion:AI_PROMPT_VERSION,evidenceHash,questionHash:createHash('sha256').update(question).digest('hex'),...extra}});
@@ -32,7 +32,7 @@ export class BackofficeAiService {
    if(process.env.BOT_ENERGY_LICENSE_MODE==='true'&&(!this.licenses||!await this.licenses.available(t.organizationId)))return {state:'NOT_AUTHORIZED',message:'EVA + RAG não incluído em licença vigente ou cota indisponível.',checkedAt};
    reservation=await this.budget.reserve(t.organizationId,t.userId,requestId,'conversation',{inputTokens:60000,outputTokens:2200},module);
    await log('REQUESTED');
-   const result=await this.connector.interpret(t.organizationId,question,evidence);
+   const result=await this.connector.interpret(t.organizationId,question,evidence,undefined,options.legalProfile===true);
    settlementAttempted=true;await this.budget.settle(reservation,result.usage);settled=true;
    await log(result.supported?'READY':'NO_EVIDENCE',{model:result.model,citations:result.citations,fields:result.fields,doubts:result.doubts,answer:result.answer});
    if(!result.supported)return {state:'NO_EVIDENCE',message:'Ainda não encontrei evidência suficiente para te orientar. Qual etapa do processo ou informação da fatura você quer entender? Assim posso conferir as fontes do contexto autorizado.',checkedAt};
