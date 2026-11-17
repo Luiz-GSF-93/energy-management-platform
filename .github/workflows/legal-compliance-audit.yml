@@ -1,0 +1,53 @@
+name: Legal compliance audit
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/2026133[3456]*'
+      - 'backend/test/legal-audit*'
+      - 'backend/test/legal-library*'
+      - 'backend/test/fixtures/legal-library*'
+      - 'frontend/app/backoffice/ocr-audit/**'
+      - 'frontend/app/backoffice/eva-knowledge/**'
+      - 'frontend/test/legal-audit*'
+      - '.github/workflows/legal-compliance-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/modules/ocr/**'
+      - 'backend/src/database/migrations/2026133[3456]*'
+      - 'frontend/app/backoffice/ocr-audit/**'
+      - 'frontend/app/backoffice/eva-knowledge/**'
+      - '.github/workflows/legal-compliance-audit.yml'
+permissions:
+  contents: read
+concurrency:
+  group: legal-compliance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm test -- --runInBand legal-audit legal-library-context azure-invoice.connector azure-backoffice-ai.connector backoffice-ai.service
+        working-directory: backend
+      - run: node test/legal-audit-sql.cjs && node test/legal-library-admission.cjs && node test/legal-audit-pdf.cjs
+        working-directory: backend
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node test/legal-audit.cjs && node test/ocr-audit.cjs
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

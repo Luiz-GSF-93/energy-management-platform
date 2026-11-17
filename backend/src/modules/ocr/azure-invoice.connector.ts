@@ -29,13 +29,13 @@ function retryAfter(response: Response): number {
 // One request per method: a durable worker must persist the operation before polling.
 // No automatic POST retry: a lost response may already have incurred a charge.
 export class AzureInvoiceConnector {
- constructor(private readonly config: AzureOcrConfig, private readonly transport: typeof fetch = fetch) {}
+ constructor(private readonly config: AzureOcrConfig, private readonly transport: typeof fetch = fetch,private readonly model:'prebuilt-invoice'|'prebuilt-read'='prebuilt-invoice') {}
  isConfigured(): boolean { try { endpointOf(this.config); return true; } catch { return false; } }
  private operationUrl(value: string): URL {
   const root = endpointOf(this.config);
   let url: URL;
   try { url = new URL(value); } catch { throw new OcrProviderError('INVALID_OPERATION'); }
-  const path = new RegExp("^/documentintelligence/documentModels/prebuilt-invoice/analyzeResults/[a-zA-Z0-9-]+$");
+  const path = new RegExp("^/documentintelligence/documentModels/"+this.model+"/analyzeResults/[a-zA-Z0-9-]+$");
   if (url.origin !== root.origin || url.username || url.password || url.hash || !path.test(url.pathname) || url.searchParams.get('api-version') !== AZURE_API_VERSION || [...url.searchParams.keys()].length !== 1) throw new OcrProviderError('INVALID_OPERATION');
   return url;
  }
@@ -48,11 +48,11 @@ export class AzureInvoiceConnector {
   const root = endpointOf(this.config);
   try { await inspectDocumentUpload(file); } catch { throw new OcrProviderError('INVALID_DOCUMENT'); }
   if (!/^[a-f0-9]{64}$/.test(expectedSha256) || file.size !== file.buffer.length || createHash('sha256').update(file.buffer).digest('hex') !== expectedSha256) throw new OcrProviderError('INVALID_DOCUMENT');
-  const url = new URL('/documentintelligence/documentModels/' + MODEL + ':analyze', root);
+  const url = new URL('/documentintelligence/documentModels/' + this.model + ':analyze', root);
   url.searchParams.set('api-version', AZURE_API_VERSION);
   url.searchParams.set('locale', 'pt-BR');
   url.searchParams.set('stringIndexType', 'utf16CodeUnit');
-  url.searchParams.set('features', 'keyValuePairs');
+  if(this.model==='prebuilt-invoice')url.searchParams.set('features', 'keyValuePairs');
   const response = await this.request(url, 'POST', JSON.stringify({ base64Source: file.buffer.toString('base64') }));
   if (response.status === 429) { await response.body?.cancel(); throw new OcrProviderError('RATE_LIMITED', retryAfter(response)); }
   // 5xx and unexpected responses are ambiguous for a POST; never retry blindly.
@@ -87,7 +87,7 @@ export class AzureInvoiceConnector {
   if (data?.status === 'running' || data?.status === 'notStarted') return { status: 'running', retryAfterSeconds: retryAfter(response) };
   if (data?.status === 'failed' || data?.status === 'canceled') return { status: 'failed' };
   const result = data?.analyzeResult;
-  if (data?.status !== 'succeeded' || !result || result.apiVersion !== AZURE_API_VERSION || result.modelId !== MODEL || typeof result.content !== 'string' || !Array.isArray(result.documents) || !Array.isArray(result.pages) || !result.pages.length) throw new OcrProviderError('INVALID_RESPONSE');
+  if (data?.status !== 'succeeded' || !result || result.apiVersion !== AZURE_API_VERSION || result.modelId !== this.model || typeof result.content !== 'string' || (this.model==='prebuilt-invoice'&&!Array.isArray(result.documents)) || !Array.isArray(result.pages) || !result.pages.length) throw new OcrProviderError('INVALID_RESPONSE');
   return { status: 'succeeded', result };
  }
 }
