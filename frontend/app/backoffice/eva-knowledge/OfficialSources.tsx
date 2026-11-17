@@ -4,8 +4,8 @@ import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card,Input} from '@/app/components/ui';
 import WorkflowModal from '../contracts/WorkflowModal';
 
-const families:Record<string,string[]>={ANEEL:['ANEEL_RULES','PRORET','PRODIST'],PLANALTO:['LEGISLATION'],CCEE:['CCEE_RULES','CCEE_PROCEDURES'],ONS:['ONS_PROCEDURES'],DISTRIBUTOR:['DISTRIBUTOR_DOCUMENTS']};
-const familyLabels:Record<string,string>={ANEEL_RULES:'Regras da ANEEL',PRORET:'PRORET',PRODIST:'PRODIST',LEGISLATION:'Legislação oficial',CCEE_RULES:'Regras de Comercialização',CCEE_PROCEDURES:'Procedimentos de Comercialização',ONS_PROCEDURES:'Procedimentos de Rede',DISTRIBUTOR_DOCUMENTS:'Documentos de distribuidoras'};
+const families:Record<string,string[]>={ANEEL:['ANEEL_RULES','PRORET','PRODIST'],PLANALTO:['LEGISLATION'],CCEE:['CCEE_RULES','CCEE_PROCEDURES'],ONS:['ONS_PROCEDURES','ONS_REPORTS'],MME:['MME_LEGISLATION'],CNPE:['CNPE_RESOLUTIONS'],EPE:['ENERGY_PLANNING'],DOU:['OFFICIAL_GAZETTE'],DISTRIBUTOR:['DISTRIBUTOR_DOCUMENTS']};
+const familyLabels:Record<string,string>={ANEEL_RULES:'Regras da ANEEL',PRORET:'PRORET',PRODIST:'PRODIST',LEGISLATION:'Legislação oficial',CCEE_RULES:'Regras de Comercialização',CCEE_PROCEDURES:'Procedimentos de Comercialização',ONS_PROCEDURES:'Procedimentos de Rede',ONS_REPORTS:'Relatórios operativos ONS',MME_LEGISLATION:'Legislação MME',CNPE_RESOLUTIONS:'Resoluções CNPE',ENERGY_PLANNING:'Planejamento energético EPE',OFFICIAL_GAZETTE:'Diário Oficial da União',DISTRIBUTOR_DOCUMENTS:'Documentos de distribuidoras'};
 const labels:Record<string,string>={DRAFT:'Rascunho',REGISTERED:'Cadastro confirmado',SUSPENDED:'Cadastro suspenso'};
 const prefix='/api/v1/admin/eva/official-sources';
 type Metadata={title:string;authority:string;family:string;url:string;markets:string[];scopeNote:string;cadenceDays:number};

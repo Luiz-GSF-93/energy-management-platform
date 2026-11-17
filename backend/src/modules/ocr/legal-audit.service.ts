@@ -1,3 +1,4 @@
+import {legalFileLookup,appendLegalFileEvidence} from './legal-library-context';
 import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {randomUUID} from 'node:crypto';
@@ -23,7 +24,7 @@ export class LegalAuditService{
  private fail(e:any){if(!e)return;if(e.code==='42501')throw new ForbiddenException('Perfil, vínculo da empresa/unidade ou licença indisponível.');if(e.code==='P3391')throw new ForbiddenException('Crédito documental indisponível. Cada verificação agrupa o original e seu relatório em um crédito.');if(['40001','23505'].includes(e.code))throw new ConflictException('O registro mudou ou há confirmação técnica pendente. Consulte o histórico antes de repetir; não reenvie o original.');if(['22023','22P02'].includes(e.code))throw new BadRequestException('Confira empresa, unidade, documento, data e fontes da análise.');throw new ServiceUnavailableException('Recebimento não confirmado. Atualize a fila e consulte o histórico antes de repetir.');}
  async action(t:TenantContext,action:string,id:string|null,body:any={}){this.scope(t,['enqueue','resume'].includes(action));if(['question','answer'].includes(action)&&!t.permissions.includes(P.INTELLIGENCE_AI_USE))throw new ForbiddenException('A pergunta exige permissão para utilizar a IA.');const r=await this.db.getClient().rpc('legal_audit_action',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_id:id,p_body:body});this.fail(r.error);return r.data;}
  async settings(t:TenantContext){if(!this.enabled())return {enabled:false};this.scope(t);await this.action(t,'list',null);return {enabled:true,aiAvailable:await this.ai.available(t),canAnalyze:t.permissions.includes(P.ENERGIA_OCR_PROCESS)&&t.permissions.includes(P.INTELLIGENCE_AI_USE),creditPolicy:'Um crédito por verificação, agrupando original e relatório. Retomada, abertura e perguntas sobre a mesma análise não consomem novo crédito documental. A IA respeita a cota própria da licença.',maxPages:100,maxBytes:15728640};}
- async library(t:TenantContext){if(!this.enabled())return {enabled:false,rows:[]};const global=(t.scope as string)==='global';if(!global)this.scope(t);const r=await this.db.getClient().rpc('legal_audit_library',{p_actor:t.userId,p_org:global?null:t.organizationId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:'list',p_body:{}});this.fail(r.error);return {enabled:true,rows:r.data};}
+ async library(t:TenantContext){if(!this.enabled())return {enabled:false,rows:[]};const global=(t.scope as string)==='global';if(!global)this.scope(t);const r=await this.db.getClient().rpc('legal_audit_library',{p_actor:t.userId,p_org:global?null:t.organizationId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:'list',p_body:{}});this.fail(r.error);return {enabled:true,rows:r.data,files:await legalFileLookup(this.db,t)};}
  async publishSource(t:TenantContext,b:any){
   if(!this.enabled())throw new ServiceUnavailableException('Auditoria em preparação.');
   const required=['id','title','authority','kind','url','edition','validFrom','validTo','topics','state','text','expectedVersion','checkedSource','reason'];
@@ -62,12 +63,14 @@ export class LegalAuditService{
   if(captured.pending)return {state:'PENDING',message:'Essa pergunta já foi recebida. Confira o histórico antes de repetir; nenhuma nova chamada de IA foi iniciada.'};
   const job=captured.job,chunks=legalChunks(job.pages),terms=b.question.toLocaleLowerCase('pt-BR').match(/[\p{L}\p{N}]{4,}/gu)??[];
   const ranked=chunks.map(c=>({c,score:terms.filter((term:string)=>c.text.toLocaleLowerCase('pt-BR').includes(term)).length})).sort((a,b)=>b.score-a.score||a.c.page-b.c.page),chosen=ranked.find(r=>r.score>0);
+  const files=await legalFileLookup(this.db,t,b.question);
   let answer:any;
-  if(!chosen)answer={state:'NO_EVIDENCE',message:'Indique a página, a cláusula ou o assunto para eu localizar o trecho exato do documento.'};
+  if(!chosen&&!files.length)answer={state:'NO_EVIDENCE',message:'Indique a página, a cláusula ou o assunto para eu localizar o trecho exato do documento.'};
   else{
-   const evidence=legalEvidence(chosen.c,job.sources);
-   evidence.push({id:'question-scope',label:'Limites desta pergunta',value:`Data-base ${String(job.as_of).slice(0,10)}. Contexto selecionado: páginas ${chosen.c.pages.join(', ')}. O relatório completo permanece disponível. A resposta não atualiza a legislação nem altera o relatório já arquivado.`,source:'Escopo desta verificação preservada'});
-   answer=await this.ai.interpret(t,b.question,evidence,job.document_id,'AUDITORIA',{settleRejectedUsage:true,legalProfile:true});
+   const evidence=chosen?legalEvidence(chosen.c,job.sources):[];
+   const fileReferences=appendLegalFileEvidence(evidence,files);
+   evidence.push({id:'question-scope',label:'Limites desta pergunta',value:`Data-base ${String(job.as_of).slice(0,10)}. Contexto selecionado: páginas ${chosen?.c.pages.join(', ')??'nenhum trecho contratual localizado; resposta limitada às fontes oficiais'}. O relatório completo permanece disponível. A resposta não atualiza a legislação nem altera o relatório já arquivado.`,source:'Escopo desta verificação preservada'});
+   answer={...await this.ai.interpret(t,b.question,evidence,job.document_id,'AUDITORIA',{settleRejectedUsage:true,legalProfile:true}),fileReferences};
   }
   return this.action(t,'answer',id,{questionId:captured.questionId,answer:{...answer,analysisId:id,asOf:job.as_of,reportUnchanged:true}});
  }

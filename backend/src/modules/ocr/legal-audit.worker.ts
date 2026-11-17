@@ -1,3 +1,4 @@
+import {legalFileLookup,appendLegalFileEvidence} from './legal-library-context';
 import {Injectable,Logger,OnModuleDestroy,OnModuleInit} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {SupabaseService} from '../../services/supabase.service';
@@ -41,16 +42,16 @@ export class LegalAuditWorker implements OnModuleInit,OnModuleDestroy{
    if(j.state==='ANALYZING'){
     const chunks=legalChunks(j.pages);
     if(j.cursor<chunks.length){
-     const c=chunks[j.cursor],evidence=legalEvidence(c,j.sources);paid=true;
+     const c=chunks[j.cursor],evidence=legalEvidence(c,j.sources),files=await legalFileLookup(this.db,t,c.text.slice(0,3000)),fileReferences=appendLegalFileEvidence(evidence,files);paid=true;
      const result=await this.ai.interpret(t,'Revise o bloco contratual: obrigações, riscos, ambiguidades, cessão, garantias, penalidades e providências. Diferencie texto contratual de norma e indique evidências. Não conclua validade integral. Considere a data-base '+String(j.as_of).slice(0,10)+'.',evidence,j.document_id,'AUDITORIA',{settleRejectedUsage:true,legalProfile:true});
      if(result.retryAfterSeconds){await this.rpc('defer',j.id,token,{delay:60});return;}
      if(result.state==='FAILED')throw Error(result.consumptionState==='PENDING'?'AI_RESULT_UNKNOWN':'LEGAL_AI_FAILED');
      if(['NOT_AUTHORIZED','NOT_CONFIGURED'].includes(result.state))throw Error('LEGAL_AI_ACCESS_REQUIRED');
-     const citations=(result.evidence??[]).map(e=>e.id),narrative={chunkId:c.id,page:c.page,pages:c.pages,state:result.state,answer:result.answer??'Não foi possível fundamentar uma interpretação deste bloco. Confira o original e a cobertura normativa.',citations,normativeSupported:citations.some(s=>s.startsWith('law-')),model:result.model??null,promptVersion:result.promptVersion??null};
+     const citations=(result.evidence??[]).map(e=>e.id),narrative={fileReferences:fileReferences.map(f=>({...f,cited:citations.includes(f.id)})),chunkId:c.id,page:c.page,pages:c.pages,state:result.state,answer:result.answer??'Não foi possível fundamentar uma interpretação deste bloco. Confira o original e a cobertura normativa.',citations,normativeSupported:citations.some(s=>s.startsWith('law-')),model:result.model??null,promptVersion:result.promptVersion??null};
      await this.rpc('analysis',j.id,token,{cursor:j.cursor,narrative,durationMs:Date.now()-start});return;
     }
     const names=await Promise.all([this.db.getClient().from('customers').select('company_name').eq('organization_id',j.organization_id).eq('id',j.customer_id).maybeSingle(),this.db.getClient().from('consumer_units').select('name').eq('organization_id',j.organization_id).eq('customer_id',j.customer_id).eq('id',j.unit_id).maybeSingle(),this.db.getClient().from('organizations').select('name').eq('id',j.organization_id).is('deleted_at',null).maybeSingle()]);if(names.some(r=>r.error||!r.data))throw Error('LEGAL_SOURCE_CONTEXT_UNAVAILABLE');
-    const report={version:LEGAL_VERSION,analysisId:j.id,organizationName:names[2].data.name,customerName:names[0].data.company_name,unitName:names[1].data.name,asOf:j.as_of,sourceHash:j.source_hash,coverage:legalCoverage(j.pages,j.sources),findings:legalFindings(j.pages,j.sources),narratives:j.narratives,sources:j.sources,financialApproval:false,professionalReviewRequired:true};await this.rpc('report',j.id,token,{report,durationMs:Date.now()-start});return;
+    const report={version:LEGAL_VERSION,analysisId:j.id,organizationName:names[2].data.name,customerName:names[0].data.company_name,unitName:names[1].data.name,asOf:j.as_of,sourceHash:j.source_hash,coverage:legalCoverage(j.pages,j.sources),findings:legalFindings(j.pages,j.sources),narratives:j.narratives,sources:j.sources,fileReferences:[...new Map(j.narratives.flatMap((n:any)=>n.fileReferences??[]).map((f:any)=>[f.id,f])).values()],financialApproval:false,professionalReviewRequired:true};await this.rpc('report',j.id,token,{report,durationMs:Date.now()-start});return;
    }
    if(j.state==='REPORTING'){
     const bytes=await legalAuditPdf(j,j.report),hash=legalHash(bytes),path=j.organization_id+'/'+j.unit_id+'/legal-audit/'+j.id+'/'+j.report_document_id+'.pdf',storage=this.db.getClient().storage.from('energy-documents-private');
