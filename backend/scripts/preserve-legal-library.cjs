@@ -10,12 +10,12 @@ const command=(key,entry)=>{entry[key]??={requestId:crypto.randomUUID(),expected
 async function rpc(action,id,body){const r=await db.getClient().rpc('legal_library_file_action',{p_actor:actor,p_org:null,p_role:'',p_platform:false,p_action:action,p_id:id,p_body:body});if(r.error)throw Object.assign(Error('Library '+action+' failed'),{code:r.error.code});return r.data;}
 async function indexFile(sourceId,documentId,bytes){
  const reference=await rpc('original',documentId,{});if(bytes.length!==reference.size||hash(bytes)!==reference.fileHash)throw Error('PUBLIC_FILE_INTEGRITY');
- const pdfjs=await import(pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.mjs')).href),pdf=await pdfjs.getDocument({data:new Uint8Array(bytes),isEvalSupported:false,useSystemFonts:false,disableFontFace:true,verbosity:0}).promise;
+ const pdfjs=await import(pathToFileURL(require.resolve('pdfjs-dist/legacy/build/pdf.mjs')).href),loading=pdfjs.getDocument({data:new Uint8Array(bytes),isEvalSupported:false,useSystemFonts:false,disableFontFace:true,verbosity:0}),pdf=await loading.promise;
  try{
   if(pdf.numPages<1||pdf.numPages>1000)throw Error('PUBLIC_PAGE_LIMIT');const pages=[];let size=0;
   for(let n=1;n<=pdf.numPages;n++){const page=await pdf.getPage(n),content=await page.getTextContent(),text=content.items.map(item=>item.str+(item.hasEOL?'\n':' ')).join('');size+=Buffer.byteLength(text);if(size>7500000||text.length>200000)throw Error('PUBLIC_TEXT_LIMIT');pages.push({page:n,text});page.cleanup();}
   const answer=await rpc('index',documentId,{sourceId,fileHash:reference.fileHash,pages,metadata:{method:'NATIVE_PDF_TEXT',allPages:true,unreadablePages:pages.filter(p=>p.text.trim().length<30).map(p=>p.page),normativeReview:'PENDING',provenance:reference.metadata.provenance}});return {...answer,pageCount:pages.length};
- }finally{await pdf.destroy();}
+ }finally{await loading.destroy();}
 }
 function sourceIdentity(source,row){const u=new URL(row.url);let authority,family;if(u.hostname.endsWith('ccee.org.br'))[authority,family]=['CCEE','CCEE_RULES'];else if(u.hostname.endsWith('ons.org.br'))[authority,family]=['ONS',source.id==='ons-procedimentos'?'ONS_PROCEDURES':'ONS_REPORTS'];else if(source.id.startsWith('cnpe'))[authority,family]=['CNPE','CNPE_RESOLUTIONS'];else if(source.id.startsWith('epe'))[authority,family]=['EPE','ENERGY_PLANNING'];else if(source.id.startsWith('mme')||source.id==='lei15269')[authority,family]=['MME','MME_LEGISLATION'];else [authority,family]=['PLANALTO','LEGISLATION'];return {authority,family};}
 (async()=>{
