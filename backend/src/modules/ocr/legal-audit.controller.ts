@@ -15,6 +15,7 @@ export class LegalAuditController{
  @Get() @Header('Cache-Control','no-store') @RequirePermission([P.DOCUMENTS_VIEW]) list(@Req()r:RequestWithTenant){return this.service.action(r.tenantContext!,'list',null);}
  @Post() @HttpCode(202) @RequirePermission([P.DOCUMENTS_VIEW,P.ENERGIA_OCR_PROCESS,P.INTELLIGENCE_AI_USE]) enqueue(@Req()r:RequestWithTenant,@Body()b:any){return this.service.enqueue(r.tenantContext!,b);}
  @Get(':id') @Header('Cache-Control','no-store') @RequirePermission([P.DOCUMENTS_VIEW]) detail(@Req()r:RequestWithTenant,@Param('id')id:string){return this.service.detail(r.tenantContext!,id);}
+ @Post(':id/review') @RequirePermission([P.DOCUMENTS_VIEW,P.ENERGIA_OCR_PROCESS]) review(@Req()r:RequestWithTenant,@Param('id')id:string,@Body()b:any){return this.service.confirmReview(r.tenantContext!,id,b);}
  @Post(':id/resume') @RequirePermission([P.DOCUMENTS_VIEW,P.ENERGIA_OCR_PROCESS,P.INTELLIGENCE_AI_USE]) resume(@Req()r:RequestWithTenant,@Param('id')id:string){return this.service.resume(r.tenantContext!,id);}
  @Post(':id/questions') @RequirePermission([P.DOCUMENTS_VIEW,P.INTELLIGENCE_AI_USE]) question(@Req()r:RequestWithTenant,@Param('id')id:string,@Body()b:any){return this.service.question(r.tenantContext!,id,b);}
 }
