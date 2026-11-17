@@ -14,7 +14,7 @@ POST retorna protocolo HTTP 202. Texto digital usa o extrator existente em worke
 
 ## Biblioteca oficial
 
-A entrega inicial contém 17 referências e quatro conjuntos de trechos revisados: Código Civil, Lei 15.040/2024, Portaria MME 50/2022 e Contratos CCEE 2026.5.1 (itens indicados na fonte). A cobertura é parcial. As referências ANEEL e os índices de precedentes permanecem catalogados até conferência de texto, edição e vigência. O acesso oficial ao texto da REN 1000 retornou 403 durante a pesquisa; nenhum conteúdo inacessível foi declarado analisado.
+A entrega inicial contém 31 referências e quatro conjuntos de trechos revisados: Código Civil, Lei 15.040/2024, Portaria MME 50/2022 e Contratos CCEE 2026.5.1 (itens indicados na fonte). O catálogo inclui ANEEL, MME, Planalto, CCEE, ONS, EPE, DOU e CNPE e as Leis 9.074/1995, 9.427/1996, 10.848/2004, 14.300/2022 e 15.269/2025. Estudos EPE/PDE e relatórios ONS são contexto técnico, sem força automática de norma. A cobertura é parcial. As referências ANEEL e os índices de precedentes permanecem catalogados até conferência de texto, edição e vigência. O acesso oficial ao texto da REN 1000 retornou 403 durante a pesquisa; nenhum conteúdo inacessível foi declarado analisado.
 
 Owner publica versões imutáveis mediante justificativa e confirmação da fonte. Publicação requer URL oficial HTTPS, vigência e hash dos trechos. Precedente vinculante exige decisão específica, processo/tema, julgamento, publicação, status, modulação e aderência. Fontes com revisão superior a 30 dias não iniciam novas análises pagas. O relatório preserva fontes, edição, hash, data-base, páginas, ressalvas e limites da cobertura usada.
 

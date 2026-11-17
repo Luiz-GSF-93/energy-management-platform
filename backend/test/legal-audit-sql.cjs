@@ -34,7 +34,7 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  const worker=(action,key=null,token=null,body={})=>db.query('SELECT public.legal_audit_worker($1,$2,$3,$4) d',[action,key,token,JSON.stringify(body)]).then(r=>r.rows[0].d);
  const library=()=>db.query("SELECT public.legal_audit_library($1,NULL,'',false,'list','{}') d",[id(3)]).then(r=>r.rows[0].d);
  const all=await library(),sources=all.filter(s=>s.state==='PUBLISHED').map(s=>({...s,reviewedOn:new Date().toISOString().slice(0,10)}));
- ok(all.length>=17);ok(sources.length===4);
+ ok(all.length>=31);ok(['lei9074','lei9427','lei-comercializacao','lei14300','aneel-legislacao','mme-legislacao','cnpe-resolucoes','ons-procedimentos','epe-pde2035','dou-consulta'].every(id=>all.some(s=>s.id===id)));ok(sources.length===4);
  // Update only the disposable seed's review date through a new immutable version.
  const jobBody={documentId:id(12),sourceHash:'a'.repeat(64),customerId:id(10),unitId:id(11),asOf:new Date().toISOString().slice(0,10),basis:'b'.repeat(64),sources,libraryVersion:'c'.repeat(64)};
  // Source dates are seeded for this release; use CURRENT_DATE in the fixture without touching source immutability.

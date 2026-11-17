@@ -1,19 +1,521 @@
 [
- {"id":"codigo-civil","title":"Código Civil — Lei 10.406/2002","authority":"Congresso Nacional / Câmara dos Deputados","kind":"LEI","url":"https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html","edition":"Trechos dos arts. 286, 299, 413, 422 e 423; não é reprodução integral","validFrom":"2003-01-11","validTo":null,"topics":["CESSAO","PENALIDADE","AMBIGUIDADE","RESPONSABILIDADE"],"state":"PUBLISHED","text":"Art. 286. O credor pode ceder o seu crédito, se a isso não se opuser a natureza da obrigação, a lei, ou a convenção com o devedor; a cláusula proibitiva da cessão não poderá ser oposta ao cessionário de boa-fé, se não constar do instrumento da obrigação.\nArt. 299. É facultado a terceiro assumir a obrigação do devedor, com o consentimento expresso do credor, ficando exonerado o devedor primitivo, salvo se aquele, ao tempo da assunção, era insolvente e o credor o ignorava.\nArt. 413. A penalidade deve ser reduzida eqüitativamente pelo juiz se a obrigação principal tiver sido cumprida em parte, ou se o montante da penalidade for manifestamente excessivo, tendo-se em vista a natureza e a finalidade do negócio.\nArt. 422. Os contratantes são obrigados a guardar, assim na conclusão do contrato, como em sua execução, os princípios de probidade e boa-fé.\nArt. 423. Quando houver no contrato de adesão cláusulas ambíguas ou contraditórias, dever-se-á adotar a interpretação mais favorável ao aderente."},
- {"id":"lei-seguros","title":"Lei 15.040/2024 — contratos de seguro","authority":"Congresso Nacional / Câmara dos Deputados","kind":"LEI","url":"https://www2.camara.leg.br/legin/fed/lei/2024/lei-15040-9-dezembro-2024-796661-publicacaooriginal-173706-pl.html","edition":"Trechos dos arts. 1º, 2º e 134; aplicação temporal a conferir no contrato","validFrom":"2025-12-11","validTo":null,"topics":["GARANTIA"],"state":"PUBLISHED","text":"Art. 1º Pelo contrato de seguro, a seguradora obriga-se, mediante o pagamento do prêmio equivalente, a garantir interesse legítimo do segurado ou do beneficiário contra riscos predeterminados.\nArt. 2º Somente podem pactuar contratos de seguro entidades que se encontrem devidamente autorizadas na forma da lei.\nArt. 134. Esta Lei entra em vigor após decorrido 1 (um) ano de sua publicação oficial."},
- {"id":"ccee-contratos-2026","title":"CCEE — Regras de Comercialização, caderno 05 Contratos","authority":"CCEE / aprovação ANEEL","kind":"REGRA_CCEE","url":"https://www.ccee.org.br/documents/80415/31259220/05%20-%20Contratos_2026.5.1_MAI.pdf/e5d55e8a-f760-236f-b1e1-ee4eea31b9ef","edition":"2026.5.1 — trecho 12.4.1, item 120; verificar alterações posteriores","validFrom":"2026-05-01","validTo":"2026-12-31","topics":["CESSAO","VOLUME","REPRESENTACAO"],"state":"PUBLISHED","text":"120. A cessão deverá ser formalizada por meio de Contrato Bilateral de Cessão a ser registrado e validado na CCEE. No entanto, para o registro do Contrato Bilateral de Cessão, os Contratos Originais de Compra e Venda de Energia Elétrica deverão estar previamente registrados e validados na CCEE.\n120.1. A Cessão de Montantes de Energia Elétrica e de Potência estará limitada à quantidade e ao prazo final do Contrato Original de Compra e Venda de Energia Elétrica registrado e validado, cabendo a verificação de tal limitação pela CCEE para a efetivação dos contratos."},
- {"id":"aneel1000","title":"REN ANEEL 1.000/2021 — distribuição, CUSD e CCER","authority":"ANEEL","kind":"RESOLUCAO","url":"https://www2.aneel.gov.br/cedoc/ren20211000.html","edition":"Texto consolidado a coletar e revisar","validFrom":"2022-01-03","validTo":null,"topics":["PRECO","PRAZO","ANEXOS","RESPONSABILIDADE"],"state":"CATALOGUED","text":""},
- {"id":"prodist","title":"REN 956/2021 e módulos do PRODIST","authority":"ANEEL","kind":"PROCEDIMENTO","url":"https://www.gov.br/aneel/pt-br/centrais-de-conteudos/procedimentos-regulatorios/prodist","edition":"Selecionar módulo e versão aplicável","validFrom":"2022-01-01","validTo":null,"topics":["RESPONSABILIDADE","ANEXOS"],"state":"CATALOGUED","text":""},
- {"id":"lei-comercializacao","title":"Lei 10.848/2004 — comercialização de energia","authority":"Congresso Nacional","kind":"LEI","url":"https://www2.camara.leg.br/legin/fed/lei/2004/lei-10848-15-marco-2004-531234-normaatualizada-pl.html","edition":"Texto atualizado e alterações: revisão por dispositivo","validFrom":"2004-03-16","validTo":null,"topics":["VOLUME","REPRESENTACAO","PENALIDADE"],"state":"CATALOGUED","text":""},
- {"id":"lei9074","title":"Lei 9.074/1995 — consumidores livres e outorgas","authority":"Congresso Nacional","kind":"LEI","url":"https://www2.camara.leg.br/legin/fed/lei/1995/lei-9074-7-julho-1995-347472-norma-pl.html","edition":"Selecionar texto atualizado e regra temporal","validFrom":"1995-07-08","validTo":null,"topics":["REPRESENTACAO","VOLUME"],"state":"CATALOGUED","text":""},
- {"id":"decreto5163","title":"Decreto 5.163/2004 — comercialização de energia","authority":"Presidência da República","kind":"DECRETO","url":"https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/decreto/d5163.htm","edition":"Consolidado: revisão por dispositivo","validFrom":"2004-07-30","validTo":null,"topics":["VOLUME","REPRESENTACAO","PRAZO"],"state":"CATALOGUED","text":""},
- {"id":"mme50","title":"Portaria Normativa MME 50/2022 — opção ACL","authority":"MME","kind":"PORTARIA","url":"https://www.gov.br/mme/pt-br/acesso-a-informacao/legislacao/portarias/2022/portaria-normativa-n-50-gm-mme-2022.pdf","edition":"Art. 1º §§ 1º e 2º; não define sozinho todas as regras atuais de migração","validFrom":"2024-01-01","validTo":null,"topics":["REPRESENTACAO"],"state":"PUBLISHED","text":"§ 1º A partir de 1º de janeiro de 2024, os consumidores classificados como Grupo A, nos termos da regulamentação vigente, poderão optar pela compra de energia elétrica a qualquer concessionário, permissionário ou autorizado de energia elétrica do Sistema Interligado Nacional.\n§ 2º Os consumidores de que trata o § 1º com carga individual inferior a 500kW, no exercício da opção de que tratam os arts. 15 e 16 da Lei nº 9.074, de 7 de julho de 1995, serão representados por agente varejista perante a Câmara de Comercialização de Energia Elétrica - CCEE."},
- {"id":"ccee-pdc","title":"CCEE — Procedimentos de Comercialização vigentes","authority":"CCEE / ANEEL","kind":"PROCEDIMENTO","url":"https://www.ccee.org.br/en/web/guest/mercado/procedimentos-de-comercializacao","edition":"Índice de versões; requer seleção e curadoria do submódulo","validFrom":"2026-01-01","validTo":null,"topics":["CESSAO","VOLUME","REPRESENTACAO","PRAZO","CONFLITO"],"state":"CATALOGUED","text":""},
- {"id":"ccee-regras","title":"CCEE — Regras de Comercialização e histórico","authority":"CCEE / ANEEL","kind":"REGRA_CCEE","url":"https://www.ccee.org.br/mercado/regras-de-comercializacao","edition":"Índice; não confundir referência catalogada com norma examinada","validFrom":"2026-01-01","validTo":null,"topics":["VOLUME","PRECO","PENALIDADE"],"state":"CATALOGUED","text":""},
- {"id":"ccee-prudencial","title":"CCEE — segurança de mercado e monitoramento prudencial","authority":"CCEE","kind":"DADO_OFICIAL","url":"https://www.ccee.org.br/pt/web/guest/mercado/seguranca-de-mercado","edition":"Consultar agente por CNPJ, evento e data; ausência de dado não significa baixo risco","validFrom":"2026-01-01","validTo":null,"topics":["GARANTIA","RESPONSABILIDADE"],"state":"CATALOGUED","text":""},
- {"id":"lgpd","title":"Lei 13.709/2018 — LGPD","authority":"Congresso Nacional","kind":"LEI","url":"https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm","edition":"Aplicabilidade e dispositivos a revisar","validFrom":"2020-09-18","validTo":null,"topics":["DADOS"],"state":"CATALOGUED","text":""},
- {"id":"cdc","title":"Lei 8.078/1990 — Código de Defesa do Consumidor","authority":"Congresso Nacional","kind":"LEI","url":"https://www.planalto.gov.br/ccivil_03/leis/l8078compilado.htm","edition":"A condição de empresa não determina sozinha a incidência do CDC","validFrom":"1991-03-11","validTo":null,"topics":["AMBIGUIDADE","PENALIDADE","RESPONSABILIDADE"],"state":"CATALOGUED","text":""},
- {"id":"arbitragem","title":"Lei 9.307/1996 — arbitragem","authority":"Congresso Nacional","kind":"LEI","url":"https://www.planalto.gov.br/ccivil_03/leis/l9307.htm","edition":"Revisar convenção e requisitos aplicáveis","validFrom":"1996-11-23","validTo":null,"topics":["CONFLITO"],"state":"CATALOGUED","text":""},
- {"id":"stj-precedentes","title":"STJ — precedentes qualificados e recursos repetitivos","authority":"STJ","kind":"INDICE_JURISPRUDENCIA","url":"https://www.stj.jus.br/sites/portalp/Precedentes/informacoes-gerais/recursos-repetitivos","edition":"Índice de pesquisa: nenhum tema é considerado aplicável sem inteiro teor, status, tese e distinção do caso","validFrom":"2016-03-18","validTo":null,"topics":["PENALIDADE","CONFLITO","AMBIGUIDADE"],"state":"CATALOGUED","text":""},
- {"id":"stf-sumulas","title":"STF — súmulas e jurisprudência","authority":"STF","kind":"INDICE_JURISPRUDENCIA","url":"https://portal.stf.jus.br/jurisprudencia/aplicacaosumula.asp","edition":"Distinguir súmula vinculante, repercussão geral e decisão não vinculante; índice não é tese","validFrom":"2016-03-18","validTo":null,"topics":["CONFLITO","PENALIDADE"],"state":"CATALOGUED","text":""}
+  {
+    "id": "codigo-civil",
+    "title": "Código Civil — Lei 10.406/2002",
+    "authority": "Congresso Nacional / Câmara dos Deputados",
+    "kind": "LEI",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2002/lei-10406-10-janeiro-2002-432893-normaatualizada-pl.html",
+    "edition": "Trechos dos arts. 286, 299, 413, 422 e 423; não é reprodução integral",
+    "validFrom": "2003-01-11",
+    "validTo": null,
+    "topics": [
+      "CESSAO",
+      "PENALIDADE",
+      "AMBIGUIDADE",
+      "RESPONSABILIDADE"
+    ],
+    "state": "PUBLISHED",
+    "text": "Art. 286. O credor pode ceder o seu crédito, se a isso não se opuser a natureza da obrigação, a lei, ou a convenção com o devedor; a cláusula proibitiva da cessão não poderá ser oposta ao cessionário de boa-fé, se não constar do instrumento da obrigação.\nArt. 299. É facultado a terceiro assumir a obrigação do devedor, com o consentimento expresso do credor, ficando exonerado o devedor primitivo, salvo se aquele, ao tempo da assunção, era insolvente e o credor o ignorava.\nArt. 413. A penalidade deve ser reduzida eqüitativamente pelo juiz se a obrigação principal tiver sido cumprida em parte, ou se o montante da penalidade for manifestamente excessivo, tendo-se em vista a natureza e a finalidade do negócio.\nArt. 422. Os contratantes são obrigados a guardar, assim na conclusão do contrato, como em sua execução, os princípios de probidade e boa-fé.\nArt. 423. Quando houver no contrato de adesão cláusulas ambíguas ou contraditórias, dever-se-á adotar a interpretação mais favorável ao aderente."
+  },
+  {
+    "id": "lei-seguros",
+    "title": "Lei 15.040/2024 — contratos de seguro",
+    "authority": "Congresso Nacional / Câmara dos Deputados",
+    "kind": "LEI",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2024/lei-15040-9-dezembro-2024-796661-publicacaooriginal-173706-pl.html",
+    "edition": "Trechos dos arts. 1º, 2º e 134; aplicação temporal a conferir no contrato",
+    "validFrom": "2025-12-11",
+    "validTo": null,
+    "topics": [
+      "GARANTIA"
+    ],
+    "state": "PUBLISHED",
+    "text": "Art. 1º Pelo contrato de seguro, a seguradora obriga-se, mediante o pagamento do prêmio equivalente, a garantir interesse legítimo do segurado ou do beneficiário contra riscos predeterminados.\nArt. 2º Somente podem pactuar contratos de seguro entidades que se encontrem devidamente autorizadas na forma da lei.\nArt. 134. Esta Lei entra em vigor após decorrido 1 (um) ano de sua publicação oficial."
+  },
+  {
+    "id": "ccee-contratos-2026",
+    "title": "CCEE — Regras de Comercialização, caderno 05 Contratos",
+    "authority": "CCEE / aprovação ANEEL",
+    "kind": "REGRA_CCEE",
+    "url": "https://www.ccee.org.br/documents/80415/31259220/05%20-%20Contratos_2026.5.1_MAI.pdf/e5d55e8a-f760-236f-b1e1-ee4eea31b9ef",
+    "edition": "2026.5.1 — trecho 12.4.1, item 120; verificar alterações posteriores",
+    "validFrom": "2026-05-01",
+    "validTo": "2026-12-31",
+    "topics": [
+      "CESSAO",
+      "VOLUME",
+      "REPRESENTACAO"
+    ],
+    "state": "PUBLISHED",
+    "text": "120. A cessão deverá ser formalizada por meio de Contrato Bilateral de Cessão a ser registrado e validado na CCEE. No entanto, para o registro do Contrato Bilateral de Cessão, os Contratos Originais de Compra e Venda de Energia Elétrica deverão estar previamente registrados e validados na CCEE.\n120.1. A Cessão de Montantes de Energia Elétrica e de Potência estará limitada à quantidade e ao prazo final do Contrato Original de Compra e Venda de Energia Elétrica registrado e validado, cabendo a verificação de tal limitação pela CCEE para a efetivação dos contratos."
+  },
+  {
+    "id": "aneel1000",
+    "title": "REN ANEEL 1.000/2021 — distribuição, CUSD e CCER",
+    "authority": "ANEEL",
+    "kind": "RESOLUCAO",
+    "url": "https://www2.aneel.gov.br/cedoc/ren20211000.html",
+    "edition": "Texto consolidado a coletar e revisar",
+    "validFrom": "2022-01-03",
+    "validTo": null,
+    "topics": [
+      "PRECO",
+      "PRAZO",
+      "ANEXOS",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "prodist",
+    "title": "REN 956/2021 e módulos do PRODIST",
+    "authority": "ANEEL",
+    "kind": "PROCEDIMENTO",
+    "url": "https://www.gov.br/aneel/pt-br/centrais-de-conteudos/procedimentos-regulatorios/prodist",
+    "edition": "Selecionar módulo e versão aplicável",
+    "validFrom": "2022-01-01",
+    "validTo": null,
+    "topics": [
+      "RESPONSABILIDADE",
+      "ANEXOS"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "lei-comercializacao",
+    "title": "Lei 10.848/2004 — comercialização de energia",
+    "authority": "Congresso Nacional",
+    "kind": "LEI",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/2004/lei-10848-15-marco-2004-531234-normaatualizada-pl.html",
+    "edition": "Texto atualizado e alterações: revisão por dispositivo",
+    "validFrom": "2004-03-16",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "REPRESENTACAO",
+      "PENALIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "lei9074",
+    "title": "Lei 9.074/1995 — consumidores livres e outorgas",
+    "authority": "Congresso Nacional",
+    "kind": "LEI",
+    "url": "https://www2.camara.leg.br/legin/fed/lei/1995/lei-9074-7-julho-1995-347472-norma-pl.html",
+    "edition": "Selecionar texto atualizado e regra temporal",
+    "validFrom": "1995-07-08",
+    "validTo": null,
+    "topics": [
+      "REPRESENTACAO",
+      "VOLUME"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "decreto5163",
+    "title": "Decreto 5.163/2004 — comercialização de energia",
+    "authority": "Presidência da República",
+    "kind": "DECRETO",
+    "url": "https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/decreto/d5163.htm",
+    "edition": "Consolidado: revisão por dispositivo",
+    "validFrom": "2004-07-30",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "REPRESENTACAO",
+      "PRAZO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "mme50",
+    "title": "Portaria Normativa MME 50/2022 — opção ACL",
+    "authority": "MME",
+    "kind": "PORTARIA",
+    "url": "https://www.gov.br/mme/pt-br/acesso-a-informacao/legislacao/portarias/2022/portaria-normativa-n-50-gm-mme-2022.pdf",
+    "edition": "Art. 1º §§ 1º e 2º; não define sozinho todas as regras atuais de migração",
+    "validFrom": "2024-01-01",
+    "validTo": null,
+    "topics": [
+      "REPRESENTACAO"
+    ],
+    "state": "PUBLISHED",
+    "text": "§ 1º A partir de 1º de janeiro de 2024, os consumidores classificados como Grupo A, nos termos da regulamentação vigente, poderão optar pela compra de energia elétrica a qualquer concessionário, permissionário ou autorizado de energia elétrica do Sistema Interligado Nacional.\n§ 2º Os consumidores de que trata o § 1º com carga individual inferior a 500kW, no exercício da opção de que tratam os arts. 15 e 16 da Lei nº 9.074, de 7 de julho de 1995, serão representados por agente varejista perante a Câmara de Comercialização de Energia Elétrica - CCEE."
+  },
+  {
+    "id": "ccee-pdc",
+    "title": "CCEE — Procedimentos de Comercialização vigentes",
+    "authority": "CCEE / ANEEL",
+    "kind": "PROCEDIMENTO",
+    "url": "https://www.ccee.org.br/en/web/guest/mercado/procedimentos-de-comercializacao",
+    "edition": "Índice de versões; requer seleção e curadoria do submódulo",
+    "validFrom": "2026-01-01",
+    "validTo": null,
+    "topics": [
+      "CESSAO",
+      "VOLUME",
+      "REPRESENTACAO",
+      "PRAZO",
+      "CONFLITO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "ccee-regras",
+    "title": "CCEE — Regras de Comercialização e histórico",
+    "authority": "CCEE / ANEEL",
+    "kind": "REGRA_CCEE",
+    "url": "https://www.ccee.org.br/mercado/regras-de-comercializacao",
+    "edition": "Índice; não confundir referência catalogada com norma examinada",
+    "validFrom": "2026-01-01",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "PRECO",
+      "PENALIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "ccee-prudencial",
+    "title": "CCEE — segurança de mercado e monitoramento prudencial",
+    "authority": "CCEE",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.ccee.org.br/pt/web/guest/mercado/seguranca-de-mercado",
+    "edition": "Consultar agente por CNPJ, evento e data; ausência de dado não significa baixo risco",
+    "validFrom": "2026-01-01",
+    "validTo": null,
+    "topics": [
+      "GARANTIA",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "lgpd",
+    "title": "Lei 13.709/2018 — LGPD",
+    "authority": "Congresso Nacional",
+    "kind": "LEI",
+    "url": "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm",
+    "edition": "Aplicabilidade e dispositivos a revisar",
+    "validFrom": "2020-09-18",
+    "validTo": null,
+    "topics": [
+      "DADOS"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "cdc",
+    "title": "Lei 8.078/1990 — Código de Defesa do Consumidor",
+    "authority": "Congresso Nacional",
+    "kind": "LEI",
+    "url": "https://www.planalto.gov.br/ccivil_03/leis/l8078compilado.htm",
+    "edition": "A condição de empresa não determina sozinha a incidência do CDC",
+    "validFrom": "1991-03-11",
+    "validTo": null,
+    "topics": [
+      "AMBIGUIDADE",
+      "PENALIDADE",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "arbitragem",
+    "title": "Lei 9.307/1996 — arbitragem",
+    "authority": "Congresso Nacional",
+    "kind": "LEI",
+    "url": "https://www.planalto.gov.br/ccivil_03/leis/l9307.htm",
+    "edition": "Revisar convenção e requisitos aplicáveis",
+    "validFrom": "1996-11-23",
+    "validTo": null,
+    "topics": [
+      "CONFLITO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "stj-precedentes",
+    "title": "STJ — precedentes qualificados e recursos repetitivos",
+    "authority": "STJ",
+    "kind": "INDICE_JURISPRUDENCIA",
+    "url": "https://www.stj.jus.br/sites/portalp/Precedentes/informacoes-gerais/recursos-repetitivos",
+    "edition": "Índice de pesquisa: nenhum tema é considerado aplicável sem inteiro teor, status, tese e distinção do caso",
+    "validFrom": "2016-03-18",
+    "validTo": null,
+    "topics": [
+      "PENALIDADE",
+      "CONFLITO",
+      "AMBIGUIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "stf-sumulas",
+    "title": "STF — súmulas e jurisprudência",
+    "authority": "STF",
+    "kind": "INDICE_JURISPRUDENCIA",
+    "url": "https://portal.stf.jus.br/jurisprudencia/aplicacaosumula.asp",
+    "edition": "Distinguir súmula vinculante, repercussão geral e decisão não vinculante; índice não é tese",
+    "validFrom": "2016-03-18",
+    "validTo": null,
+    "topics": [
+      "CONFLITO",
+      "PENALIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "planalto-legislacao",
+    "title": "Planalto — legislação federal",
+    "authority": "Presidência da República",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.planalto.gov.br/ccivil_03/",
+    "edition": "Catálogo de leis e decretos; selecionar ato, alterações e vigência. Acesso automatizado sujeito à proteção do portal.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "ANEXOS",
+      "REPRESENTACAO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "lei9427",
+    "title": "Lei 9.427/1996 — ANEEL e concessões de energia",
+    "authority": "Congresso Nacional / Presidência da República",
+    "kind": "LEI",
+    "url": "https://www.planalto.gov.br/ccivil_03/leis/l9427cons.htm",
+    "edition": "Consolidado a conferir; inclui alterações posteriores. Cópia oficial alternativa: Câmara dos Deputados.",
+    "validFrom": "1996-12-27",
+    "validTo": null,
+    "topics": [
+      "RESPONSABILIDADE",
+      "REPRESENTACAO",
+      "PENALIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "lei14300",
+    "title": "Lei 14.300/2022 — geração distribuída e SCEE",
+    "authority": "Congresso Nacional / Presidência da República",
+    "kind": "LEI",
+    "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14300.htm",
+    "edition": "Marco legal de micro e minigeração distribuída; conferir alterações, transições e enquadramento.",
+    "validFrom": "2022-01-07",
+    "validTo": null,
+    "topics": [
+      "PRECO",
+      "VOLUME",
+      "PRAZO",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "lei15269",
+    "title": "Lei 15.269/2025 — modernização do setor elétrico",
+    "authority": "Congresso Nacional / MME",
+    "kind": "LEI",
+    "url": "https://www.gov.br/mme/pt-br/acesso-a-informacao/legislacao/leis/lei-n-15-269-2025.pdf",
+    "edition": "Fonte oficial disponibilizada pelo MME; conferir dispositivos alterados, transições e regulamentação.",
+    "validFrom": "2025-11-25",
+    "validTo": null,
+    "topics": [
+      "REPRESENTACAO",
+      "PRECO",
+      "VOLUME",
+      "PRAZO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "aneel-legislacao",
+    "title": "ANEEL — legislação e resoluções normativas",
+    "authority": "ANEEL",
+    "kind": "DADO_OFICIAL",
+    "url": "https://legislacao.aneel.gov.br/",
+    "edition": "Catálogo oficial indicado pela Biblioteca Virtual ANEEL; selecionar ato, consolidação, retificações e vigência.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "PRECO",
+      "PRAZO",
+      "RESPONSABILIDADE",
+      "PENALIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "mme-legislacao",
+    "title": "MME — leis, decretos e portarias",
+    "authority": "Ministério de Minas e Energia",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.gov.br/mme/pt-br/acesso-a-informacao/legislacao",
+    "edition": "Catálogo oficial; índice não substitui o ato nem comprova vigência.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "REPRESENTACAO",
+      "VOLUME",
+      "PRECO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "cnpe-resolucoes",
+    "title": "CNPE — resoluções e diretrizes energéticas",
+    "authority": "CNPE / MME",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.gov.br/mme/pt-br/assuntos/conselhos-e-comites/cnpe/resolucoes-do-cnpe",
+    "edition": "Catálogo anual; conferir alcance do ato, alterações e implementação regulatória. Diretriz não substitui regra contratual aplicável.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "REPRESENTACAO",
+      "VOLUME",
+      "PRAZO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "ons-procedimentos",
+    "title": "ONS — Procedimentos de Rede",
+    "authority": "Operador Nacional do Sistema Elétrico",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.ons.org.br/paginas/sobre-o-ons/procedimentos-de-rede/o-que-sao",
+    "edition": "Índice institucional; selecionar submódulo aprovado, revisão, vigência e agentes alcançados.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "RESPONSABILIDADE",
+      "ANEXOS",
+      "PRAZO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "ons-mpo",
+    "title": "ONS — Manual de Procedimentos da Operação e rotinas operativas",
+    "authority": "Operador Nacional do Sistema Elétrico",
+    "kind": "PROCEDIMENTO",
+    "url": "https://www.ons.org.br/%2FMPO%2FDocumento%20Normativo%2F4.%20Rotinas%20Operacionais%20-%20SM%205.13%2F4.1.%20Rotinas%20Gerais%2F4.1.5.%20Padroniza%C3%A7%C3%A3o%20e%20Revis%C3%A3o%20do%20Manual%20de%20Procedimentos%20da%20Opera%C3%A7%C3%A3o%2FRO-MP.BR.02_Rev.37.pdf",
+    "edition": "RO-MP.BR.02 rev.37, vigência declarada 02/10/2025; confirmar revisão atual e o documento operativo específico.",
+    "validFrom": "2025-10-02",
+    "validTo": null,
+    "topics": [
+      "RESPONSABILIDADE",
+      "ANEXOS",
+      "PRAZO"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "ons-boletins",
+    "title": "ONS — boletins e relatórios da operação do SIN",
+    "authority": "Operador Nacional do Sistema Elétrico",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.ons.org.br/paginas/resultados-da-operacao/boletins-da-operacao",
+    "edition": "Contexto técnico. Distinguir informativo preliminar e dados consolidados; relatório não cria obrigação contratual.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "ons-historico",
+    "title": "ONS — histórico da operação",
+    "authority": "Operador Nacional do Sistema Elétrico",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.ons.org.br/paginas/resultados-da-operacao/historico-da-operacao",
+    "edition": "Séries técnicas oficiais; conferir período, consolidação e unidade. Não constituem prova isolada de culpa ou descumprimento.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "epe-pde2035",
+    "title": "EPE — PDE e estudos de expansão de geração e transmissão",
+    "authority": "Empresa de Pesquisa Energética / MME",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.epe.gov.br/pt/publicacoes-dados-abertos/publicacoes/plano-decenal-de-expansao-de-energia-2035",
+    "edition": "PDE 2035, cadernos e estudos complementares. Planejamento e cenários; não é garantia de preço, resultado ou obrigação privada.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "PRECO",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "epe-pde2035-arquivo",
+    "title": "EPE — PDE 2035, relatório final",
+    "authority": "Empresa de Pesquisa Energética / MME",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.epe.gov.br/sites-pt/publicacoes-dados-abertos/publicacoes/Documents/PDE%202035_Relat%C3%B3rio%20Final_Envio%20MME_2026-11-05_rev4.pdf",
+    "edition": "Arquivo oficial referenciado no portal EPE; revisão 05/11/2026. Estudo de planejamento, sem força automática de obrigação contratual.",
+    "validFrom": "2026-11-05",
+    "validTo": null,
+    "topics": [
+      "VOLUME",
+      "PRECO",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  },
+  {
+    "id": "dou-consulta",
+    "title": "DOU — publicação oficial e retificações",
+    "authority": "Imprensa Nacional",
+    "kind": "DADO_OFICIAL",
+    "url": "https://www.in.gov.br/",
+    "edition": "Selecionar ato, data, edição, seção, página e retificações. Catálogo não substitui o ato publicado; acesso deve ser reconferido.",
+    "validFrom": "2026-11-17",
+    "validTo": null,
+    "topics": [
+      "ANEXOS",
+      "PRAZO",
+      "RESPONSABILIDADE"
+    ],
+    "state": "CATALOGUED",
+    "text": ""
+  }
 ]

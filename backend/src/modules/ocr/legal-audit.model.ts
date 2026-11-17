@@ -3,6 +3,7 @@ export const LEGAL_VERSION='legal-compliance-1.0';
 export const legalHash=(v:unknown)=>createHash('sha256').update(Buffer.isBuffer(v)||typeof v==='string'?v:JSON.stringify(v)).digest('hex');
 export type LegalPage={page:number;text:string;issues:string[]};
 export type LegalSource={id:string;title:string;authority:string;kind:string;url:string;version:number;edition:string;validFrom:string;validTo:string|null;reviewedOn:string;state:string;text:string;hash:string;topics:string[]};
+export const legalNormativeSource=(source:Pick<LegalSource,'kind'>)=>['LEI','DECRETO','RESOLUCAO','PORTARIA','REGRA_CCEE','PROCEDIMENTO','PRECEDENTE_VINCULANTE','JURISPRUDENCIA'].includes(source.kind);
 export type LegalFinding={id:string;topic:string;severity:'ATENCAO'|'ALTA';page:number;quote:string;consideration:string;recommendation:string;sourceIds:string[];legalConclusion:false};
 export const LEGAL_CHECKS=[
  {key:'CESSAO',label:'Cessão de direitos, créditos e posição contratual',pattern:/cess[aã]o|ceder|cession[aá]ri|transfer[eê]ncia.{0,45}(direit|contrat|cr[eé]dit)/i,risk:'Identificar o que está sendo cedido, a quem, os efeitos sobre obrigações e garantias e os requisitos de consentimento/notificação. Cessão de crédito, de posição contratual e de montantes de energia têm regimes distintos.',next:'Exigir objeto, limites, responsabilidades e procedimento de comunicação expressos; conferir o procedimento CCEE aplicável.'},
@@ -36,4 +37,4 @@ export function legalFindings(pages:LegalPage[],sources:LegalSource[]):LegalFind
 export function applicableLegalSources(rows:LegalSource[],asOf:string,reviewDate:string){
  return rows.filter(s=>s.state==='PUBLISHED'&&s.validFrom<=asOf&&(!s.validTo||s.validTo>=asOf)&&s.reviewedOn>=new Date(Date.parse(reviewDate+'T12:00:00Z')-30*86400000).toISOString().slice(0,10)&&s.reviewedOn<=reviewDate&&s.text.trim()&&legalHash(s.text)===s.hash);
 }
-export function legalCoverage(pages:LegalPage[],sources:LegalSource[]){return {pages:pages.length,readable:pages.filter(p=>p.text.trim().length>=30).length,issues:pages.flatMap(p=>p.issues.map(issue=>({page:p.page,issue}))),topics:LEGAL_CHECKS.map(c=>({topic:c.key,label:c.label,sourceCovered:sources.some(s=>s.topics.includes(c.key))})),scope:'SELECTED_OFFICIAL_EXCERPTS',professionalReviewRequired:true,financialApproval:false};}
+export function legalCoverage(pages:LegalPage[],sources:LegalSource[]){return {pages:pages.length,readable:pages.filter(p=>p.text.trim().length>=30).length,issues:pages.flatMap(p=>p.issues.map(issue=>({page:p.page,issue}))),topics:LEGAL_CHECKS.map(c=>({topic:c.key,label:c.label,sourceCovered:sources.some(s=>legalNormativeSource(s)&&s.topics.includes(c.key))})),scope:'SELECTED_OFFICIAL_EXCERPTS',professionalReviewRequired:true,financialApproval:false};}
