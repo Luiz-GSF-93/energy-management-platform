@@ -1,17 +1,33 @@
-# EnergyOS - PEE: servico independente
+# EnergyOS – PEE: serviço independente
 
-Preparacao de instalacao em ambiente separado, desligada por padrao.
+Node 24, sem dependências adicionais. `npm test` executa 14 testes.
+`npm start` inicia desativado por padrão, sem banco, assinatura ou cobrança.
 
-- Node 24, sem dependencias de execucao adicionais.
-- `npm test` executa os cinco testes do servico.
-- `npm start` inicia desligado sem banco, assinatura ou cobranca.
-- `/health` declara `enabled:false` e `ready:false`; rotas de negocio retornam 503.
-- Nao habilitar antes da homologacao com o Core.
+## Homologação de acesso pelo Core
 
-Consulte `../../docs/integrations/pee-core-installation.md` e `.env.example`.
-O gateway de referencia usa RS256; o Core usa sessoes opacas. Essa referencia
-nao e automaticamente compativel com a ponte de acesso preparada no Core.
-Nao copiar senhas ou cookies do Core para o PEE e nao reutilizar segredos.
+`PEE_ACCESS_ENABLED=true` implementa login pela sessão e permissão individual do
+Energy Core. Configure os campos separados de `.env.example`. PEE_CORE_ENABLED
+deve continuar false: o gateway legado de licenciamento usa outro protocolo.
 
-Licencas, assinatura digital, royalties e EVA ainda exigem integracoes reais.
-O prototipo demonstrativo nao equivale a uma aplicacao autenticada de producao.
+O Core inicia uma conexão HTTPS de saída para o PEE; sua API interna não fica
+exposta. A ponte aceita somente troca de código e consulta de acesso, com
+organização e tenant fixos, segredo dedicado e validação em ambas as pontas.
+Use exatamente uma réplica PEE e um worker Core nesta homologação. A fila de
+autorização fica em memória; reinícios negam solicitações pendentes. Antes de
+escalar, implementar transporte compartilhado e novos testes.
+
+O navegador passa por /auth/core/start, /pee/authorize no Core e /sso/core.
+Estado vinculado ao navegador e PKCE protegem a troca de código. Códigos duram
+60 segundos e são de uso único. Cookies PEE são cifrados, HttpOnly, Secure,
+SameSite=Lax e limitados a cinco minutos. Senha e cookies do Core ficam no Core.
+Cada consulta autenticada confirma a permissão atual; falhas negam o acesso.
+
+/app confirma apenas acesso, perfil e cota configurada. Projetos, consumo de
+cotas, contratação de terceiros, assinatura, royalties, EVA e mensagens ainda
+dependem de integração real. /health continua com enabled:false e ready:false;
+no modo de acesso também informa access_enabled e core_connected.
+
+Não ativar antes de homologar as duas pontas e configurar identificadores e
+segredos exclusivos. Publicar com os dois controles false preserva o modo
+desativado anterior. Não copiar senhas/cookies ou reutilizar segredos do Core.
+Consulte ../../docs/integrations/pee-core-sso.md e .env.example.
