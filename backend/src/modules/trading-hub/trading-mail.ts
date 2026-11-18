@@ -5,6 +5,7 @@ export const randomToken=()=>randomBytes(32).toString('hex');
 export const otp=()=>String(randomInt(0,1000000)).padStart(6,'0');
 export function otpDigest(token:string,code:string){const secret=process.env.TRADING_PORTAL_SECRET??process.env.SUPABASE_SERVICE_KEY;if(!secret)throw new ServiceUnavailableException('Configuração segura do portal indisponível.');const derived=createHmac('sha256',secret).update('energyos-trading-otp-v1').digest();return createHmac('sha256',derived).update(token+':'+code).digest('hex');}
 export const escapeHtml=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+export function tradingEmailHint(email:string){const [local,domain]=email.split('@');return local.slice(0,2)+'***@'+domain;}
 export function tradingMailConfigured(){return !!process.env.TRADING_RESEND_API_KEY?.trim()&&!!process.env.TRADING_EMAIL_FROM&&/^[^\s@]+@cotacoes\.expertenergy\.com\.br$/.test(process.env.TRADING_EMAIL_FROM);}
 export class TradingMailError extends ServiceUnavailableException {
  constructor(readonly outcome:'REJECTED'|'UNKNOWN'|'NOT_CONFIGURED',readonly diagnosticCode:string,readonly httpStatus:number|null=null){super(outcome==='NOT_CONFIGURED'?'Configure TRADING_RESEND_API_KEY e o remetente exclusivo de cotações.':outcome==='REJECTED'?`Envio recusado pelo provedor (${httpStatus}). Confira a configuração do remetente.`:'Resultado do envio não confirmado. Consulte o provedor antes de reenviar.');}
