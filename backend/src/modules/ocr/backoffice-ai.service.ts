@@ -5,9 +5,9 @@ import {createHash,randomUUID} from 'node:crypto';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {AuditService} from '../../common/services/audit.service';
-import {AiEvidence,AI_PROMPT_VERSION,AzureBackofficeAiConnector,BackofficeAiError} from './azure-backoffice-ai.connector';
+import {AiEvidence,LEGAL_AI_OUTPUT_LIMIT,AI_PROMPT_VERSION,AzureBackofficeAiConnector,BackofficeAiError} from './azure-backoffice-ai.connector';
 
-export type AiReview={state:'READY'|'NOT_CONFIGURED'|'NOT_AUTHORIZED'|'FAILED'|'NO_EVIDENCE';message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:AiEvidence[];model?:string;promptVersion?:string;checkedAt:string;consumptionState?:'SETTLED'|'PENDING'|'NOT_RESERVED';retryAfterSeconds?:number};
+export type AiReview={state:'READY'|'NOT_CONFIGURED'|'NOT_AUTHORIZED'|'FAILED'|'NO_EVIDENCE';message:string;answer?:string;fields?:{key:string;value:string;evidenceId:string}[];doubts?:{question:string;evidenceIds:string[]}[];evidence?:AiEvidence[];model?:string;promptVersion?:string;checkedAt:string;errorCode?:string;consumptionState?:'SETTLED'|'PENDING'|'NOT_RESERVED';retryAfterSeconds?:number};
 @Injectable()
 export class BackofficeAiService {
  private readonly active=new Set<string>();
@@ -31,7 +31,7 @@ export class BackofficeAiService {
    // Fail closed before transmission if the existing durable audit cannot record intent.
    if(!this.budget)throw new Error('BUDGET_UNAVAILABLE');
    if(process.env.BOT_ENERGY_LICENSE_MODE==='true'&&(!this.licenses||!await this.licenses.available(t.organizationId)))return {state:'NOT_AUTHORIZED',message:'EVA + RAG não incluído em licença vigente ou cota indisponível.',checkedAt};
-   reservation=await this.budget.reserve(t.organizationId,t.userId,requestId,'conversation',{inputTokens:60000,outputTokens:2200},module);
+   reservation=await this.budget.reserve(t.organizationId,t.userId,requestId,'conversation',{inputTokens:60000,outputTokens:options.legalProfile?LEGAL_AI_OUTPUT_LIMIT:2200},module);
    await log('REQUESTED');
    const result=await this.connector.interpret(t.organizationId,question,evidence,undefined,options.legalProfile===true);
    settlementAttempted=true;await this.budget.settle(reservation,result.usage);settled=true;
@@ -48,7 +48,7 @@ export class BackofficeAiService {
    const consumptionState=reservation?(settled?'SETTLED':'PENDING'):'NOT_RESERVED';
    try{await log('FAILED',{errorCode:code,evidenceCount:evidence.length,consumptionState,...(error instanceof BackofficeAiError&&error.providerStatus?{providerStatus:error.providerStatus}:{})});}catch{/* Keep source-backed drafts even if diagnostic auditing is unavailable. */}
    const message=code==='PROVIDER_TIMEOUT'?'A IA excedeu o tempo de resposta. Os campos extraídos e rascunhos estão preservados; tente novamente.':error instanceof Error&&error.message.startsWith('Preços Azure')?error.message:'Não foi possível concluir a interpretação com fontes válidas. Os campos extraídos estão preservados. Confira as evidências e tente novamente; aprovação financeira continua separada.';
-   return {state:'FAILED',message:options.settleRejectedUsage?'A interpretação não foi concluída. Os campos preparados estão preservados. Consulte o histórico antes de repetir; nenhuma nova tentativa foi iniciada automaticamente.':message,checkedAt,consumptionState};
+   return {state:'FAILED',message:options.settleRejectedUsage?'A interpretação não foi concluída. Os campos preparados estão preservados. Consulte o histórico antes de repetir; nenhuma nova tentativa foi iniciada automaticamente.':message,checkedAt,consumptionState,errorCode:code};
   }
   finally{this.active.delete(key);}
  }

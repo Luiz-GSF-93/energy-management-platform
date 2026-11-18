@@ -25,4 +25,5 @@ export class LegalAuditOwnerController{
  private context(r:RequestWithAuthenticatedUser):any{return {scope:'global',userId:r.authenticatedUser.userId,roleId:'',permissions:[],role:'admin_platform'};}
  @Get() @Header('Cache-Control','no-store') @RequirePermission([EVA_GUIDE_OWNER]) list(@Req()r:RequestWithAuthenticatedUser){return this.service.library(this.context(r));}
  @Post() @RequirePermission([EVA_GUIDE_OWNER]) publish(@Req()r:RequestWithAuthenticatedUser,@Body()b:any){return this.service.publishSource(this.context(r),b);}
+ @Post('analyses/:id/recover') @HttpCode(202) @RequirePermission([EVA_GUIDE_OWNER]) recover(@Req()r:RequestWithAuthenticatedUser,@Param('id')id:string,@Body()b:any){return this.service.recoverUnknown(this.context(r),id,b);}
 }
