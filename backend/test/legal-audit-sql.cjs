@@ -76,5 +76,24 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  for(const table of ['legal_audit_sources','legal_audit_jobs','legal_audit_events','legal_audit_questions'])for(const role of ['anon','authenticated'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])ok(!(await db.query('SELECT has_table_privilege($1,$2,$3) p',[role,table,privilege])).rows[0].p);
  for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_function_privilege($1,'public.legal_audit_grouped_report(jsonb)','EXECUTE') p",[role])).rows[0].p);
  await deny(()=>db.exec("UPDATE legal_audit_sources SET created_by='changed'"));await deny(()=>db.exec("DELETE FROM legal_audit_events"));
+
+ // Owner-controlled unknown AI recovery preserves both accounting and completed reading.
+ await db.exec(`CREATE TABLE bot_energy_ai_usage(id uuid PRIMARY KEY,organization_id text,module text,state text,reserved_micro_usd bigint,actual_micro_usd bigint,settled_at timestamptz);
+ CREATE TABLE audit_logs(id uuid DEFAULT gen_random_uuid(),organization_id text,resource_type text,resource_id text,changes jsonb,created_at timestamptz DEFAULT clock_timestamp());
+ UPDATE auth.users SET banned_until=NULL;
+ UPDATE legal_audit_jobs SET state='TECHNICAL_REVIEW',note='AI_RESULT_UNKNOWN',pages='[{"page":1,"text":"Synthetic guarantee clause","issues":[]}]',narratives='[]',cursor=0,lease_token=NULL,lease_until=NULL WHERE id='${id(32)}';
+ INSERT INTO bot_energy_ai_usage VALUES('${id(70)}','a','AUDITORIA','RESERVED',20200,NULL,NULL);
+ INSERT INTO audit_logs(organization_id,resource_type,resource_id,changes,created_at) VALUES('a','backoffice_ai_interpretation','${id(70)}','{"after":{"state":"REQUESTED","documentId":"${id(12)}"}}',now()-interval '2 seconds'),('a','backoffice_ai_interpretation','${id(70)}','{"after":{"state":"FAILED","documentId":"${id(12)}","consumptionState":"PENDING"}}',now()-interval '1 second');`);
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261339_legal_audit_controlled_recovery.sql'),'utf8'));
+ const stamp=(await db.query('SELECT updated_at::text s FROM legal_audit_jobs WHERE id=$1',[id(32)])).rows[0].s;
+ const recover=(owner=id(3),org='a',request=id(70),expected=stamp,ack=true)=>db.query('SELECT legal_audit_recover_ai($1,$2,$3,$4,$5,$6,$7) d',[owner,org,id(32),request,expected,'Verified connection; preserve unknown reservation and retry one saved block.',ack]).then(r=>r.rows[0].d);
+ await deny(()=>recover(actor));await deny(()=>recover(id(3),'b'));await deny(()=>recover(id(3),'a',id(71)));await deny(()=>recover(id(3),'a',id(70),'2000-01-01'));await deny(()=>recover(id(3),'a',id(70),stamp,false));
+ const usageBefore=(await db.query('SELECT to_jsonb(u) d FROM bot_energy_ai_usage u')).rows[0].d;
+ const quotaBefore=(await db.query("SELECT organization_resource_usage('a') u")).rows[0].u;
+ ok((await recover()).state==='ANALYZING');ok((await recover()).replayed===true);
+ ok(JSON.stringify((await db.query('SELECT to_jsonb(u) d FROM bot_energy_ai_usage u')).rows[0].d)===JSON.stringify(usageBefore));
+ ok(JSON.stringify((await db.query("SELECT organization_resource_usage('a') u")).rows[0].u)===JSON.stringify(quotaBefore));
+ ok((await db.query("SELECT count(*)::integer n FROM legal_audit_events WHERE kind='UNKNOWN_AI_RETRY_AUTHORIZED'")).rows[0].n===1);
+ for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'public.legal_audit_recover_ai(uuid,text,uuid,uuid,timestamptz,text,boolean)','EXECUTE') p",[role])).rows[0].p);
  console.log('Legal audit SQL:',checks,'checks passed');
  }finally{await db.close();}})().catch(e=>{console.error({message:e.message,code:e.code,position:e.position,internalQuery:e.internalQuery,where:e.where,stack:e.stack?.split("\n").slice(0,3).join("\n")});process.exitCode=1});

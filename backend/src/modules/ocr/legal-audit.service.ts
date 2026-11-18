@@ -62,6 +62,11 @@ export class LegalAuditService{
   const r=await this.db.getClient().rpc('legal_audit_confirm_review',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_id:id,p_hash:b.sourceHash});this.fail(r.error);return r.data;
  }
  async resume(t:TenantContext,id:string){if(!uuid(id))throw new BadRequestException('Análise inválida.');return this.action(t,'resume',id);}
+ async recoverUnknown(t:TenantContext,id:string,b:any){
+  if((t.scope as string)!=='global'||!uuid(t.userId))throw new ForbiddenException('A retomada técnica exige o Owner da Plataforma.');
+  if(!uuid(id)||!b||Object.keys(b).sort().join(',')!=='expectedUpdatedAt,keepReservation,organizationId,reason,requestId'||!uuid(b.requestId)||typeof b.organizationId!=='string'||!b.organizationId||b.organizationId.length>100||typeof b.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(b.expectedUpdatedAt))||b.keepReservation!==true||typeof b.reason!=='string'||b.reason.trim().length<20||b.reason.length>1000)throw new BadRequestException('Confira o protocolo, histórico, justificativa e a manutenção da reserva anterior.');
+  const r=await this.db.getClient().rpc('legal_audit_recover_ai',{p_owner:t.userId,p_org:b.organizationId,p_id:id,p_request:b.requestId,p_expected:b.expectedUpdatedAt,p_reason:b.reason,p_keep_reservation:true});this.fail(r.error);return r.data;
+ }
  async question(t:TenantContext,id:string,b:any){
   if(!uuid(id)||!b||Object.keys(b).join(',')!=='question'||typeof b.question!=='string'||b.question.trim().length<3||b.question.length>500)throw new BadRequestException('Pergunta inválida.');
   const captured=await this.action(t,'question',id,{question:b.question.trim(),questionHash:legalHash(b.question.trim())});

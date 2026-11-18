@@ -45,7 +45,7 @@ export class LegalAuditWorker implements OnModuleInit,OnModuleDestroy{
      const c=chunks[j.cursor],evidence=legalEvidence(c,j.sources),files=await legalFileLookup(this.db,t,c.text.slice(0,3000)),fileReferences=appendLegalFileEvidence(evidence,files);paid=true;
      const result=await this.ai.interpret(t,'Revise o bloco contratual: obrigações, riscos, ambiguidades, cessão, garantias, penalidades e providências. Diferencie texto contratual de norma e indique evidências. Não conclua validade integral. Considere a data-base '+String(j.as_of).slice(0,10)+'.',evidence,j.document_id,'AUDITORIA',{settleRejectedUsage:true,legalProfile:true});
      if(result.retryAfterSeconds){await this.rpc('defer',j.id,token,{delay:60});return;}
-     if(result.state==='FAILED')throw Error(result.consumptionState==='PENDING'?'AI_RESULT_UNKNOWN':'LEGAL_AI_FAILED');
+     if(result.state==='FAILED')throw Error(result.consumptionState==='PENDING'?'AI_RESULT_UNKNOWN':result.errorCode==='OUTPUT_LIMIT'?'LEGAL_AI_OUTPUT_LIMIT':'LEGAL_AI_FAILED');
      if(['NOT_AUTHORIZED','NOT_CONFIGURED'].includes(result.state))throw Error('LEGAL_AI_ACCESS_REQUIRED');
      const citations=(result.evidence??[]).map(e=>e.id),narrative={fileReferences:fileReferences.map(f=>({...f,cited:citations.includes(f.id)})),chunkId:c.id,page:c.page,pages:c.pages,state:result.state,answer:result.answer??'Não foi possível fundamentar uma interpretação deste bloco. Confira o original e a cobertura normativa.',citations,normativeSupported:citations.some(s=>s.startsWith('law-')),model:result.model??null,promptVersion:result.promptVersion??null};
      await this.rpc('analysis',j.id,token,{cursor:j.cursor,narrative,durationMs:Date.now()-start});return;
