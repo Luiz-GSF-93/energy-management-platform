@@ -11,6 +11,8 @@ export async function legalAuditPdf(job:any,report:any):Promise<Buffer>{
   heading('Síntese executiva');
   text(`${report.findings.length} itens destacados para conferência, sendo ${report.findings.filter((f:any)=>f.severity==='ALTA').length} com prioridade de revisão. ${report.coverage.topics.filter((c:any)=>!c.sourceCovered).length} assuntos permanecem sem cobertura normativa específica demonstrada. A prioridade é uma classificação de triagem, não prova de infração, nulidade ou penalidade devida.`);
   text('Este documento apresenta avaliação técnica assistida: evidência contratual, consideração, fundamento disponível e providência recomendada. A validação cabe ao responsável técnico/jurídico autorizado da organização; não é um laudo judicial assinado por perito.');
+  const reviewBlocks=report.narratives.filter((n:any)=>n.state==='EVIDENCE_REVIEW').length;
+  if(reviewBlocks)text(`Ressalva de interpretação: ${reviewBlocks} de ${report.narratives.length} blocos apresentam triagem dos trechos do original porque a interpretação IA não foi validada. Esses blocos exigem revisão jurídica. Respostas recusadas não foram incorporadas às conclusões.`);
   heading('Escopo e integridade');text(`Páginas recebidas: ${report.coverage.pages}. Páginas com texto: ${report.coverage.readable}. A revisão considera somente este arquivo e os trechos oficiais identificados abaixo. Assinaturas, poderes e anexos externos precisam de conferência própria.`);
   for(const issue of report.coverage.issues)text(`Página ${issue.page}: ${issue.issue}.`);
   heading('Verificações por assunto');

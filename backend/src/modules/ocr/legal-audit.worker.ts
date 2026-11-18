@@ -8,7 +8,7 @@ import {BackofficeAiService} from './backoffice-ai.service';
 import {AzureInvoiceConnector,azureConfig,OcrProviderError} from './azure-invoice.connector';
 import {extractPdfText} from './eva-pdf-text.extractor';
 import {ExtractionError} from './eva-extraction.model';
-import {LEGAL_VERSION,legalPages,legalChunks,legalFindings,legalCoverage,legalHash} from './legal-audit.model';
+import {LEGAL_VERSION,LEGAL_REJECTED_CONTENT,legalEvidenceReview,legalPages,legalChunks,legalFindings,legalCoverage,legalHash} from './legal-audit.model';
 import {legalEvidence} from './legal-audit.service';
 import {legalAuditPdf} from './legal-audit.pdf';
 @Injectable()
@@ -42,9 +42,18 @@ export class LegalAuditWorker implements OnModuleInit,OnModuleDestroy{
    if(j.state==='ANALYZING'){
     const chunks=legalChunks(j.pages);
     if(j.cursor<chunks.length){
-     const c=chunks[j.cursor],evidence=legalEvidence(c,j.sources),files=await legalFileLookup(this.db,t,c.text.slice(0,3000)),fileReferences=appendLegalFileEvidence(evidence,files);paid=true;
-     const result=await this.ai.interpret(t,'Revise o bloco contratual: obrigações, riscos, ambiguidades, cessão, garantias, penalidades e providências. Diferencie texto contratual de norma e indique evidências. Não conclua validade integral. Considere a data-base '+String(j.as_of).slice(0,10)+'.',evidence,j.document_id,'AUDITORIA',{settleRejectedUsage:true,legalProfile:true});
+     const c=chunks[j.cursor],evidence=legalEvidence(c,j.sources),files=await legalFileLookup(this.db,t,c.text.slice(0,3000)),fileReferences=appendLegalFileEvidence(evidence,files);
+     const question='Revise o bloco contratual: obrigações, riscos, ambiguidades, cessão, garantias, penalidades e providências. Diferencie texto contratual de norma e indique evidências. Não conclua validade integral. Considere a data-base '+String(j.as_of).slice(0,10)+'.';
+     const prior=await this.db.getClient().rpc('legal_audit_settled_rejection',{p_id:j.id,p_token:token,p_cursor:j.cursor,p_evidence:legalHash(evidence),p_question:legalHash(question)});
+     if(prior.error)throw Error('LEGAL_REJECTION_CHECK_UNCONFIRMED');
+     let result:Awaited<ReturnType<BackofficeAiService['interpret']>>;
+     if(prior.data?.consumptionState==='SETTLED')result=prior.data;
+     else{paid=true;result=await this.ai.interpret(t,question,evidence,j.document_id,'AUDITORIA',{settleRejectedUsage:true,legalProfile:true});}
      if(result.retryAfterSeconds){await this.rpc('defer',j.id,token,{delay:60});return;}
+     if(result.state==='FAILED'&&result.consumptionState==='SETTLED'&&LEGAL_REJECTED_CONTENT.includes(result.errorCode??'')){
+      const narrative={...legalEvidenceReview(c,j.pages,j.sources,result.errorCode!),fileReferences:fileReferences.map(f=>({...f,cited:false})),reusedSettledRejection:prior.data?.replayed===true,aiRequestId:prior.data?.requestId??null};
+      await this.rpc('analysis',j.id,token,{cursor:j.cursor,narrative,durationMs:Date.now()-start});return;
+     }
      if(result.state==='FAILED')throw Error(result.consumptionState==='PENDING'?'AI_RESULT_UNKNOWN':result.errorCode==='OUTPUT_LIMIT'?'LEGAL_AI_OUTPUT_LIMIT':'LEGAL_AI_FAILED');
      if(['NOT_AUTHORIZED','NOT_CONFIGURED'].includes(result.state))throw Error('LEGAL_AI_ACCESS_REQUIRED');
      const citations=(result.evidence??[]).map(e=>e.id),narrative={fileReferences:fileReferences.map(f=>({...f,cited:citations.includes(f.id)})),chunkId:c.id,page:c.page,pages:c.pages,state:result.state,answer:result.answer??'Não foi possível fundamentar uma interpretação deste bloco. Confira o original e a cobertura normativa.',citations,normativeSupported:citations.some(s=>s.startsWith('law-')),model:result.model??null,promptVersion:result.promptVersion??null};
