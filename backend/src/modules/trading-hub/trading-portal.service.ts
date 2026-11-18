@@ -1,4 +1,4 @@
-import {BadRequestException,ConflictException,ForbiddenException,Injectable,ServiceUnavailableException} from '@nestjs/common';
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,Logger,ServiceUnavailableException} from '@nestjs/common';
 
 
 import {SupabaseService} from '../../services/supabase.service';
@@ -16,7 +16,7 @@ import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 import {object,text,uuid,validateTrading} from './trading-validation';
 
 
-import {digest,randomToken,otp,otpDigest,sendTradingMail,tradingMailConfigured,tradingMailFailure} from './trading-mail';
+import {digest,randomToken,otp,otpDigest,sendTradingMail,tradingMailConfigured,tradingMailFailure,tradingEmailHint} from './trading-mail';
 import {tradingEmailHtml} from './trading-email-template';
 import {assertQuotationReady,quotationExpired} from './trading-terms';
 
@@ -42,7 +42,7 @@ export class TradingPortalService {
  private async audit(i:any,action:string,details:any){const r=await this.client().from('trading_portal_audit').insert({organization_id:i.organization_id,invitation_id:i.id,action,identity:i.email,details});this.check(r.error);}
 
 
- private async invite(hash:string,session=false){const r=session?await this.client().from('trading_invitations').select('*').eq('session_hash',hash).maybeSingle():await this.client().rpc('trading_invitation_for_token',{p_hash:hash});this.check(r.error);const i=r.data;if(!i||!(i.state==='PENDING'||i.kind==='SUPPLIER'&&['RESPONDED','DECLINED'].includes(i.state))||!Number.isFinite(Date.parse(i.expires_at))||Date.parse(i.expires_at)<=Date.now()||(session&&(!Number.isFinite(Date.parse(i.session_expires_at))||Date.parse(i.session_expires_at)<=Date.now())))throw new ForbiddenException('Convite ou sessão inválida, expirada ou revogada. Reabra o link recebido para confirmar seu e-mail enquanto a cotação estiver vigente.');await this.licenses.requireEntitlement(i.organization_id,'trading_hub');const o=await this.client().from('trading_records').select('kind,status,data').eq('organization_id',i.organization_id).eq('id',i.opportunity_id).maybeSingle();this.check(o.error);if(!o.data||o.data.kind!=='opportunity'||!['OPEN','ANALYSIS'].includes(o.data.status)||quotationExpired(o.data.data))throw new ForbiddenException('Cotação expirada ou encerrada. Solicite uma nova rodada.');return i;}
+ private async invite(hash:string,session=false){const r=session?await this.client().from('trading_invitations').select('*').eq('session_hash',hash).maybeSingle():await this.client().rpc('trading_invitation_for_token',{p_hash:hash});this.check(r.error);const i=r.data;if(!i||!(i.state==='PENDING'||i.kind==='SUPPLIER'&&['RESPONDED','DECLINED'].includes(i.state))||!Number.isFinite(Date.parse(i.expires_at))||Date.parse(i.expires_at)<=Date.now()||(session&&(!Number.isFinite(Date.parse(i.session_expires_at))||Date.parse(i.session_expires_at)<=Date.now())))throw new ForbiddenException('Convite ou sessão inválida, expirada ou revogada. Reabra o link recebido para confirmar seu e-mail enquanto a cotação estiver vigente.');await this.licenses.requireEntitlement(i.organization_id,'trading_hub');const o=await this.client().from('trading_records').select('kind,status,data').eq('organization_id',i.organization_id).eq('id',i.opportunity_id).maybeSingle();this.check(o.error);if(!o.data||o.data.kind!=='opportunity'||!['OPEN','ANALYSIS'].includes(o.data.status)||quotationExpired(o.data.data))throw new ForbiddenException('Cotação expirada ou encerrada. Solicite uma nova rodada.');return {...i,opportunityTitle:o.data.data?.title??null};}
 
 
  async hubContract(id:string,b:unknown,t:TenantContext){return this.hub.contract(id,b,t);}
@@ -98,7 +98,21 @@ export class TradingPortalService {
  async inviteClient(id:string,t:TenantContext){await this.hub.allowed(t,true);await this.hub.legacyWorkflowGuard(id,t);if(!tradingMailConfigured())throw new ServiceUnavailableException('Configure o remetente de cotações no Resend.');if(!(['gestor','admin_org'].includes(t.role)||t.accessMode==='platform_operation'))throw new ForbiddenException('Gestor ou administrador requerido.');const p=await this.hub.one(id,t);if(p.kind!=='proposal'||p.status!=='MANAGER_APPROVED')throw new BadRequestException('Proposta precisa da aprovação interna.');const o=await this.hub.one(p.parent_id,t);const c=await this.client().from('customers').select('contact_email').eq('organization_id',t.organizationId).eq('id',o.data.customerId).is('deleted_at',null).maybeSingle();this.check(c.error);const email=c.data?.contact_email;if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new BadRequestException('Cadastre o e-mail de contato autorizado do cliente.');return this.issue(t,o,email.toLowerCase(),'CLIENT',null,p.id);}
 
 
- async challenge(token:string){const i=await this.invite(digest(this.token(token)));const code=otp();const r=await this.client().rpc('trading_otp_challenge',{p_hash:digest(token),p_otp:otpDigest(token,code)});this.check(r.error);if(!r.data)throw new BadRequestException('Aguarde um minuto antes de solicitar outro código.');await sendTradingMail(i.email,'EnergyOS — código de acesso',`Seu código de acesso ao Trading Hub é ${code}. Válido por 10 minutos. Não compartilhe.`, 'trading-otp-'+i.id+'-'+Date.now(),tradingEmailHtml({title:'Confirme seu acesso',intro:'Use o código abaixo para acessar sua oportunidade no portal seguro do Trading Hub.',code,footer:'Válido por até 10 minutos ou até a expiração do convite. Não compartilhe este código. Se você não solicitou o acesso, ignore esta mensagem.'}));return {sent:true};}
+ private async recordOtpDelivery(i:any,result:{state:string;messageId?:string;httpStatus:number|null;code:string|null}){
+  try{await this.audit(i,'OTP_EMAIL_'+result.state,result);}
+  catch{new Logger(TradingPortalService.name).warn(JSON.stringify({event:'TRADING_OTP_DELIVERY_AUDIT_UNCONFIRMED',invitationId:i.id,state:result.state,code:result.code}));}
+ }
+ async challenge(token:string){
+  const i=await this.invite(digest(this.token(token)));
+  if(!tradingMailConfigured())throw new ServiceUnavailableException('Envio do código temporariamente indisponível. O backoffice deve conferir o remetente de cotações.');
+  const challengedAt=Date.now(),title=String(i.opportunityTitle??'').replace(/\s+/g,' ').slice(0,120),code=otp(),r=await this.client().rpc('trading_otp_challenge',{p_hash:digest(token),p_otp:otpDigest(token,code)});this.check(r.error);
+  if(!r.data)throw new BadRequestException('Aguarde 60 segundos entre pedidos de código. Há um limite de 10 pedidos por convite por dia. Se o prazo da cotação terminou ou o link foi revogado, solicite orientação ao backoffice.');
+  let messageId:string;
+  try{messageId=await sendTradingMail(i.email,'EnergyOS — código de acesso'+(title?' · '+title:''),`Cotação: ${title||'Trading Hub'}.\nSeu código de acesso ao Trading Hub é ${code}. Válido por até 10 minutos ou até o prazo do convite. O código é enviado somente ao e-mail que recebeu o convite; não é enviado automaticamente ao abrir o link. Não compartilhe.`, 'trading-otp-'+i.id+'-'+Date.now(),tradingEmailHtml({title:'Confirme seu acesso',intro:'Use o código abaixo no mesmo convite em que você solicitou o acesso ao Trading Hub.',code,...(title?{facts:[['Cotação',title]] as [string,string][]}:{}),footer:'Válido por até 10 minutos ou até a expiração do convite. Use somente o código mais recente solicitado neste link. Não compartilhe. Se não encontrar a mensagem, confira spam e quarentena do e-mail corporativo.'}));}
+  catch(error){const failure=tradingMailFailure(error);await this.recordOtpDelivery(i,failure);throw error;}
+  await this.recordOtpDelivery(i,{state:'ACCEPTED',messageId,httpStatus:200,code:null});
+  return {sent:true,emailHint:tradingEmailHint(i.email),resendAfterSeconds:60,expiresAt:new Date(Math.min(challengedAt+600000,Date.parse(i.expires_at))).toISOString()};
+ }
 
 
  async verify(token:string,input:unknown){this.token(token);const b=object(input);if(Object.keys(b).some(k=>k!=='code')||!/^\d{6}$/.test(b.code))throw new BadRequestException('Informe o código de seis dígitos.');const session=randomToken();const r=await this.client().rpc('trading_otp_verify',{p_hash:digest(token),p_otp:otpDigest(token,b.code),p_session:digest(session)});this.check(r.error);if(!r.data)throw new ForbiddenException('Código inválido, expirado ou excedeu tentativas.');return {session};}
