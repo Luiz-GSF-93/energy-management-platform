@@ -5,6 +5,23 @@ const decimal=(s:string)=>{if(typeof s!=='string'||!/^(0|[1-9]\d{0,11})(\.\d{1,1
 const fixed=(n:bigint,p=12)=>{const v=(n<0n?-n:n).toString().padStart(p+1,'0');return (n<0n?'-':'')+v.slice(0,-p)+'.'+v.slice(-p);};
 const money=(n:bigint)=>fixed((n+scale/200n)/(scale/100n),2);
 
+/** XML preserves more unit-price decimals than a printed DANFE. Compare exact
+ * quantity/total and the price rounded to the least precise original, without
+ * treating a contradictory fiscal statement as another copy. */
+export function supplierInvoiceCopiesAgree(a:any,b:any){
+ try{
+  if(a.month!==b.month||decimal(a.quantityMwh)!==decimal(b.quantityMwh)||decimal(a.amount)!==decimal(b.amount))return false;
+  const places=Math.min((a.pricePerMwh.split('.')[1]??'').length,(b.pricePerMwh.split('.')[1]??'').length);
+  const step=10n**BigInt(12-places),rounded=(v:string)=>(decimal(v)+step/2n)/step;
+  if(rounded(a.pricePerMwh)!==rounded(b.pricePerMwh))return false;
+  const known=(t:string)=>['INCLUDED','NET_DESTINATION_ICMS'].includes(t);
+  if(known(a.taxTreatment)&&known(b.taxTreatment)&&a.taxTreatment!==b.taxTreatment)return false;
+  if([a,b].some(p=>p.taxEvidence?.kind==='CONFLICTING_ICMS'))return false;
+  for(const key of ['icmsBase','icmsAmount'])if(a.taxEvidence?.[key]!==undefined&&b.taxEvidence?.[key]!==undefined&&decimal(a.taxEvidence[key])!==decimal(b.taxEvidence[key]))return false;
+  return true;
+ }catch{return false;}
+}
+
 export function supplierInvoiceSetCaptureMatches(source:any,documents:any[],scope:{organizationId:string;customerId:string;unitId:string;month:string}){
  return !!source?.invoiceSetHash&&Array.isArray(source.documents)&&source.documents.length>0&&source.documents.length<=10&&source.documents.every((p:any)=>documents.some(d=>d.id===p.documentId&&d.organization_id===scope.organizationId&&d.customer_id===scope.customerId&&d.consumer_unit_id===scope.unitId&&d.file_hash===p.fileHash&&d.file_verified===true&&d.document_type==='INVOICE_SUPPLIER'&&String(d.reference_month).slice(0,7)===scope.month));
 }
@@ -13,7 +30,8 @@ export function supplierInvoiceSetCaptureMatches(source:any,documents:any[],scop
  * Do not turn a partially readable candidate list into a complete purchase. */
 export function supplierInvoiceSet(documents:any[],proposals:any[]){
  if(documents.length<2||!proposals.length||documents.length>10)return null;
- const sorted=[...documents].sort((a,b)=>a.id.localeCompare(b.id));
+ const copy=(d:any)=>proposals.some(p=>p.documentId===d.id&&p.fileHash===d.file_hash&&p.fiscalCopyOf)?1:0;
+ const sorted=[...documents].sort((a,b)=>copy(a)-copy(b)||a.id.localeCompare(b.id));
  const sources:any[]=[],invoices:any[]=[],byKey=new Map<string,any>(),byHash=new Map<string,any>(),issues:string[]=[];
  for(const d of sorted){
   const matches=proposals.filter(p=>p.documentId===d.id&&p.fileHash===d.file_hash);
@@ -24,12 +42,13 @@ export function supplierInvoiceSet(documents:any[],proposals:any[]){
   sources.push({documentId:p.documentId,fileHash:p.fileHash});
   const key=p.fiscalIdentity?.key??p.fileHash,prior=byHash.get(p.fileHash)??byKey.get(key);
   if(prior){
-   if(['quantityMwh','pricePerMwh','amount','taxTreatment'].some(k=>prior[k]!==p[k])||settlementHash(prior.taxEvidence??null)!==settlementHash(p.taxEvidence??null))issues.push('A mesma identidade fiscal apresenta valores ou tributos diferentes; confira as versões da nota.');
+   if(!supplierInvoiceCopiesAgree(prior,p))issues.push('A mesma identidade fiscal apresenta valores ou tributos diferentes; confira as versões da nota.');
    continue;
   }
   byKey.set(key,p);byHash.set(p.fileHash,p);invoices.push(p);
  }
  if(!invoices.length)return null;
+ sources.sort((a,b)=>a.documentId.localeCompare(b.documentId));
  const quantity=invoices.reduce((n,p)=>n+decimal(p.quantityMwh),0n),amount=invoices.reduce((n,p)=>n+decimal(p.amount),0n);
  const setHash=settlementHash({version:1,sources,invoices,issues});
  return {...invoices[0],format:'supplier-invoice-proposal-1',setVersion:1,setHash,sources,invoices,issues,
@@ -47,7 +66,7 @@ export function supplierInvoiceSetDraft(c:any,single:(context:any)=>any,parse:(v
  let allocation=c.manualOverrides?.supplierInvoiceAllocation;
  try{if(allocation)allocation=parse(allocation);}catch{allocation=null;need('SUPPLIER_INVOICE_REVIEW','A confirmação anterior é inválida; confira o conjunto atual.');}
  if(allocation?.invoiceTaxes?.some((x:any)=>!p.invoices.some((n:any)=>n.documentId===x.documentId&&n.fileHash===x.fileHash))){allocation=null;need('SUPPLIER_INVOICE_REVIEW','Uma confirmação fiscal não pertence ao conjunto atual.');}
- const confirmed=!!c.manualAuthor&&allocation?.invoiceSetHash===p.setHash&&allocation.documentId===p.documentId&&allocation.fileHash===p.fileHash;
+ const confirmed=!!c.manualAuthor&&(allocation?.invoiceSetHash===p.setHash||p.coverageCompatibleSetHashes?.includes(allocation?.invoiceSetHash))&&allocation.documentId===p.documentId&&allocation.fileHash===p.fileHash;
  if(!confirmed)need('SUPPLIER_INVOICE_COVERAGE',`As ${p.invoices.length} notas já estão preenchidas. Confirme se o conjunto cobre o faturamento ou se existe compra adicional.`);
  if(c.manualOverrides?.supplierSettlement||c.manualOverrides?.supplierPricePerMwh!==undefined)need('SUPPLIER_MANUAL_ALLOCATION_REVIEW','Há uma alocação manual anterior. Confira o conjunto antes de substituir a proposta manual.');
  for(const issue of p.issues??[])need('SUPPLIER_INVOICE_SET_CONFLICT',issue);
@@ -76,7 +95,7 @@ export function supplierInvoiceSetDraft(c:any,single:(context:any)=>any,parse:(v
  let difference:null|string=null;
  try{const measured=decimal(c.measurements.consumptionTotal)/1000n;difference=fixed(measured-decimal(p.quantityMwh));differences.push('Notas: '+p.quantityMwh+' MWh; medição: '+fixed(measured)+' MWh; diferença '+difference+' MWh preservada, sem presumir perda ou compra extra.');}catch{need('SUPPLIER_INVOICE_REVIEW','Confira a medição da competência.');}
  return {format:'supplier-invoice-evidence-1',setVersion:1,state:requirements.length?'PENDING':'COMPLETE',requirements,differences,consumedCostSources,confirmedExtraCostSources,memory:null,terms:null,
-  source:{kind:'VERIFIED_INVOICE',documentId:p.documentId,fileHash:p.fileHash,invoiceSetHash:p.setHash,documents:p.sources,invoices:components,...(confirmed?{allocation:{...allocation,actor:c.manualAuthor}}:{})},
+  source:{kind:'VERIFIED_INVOICE',documentId:p.documentId,fileHash:p.fileHash,invoiceSetHash:p.setHash,documents:p.sources,invoices:components,...(p.fiscalCopies?.length?{fiscalCopies:p.fiscalCopies}:{}),...(confirmed?{allocation:{...allocation,actor:c.manualAuthor}}:{})},
   requiresHumanAcceptance:requirements.length>0,financialApproval:false,canPublish:false,
   supplier:{formulaVersion:'supplier-invoice-evidence-1',contract:null,pricePerMwh:p.pricePerMwh,contractedMwh:p.quantityMwh,regularAmount:p.amount,extraAmount:'0.00',totalAmount:p.amount,taxTreatment:'PER_INVOICE',invoiceComponents:components,volumeDifferenceMwh:difference,requirements:[]}};
 }

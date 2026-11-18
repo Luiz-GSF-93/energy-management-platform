@@ -1,4 +1,4 @@
-import {supplierInvoiceSet,supplierInvoiceSetDraft} from './supplier-invoice-set';
+import {supplierInvoiceSet,supplierInvoiceSetDraft,supplierInvoiceCopiesAgree} from './supplier-invoice-set';
 import {settlementHash} from './documented-supplier-settlement';
 export async function collectSupplierInvoiceEvidence(documents:any[],read:(d:any)=>Promise<{kind:string;proposal:any;reviewProposal?:any}>){
  const kept:any[]=[],proposals:any[]=[],reviewProposals:any[]=[],excluded:any[]=[],observations:string[]=[];
@@ -7,7 +7,22 @@ export async function collectSupplierInvoiceEvidence(documents:any[],read:(d:any
   try{const evidence=await read(d);if(evidence.kind==='CONTRACT'){excluded.push({id:d.id,name:d.original_filename,reason:'Conteúdo contratual; não é nota fiscal.'});continue;}kept.push(d);if(evidence.proposal)proposals.push(evidence.proposal);if(evidence.reviewProposal)reviewProposals.push(evidence.reviewProposal);}
   catch{kept.push(d);observations.push('Nota do fornecedor: extração local exige revisão; sem nova chamada paga.');}
  }
- return {documents:kept,proposals,reviewProposals,excluded,observations,selected:kept.length===1&&proposals.length===1?proposals[0]:supplierInvoiceSet(kept,proposals)};
+ const previous=kept.length===1&&proposals.length===1?proposals[0]:supplierInvoiceSet(kept,proposals);
+ const copies=reviewProposals.filter(p=>p.requiresUnitConfirmation===true&&p.fiscalIdentity?.kind==='NFE_ACCESS_KEY'&&proposals.some(n=>n.fiscalIdentity?.kind==='NFE_ACCESS_KEY'&&n.fiscalIdentity.key===p.fiscalIdentity.key&&supplierInvoiceCopiesAgree(n,p)));
+ // A same-CNPJ document alone cannot prove the installation. An identical,
+ // verified fiscal note already identified for this unit can prove its copy.
+ // The reader supplies review candidates only in the absence of conflicting UC.
+ const aliases=copies.map(p=>{const n=proposals.find(n=>n.fiscalIdentity?.key===p.fiscalIdentity.key&&supplierInvoiceCopiesAgree(n,p))!;return {...p,fiscalCopyOf:{documentId:n.documentId,fileHash:n.fileHash,key:n.fiscalIdentity.key}};});
+ const combined=[...proposals,...aliases];
+ const selected=aliases.length?supplierInvoiceSet(kept,combined):previous;
+ if(aliases.length&&selected)selected.fiscalCopies=aliases.map(p=>({documentId:p.documentId,fileHash:p.fileHash,canonicalDocumentId:p.fiscalCopyOf.documentId,canonicalFileHash:p.fiscalCopyOf.fileHash,key:p.fiscalCopyOf.key}));
+ if(aliases.length&&selected&&previous?.setVersion&&settlementHash(previous.invoices)===settlementHash(selected.invoices)&&previous.sources.every((s:any)=>selected.sources.some((n:any)=>n.documentId===s.documentId&&n.fileHash===s.fileHash))){
+  // Preserve an existing full-set coverage decision only when all economic
+  // invoices and every original hash are unchanged. Resolving a proven copy is
+  // not a new purchase; source changes and additional invoices still invalidate it.
+  selected.coverageCompatibleSetHashes=[previous.setHash];
+ }
+ return {documents:kept,proposals:combined,reviewProposals,excluded,observations,selected};
 }
 export type SupplierInvoiceAllocation={installationConfirmation?:{reason:string};documentId:string;fileHash:string;coverage:'FULL'|'WITH_DOCUMENTED_EXTRA';reason:string;invoiceSetHash?:string;invoiceTaxes?:{documentId:string;fileHash:string;treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}[];costId?:string;costRevision?:number;costsHash?:string;taxConfirmation?:{treatment:'NET_DESTINATION_ICMS'|'INCLUDED';reason:string}};
 export function supplierInvoiceAllocationInput(v:any):SupplierInvoiceAllocation{

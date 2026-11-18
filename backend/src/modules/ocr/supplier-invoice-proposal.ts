@@ -107,6 +107,11 @@ export function supplierInvoiceProposal(text:string,month:string,taxId:string,so
  const originStatement=/NAO INCIDENCIA DE ICMS CONFORME ART(?:IGO|\.)?\s*(?:TERCEIRO|3[Oº°]?) DA LEI COMPLEMENTAR (?:87\/96|8796)\b/.test(fiscalText)&&/\b2716\.?00\.?00\s+041\s+6252\s+MWH\b/.test(section)&&/\bVALOR DO ICMS\s*\n\s*0,00(?=\s|$)/.test(t);
  // A verified NF-e access key identifies the same fiscal note across different PDFs.
  const accessKeys=[...t.matchAll(/\bCHAVE DE ACESSO\b[\s:]*((?:[0-9]\s*){44})(?![0-9])/g)].map(m=>m[1].replace(/\D/g,''));
+ // Some native DANFEs serialize the barcode's digits before every heading.
+ // Only the standalone, grouped first line is an alternative identity location;
+ // a referenced key elsewhere in the document is never the note's own identity.
+ const leadingKey=t.match(/^[ \t]*((?:[0-9]{4}[ \t]+){10}[0-9]{4})[ \t]*(?:\r?\n)/);
+ if(leadingKey&&/\bDANFE\b/.test(t.slice(0,1200)))accessKeys.push(leadingKey[1].replace(/\D/g,''));
  const validKeys=[...new Set(accessKeys.filter(k=>{let sum=0,weight=2;for(let i=42;i>=0;i--){sum+=Number(k[i])*weight;weight=weight===9?2:weight+1;}const v=11-sum%11;return Number(k[43])===(v>=10?0:v)&&['55','65'].includes(k.slice(20,22));}))];
  const fiscalIdentity=validKeys.length===1?{kind:'NFE_ACCESS_KEY',key:validKeys[0]}:null;
  if(/\b(?:NF-?E|NOTA FISCAL)\s+CANCELADA\b|\bNOTA FISCAL (?:DE )?(?:DEVOLUCAO|CREDITO)\b|\bNF-?E DE AJUSTE\b/.test(t))return null;
