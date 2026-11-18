@@ -1,0 +1,13 @@
+{
+  "name": "@energyos/pee-core-api",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs disabled-mode.test.mjs supabase-auth.test.mjs"
+  }
+}
