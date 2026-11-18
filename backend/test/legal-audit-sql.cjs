@@ -95,5 +95,16 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  ok(JSON.stringify((await db.query("SELECT organization_resource_usage('a') u")).rows[0].u)===JSON.stringify(quotaBefore));
  ok((await db.query("SELECT count(*)::integer n FROM legal_audit_events WHERE kind='UNKNOWN_AI_RETRY_AUTHORIZED'")).rows[0].n===1);
  for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'public.legal_audit_recover_ai(uuid,text,uuid,uuid,timestamptz,text,boolean)','EXECUTE') p",[role])).rows[0].p);
+
+ await db.exec(`ALTER TABLE bot_energy_ai_usage ADD COLUMN actor_id text,ADD COLUMN input_tokens bigint,ADD COLUMN output_tokens bigint;ALTER TABLE audit_logs ADD COLUMN user_id uuid;
+ UPDATE legal_audit_jobs SET lease_token='${id(80)}',lease_until=now()+interval '3 minutes' WHERE id='${id(32)}';
+ INSERT INTO bot_energy_ai_usage(id,organization_id,module,state,reserved_micro_usd,actual_micro_usd,settled_at,actor_id,input_tokens,output_tokens) VALUES('${id(73)}','a','AUDITORIA','SETTLED',20200,100,now(),'${actor}',100,50);
+ INSERT INTO audit_logs(organization_id,resource_type,resource_id,user_id,changes) VALUES('a','backoffice_ai_interpretation','${id(73)}','${actor}','{"after":{"state":"FAILED","documentId":"${id(12)}","consumptionState":"SETTLED","errorCode":"UNGROUNDED_NUMBER","evidenceHash":"${'a'.repeat(64)}","questionHash":"${'b'.repeat(64)}"}}');`);
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261340_legal_audit_settled_rejection.sql'),'utf8'));
+ const rejection=(token=id(80),cursor=0,evidence='a'.repeat(64))=>db.query('SELECT legal_audit_settled_rejection($1,$2,$3,$4,$5) d',[id(32),token,cursor,evidence,'b'.repeat(64)]).then(r=>r.rows[0].d);
+ ok((await rejection()).requestId===id(73));await deny(()=>rejection(id(81)));await deny(()=>rejection(id(80),1));ok(await rejection(id(80),0,'c'.repeat(64))===null);
+ await db.exec(`UPDATE bot_energy_ai_usage SET state='RESERVED' WHERE id='${id(73)}'`);ok(await rejection()===null);await db.exec(`UPDATE bot_energy_ai_usage SET state='SETTLED',organization_id='b' WHERE id='${id(73)}'`);ok(await rejection()===null);await db.exec(`UPDATE bot_energy_ai_usage SET organization_id='a' WHERE id='${id(73)}'`);
+ ok((await rejection()).consumptionState==='SETTLED');ok((await db.query('SELECT count(*)::integer n FROM bot_energy_ai_usage')).rows[0].n===2);
+ for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'public.legal_audit_settled_rejection(uuid,uuid,integer,text,text)','EXECUTE') p",[role])).rows[0].p);
  console.log('Legal audit SQL:',checks,'checks passed');
  }finally{await db.close();}})().catch(e=>{console.error({message:e.message,code:e.code,position:e.position,internalQuery:e.internalQuery,where:e.where,stack:e.stack?.split("\n").slice(0,3).join("\n")});process.exitCode=1});
