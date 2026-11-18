@@ -9,6 +9,10 @@ on:
       - 'frontend/test/trading-resend.cjs'
       - 'frontend/app/backoffice/trading-hub/TradingResendDialog.tsx'
       - 'backend/test/trading-resend-database.cjs'
+      - 'backend/test/database/trading-reentry.test.mjs'
+      - 'backend/src/database/migrations/20261338_trading_supplier_reentry.sql'
+      - 'frontend/test/trading-reentry.cjs'
+      - 'frontend/app/cotacao/**'
       - 'backend/src/database/migrations/20261217_trading_invitation_resend.sql'
       - 'frontend/test/user-access-governance.cjs'
       - '.github/workflows/trading-form-validation.yml'
@@ -26,13 +30,13 @@ jobs:
         working-directory: backend
       - run: node node_modules/jest/bin/jest.js --runInBand --silent src/modules/trading-hub
         working-directory: backend
-      - run: node test/trading-resend-database.cjs
+      - run: node test/trading-resend-database.cjs && node test/database/trading-reentry.test.mjs
         working-directory: backend
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/trading-required-fields.cjs && node test/trading-resend.cjs && node test/user-access-governance.cjs
+      - run: node test/trading-reentry.cjs && node test/trading-required-fields.cjs && node test/trading-resend.cjs && node test/user-access-governance.cjs
         working-directory: frontend
       - run: node node_modules/typescript/bin/tsc --noEmit --incremental false
         working-directory: frontend
