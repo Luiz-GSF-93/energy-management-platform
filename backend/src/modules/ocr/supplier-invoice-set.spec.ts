@@ -1,5 +1,5 @@
 import {assistedClosingReport} from './eva-assisted-closing.model';
-import {supplierInvoiceSet,supplierInvoiceSetCaptureMatches} from './supplier-invoice-set';
+import {supplierInvoiceSet,supplierInvoiceSetCaptureMatches,supplierInvoiceCopiesAgree} from './supplier-invoice-set';
 import {collectSupplierInvoiceEvidence,supplierInvoiceEvidenceDraft,supplierInvoiceAllocationInput} from './supplier-invoice-evidence';
 import {supplierInside} from './invoice-component-tax-v3';
 import {settlementHash} from './documented-supplier-settlement';
@@ -11,6 +11,42 @@ function accept(c:any){const p=c.supplierInvoiceProposal;c.manualOverrides.suppl
 function invoiceDraft(c:any){const d=supplierInvoiceEvidenceDraft(c);if(!d)throw Error('Expected a source-backed invoice set');return d;}
 function fiscal(c:any){const draft=invoiceDraft(c);return supplierInside({contractDraft:draft,fields:[{key:'supplier:tax',state:'FILLED',value:'PER_INVOICE'}],operational:{supplier:{amount:draft.supplier.totalAmount}}},'18','Rate on verified distributor invoice');}
 describe('Multiple fiscal supplier notes',()=>{
+ it('reuses the verified fiscal identity of an XML for its PDF copy, retaining existing coverage and consuming its cost once',async()=>{
+  const xml={...note(2),fiscalIdentity:{kind:'NFE_ACCESS_KEY',key:'fiscal-2'}},pdf={...note(1),fiscalIdentity:xml.fiscalIdentity,requiresUnitConfirmation:true};
+  const documents=docs([pdf,xml]);const old=supplierInvoiceSet(documents,[xml]);
+  const c=context([xml]);c.supplierInvoiceProposal=old;accept(c);
+  c.cost.costs.items.push({id:id(7),category:'SUPPLIER_INVOICE',scenario:'ACL',effect:'COST',amount:xml.amount,source:pdf.documentId+' '+pdf.fileHash});
+  const result=await collectSupplierInvoiceEvidence(documents,async d=>d.id===xml.documentId?{kind:'INVOICE',proposal:xml}:{kind:'INVOICE',proposal:null,reviewProposal:pdf});
+  c.supplierInvoiceProposal=result.selected;c.documentedSupplierOptions.proposals=result.proposals;
+  expect(result.selected).toMatchObject({documentId:xml.documentId,amount:'100.00',issues:[],coverageCompatibleSetHashes:[old.setHash]});
+  expect(result.selected.invoices).toHaveLength(1);expect(result.selected.sources).toHaveLength(2);
+  expect(invoiceDraft(c)).toMatchObject({state:'COMPLETE',consumedCostSources:[{id:id(7)}],source:{allocation:{actor:'operator'},fiscalCopies:[{documentId:pdf.documentId,canonicalDocumentId:xml.documentId}]}});
+  expect(c.manualOverrides.supplierInvoiceAllocation.invoiceSetHash).toBe(old.setHash);
+  c.cost.costs.items.push({...c.cost.costs.items.at(-1),id:id(6),source:xml.documentId+' '+xml.fileHash});
+  expect(invoiceDraft(c).requirements.map((r:any)=>r.code)).toContain('SUPPLIER_INVOICE_COST_CONFLICT');c.cost.costs.items.pop();
+  c.manualAuthor=null;expect(invoiceDraft(c).state).toBe('PENDING');c.manualAuthor='operator';
+  c.manualOverrides.supplierInvoiceAllocation.invoiceSetHash='f'.repeat(64);
+  expect(invoiceDraft(c).requirements.map((r:any)=>r.code)).toContain('SUPPLIER_INVOICE_COVERAGE');c.manualOverrides.supplierInvoiceAllocation.invoiceSetHash=old.setHash;
+  c.supplierInvoiceProposal=supplierInvoiceSet([...documents,...docs([note(3)])],[xml,...result.proposals.filter(p=>p.fiscalCopyOf),note(3)]);
+  expect(invoiceDraft(c).requirements.map((r:any)=>r.code)).toContain('SUPPLIER_INVOICE_COVERAGE');
+ });
+ it('does not assign a same-CNPJ PDF to a unit without an already identified matching fiscal original',async()=>{const pdf={...note(1),requiresUnitConfirmation:true,fiscalIdentity:{kind:'NFE_ACCESS_KEY',key:'fiscal-1'}};const result=await collectSupplierInvoiceEvidence(docs([pdf]),async()=>({kind:'INVOICE',proposal:null,reviewProposal:pdf}));expect(result.selected).toBeNull();expect(result.proposals).toEqual([]);});
+ it.each(['key','amount','quantity','tax','missing key'])('does not infer a copy or remove the unresolved source when %s differs',async kind=>{
+  const xml={...note(2),fiscalIdentity:{kind:'NFE_ACCESS_KEY',key:'fiscal-2'}},pdf={...note(1),fiscalIdentity:xml.fiscalIdentity,requiresUnitConfirmation:true};
+  if(kind==='key')pdf.fiscalIdentity={key:'other',kind:'NFE_ACCESS_KEY'};
+  if(kind==='missing key')pdf.fiscalIdentity=null;
+  if(kind==='amount')pdf.amount='101.00';if(kind==='quantity')pdf.quantityMwh='2';if(kind==='tax')pdf.taxTreatment='NET_DESTINATION_ICMS';
+  const result=await collectSupplierInvoiceEvidence(docs([xml,pdf]),async d=>d.id===xml.documentId?{kind:'INVOICE',proposal:xml}:{kind:'INVOICE',proposal:null,reviewProposal:pdf});
+  expect(result.proposals).toHaveLength(1);expect(result.selected.issues).toHaveLength(1);expect(result.selected.coverageCompatibleSetHashes).toBeUndefined();
+ });
+ it('compares exact monetary/quantity values and printed-price precision, preserving contradictory taxes',()=>{
+  const xml={...note(1),quantityMwh:'20.1250',pricePerMwh:'128.9202484472',amount:'2594.52'},pdf={...xml,quantityMwh:'20.125',pricePerMwh:'128.9202'};
+  expect(supplierInvoiceCopiesAgree(xml,pdf)).toBe(true);
+  expect(supplierInvoiceCopiesAgree(xml,{...pdf,pricePerMwh:'128.9203'})).toBe(false);
+  expect(supplierInvoiceCopiesAgree(xml,{...pdf,amount:'2594.53'})).toBe(false);
+  expect(supplierInvoiceCopiesAgree(xml,{...pdf,taxTreatment:'NET_DESTINATION_ICMS'})).toBe(false);
+  expect(supplierInvoiceCopiesAgree({...xml,taxEvidence:{icmsAmount:'1.00'}},{...pdf,taxEvidence:{icmsAmount:'2.00'}})).toBe(false);
+ });
  it('collects two independently verified notes and fills totals before a coverage decision',async()=>{const ns=[note(1),note(2)],result=await collectSupplierInvoiceEvidence(docs(ns),async d=>({kind:'INVOICE',proposal:ns.find(n=>n.documentId===d.id)}));expect(result.selected).toMatchObject({setVersion:1,quantityMwh:'2.000000000000',amount:'200.00',pricePerMwh:'100.000000',invoices:ns});const c=context(ns),before=JSON.stringify(c),d=invoiceDraft(c);expect(d).toMatchObject({state:'PENDING',supplier:{totalAmount:'200.00',volumeDifferenceMwh:'-0.100000000000'}});expect(d.requirements.map((r:any)=>r.code)).toEqual(['SUPPLIER_INVOICE_COVERAGE']);expect(JSON.stringify(c)).toBe(before);});
  it('consolidates three or more notes with an order-independent signature and weighted nominal price',()=>{const ns=[note(1),{...note(2),quantityMwh:'2',pricePerMwh:'150',amount:'300.00'},note(3)];const a=supplierInvoiceSet(docs(ns),ns),b=supplierInvoiceSet(docs([...ns].reverse()),[...ns].reverse());expect(a).toMatchObject({quantityMwh:'4.000000000000',amount:'500.00',pricePerMwh:'125.000000'});expect(a.setHash).toBe(b.setHash);});
  it('taxes only the net NF inside and preserves the already gross note, rounding per document',()=>{const c=context();accept(c);expect(invoiceDraft(c).state).toBe('COMPLETE');expect(fiscal(c)).toMatchObject({base:'200.00',icmsAmount:'21.95',amount:'221.95',components:[{amount:'100.00',icmsAmount:'0.00'},{amount:'121.95',icmsAmount:'21.95'}]});expect(c.measurements.consumptionTotal).toBe('1900');});
