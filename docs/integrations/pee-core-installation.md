@@ -1,3 +1,5 @@
+ATUALIZACAO DE IMPLANTACAO - 18/11/2026: o painel Railway informa que novos servicos nao podem adotar o antigo Config as Code. No passo 2 abaixo, substituir a selecao de railway.json pela configuracao direta do novo servico: raiz /services/pee-core-api, builder Dockerfile, caminho /services/pee-core-api/Dockerfile, watch /services/pee-core-api/** e health /health. A primeira implantacao no projeto independente EnergyOS-PEE foi concluida; /health respondeu 200 com enabled=false e ready=false, e as rotas de negocio responderam 503. A ativacao funcional continua pendente. Nenhum banco, segredo ou servico existente foi alterado.
+
 # EnergyOS - PEE: instalacao independente
 
 Preparacao em 18/11/2026, branch `install/pee-core-integration-20261118`.
