@@ -10,9 +10,11 @@ export class AccessFailure extends Error {constructor(status,message){super(mess
 const fail=(status=503,message='O Core não confirmou o acesso. Tente novamente.')=>new AccessFailure(status,message);
 function exact(value,keys){return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(k=>Object.hasOwn(value,k));}
 export function validateCoreTask(operation,payload,organization){
- const fields=operation==='exchange'?['organization_id','audience','code','code_verifier']:operation==='activity'?['organization_id','audience','token','activity_age_ms']:operation==='introspect'?['organization_id','audience','token']:[];
+ const fields=operation==='exchange'?['organization_id','audience','code','code_verifier']:operation==='activity'?['organization_id','audience','token','activity_age_ms']:operation==='authors'?['organization_id','audience','token','author_ids']:operation==='members'?['organization_id','audience','token','after_id']:operation==='introspect'?['organization_id','audience','token']:[];
  if(!fields.length||!exact(payload,fields)||payload.organization_id!==organization||!identifier(organization)||payload.audience!=='energyos-pee'||!token(operation==='exchange'?payload.code:payload.token)||operation==='exchange'&&!token(payload.code_verifier))throw fail(400,'Solicitação de acesso inválida');
  if(operation==='activity'&&(!Number.isInteger(payload.activity_age_ms)||payload.activity_age_ms<0||payload.activity_age_ms>60000))throw fail(400,'Atividade inválida');
+ if(operation==='authors'&&(!Array.isArray(payload.author_ids)||payload.author_ids.length<1||payload.author_ids.length>40||payload.author_ids.some(id=>!identifier(id))||new Set(payload.author_ids).size!==payload.author_ids.length))throw fail(400,'Consulta de autores inválida');
+ if(operation==='members'&&payload.after_id!==null&&!identifier(payload.after_id))throw fail(400,'Paginação da equipe inválida');
  return payload;
 }
 const scopes={viewer:['projects:read'],editor:['projects:read','projects:create','projects:edit'],reviewer:['projects:read','projects:review']};
@@ -22,7 +24,11 @@ export function validateCoreAnswer(operation,data,organization,now=Date.now(),te
  if(operation==='exchange'){
   if(!exact(data,['token','expires_in','tenant_id','sub','audience'])||!token(data.token)||!Number.isInteger(data.expires_in)||data.expires_in<1||data.expires_in>900)throw fail();
  }else{
-  if(!exact(data,['active','sub','tenant_id','organization_id','role','scopes','monthly_project_limit','expires_at','audience'])||data.active!==true||data.organization_id!==organization||!Object.hasOwn(scopes,data.role)||JSON.stringify(data.scopes)!==JSON.stringify(scopes[data.role])||!Number.isInteger(data.monthly_project_limit)||data.monthly_project_limit<1||data.monthly_project_limit>10000||!Number.isFinite(Date.parse(data.expires_at))||Date.parse(data.expires_at)<=now||Date.parse(data.expires_at)>now+905000)throw fail();
+  const keys=['active','sub','tenant_id','organization_id','role','scopes','monthly_project_limit','expires_at','audience',...(Object.hasOwn(data,'display_name')?['display_name']:[]),...(operation==='authors'?['author_names']:[]),...(operation==='members'?['members','has_more','next_cursor']:[])];
+  if(!exact(data,keys)||data.active!==true||data.organization_id!==organization||!Object.hasOwn(scopes,data.role)||JSON.stringify(data.scopes)!==JSON.stringify(scopes[data.role])||!Number.isInteger(data.monthly_project_limit)||data.monthly_project_limit<1||data.monthly_project_limit>10000||!Number.isFinite(Date.parse(data.expires_at))||Date.parse(data.expires_at)<=now||Date.parse(data.expires_at)>now+905000)throw fail();
+  if(Object.hasOwn(data,'display_name')&&(typeof data.display_name!=='string'||!data.display_name.trim()||data.display_name.length>200||/[\x00-\x1f]/.test(data.display_name)))throw fail();
+  if(operation==='authors'&&(!Array.isArray(data.author_names)||data.author_names.length>40||new Set(data.author_names.map(a=>a.id)).size!==data.author_names.length||data.author_names.some(a=>!exact(a,['id','name'])||!identifier(a.id)||typeof a.name!=='string'||!a.name.trim()||a.name.length>200||/[\x00-\x1f]/.test(a.name))))throw fail();
+  if(operation==='members'&&(!Array.isArray(data.members)||data.members.length>25||typeof data.has_more!=='boolean'||data.has_more&&(!data.members.length||data.next_cursor!==data.members.at(-1).id)||!data.has_more&&data.next_cursor!==null||data.members.some(a=>!exact(a,['id','name','role','active','expires_at','monthly_limit'])||!identifier(a.id)||typeof a.name!=='string'||!a.name.trim()||a.name.length>200||/[\x00-\x1f]/.test(a.name)||!Object.hasOwn(scopes,a.role)||typeof a.active!=='boolean'||!Number.isInteger(a.monthly_limit)||a.monthly_limit<1||a.monthly_limit>10000||a.expires_at!==null&&!Number.isFinite(Date.parse(a.expires_at)))||new Set(data.members.map(a=>a.id)).size!==data.members.length))throw fail();
  }
  return data;
 }
@@ -52,7 +58,7 @@ export function createCoreTransport({organization,tenant,timeoutMs=8000,pollMs=2
    const task=pending.get(body.id);if(!task||!task.claimed||!equalSecret(body.nonce,task.nonce))throw fail(409,'Solicitação expirada');
    if(![200,400,401,403,409,422,429,503].includes(body.status))throw fail(400,'Resposta inválida');
    if(body.status!==200){clearTimeout(task.timer);pending.delete(task.id);task.reject(fail([400,401,403,409,422,429].includes(body.status)?body.status:503,body.status===403?'Acesso não liberado pelo Core':'O Core não confirmou o acesso'));return;}
-   let data;try{data=validateCoreAnswer(task.operation,body.data,organization,now(),tenant);}catch{clearTimeout(task.timer);pending.delete(task.id);task.reject(fail());throw fail(400,'Resposta inválida');}
+   let data;try{data=validateCoreAnswer(task.operation,body.data,organization,now(),tenant);if(task.operation==='authors'&&data.author_names.some(a=>!task.payload.author_ids.includes(a.id)))throw fail();}catch{clearTimeout(task.timer);pending.delete(task.id);task.reject(fail());throw fail(400,'Resposta inválida');}
    clearTimeout(task.timer);pending.delete(task.id);lastPeer=now();task.resolve(data);
   },
   close(){closed=true;if(waiter){const w=waiter;waiter=null;w.finish(null);}for(const task of pending.values()){clearTimeout(task.timer);task.reject(fail());}pending.clear();}

@@ -19,6 +19,18 @@ test('a Core answer cannot select a licensed tenant or invent elevated scopes',(
  assert.ok(validateCoreAnswer('introspect',grant(),organization,Date.now(),tenant));
  for(const value of [{...grant(),tenant_id:randomUUID()},{...grant(),organization_id:randomUUID()},{...grant(),role:'admin'},{...grant(),scopes:['projects:read','licenses:release']},{...grant(),expires_at:new Date(0).toISOString()},{...grant(),monthly_project_limit:0}])assert.throws(()=>validateCoreAnswer('introspect',value,organization,Date.now(),tenant));
 });
+
+test('identity names and workspace team remain bounded data rather than elevated permissions',()=>{
+ const answer={...grant(),display_name:'Luiz',members:[{id:subject,name:'Luiz',role:'editor',active:true,expires_at:null,monthly_limit:5}],has_more:false,next_cursor:null};
+ assert.ok(validateCoreTask('members',{organization_id:organization,audience:'energyos-pee',token:opaque(),after_id:null},organization));
+ assert.ok(validateCoreAnswer('members',answer,organization,Date.now(),tenant));
+ for(const bad of [{...answer,members:[{...answer.members[0],role:'admin'}]},{...answer,members:[{...answer.members[0],email:'unexpected@example.invalid'}]},{...answer,has_more:true,next_cursor:null},{...answer,display_name:'Luiz\nforged'}])assert.throws(()=>validateCoreAnswer('members',bad,organization,Date.now(),tenant));
+});
+
+test('author resolution cannot return another actor than those requested by the server',async()=>{
+ const broker=createCoreTransport(options),pending=assert.rejects(broker.call('authors',{organization_id:organization,audience:'energyos-pee',token:opaque(),author_ids:[subject]})),task=await broker.poll();
+ assert.throws(()=>broker.reply({id:task.id,nonce:task.nonce,status:200,data:{...grant(),author_names:[{id:randomUUID(),name:'Other actor'}]}}));await pending;assert.equal(broker.size(),0);broker.close();
+});
 test('a dispatched request needs the matching nonce and can be answered only once',async()=>{
  const b=createCoreTransport(options),pending=b.call('exchange',exchangePayload()),task=await b.poll();
  assert.throws(()=>b.reply({id:task.id,nonce:opaque(),status:200,data:exchanged()}));
