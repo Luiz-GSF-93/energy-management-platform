@@ -1,3 +1,4 @@
+import {integratedProgress} from './project-progress.mjs';
 import {scoringMethods,scoringMetrics} from './scoring.mjs';
 import {readFile,stat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
@@ -79,7 +80,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    }res.setHeader('Content-Length',size);createReadStream(file).pipe(res);return true;
   }
   if(req.method==='GET'&&path.startsWith('/assets/')){
-   const assets={'/assets/app.js':['application/javascript; charset=utf-8','web/app.js'],'/assets/activity.mjs':['application/javascript; charset=utf-8','web/activity.mjs'],'/assets/workspace-modules.mjs':['application/javascript; charset=utf-8','web/workspace-modules.mjs'],'/assets/app.css':['text/css; charset=utf-8','web/app.css'],'/assets/logo.png':['image/png','web/logo.png'],'/assets/favicon.ico':['image/x-icon','web/favicon.ico'],'/assets/comercial.vtt':['text/vtt; charset=utf-8','web/comercial.vtt'],'/assets/comercial-poster.jpg':['image/jpeg','web/comercial-poster.jpg']};
+   const assets={'/assets/workspace-progress.mjs':['application/javascript; charset=utf-8','web/workspace-progress.mjs'],'/assets/app.js':['application/javascript; charset=utf-8','web/app.js'],'/assets/activity.mjs':['application/javascript; charset=utf-8','web/activity.mjs'],'/assets/workspace-modules.mjs':['application/javascript; charset=utf-8','web/workspace-modules.mjs'],'/assets/app.css':['text/css; charset=utf-8','web/app.css'],'/assets/logo.png':['image/png','web/logo.png'],'/assets/favicon.ico':['image/x-icon','web/favicon.ico'],'/assets/comercial.vtt':['text/vtt; charset=utf-8','web/comercial.vtt'],'/assets/comercial-poster.jpg':['image/jpeg','web/comercial-poster.jpg']};
    const match=assets[path]??({'/assets/fonts.css':['text/css; charset=utf-8','web/fonts.css'],'/assets/brand.css':['text/css; charset=utf-8','web/brand.css'],'/assets/energyos-icon.svg':['image/svg+xml','web/energyos-icon.svg']}[path])??(/^\/assets\/font-[a-f0-9]{12}\.ttf$/.test(path)?['font/ttf','web/'+path.split('/').at(-1)]:null);if(!match)return false;res.setHeader('Content-Type',match[0]);res.setHeader('Content-Security-Policy',"default-src 'none'; img-src data:");res.end(await readFile(new URL(match[1],import.meta.url)));return true;
   }
   if(path!=='/app'&&!path.startsWith('/api/app/'))return false;
@@ -152,7 +153,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    const payload=await validate(c,record[1],body,old);send(res,record[2]?200:201,await put(c,record[1],id,version,payload));return true;
   }
   const analysis=path.match(/^\/api\/app\/projects\/([a-f0-9-]{36})\/analysis$/);
-  if(analysis&&req.method==='GET'){const data=await snapshot(c,analysis[1]);send(res,200,assessProject(data));return true;}
+  if(analysis&&req.method==='GET'){const data=await snapshot(c,analysis[1]);const assessment=assessProject(data);send(res,200,{...assessment,progress:integratedProgress(data,assessment)});return true;}
   const report=path.match(/^\/api\/app\/projects\/([a-f0-9-]{36})\/reports\/(final|presentation|diagnosis|memorial|mv|economics|schedule|documents|compliance|progress)$/);
   if(report&&req.method==='POST'){
    write(c);const body=await jsonBody(req),data=await snapshot(c,report[1]),html=renderReport(data,report[2]),hash=digest(html);
