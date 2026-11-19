@@ -11,7 +11,7 @@ const exchanged=()=>({token:opaque(),expires_in:300,tenant_id:tenant,sub:subject
 const grant=()=>({active:true,sub:subject,tenant_id:tenant,organization_id:organization,role:'editor',scopes:['projects:read','projects:create','projects:edit'],monthly_project_limit:5,expires_at:new Date(Date.now()+250000).toISOString(),audience:'energyos-pee'});
 const options={organization,tenant,timeoutMs:150,pollMs:40};
 
-test('transport accepts only the fixed Core organization and two access operations',()=>{
+test('transport accepts only the fixed Core organization and access/activity operations',()=>{
  assert.ok(validateCoreTask('exchange',exchangePayload(),organization));
  for(const [operation,payload] of [['execute',exchangePayload()],['exchange',{...exchangePayload(),organization_id:randomUUID()}],['exchange',{...exchangePayload(),url:'https://untrusted.invalid'}],['exchange',{...exchangePayload(),code_verifier:'bad'}]])assert.throws(()=>validateCoreTask(operation,payload,organization));
 });
@@ -43,7 +43,7 @@ test('access startup is disabled by default and refuses insecure or mixed-mode c
 });
 
 test('HTTP access flow binds the browser, hides Core credentials, rechecks revocation and enforces logout CSRF',async()=>{
- const config={publicOrigin:'https://pee.synthetic.invalid',coreOrigin:'https://core.synthetic.invalid',organization,tenant,peerSecret:opaque(),cookieKey:opaque(),workspaceName:'Expert Energy'},transport=createCoreTransport({...options,timeoutMs:1200}),{server}=createAccessServer({config,transport});
+ const config={publicOrigin:'https://pee.synthetic.invalid',coreOrigin:'https://core.synthetic.invalid',organization,tenant,peerSecret:opaque(),cookieKey:opaque(),workspaceName:'Expert Energy',activityEnabled:true},transport=createCoreTransport({...options,timeoutMs:1200}),{server}=createAccessServer({config,transport});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url='http://127.0.0.1:'+server.address().port;
  const send=async(path,{body,headers={},method=body===undefined?'GET':'POST'}={})=>fetch(url+path,{method,redirect:'manual',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
  const machine={'Authorization':'Bearer '+config.peerSecret};
@@ -56,6 +56,10 @@ test('HTTP access flow binds the browser, hides Core credentials, rechecks revoc
   const logged=await login;assert.equal(logged.status,200);assert.deepEqual(await logged.json(),{ok:true});const sessionCookie=logged.headers.getSetCookie().find(c=>c.startsWith('__Host-pee_session='));assert.ok(!sessionCookie.includes(coreToken.token));assert.match(sessionCookie,/HttpOnly; Secure; SameSite=Lax/);const sessionHeader=sessionCookie.split(';')[0];
   assert.equal((await send('/auth/core/exchange',{body,headers:browser})).status,409);assert.equal(transport.size(),0);
   const inspected=send('/api/session',{headers:{Cookie:sessionHeader}});await answer(grant());const sessionResponse=await inspected;assert.equal(sessionResponse.status,200);const identity=await sessionResponse.json();assert.equal(identity.role,'editor');assert.equal(identity.workspace,'Expert Energy');assert.equal(identity.monthly_project_limit,5);assert.ok(!JSON.stringify(identity).includes(coreToken.token));
+  assert.equal(sessionResponse.headers.get('set-cookie'),null,'Passive reads do not renew the cookie');
+  assert.equal((await send('/api/app/activity',{body:{csrf:identity.csrf,activity_age_ms:0},headers:{Origin:'https://attacker.invalid',Cookie:sessionHeader}})).status,403);
+  assert.equal((await send('/api/app/activity',{body:{csrf:opaque(),activity_age_ms:0},headers:{Origin:config.publicOrigin,Cookie:sessionHeader}})).status,403);
+  const pulse=send('/api/app/activity',{body:{csrf:identity.csrf,activity_age_ms:2500},headers:{Origin:config.publicOrigin,Cookie:sessionHeader}});const pulseTask=await answer({...grant(),expires_at:new Date(Date.now()+897500).toISOString()});assert.equal(pulseTask.operation,'activity');assert.equal(pulseTask.payload.activity_age_ms,2500);const renewed=await pulse;assert.equal(renewed.status,200);assert.match(renewed.headers.get('set-cookie'),/Max-Age=89[0-9]/);assert.equal((await renewed.json()).idle_seconds,900);
   const revoked=send('/api/session',{headers:{Cookie:sessionHeader}});await answer({message:'Denied'},403);assert.equal((await revoked).status,403);
   assert.equal((await send('/auth/logout',{body:{csrf:opaque()},headers:{Origin:config.publicOrigin,Cookie:sessionHeader}})).status,403);
   assert.equal((await send('/auth/logout',{body:{csrf:identity.csrf},headers:{Cookie:sessionHeader}})).status,403);

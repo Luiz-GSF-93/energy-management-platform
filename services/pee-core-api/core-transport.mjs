@@ -10,8 +10,9 @@ export class AccessFailure extends Error {constructor(status,message){super(mess
 const fail=(status=503,message='O Core não confirmou o acesso. Tente novamente.')=>new AccessFailure(status,message);
 function exact(value,keys){return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(k=>Object.hasOwn(value,k));}
 export function validateCoreTask(operation,payload,organization){
- const fields=operation==='exchange'?['organization_id','audience','code','code_verifier']:operation==='introspect'?['organization_id','audience','token']:[];
+ const fields=operation==='exchange'?['organization_id','audience','code','code_verifier']:operation==='activity'?['organization_id','audience','token','activity_age_ms']:operation==='introspect'?['organization_id','audience','token']:[];
  if(!fields.length||!exact(payload,fields)||payload.organization_id!==organization||!identifier(organization)||payload.audience!=='energyos-pee'||!token(operation==='exchange'?payload.code:payload.token)||operation==='exchange'&&!token(payload.code_verifier))throw fail(400,'Solicitação de acesso inválida');
+ if(operation==='activity'&&(!Number.isInteger(payload.activity_age_ms)||payload.activity_age_ms<0||payload.activity_age_ms>60000))throw fail(400,'Atividade inválida');
  return payload;
 }
 const scopes={viewer:['projects:read'],editor:['projects:read','projects:create','projects:edit'],reviewer:['projects:read','projects:review']};
@@ -19,9 +20,9 @@ export function validateCoreAnswer(operation,data,organization,now=Date.now(),te
  if(tenant&&data?.tenant_id!==tenant)throw fail();
  if(!data||data.audience!=='energyos-pee'||!identifier(data.sub)||!identifier(data.tenant_id))throw fail();
  if(operation==='exchange'){
-  if(!exact(data,['token','expires_in','tenant_id','sub','audience'])||!token(data.token)||!Number.isInteger(data.expires_in)||data.expires_in<1||data.expires_in>300)throw fail();
+  if(!exact(data,['token','expires_in','tenant_id','sub','audience'])||!token(data.token)||!Number.isInteger(data.expires_in)||data.expires_in<1||data.expires_in>900)throw fail();
  }else{
-  if(!exact(data,['active','sub','tenant_id','organization_id','role','scopes','monthly_project_limit','expires_at','audience'])||data.active!==true||data.organization_id!==organization||!Object.hasOwn(scopes,data.role)||JSON.stringify(data.scopes)!==JSON.stringify(scopes[data.role])||!Number.isInteger(data.monthly_project_limit)||data.monthly_project_limit<1||data.monthly_project_limit>10000||!Number.isFinite(Date.parse(data.expires_at))||Date.parse(data.expires_at)<=now||Date.parse(data.expires_at)>now+305000)throw fail();
+  if(!exact(data,['active','sub','tenant_id','organization_id','role','scopes','monthly_project_limit','expires_at','audience'])||data.active!==true||data.organization_id!==organization||!Object.hasOwn(scopes,data.role)||JSON.stringify(data.scopes)!==JSON.stringify(scopes[data.role])||!Number.isInteger(data.monthly_project_limit)||data.monthly_project_limit<1||data.monthly_project_limit>10000||!Number.isFinite(Date.parse(data.expires_at))||Date.parse(data.expires_at)<=now||Date.parse(data.expires_at)>now+905000)throw fail();
  }
  return data;
 }

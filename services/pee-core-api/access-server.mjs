@@ -20,7 +20,7 @@ async function jsonBody(req,max=16384){if(!/^application\/json(?:;|$)/i.test(req
 export function accessConfiguration(env=process.env){
  if(env.PEE_ACCESS_ENABLED!=='true')return null;
  if(env.PEE_CORE_ENABLED==='true')throw Error('Access mode must not enable the incompatible reference licensing gateway');
- const config={publicOrigin:httpsOrigin(env.PEE_PUBLIC_ORIGIN??''),coreOrigin:httpsOrigin(env.CORE_PUBLIC_ORIGIN??''),organization:env.CORE_OWNER_ORGANIZATION_ID,tenant:env.CORE_WORKSPACE_TENANT_ID,peerSecret:env.CORE_PEER_SECRET,cookieKey:env.PEE_COOKIE_KEY,workspaceName:'Expert Energy'};
+ const config={publicOrigin:httpsOrigin(env.PEE_PUBLIC_ORIGIN??''),coreOrigin:httpsOrigin(env.CORE_PUBLIC_ORIGIN??''),organization:env.CORE_OWNER_ORGANIZATION_ID,tenant:env.CORE_WORKSPACE_TENANT_ID,peerSecret:env.CORE_PEER_SECRET,cookieKey:env.PEE_COOKIE_KEY,workspaceName:'Expert Energy',activityEnabled:env.PEE_ACTIVITY_ENABLED==='true'};
  if(!identifier(config.organization)||!identifier(config.tenant)||!token(config.peerSecret)||!token(config.cookieKey)||config.peerSecret===config.cookieKey||config.publicOrigin===config.coreOrigin)throw Error('Dedicated Core access configuration required');
  return config;
 }
@@ -29,7 +29,7 @@ export function createAccessServer({config,transport,now=Date.now,application}={
  if(!config||!identifier(config.organization)||!identifier(config.tenant)||!token(config.peerSecret)||!token(config.cookieKey)||config.peerSecret===config.cookieKey)throw Error('Invalid access configuration');
  config={...config,publicOrigin:httpsOrigin(config.publicOrigin),coreOrigin:httpsOrigin(config.coreOrigin)};
  const core=transport??createCoreTransport({organization:config.organization,tenant:config.tenant,now});const sealer=createSealer(config.cookieKey,{now});const usedStates=new Map();
- const app=application??(process.env.PEE_PROJECTS_ENABLED==='true'?createApplication({publicOrigin:config.publicOrigin,coreOrigin:config.coreOrigin,workspace:config.workspaceName,coreCall:core.call}):null);
+ const app=application??(process.env.PEE_PROJECTS_ENABLED==='true'?createApplication({publicOrigin:config.publicOrigin,coreOrigin:config.coreOrigin,workspace:config.workspaceName,coreCall:core.call,activityEnabled:config.activityEnabled===true}):null);
  function origin(req){if(req.headers.origin!==config.publicOrigin)deny(403,'Origem não autorizada');}
  function machine(req){if(!equalSecret(req.headers.authorization,'Bearer '+config.peerSecret))deny(401,'Serviço não autorizado');}
  function session(req){const s=sealer.open('session',cookies(req)[SESSION]);if(!exact(s,['organization','tenant','subject','coreToken','csrf'])||s.organization!==config.organization||s.tenant!==config.tenant||!identifier(s.subject)||!token(s.coreToken)||!token(s.csrf))deny(401,'Sessão inválida');return s;}
@@ -64,6 +64,14 @@ export function createAccessServer({config,transport,now=Date.now,application}={
    }
    if(req.method==='GET'&&path==='/api/session'){
     const {session:s,grant:g}=await authorized(req);return json(res,200,{workspace:config.workspaceName??'Expert Energy',role:g.role,scopes:g.scopes,monthly_project_limit:g.monthly_project_limit,csrf:s.csrf,expires_at:g.expires_at});
+   }
+   if(req.method==='POST'&&path==='/api/app/activity'){
+    if(!config.activityEnabled)deny(503,'Renovação por atividade ainda em atualização.');
+    origin(req);const body=await jsonBody(req,2048);if(!exact(body,['csrf','activity_age_ms'])||!Number.isInteger(body.activity_age_ms)||body.activity_age_ms<0||body.activity_age_ms>60000)deny(400,'Solicitação inválida');const s=session(req);if(!equalSecret(body.csrf,s.csrf))deny(403,'Confirmação de sessão inválida');
+    const g=await core.call('activity',{organization_id:s.organization,audience:'energyos-pee',token:s.coreToken,activity_age_ms:body.activity_age_ms});
+    if(g.sub!==s.subject||g.tenant_id!==s.tenant||g.organization_id!==s.organization)deny(403,'Contexto alterado. Entre novamente.');
+    const remaining=Math.max(1,Math.min(900,Math.floor((Date.parse(g.expires_at)-now())/1000)));
+    res.setHeader('Set-Cookie',cookie(SESSION,sealer.seal('session',s,remaining),remaining));return json(res,200,{expires_at:g.expires_at,idle_seconds:900});
    }
    if(req.method==='POST'&&path==='/auth/logout'){
     origin(req);const body=await jsonBody(req,2048);if(!exact(body,['csrf']))deny(400,'Solicitação inválida');let s;try{s=session(req);}catch{res.setHeader('Set-Cookie',cookie(SESSION,'',0));return json(res,200,{ok:true});}if(!equalSecret(body.csrf,s.csrf))deny(403,'Confirmação de sessão inválida');res.setHeader('Set-Cookie',cookie(SESSION,'',0));return json(res,200,{ok:true});

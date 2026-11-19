@@ -14,7 +14,7 @@ async function jsonBody(req,max=600000){if(!/^application\/json(?:;|$)/i.test(re
 const mimeTypes=['application/pdf','image/jpeg','image/png','text/csv','text/plain','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
 const categories=['manufacturer_manual','bills','baseline','diagram','art','budgets','mv_plan','consent','signature_evidence','official_decision','edital','other'];
 function validFile(bytes,mime){if(mime==='application/pdf')return bytes.subarray(0,5).toString()==='%PDF-';if(mime==='image/png')return bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));if(mime==='image/jpeg')return bytes[0]===255&&bytes[1]===216&&bytes[2]===255;if(mime.endsWith('spreadsheetml.sheet'))return bytes[0]===80&&bytes[1]===75;return !bytes.includes(0)&&!/<(?:script|iframe|html)\b/i.test(bytes.toString('utf8'));}
-export function createApplication({store=createStore(),publicOrigin,coreOrigin,workspace='Expert Energy',coreCall}={}){
+export function createApplication({store=createStore(),publicOrigin,coreOrigin,workspace='Expert Energy',coreCall,activityEnabled=false}={}){
  const limits=new Map();
  function limit(c,method){
   const now=Date.now(),key=c.tenant+':'+c.subject,minute=Math.floor(now/60000);let counter=limits.get(key);
@@ -61,7 +61,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    }res.setHeader('Content-Length',size);createReadStream(file).pipe(res);return true;
   }
   if(req.method==='GET'&&path.startsWith('/assets/')){
-   const assets={'/assets/app.js':['application/javascript; charset=utf-8','web/app.js'],'/assets/app.css':['text/css; charset=utf-8','web/app.css'],'/assets/logo.png':['image/png','web/logo.png'],'/assets/favicon.ico':['image/x-icon','web/favicon.ico'],'/assets/comercial.vtt':['text/vtt; charset=utf-8','web/comercial.vtt'],'/assets/comercial-poster.jpg':['image/jpeg','web/comercial-poster.jpg']};
+   const assets={'/assets/app.js':['application/javascript; charset=utf-8','web/app.js'],'/assets/activity.mjs':['application/javascript; charset=utf-8','web/activity.mjs'],'/assets/app.css':['text/css; charset=utf-8','web/app.css'],'/assets/logo.png':['image/png','web/logo.png'],'/assets/favicon.ico':['image/x-icon','web/favicon.ico'],'/assets/comercial.vtt':['text/vtt; charset=utf-8','web/comercial.vtt'],'/assets/comercial-poster.jpg':['image/jpeg','web/comercial-poster.jpg']};
    const match=assets[path];if(!match)return false;res.setHeader('Content-Type',match[0]);res.setHeader('Content-Security-Policy',"default-src 'none'");res.end(await readFile(new URL(match[1],import.meta.url)));return true;
   }
   if(path!=='/app'&&!path.startsWith('/api/app/'))return false;
@@ -72,7 +72,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
   }
   if(req.method!=='GET'){if(req.headers.origin!==publicOrigin||req.headers['x-csrf-token']!==s.csrf)fail('Confirme novamente seu acesso para continuar.',403);}
   if(req.method==='GET'&&path==='/api/app/bootstrap'){
-   const data=Object.fromEntries(await Promise.all(kinds.map(async k=>[k,await list(c,k)])));send(res,200,{identity:{workspace,role:c.role,subject:c.subject,monthly_limit:c.monthly_limit,csrf:s.csrf,expires_at:g.expires_at,core_url:coreOrigin+'/pee'},types,inputs:opportunityInputs,reports:reportTypes,sections:requiredSections,data});return true;
+   const data=Object.fromEntries(await Promise.all(kinds.map(async k=>[k,await list(c,k)])));send(res,200,{identity:{workspace,role:c.role,subject:c.subject,monthly_limit:c.monthly_limit,csrf:s.csrf,expires_at:g.expires_at,core_url:coreOrigin+'/pee',activity_enabled:activityEnabled,idle_seconds:900},types,inputs:opportunityInputs,reports:reportTypes,sections:requiredSections,data});return true;
   }
   if(req.method==='GET'&&path==='/api/app/audit'){send(res,200,{items:await store.rpc(c,'audit')});return true;}
   const record=path.match(/^\/api\/app\/records\/(company|unit|project|simulation|rule)(?:\/([a-f0-9-]{36}))?$/);
