@@ -1,15 +1,17 @@
+import {proposalIsLive} from './trading-supply';
 /** A deliberately small public projection: never return source records, contacts or files. */
 export function guaranteeSummary(value:unknown){
  const text=typeof value==='string'?value.trim():'';
  const normalized=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.!]$/,'').trim();
- const waived=['sem garantia','sem garantias','dispensa de garantia','garantia dispensada','nao exige garantia','nao exige garantias','nenhuma garantia exigida'].includes(normalized);
+ const waived=['sem exigencia de garantia','sem garantia','sem garantias','dispensa de garantia','garantia dispensada','nao exige garantia','nao exige garantias','nenhuma garantia exigida'].includes(normalized);
  return {text:text||'Não informada',waived,explanation:waived?'Dispensa de garantia declarada: sem custo de constituição dessa garantia; demais custos e condições devem ser conferidos.':'Garantia declarada, sem custo comprovado para comparação. Não há classificação automática de melhor garantia.'};
 }
 export function clientMonitorSnapshot(raw:any){
  const o=raw.opportunity, d=o.data, now=Date.parse(raw.serverNow), today=new Date(now).toISOString().slice(0,10);
  const terms=['energyType','flexibilityUpperPercent','flexibilityLowerPercent','seasonality','correctionIndex','billingTerms'];
- const proposals=(raw.proposals??[]).filter((p:any)=>!['REJECTED','DECLINED','CANCELLED'].includes(p.status)&&p.data.validUntil>=today&&Number(p.data.priceBrlMwh)>0);
- const comparable=(p:any)=>terms.every(k=>d[k]!=null&&p.data[k]!=null&&String(d[k]).trim()===String(p.data[k]).trim());
+ const proposals=(raw.proposals??[]).filter((p:any)=>!['REJECTED','DECLINED','CANCELLED'].includes(p.status)&&proposalIsLive(p.data,now)&&Number(p.data.priceBrlMwh)>0);
+ const billingKey=(v:any)=>String(v).trim().replace(/^(\d+)\s*DU após (?:emissão da )?NF$/i,'$1 DU após NF');
+ const comparable=(p:any)=>terms.every(k=>d[k]!=null&&p.data[k]!=null&&(k==='billingTerms'?billingKey(d[k])===billingKey(p.data[k]):String(d[k]).trim()===String(p.data[k]).trim()));
  const eligible=proposals.filter(comparable).sort((a:any,b:any)=>Number(a.data.priceBrlMwh)-Number(b.data.priceBrlMwh)||a.id.localeCompare(b.id));
  const lowest=eligible.length?Number(eligible[0].data.priceBrlMwh):null;
  const rows=proposals.map((p:any)=>{
@@ -32,7 +34,7 @@ export function clientMonitorSnapshot(raw:any){
  const safeIds=new Set(rows.map((r:any)=>r.id));
  const topFive=rows.filter((r:any)=>r.rank!==null).slice(0,5).map((r:any)=>({proposalId:r.id,strengths:[...(r.rank===1?['Melhor preço nominal entre condições equivalentes']:[]),...(r.guarantee.waived?['Dispensa de garantia declarada']:[]),`Índice nominal de preço ${r.score}/100`]}));
  notes.push('Monitoramento prudencial: o fator de alavancagem deve ser conferido na CCEE por agente e evento. Consulta não confirmada nesta rodada; ausência de informação não significa risco baixo. O índice de preço não incorpora risco de crédito.');
- return {serverNow:raw.serverNow,roundEndsAt:raw.roundEndsAt??raw.expiresAt,expiresAt:raw.expiresAt,updatedAt:raw.serverNow,title:d.title,customer:raw.customer,unit:raw.unit,startMonth:d.startMonth,months:d.months,submarket:d.submarket,topFive,
+ return {serverNow:raw.serverNow,roundEndsAt:raw.roundEndsAt??raw.expiresAt,expiresAt:raw.expiresAt,updatedAt:raw.serverNow,title:d.title,customer:raw.customer,unit:raw.scope?.unitName??raw.unit,scope:raw.scope,scopeOptions:raw.scopeOptions,startMonth:d.startMonth,months:d.months,submarket:d.submarket,topFive,
   prudential:{status:'NOT_VERIFIED',source:'CCEE · Monitoramento Prudencial',url:'https://www.ccee.org.br/en/web/guest/fator-de-alavancagem',checkedAt:null},
   references:refs,proposals:rows,history:(raw.history??[]).filter((h:any)=>safeIds.has(h.proposalId)&&Number(h.priceBrlMwh)>0).map((h:any)=>({proposalId:h.proposalId,at:h.at,priceBrlMwh:Number(h.priceBrlMwh)})),
   invitations:raw.counts,pld:{rows:pld,fresh,variationPercent:variation},eva:{method:'Análise por regras, sem nova leitura OCR ou chamada de IA',notes},

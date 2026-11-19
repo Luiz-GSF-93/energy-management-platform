@@ -7,6 +7,15 @@ export function monthValue(index:number){return `${Math.floor(index/12)}-${Strin
 export type Observation={proposal:TradingRow;opportunity:TradingRow;supplier:TradingRow;price:number;start:number;end:number;purchase:string;band:string;variation:number|null;difference:number|null};
 /** Only joins rows already authorized by the organization's existing Trading endpoint. */
 export function observations(rows:TradingRow[],receivedIds:Set<string>):Observation[]{
+ // Expand the versioned matrix so a first-unit compatibility value is never treated as a global price.
+ const expanded:TradingRow[]=[];const expandedIds=new Set<string>();
+ for(const p of rows){if(p.kind!=='proposal'||p.data.proposalVersion!==3){expanded.push(p);continue;}const o=rows.find(o=>o.id===p.parent_id&&o.kind==='opportunity');if(!o||o.data.supplyVersion!==3)continue;
+  for(const u of p.data.unitOffers??[])for(const period of o.data.supplyPeriods??[]){const price=u.periodPrices?.find((r:any)=>r.year===period.year)?.priceBrlMwh;if(!(price>0))continue;const scope=u.unitId+':'+period.year,opId=o.id+':'+scope,id=p.id+':'+scope;
+   expanded.push({...o,id:opId,data:{...o.data,title:o.data.title+' · '+(o.data.unitSnapshots?.find((v:any)=>v.id===u.unitId)?.name??'Unidade')+' · '+period.year,startMonth:period.startDate.slice(0,7),months:period.months}});
+   expanded.push({...p,id,parent_id:opId,data:{...p.data,...u,priceBrlMwh:price}});if(receivedIds.has(p.id))expandedIds.add(id);
+  }
+ }
+ rows=expanded;receivedIds=new Set(Array.from(receivedIds).concat(Array.from(expandedIds)));
  const byId=new Map(rows.map(r=>[r.id,r]));const result:Observation[]=[];
  for(const proposal of rows){
   if(proposal.kind!=='proposal'||!receivedIds.has(proposal.id)||!['RECEIVED','ANALYSIS','MANAGER_APPROVED','CLIENT_APPROVED','CONTRACTED'].includes(proposal.status))continue;

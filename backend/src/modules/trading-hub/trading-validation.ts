@@ -1,10 +1,11 @@
 import {BadRequestException} from '@nestjs/common';
 import {annualPrices,validateCommercialTerms} from './trading-terms';
+import {normalizeSupplyScope,normalizeProposalSupply,proposalIsLive} from './trading-supply';
 
 export type TradingKind='supplier'|'opportunity'|'proposal';
 
 const commercialFields=['commercialTermsVersion','flexibilityUpperPercent','flexibilityLowerPercent','seasonality','correctionIndex','billingTerms'] as const;
-export const fields={supplier:['legalName','tradeName','cnpj','phone','administrativeEmail','administrativeContact','quotationContacts','address','city','state'],opportunity:['title','customerId','unitId','distributor','submarket','averageMwhMonth','energyType','startMonth','purchaseType','months','expiresAt','acrMonthlyBrl','aclOtherMonthlyBrl','comparisonBasis','investmentBrl','discountAnnualPercent','documents','annualReferencePrices',...commercialFields],proposal:['supplierId','priceBrlMwh','energyType','flexibility','modulation','guarantees','validUntil','conditions','documents',...commercialFields]} as const;
+export const fields={supplier:['legalName','tradeName','cnpj','phone','administrativeEmail','administrativeContact','quotationContacts','address','city','state'],opportunity:['supplyVersion','supplyStartDate','supplyEndDate','unitIds','unitCnpjs','discloseUnitCnpj','title','customerId','unitId','distributor','submarket','averageMwhMonth','energyType','startMonth','purchaseType','months','expiresAt','acrMonthlyBrl','aclOtherMonthlyBrl','comparisonBasis','investmentBrl','discountAnnualPercent','documents','annualReferencePrices',...commercialFields],proposal:['proposalVersion','unitOffers','supplierId','priceBrlMwh','energyType','flexibility','modulation','guarantees','validUntil','conditions','documents',...commercialFields]} as const;
 export function object(value:unknown):Record<string,any>{if(!value||Array.isArray(value)||typeof value!=='object')throw new BadRequestException('Objeto inválido.');return value as Record<string,any>;}
 
 export function text(value:any,min=1,max=500,label?:string){if(typeof value!=='string'||value.trim().length<min||value.trim().length>max)throw new BadRequestException(label?`${label}: informe de ${min} a ${max} caracteres.`:'Preencha os textos obrigatórios dentro dos limites.');return value.trim();}
@@ -44,6 +45,7 @@ export function validateTrading(kind:string,input:unknown){
   if(!['CONVENTIONAL','INCENTIVIZED_50','INCENTIVIZED_100'].includes(d.energyType))throw new BadRequestException('Modalidade de energia inválida.');
 
   if(kind==='opportunity'){
+   if(d.supplyVersion!=null)normalizeSupplyScope(d);
    if(d.purchaseType!=null&&!['AVULSA','CONTRATO'].includes(d.purchaseType))throw new BadRequestException('Tipo de compra inválido.');
 
    for(const [k,label] of [['title','Título da oportunidade'],['customerId','Cliente'],['unitId','Unidade consumidora'],['distributor','Distribuidora']])d[k]=text(d[k],1,200,label);
@@ -51,12 +53,12 @@ export function validateTrading(kind:string,input:unknown){
    if(!['SE_CO','S','NE','N'].includes(d.submarket))throw new BadRequestException('Submercado inválido.');number(d.averageMwhMonth,0.000001,1e9);number(d.months,1,600);if(!Number.isInteger(d.months)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(d.startMonth))throw new BadRequestException('Prazo inválido.');
 
    if(!Number.isFinite(Date.parse(d.expiresAt))||Date.parse(d.expiresAt)<=Date.now()||Date.parse(d.expiresAt)>Date.now()+366*86400000)throw new BadRequestException('Expiração deve ocorrer em até um ano.');
-   if(d.annualReferencePrices!=null)d.annualReferencePrices=annualPrices(d.annualReferencePrices,d.startMonth,d.months);
+   if(d.supplyVersion!==3&&d.annualReferencePrices!=null)d.annualReferencePrices=annualPrices(d.annualReferencePrices,d.startMonth,d.months);
    validateCommercialTerms(d);
 
    for(const k of ['acrMonthlyBrl','aclOtherMonthlyBrl','investmentBrl','discountAnnualPercent'])if(d[k]!=null)number(d[k],0,k==='discountAnnualPercent'?1000:1e12);
    if(d.acrMonthlyBrl!=null||d.aclOtherMonthlyBrl!=null)d.comparisonBasis=text(d.comparisonBasis,10,1000,'Fonte e premissas da comparação (obrigatório ao informar a base ACR ou demais custos ACL)');
-  }else{uuid(d.supplierId);number(d.priceBrlMwh,0.0001,1e7);validateCommercialTerms(d,d.commercialTermsVersion===2);for(const k of ['flexibility','modulation','guarantees','conditions'])d[k]=text(d[k],1,4000);if(!/^\d{4}-\d{2}-\d{2}$/.test(d.validUntil)||!Number.isFinite(Date.parse(d.validUntil))||d.validUntil<new Date().toISOString().slice(0,10))throw new BadRequestException('Validade da proposta inválida.');}
+  }else{if(d.proposalVersion!=null)normalizeProposalSupply(d);uuid(d.supplierId);number(d.priceBrlMwh,0.0001,1e7);validateCommercialTerms(d,d.commercialTermsVersion===2);for(const k of ['flexibility','modulation','guarantees','conditions'])d[k]=text(d[k],1,4000);if(!proposalIsLive(d))throw new BadRequestException('Validade da proposta inválida.');}
 
  }
 
