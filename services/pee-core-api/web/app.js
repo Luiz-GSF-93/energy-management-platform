@@ -1,13 +1,16 @@
 'use strict';
+import {createActivityTracker} from '/assets/activity.mjs';
+let activityTracker=null,activityTimer=null;
 let state=null,view='dashboard',selected=null,analysis=null,busy=false;
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),num=v=>typeof v==='number'?new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(v):'—',money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v??0);
 const navigation={dashboard:'Visão geral',companies:'Empresas e unidades',projects:'Projetos',simulations:'Oportunidades',economics:'Econômico e RCB',rules:'Requisitos do edital',documents:'Documentos e assinaturas',reports:'Relatórios e projeto final',workflow:'Avaliação e processo',audit:'Rastreabilidade'};
+function configureActivity(){if(activityTracker||!state?.identity.activity_enabled)return;activityTracker=createActivityTracker({hidden:()=>document.hidden,renew:age=>api('activity',{csrf:state.identity.csrf,activity_age_ms:age}),onLock:reason=>{const box=$('#error');if(box){box.hidden=false;box.textContent=reason==='idle'?'Sua sessão foi encerrada após 15 minutos de inatividade. Os campos não salvos permanecem nesta tela. Renove o acesso pelo Core antes de continuar.':'Sua permissão ou sessão foi alterada. Entre novamente pelo Core.';const a=document.createElement('a');a.href='/auth/core/start';a.target='_blank';a.rel='noopener';a.textContent=' Renovar acesso pelo Core';box.append(a);}}});for(const name of ['pointerdown','pointermove','keydown','wheel','touchstart'])window.addEventListener(name,e=>activityTracker.activity(e),{passive:true});activityTimer=setInterval(()=>void activityTracker.tick(),15000);}
 const current=()=>state?.data.project.find(p=>p.id===selected),records=k=>state?.data[k]??[],canWrite=()=>['editor','reviewer','manager'].includes(state?.identity.role),canReview=()=>['reviewer','manager'].includes(state?.identity.role),canEdit=()=>['editor','manager'].includes(state?.identity.role);
 async function api(path,body,blob=false){
  const r=await fetch('/api/app/'+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',redirect:'error',headers:{...(body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':state?.identity.csrf})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(40000)});
  if(!r.ok){let msg;try{msg=(await r.json()).message;}catch{}const e=Error(msg??'Não foi possível confirmar a operação. Atualize os dados antes de repetir.');e.status=r.status;throw e;}return blob?r.blob():r.json();
 }
-async function load(){const data=await api('bootstrap');state=data;if(!records('project').some(p=>p.id===selected))selected=records('project')[0]?.id??null;await refreshAnalysis();render();}
+async function load(){const data=await api('bootstrap');state=data;configureActivity();if(!records('project').some(p=>p.id===selected))selected=records('project')[0]?.id??null;await refreshAnalysis();render();}
 async function refreshAnalysis(){analysis=selected?await api('projects/'+selected+'/analysis'):null;}
 function message(e){const box=$('#error');if(box){box.textContent=e.message??String(e);box.hidden=false;box.scrollIntoView({block:'nearest'});}else alert(e.message??String(e));}
 function field(name,label,value='',type='text',attrs=''){return `<label>${esc(label)}<input name="${esc(name)}" type="${type}" value="${esc(value)}" ${attrs}></label>`;}
