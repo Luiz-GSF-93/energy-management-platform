@@ -1,4 +1,4 @@
-# EnergyOS – PEE / project platform 0.6.0
+# EnergyOS – PEE / project platform 0.7.0
 
 Independent service. No existing EnergyOS entrypoint imports it. Keep the existing EnergyOS services and main branch unchanged.
 
@@ -31,3 +31,13 @@ Exactly one Railway replica and one outbound Core connector remain required; tra
 The standalone license reference is not the real sales module. The Core commercial module, independent licensed-user identity, live provider signature jobs, royalties ledger, official-source EVA and email dispatch must be implemented and homologated separately before their capability flags are enabled. Health reports these capabilities explicitly; a ready project workspace is not a declaration that those commercial integrations are complete. No email is sent, contract signed, charge made or distributor project submitted by installing this service.
 
 Official technical references: https://supabase.com/docs/guides/database/postgres/row-level-security ; https://supabase.com/kb/troubleshooting/cant-revoke-a-role-membership-granted-by-supabase_admin-d08922 ; https://supabase.com/docs/guides/storage/security/access-control . PEE call rules: https://www.gov.br/aneel/pt-br/assuntos/programa-de-eficiencia-energetica/chamadas-publicas .
+
+## Reviewed normative evaluation
+
+The supplied ANEEL CPP guide is the 2016 edition (72 PDF pages). It is a historical reference, not an automatic source of current edital weights or deadlines. The deterministic engine recalculates eligibility checks, total/PEE RCB, resource funding, quality evidence and action plans from stored project data. Competitive scores require reviewed current-edital methods and, for relative methods, a documented same-call and same-typology reference. No approval probability is invented.
+
+Version 002 must be applied to the dedicated PEE database before enabling the new workspace revision. It repairs reviewer persistence within the already authorized role, provides actual quota usage, atomic project snapshots and stale-snapshot emission protection. It does not grant direct table access to browsers.
+
+Session renewal is explicitly controlled by PEE_ACTIVITY_ENABLED. Real input renews the 15-minute idle window through Core; reads and timer-only polling do not. Core revocation, grant expiry and absolute session policy remain authoritative.
+
+The full approved 22-module rollout remains under implementation. Do not treat a menu item, draft contract or configured provider as evidence of an active paid license or a delivered message. No existing EnergyOS source is imported or changed by this service.
