@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createResendProvider,ResendFailure} from './resend-provider.mjs';
 import {createProjectZip} from './project-package.mjs';
-import {downloadReceivedAttachment} from './mail-attachments.mjs';
+import {downloadReceivedAttachment,receivedAttachmentUrl} from './mail-attachments.mjs';
 
 test('PEE shares Resend capacity with at most two request starts per second',async()=>{
  let clock=0;const starts=[],delays=[],provider=createResendProvider({key:'synthetic-only-key'},{now:()=>clock,pause:async ms=>{delays.push(ms);await new Promise(resolve=>setImmediate(resolve));clock+=ms;},fetcher:async()=>{starts.push(clock);return Response.json({id:randomUUID()});}});
@@ -30,4 +30,9 @@ test('receiving attachments reject foreign hosts, mismatched paths and private D
  await assert.rejects(downloadReceivedAttachment(detail,email,options),/MAIL_ATTACHMENT_ADDRESS/);
  await assert.rejects(downloadReceivedAttachment({...detail,download_url:'https://attacker.invalid/file'},email,options),/MAIL_ATTACHMENT_SOURCE/);
  await assert.rejects(downloadReceivedAttachment(detail,randomUUID(),options),/MAIL_ATTACHMENT_SOURCE/);assert.equal(requests,0);
+});
+test('current and legacy Resend attachment CDNs require the exact same email and attachment IDs',()=>{
+ const email=randomUUID(),id=randomUUID(),base={id,size:123};
+ for(const download_url of [`https://inbound-cdn.resend.com/${email}/attachments/${id}?signature=synthetic`,`https://cdn.resend.app/receiving/${email}/attachments/${id}?signature=synthetic`])assert.equal(receivedAttachmentUrl({...base,download_url},email).protocol,'https:');
+ for(const download_url of [`https://cdn.resend.app.evil.invalid/receiving/${email}/attachments/${id}`,`https://cdn.resend.app/receiving/${randomUUID()}/attachments/${id}`,`https://cdn.resend.app/receiving/${email}/attachments/${randomUUID()}`,`https://cdn.resend.app/${email}/attachments/${id}`,`http://cdn.resend.app/receiving/${email}/attachments/${id}`])assert.throws(()=>receivedAttachmentUrl({...base,download_url},email),/MAIL_ATTACHMENT_SOURCE/);
 });
