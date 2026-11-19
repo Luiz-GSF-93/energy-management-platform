@@ -3,6 +3,9 @@ import {createHash,randomBytes} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {AccessFailure,createCoreTransport,equalSecret,identifier,opaque,token} from './core-transport.mjs';
 import {createSealer} from './session-seal.mjs';
+import {createApplication} from './application.mjs';
+import {ProjectError} from './project-policy.mjs';
+import {StoreError} from './store.mjs';
 
 const SESSION='__Host-pee_session',STATE='__Host-pee_state';
 const digest=value=>createHash('sha256').update(value).digest('base64url');
@@ -22,10 +25,11 @@ export function accessConfiguration(env=process.env){
  return config;
 }
 
-export function createAccessServer({config,transport,now=Date.now}={}){
+export function createAccessServer({config,transport,now=Date.now,application}={}){
  if(!config||!identifier(config.organization)||!identifier(config.tenant)||!token(config.peerSecret)||!token(config.cookieKey)||config.peerSecret===config.cookieKey)throw Error('Invalid access configuration');
  config={...config,publicOrigin:httpsOrigin(config.publicOrigin),coreOrigin:httpsOrigin(config.coreOrigin)};
  const core=transport??createCoreTransport({organization:config.organization,tenant:config.tenant,now});const sealer=createSealer(config.cookieKey,{now});const usedStates=new Map();
+ const app=application??(process.env.PEE_PROJECTS_ENABLED==='true'?createApplication({publicOrigin:config.publicOrigin,coreOrigin:config.coreOrigin,workspace:config.workspaceName,coreCall:core.call}):null);
  function origin(req){if(req.headers.origin!==config.publicOrigin)deny(403,'Origem não autorizada');}
  function machine(req){if(!equalSecret(req.headers.authorization,'Bearer '+config.peerSecret))deny(401,'Serviço não autorizado');}
  function session(req){const s=sealer.open('session',cookies(req)[SESSION]);if(!exact(s,['organization','tenant','subject','coreToken','csrf'])||s.organization!==config.organization||s.tenant!==config.tenant||!identifier(s.subject)||!token(s.coreToken)||!token(s.csrf))deny(401,'Sessão inválida');return s;}
@@ -40,7 +44,7 @@ export function createAccessServer({config,transport,now=Date.now}={}){
   res.setHeader('Cache-Control','no-store');res.setHeader('Pragma','no-cache');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Security-Policy',"default-src 'none'; frame-ancestors 'none'");
   try{
    if((req.url??'').length>2048)deny(414,'Endereço inválido');const path=new URL(req.url,'http://local.invalid').pathname;
-   if(req.method==='GET'&&path==='/health')return json(res,200,{service:'energyos-pee-core-api',enabled:false,ready:false,access_enabled:true,core_connected:core.ready(),status:core.ready()?'access-homologation':'awaiting-core'});
+   if(req.method==='GET'&&path==='/health')return json(res,200,{service:'energyos-pee-core-api',enabled:!!app,ready:!!app&&core.ready(),access_enabled:true,core_connected:core.ready(),project_storage_configured:!!app,licensing_enabled:false,eva_enabled:false,mail_enabled:false,status:app?'project-platform':core.ready()?'access-homologation':'awaiting-core'});
    if(req.method==='POST'&&path==='/internal/core/poll'){
     machine(req);const body=await jsonBody(req);if(!exact(body,['organization_id'])||body.organization_id!==config.organization)deny(403,'Organização não autorizada');const abort=new AbortController();res.once('close',()=>abort.abort());const task=await core.poll(abort.signal);if(!res.destroyed)return json(res,200,{task});return;
    }
@@ -64,6 +68,7 @@ export function createAccessServer({config,transport,now=Date.now}={}){
    if(req.method==='POST'&&path==='/auth/logout'){
     origin(req);const body=await jsonBody(req,2048);if(!exact(body,['csrf']))deny(400,'Solicitação inválida');let s;try{s=session(req);}catch{res.setHeader('Set-Cookie',cookie(SESSION,'',0));return json(res,200,{ok:true});}if(!equalSecret(body.csrf,s.csrf))deny(403,'Confirmação de sessão inválida');res.setHeader('Set-Cookie',cookie(SESSION,'',0));return json(res,200,{ok:true});
    }
+   if(app&&await app.handle(req,res,path,authorized))return;
    if(req.method==='GET'&&path==='/app'){
     const {session:s,grant:g}=await authorized(req);const role={viewer:'Consulta',editor:'Elaboração',reviewer:'Revisão técnica'}[g.role];
     return page(res,'Workspace',`<p class="status">Acesso confirmado pelo Core</p><h1>${escape(config.workspaceName??'Expert Energy')}</h1><p class="muted">Seu ambiente de projetos PEE.</p><div class="grid"><section><h2>Seu perfil</h2><p>${escape(role)}</p></section><section><h2>Limite configurado</h2><p>${g.monthly_project_limit} projetos por mês</p></section></div><section><h2>Elaboração de projetos</h2><p>A liberação deste módulo aguarda a homologação do cadastro de projetos, documentos e consumo das cotas.</p><button disabled>Novos projetos em homologação</button></section><p><a href="${escape(config.coreOrigin)}/pee">Voltar ao Energy Core</a></p><button id="logout" type="button">Sair deste ambiente</button><p id="notice" role="status"></p>`,`document.getElementById('logout').addEventListener('click',async()=>{try{const r=await fetch('/auth/logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:${JSON.stringify(s.csrf)}})});if(!r.ok)throw Error();location.replace('/');}catch{document.getElementById('notice').textContent='Não foi possível confirmar a saída. Tente novamente.';}});`);
@@ -71,7 +76,11 @@ export function createAccessServer({config,transport,now=Date.now}={}){
    if(req.method==='GET'&&path==='/')return page(res,'Acesso','<p class="status">Homologação do acesso</p><h1>Do potencial energético<br>ao projeto PEE.</h1><p class="muted">Engenharia, documentação e inteligência para preparar projetos de eficiência energética.</p><section><h2>Usuários do Energy Core</h2><p>Entre com seu acesso do Core. A plataforma confirma a permissão individual e a organização autorizada.</p><a class="action" href="/auth/core/start">Entrar pelo Energy Core</a></section><section><h2>Organizações licenciadas</h2><p>A contratação e o acesso por licença serão liberados após a homologação do contrato, assinatura e aprovação pelo Core.</p></section>');
    if(path.startsWith('/v1/'))return json(res,503,{error:'PEE_CORE_DISABLED',message:'Contratação e projetos ainda não foram liberados.'});
    return json(res,404,{message:'Página não encontrada'});
-  }catch(e){const status=e instanceof AccessFailure?e.status:503;return json(res,status,{message:e instanceof AccessFailure?e.message:'O acesso não pôde ser confirmado. Tente novamente.'});}
+  }catch(e){const known=e instanceof AccessFailure||e instanceof ProjectError||e instanceof StoreError,status=known?e.status:503;
+   if(req.method==='GET'&&new URL(req.url,'http://local.invalid').pathname==='/app'){
+    res.statusCode=status;return page(res,'Renovar acesso','<h1>Entre novamente pelo Core.</h1><p>Esta sessão expirou, teve a permissão alterada ou não pôde ser confirmada. Seus dados salvos permanecem no workspace.</p><p><a class="action" href="/auth/core/start">Entrar pelo Energy Core</a></p><p><a href="'+escape(config.coreOrigin)+'/pee">Consultar sua permissão no Core</a></p>');
+   }
+   return json(res,status,{message:known?e.message:'Não foi possível confirmar a operação. Atualize os dados antes de repetir.'});}
  });
  server.requestTimeout=35000;server.headersTimeout=10000;server.on('close',()=>core.close());return {server,transport:core};
 }
