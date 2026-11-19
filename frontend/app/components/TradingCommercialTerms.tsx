@@ -1,4 +1,5 @@
 'use client';
+import {calendarPeriods} from '@/app/lib/trading-supply';
 import {Input} from '@/app/components/ui';
 
 export const quotationGuidance='Procure se aproximar ou melhorar sua oferta com base na referência de preço desejado ACL indicada para cada ano de fornecimento. Aguardamos seu melhor preço e agradecemos sua participação.';
@@ -32,5 +33,5 @@ export function CommercialTermsSummary({data}:{data:Record<string,any>}){
  return <dl style={grid}>{[['Flexibilidade maior',data.flexibilityUpperPercent==null?'Não informada':`+${data.flexibilityUpperPercent}%`],['Flexibilidade menor',data.flexibilityLowerPercent==null?'Não informada':`${data.flexibilityLowerPercent}%`],['Sazonalidade',data.seasonality],['Índice de correção',data.correctionIndex],['Condição de faturamento',data.billingTerms]].map(([label,value])=><div key={label}><dt>{label}</dt><dd style={{margin:0,overflowWrap:'anywhere'}}>{value||'Não informado'}</dd></div>)}</dl>;
 }
 export function AnnualReferenceSummary({data}:{data:Record<string,any>}){
- return <section aria-label="Referências desejadas de preço ACL"><h3>Referência de preço desejado ACL · R$/MWh</h3><p>{quotationGuidance}</p>{data.annualReferencePrices?.length?<ul>{referencePeriods(data.startMonth,data.months).map(p=>{const price=data.annualReferencePrices.find((r:any)=>r.year===p.year)?.priceBrlMwh;return <li key={p.year}>{p.year} · {p.start} a {p.end}: <strong>{typeof price==='number'?price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4})+' R$/MWh':'Não cadastrada'}</strong></li>;})}</ul>:<p>Referência ainda não cadastrada pelo backoffice.</p>}</section>;
+ return <section aria-label="Referências desejadas de preço ACL"><h3>Referência de preço desejado ACL · R$/MWh</h3><p>{quotationGuidance}</p>{data.annualReferencePrices?.length?<ul>{(data.supplyVersion===3?calendarPeriods(data.supplyStartDate,data.supplyEndDate).map(p=>({year:p.year,start:p.startDate,end:p.endDate})):referencePeriods(data.startMonth,data.months)).map(p=>{const price=data.annualReferencePrices.find((r:any)=>r.year===p.year)?.priceBrlMwh;return <li key={p.year}>{p.year} · {p.start} a {p.end}: <strong>{typeof price==='number'?price.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4})+' R$/MWh':'Não cadastrada'}</strong></li>;})}</ul>:<p>Referência ainda não cadastrada pelo backoffice.</p>}</section>;
 }

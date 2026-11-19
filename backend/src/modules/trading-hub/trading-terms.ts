@@ -1,4 +1,5 @@
 import {BadRequestException} from '@nestjs/common';
+import {calendarSupplyPeriods,supplyReferences} from './trading-supply';
 
 export type AnnualPrice={year:number;priceBrlMwh:number};
 export function supplyYears(start:string,months:number){
@@ -28,7 +29,7 @@ export function validateCommercialTerms(d:Record<string,any>,required=false){
  if(d.flexibilityUpperPercent!=null&&d.flexibilityLowerPercent!=null)d.flexibility=`+${d.flexibilityUpperPercent}% / ${d.flexibilityLowerPercent}%`;
 }
 export function assertQuotationReady(d:Record<string,any>){
- annualPrices(d.annualReferencePrices,d.startMonth,d.months,true);validateCommercialTerms({...d},true);
+ if(d.supplyVersion===3)supplyReferences(d.annualReferencePrices,calendarSupplyPeriods(d.supplyStartDate,d.supplyEndDate),true);else annualPrices(d.annualReferencePrices,d.startMonth,d.months,true);validateCommercialTerms({...d},true);
 }
 export function quotationExpired(d:Record<string,any>,now=Date.now()){
  return !Number.isFinite(Date.parse(d.expiresAt))||Date.parse(d.expiresAt)<=now;

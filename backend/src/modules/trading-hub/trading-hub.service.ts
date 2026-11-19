@@ -10,9 +10,10 @@ import {LicensesService} from '../licenses/services/licenses.service';
 import {TenantContext} from '../../common/interfaces/tenant-context.interface';
 
 
-import {object,text,uuid,validateTrading} from './trading-validation';
+import {object,text,uuid,validateTrading,cnpj} from './trading-validation';
 
 
+import {bindProposalSupply} from './trading-supply';
 import {compareTrading} from './trading-comparison';
 import {assertQuotationReady,quotationExpired} from './trading-terms';
 
@@ -40,7 +41,7 @@ export class TradingHubService {
  async allowed(t:TenantContext,write=false,supplier=false){if(!t?.organizationId||!t.userId||(!['admin_org','gestor','operacional'].includes(t.role)&&t.accessMode!=='platform_operation')||!(t.permissions?.includes(write?TRADING_MANAGE:TRADING_VIEW)||write&&supplier&&t.permissions?.includes(TRADING_SUPPLIERS_MANAGE)&&t.permissions?.includes(TRADING_VIEW)))throw new ForbiddenException('Acesso exclusivo ao backoffice autorizado.');await this.licenses.requireEntitlement(t.organizationId,'trading_hub');}
 
 
- async list(t:TenantContext){await this.allowed(t);const r=await this.client().from('trading_records').select('*').eq('organization_id',t.organizationId).order('created_at',{ascending:false}).limit(1001);this.fail(r.error);if(!r.data||r.data.length>1000)throw new BadRequestException('Consulta extensa; solicite exportação por período.');return {rows:r.data,canManage:t.permissions.includes(TRADING_MANAGE),canManageSuppliers:t.permissions.includes(TRADING_MANAGE)||t.permissions.includes(TRADING_SUPPLIERS_MANAGE),canApprove:['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation',comparisons:r.data.filter((v:any)=>v.kind==='opportunity').map((o:any)=>({opportunityId:o.id,rows:compareTrading(o,r.data.filter((p:any)=>p.kind==='proposal'&&p.parent_id===o.id))}))};}
+ async list(t:TenantContext){await this.allowed(t);const r=await this.client().from('trading_records').select('*').eq('organization_id',t.organizationId).order('created_at',{ascending:false}).limit(1001);this.fail(r.error);if(!r.data||r.data.length>1000)throw new BadRequestException('Consulta extensa; solicite exportação por período.');return {supportsSupplyV3:true,rows:r.data,canManage:t.permissions.includes(TRADING_MANAGE),canManageSuppliers:t.permissions.includes(TRADING_MANAGE)||t.permissions.includes(TRADING_SUPPLIERS_MANAGE),canApprove:['admin_org','gestor'].includes(t.role)||t.accessMode==='platform_operation',comparisons:r.data.filter((v:any)=>v.kind==='opportunity').map((o:any)=>({opportunityId:o.id,rows:compareTrading(o,r.data.filter((p:any)=>p.kind==='proposal'&&p.parent_id===o.id))}))};}
 
 
  async documents(t:TenantContext){await this.allowed(t);const r=await this.client().from('documents').select('id,original_filename,customer_id,consumer_unit_id').eq('organization_id',t.organizationId).eq('file_verified',true).order('created_at',{ascending:false}).limit(1001);this.fail(r.error);if(r.data.length>1000)throw new BadRequestException('Muitos documentos; solicite a consulta por unidade.');return r.data;}
@@ -62,13 +63,21 @@ export class TradingHubService {
 
 
   if(kind==='proposal'&&opportunity&&quotationExpired(opportunity.data))throw new BadRequestException('Cotação expirada; crie uma nova rodada.');
+  if(kind==='proposal'&&opportunity)bindProposalSupply(d,opportunity.data);
   if(kind==='proposal'){const s=await this.one(d.supplierId,t);if(s.kind!=='supplier'||s.status!=='ACTIVE')throw new BadRequestException('Selecione fornecedor ativo desta organização.');}
 
 
-  if(kind==='opportunity'){const u=await this.client().from('consumer_units').select('id').eq('organization_id',t.organizationId).eq('customer_id',d.customerId).eq('id',d.unitId).maybeSingle();this.fail(u.error);if(!u.data)throw new ForbiddenException('Unidade fora do escopo.');}
+  if(kind==='opportunity'){
+   if(d.supplyVersion===3){
+    const u=await this.client().from('consumer_units').select('id,name,status').eq('organization_id',t.organizationId).eq('customer_id',d.customerId).in('id',d.unitIds);this.fail(u.error);
+    if(!u.data||u.data.length!==d.unitIds.length||u.data.some((r:any)=>r.status!=='ACTIVE'))throw new ForbiddenException('Selecione unidades ativas deste cliente e organização.');
+    if(d.discloseUnitCnpj&&d.unitCnpjs.some((r:any)=>!cnpj(r.cnpj)))throw new BadRequestException('Confira os CNPJs das unidades e seus dígitos verificadores.');
+    d.unitSnapshots=d.unitIds.map((id:string)=>({id,name:u.data.find((r:any)=>r.id===id).name,...(d.discloseUnitCnpj?{cnpj:d.unitCnpjs.find((r:any)=>r.unitId===id).cnpj}:{})}));
+   }else{const u=await this.client().from('consumer_units').select('id').eq('organization_id',t.organizationId).eq('customer_id',d.customerId).eq('id',d.unitId).maybeSingle();this.fail(u.error);if(!u.data)throw new ForbiddenException('Unidade fora do escopo.');}
+  }
 
 
-  for(const doc of d.documents??[]){const r=await this.client().from('documents').select('id,file_verified,customer_id,consumer_unit_id').eq('organization_id',t.organizationId).eq('id',doc).maybeSingle();this.fail(r.error);if(!r.data?.file_verified)throw new BadRequestException('Anexo deve ser documento verificado desta organização.');if((kind==='opportunity'||opportunity)&&(r.data.customer_id!==(opportunity?.data.customerId??d.customerId)||r.data.consumer_unit_id!==(opportunity?.data.unitId??d.unitId)))throw new BadRequestException('Anexo fora do cliente e unidade.');}
+  for(const doc of d.documents??[]){const r=await this.client().from('documents').select('id,file_verified,customer_id,consumer_unit_id').eq('organization_id',t.organizationId).eq('id',doc).maybeSingle();this.fail(r.error);if(!r.data?.file_verified)throw new BadRequestException('Anexo deve ser documento verificado desta organização.');if((kind==='opportunity'||opportunity)&&(r.data.customer_id!==(opportunity?.data.customerId??d.customerId)||!((opportunity?.data.unitIds??d.unitIds??[opportunity?.data.unitId??d.unitId]).includes(r.data.consumer_unit_id))))throw new BadRequestException('Anexo fora do cliente e unidade.');}
 
 
   const r=await this.client().rpc('save_trading_record',{p_org:t.organizationId,p_actor:t.userId,p_kind:kind,p_id:id,p_revision:b.revision,p_parent:parent,p_data:d,p_reason:text(b.reason,3,500)});this.fail(r.error);return r.data;
