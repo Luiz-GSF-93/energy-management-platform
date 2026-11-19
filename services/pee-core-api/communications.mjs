@@ -18,7 +18,7 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
   const documents=draft.document_ids.map(id=>{const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d)fail('Anexo não pertence a este projeto.',404);return {id:d.id,name:d.name,mime:d.mime,sha256:d.sha256,size:d.size};});
   if(documents.reduce((n,d)=>n+d.size,0)>20971520)fail('Os anexos da comunicação devem totalizar até 20 MB.');
   const analysis=assessProject(data);let submission_issues=[];try{validateSubmissionMail(draft,data,analysis);}catch(e){if(!(e instanceof ProjectError))throw e;submission_issues=[e.message];}
-  const body=projectCommunication({draft,project:data.project,company:data.company,unit:data.unit,analysis,workspace,author,projectCode:thread.project_code});
+  const body=projectCommunication({draft,project:data.project,company:data.company,unit:data.unit,analysis,workspace:data.workspace??workspace,author,projectCode:thread.project_code});
   const payload={...draft,submission_issues,body,html:communicationHtml(draft.subject,body),sender_name:author,documents,snapshot_hash:data.snapshot_hash,project_version:data.project.version,prepared_at:new Date().toISOString()};
   return {...payload,preview_hash:communicationHash(payload)};
  }

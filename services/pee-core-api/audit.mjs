@@ -1,5 +1,8 @@
 const entities={company:'Empresa',unit:'Unidade consumidora',project:'Projeto',simulation:'Simulação',document:'Documento',rule:'Perfil do edital',workflow:'Etapa da CPP',communication:'Comunicação',royalty:'Royalty'};
 const labels={
+ 'royalty.prepared':'Apuração de royalties preparada',
+ 'royalty.confirmed':'Apuração de royalties confirmada no Core',
+ 'license.cancellation_requested':'Cancelamento de licença solicitado',
  'project.emitted':'Relatório do projeto emitido',
  'communication.queued':'Comunicação aguardando envio',
  'communication.accepted':'Envio aceito pelo Resend',
