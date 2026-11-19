@@ -45,7 +45,7 @@ export function createAccessServer({config,transport,now=Date.now,application}={
   res.setHeader('Cache-Control','no-store');res.setHeader('Pragma','no-cache');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Security-Policy',"default-src 'none'; frame-ancestors 'none'");
   try{
    if((req.url??'').length>2048)deny(414,'Endereço inválido');const path=new URL(req.url,'http://local.invalid').pathname;
-   if(req.method==='GET'&&path==='/health')return json(res,200,{service:'energyos-pee-core-api',enabled:!!app,ready:!!app&&core.ready(),access_enabled:true,activity_renewal_enabled:config.activityEnabled===true,idle_timeout_seconds:config.activityEnabled?900:null,core_connected:core.ready(),project_storage_configured:!!app,licensing_enabled:false,eva_enabled:!!app,mail_enabled:false,eva_mode:app?'official_retrieval':null,author_directory_enabled:process.env.PEE_AUTHOR_DIRECTORY_ENABLED==='true',status:app?'project-platform':core.ready()?'access-homologation':'awaiting-core'});
+   if(req.method==='GET'&&path==='/health')return json(res,200,{service:'energyos-pee-core-api',enabled:!!app,ready:!!app&&core.ready(),access_enabled:true,activity_renewal_enabled:config.activityEnabled===true,idle_timeout_seconds:config.activityEnabled?900:null,core_connected:core.ready(),project_storage_configured:!!app,licensing_enabled:false,eva_enabled:!!app,mail_enabled:app?.mailEnabled===true,eva_mode:app?'official_retrieval':null,author_directory_enabled:process.env.PEE_AUTHOR_DIRECTORY_ENABLED==='true',status:app?'project-platform':core.ready()?'access-homologation':'awaiting-core'});
    if(req.method==='POST'&&path==='/internal/core/poll'){
     machine(req);const body=await jsonBody(req);if(!exact(body,['organization_id'])||body.organization_id!==config.organization)deny(403,'Organização não autorizada');const abort=new AbortController();res.once('close',()=>abort.abort());const task=await core.poll(abort.signal);if(!res.destroyed)return json(res,200,{task});return;
    }
@@ -92,7 +92,7 @@ export function createAccessServer({config,transport,now=Date.now,application}={
    }
    return json(res,status,{message:known?e.message:'Não foi possível confirmar a operação. Atualize os dados antes de repetir.'});}
  });
- server.requestTimeout=35000;server.headersTimeout=10000;server.on('close',()=>core.close());return {server,transport:core};
+ server.requestTimeout=35000;server.headersTimeout=10000;const mailTimer=app?.mailEnabled?setInterval(()=>void app.archiveMail().catch(()=>{}),60000):null;mailTimer?.unref();server.on('close',()=>{if(mailTimer)clearInterval(mailTimer);core.close();});return {server,transport:core};
 }
 
 export function startAccessServer(){const config=accessConfiguration();if(!config)throw Error('Access mode is disabled');const {server}=createAccessServer({config});server.listen(Number(process.env.PORT||3001),'0.0.0.0',()=>process.stdout.write(process.env.PEE_PROJECTS_ENABLED==='true'?'EnergyOS PEE project service started.\n':'EnergyOS PEE access homologation started.\n'));return server;}
