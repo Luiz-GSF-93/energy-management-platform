@@ -1,3 +1,4 @@
+import {validateSubmissionMail}from'./distributor-contact.mjs';
 import {randomUUID,randomBytes,createHash}from'node:crypto';
 import {ProjectError}from'./project-policy.mjs';
 import {assessProject}from'./evaluation.mjs';
@@ -16,8 +17,9 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
   const draft=validateCommunication(input),data=await snapshot(c,thread.project_id);if(!data.company||!data.unit)fail('Complete o beneficiário e a unidade do projeto.');
   const documents=draft.document_ids.map(id=>{const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d)fail('Anexo não pertence a este projeto.',404);return {id:d.id,name:d.name,mime:d.mime,sha256:d.sha256,size:d.size};});
   if(documents.reduce((n,d)=>n+d.size,0)>20971520)fail('Os anexos da comunicação devem totalizar até 20 MB.');
-  const body=projectCommunication({draft,project:data.project,company:data.company,unit:data.unit,analysis:assessProject(data),workspace,author,projectCode:thread.project_code});
-  const payload={...draft,body,html:communicationHtml(draft.subject,body),sender_name:author,documents,snapshot_hash:data.snapshot_hash,project_version:data.project.version,prepared_at:new Date().toISOString()};
+  const analysis=assessProject(data);let submission_issues=[];try{validateSubmissionMail(draft,data,analysis);}catch(e){if(!(e instanceof ProjectError))throw e;submission_issues=[e.message];}
+  const body=projectCommunication({draft,project:data.project,company:data.company,unit:data.unit,analysis,workspace,author,projectCode:thread.project_code});
+  const payload={...draft,submission_issues,body,html:communicationHtml(draft.subject,body),sender_name:author,documents,snapshot_hash:data.snapshot_hash,project_version:data.project.version,prepared_at:new Date().toISOString()};
   return {...payload,preview_hash:communicationHash(payload)};
  }
  async function privateFiles(c,message){return user(c,'files',{message_id:message.id});}
@@ -50,6 +52,7 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
     if(b.version!==message.version||b.preview_hash!==message.payload.preview_hash)fail('A prévia mudou. Atualize antes de confirmar.',409);
     if(['accepted','delivered','bounced','complained','delivery_delayed','suppressed'].includes(message.state)){send(res,200,message);return true;}
     const data=await snapshot(c,thread.project_id);if(data.snapshot_hash!==message.payload.snapshot_hash)fail('O projeto mudou após a preparação. Atualize o rascunho e revise a nova prévia.',409);
+    validateSubmissionMail(message.payload,data,assessProject(data));
     if(activeSend)fail('Outro envio está sendo confirmado. Aguarde.',429);
     const minute=Math.floor(Date.now()/60000),key=c.tenant+':'+c.subject;for(const[k,v]of sendLimits)if(v.minute<minute)sendLimits.delete(k);const count=sendLimits.get(key)??{minute,count:0};if(++count.count>3)fail('Limite de três confirmações de envio por minuto.',429);sendLimits.set(key,count);
     activeSend=true;
