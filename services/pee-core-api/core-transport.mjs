@@ -1,3 +1,5 @@
+import{evaOperations,evaTask,evaAnswer}from'./eva-policy.mjs';
+import {licensedOperations,licensedTask,licensedAnswer} from './licensed-policy.mjs';
 import {randomBytes,randomUUID,createHash,timingSafeEqual} from 'node:crypto';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10,6 +12,8 @@ export class AccessFailure extends Error {constructor(status,message){super(mess
 const fail=(status=503,message='O Core não confirmou o acesso. Tente novamente.')=>new AccessFailure(status,message);
 function exact(value,keys){return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(k=>Object.hasOwn(value,k));}
 export function validateCoreTask(operation,payload,organization){
+ if(evaOperations.has(operation)){try{return evaTask(operation,payload,organization);}catch{throw fail(422,'Consulta EVA inválida');}}
+ if(licensedOperations.has(operation)){try{return licensedTask(operation,payload,organization);}catch{throw fail(400,'Solicitação de licença inválida');}}
  const fields=operation==='exchange'?['organization_id','audience','code','code_verifier']:operation==='activity'?['organization_id','audience','token','activity_age_ms']:operation==='authors'?['organization_id','audience','token','author_ids']:operation==='members'?['organization_id','audience','token','after_id']:operation==='introspect'?['organization_id','audience','token']:[];
  if(!fields.length||!exact(payload,fields)||payload.organization_id!==organization||!identifier(organization)||payload.audience!=='energyos-pee'||!token(operation==='exchange'?payload.code:payload.token)||operation==='exchange'&&!token(payload.code_verifier))throw fail(400,'Solicitação de acesso inválida');
  if(operation==='activity'&&(!Number.isInteger(payload.activity_age_ms)||payload.activity_age_ms<0||payload.activity_age_ms>60000))throw fail(400,'Atividade inválida');
@@ -19,6 +23,8 @@ export function validateCoreTask(operation,payload,organization){
 }
 const scopes={viewer:['projects:read'],editor:['projects:read','projects:create','projects:edit'],reviewer:['projects:read','projects:review']};
 export function validateCoreAnswer(operation,data,organization,now=Date.now(),tenant){
+ if(evaOperations.has(operation)){try{return evaAnswer(data,now);}catch{throw fail();}}
+ if(licensedOperations.has(operation)){try{return licensedAnswer(operation,data,organization,tenant,now);}catch{throw fail();}}
  if(tenant&&data?.tenant_id!==tenant)throw fail();
  if(!data||data.audience!=='energyos-pee'||!identifier(data.sub)||!identifier(data.tenant_id))throw fail();
  if(operation==='exchange'){
@@ -33,7 +39,7 @@ export function validateCoreAnswer(operation,data,organization,now=Date.now(),te
  return data;
 }
 
-// Only short-lived access checks are queued here, never business jobs or files.
+// Access checks and bounded EVA start/status handles only. Model generation runs asynchronously in Core; no files or engineering records enter this queue.
 // Current deployment requires exactly one PEE replica and one Core connector.
 // Loss of this process fails pending requests closed; nothing is authorized offline.
 export function createCoreTransport({organization,tenant,timeoutMs=8000,pollMs=20000,maxPending=128,now=Date.now}={}){
@@ -58,7 +64,7 @@ export function createCoreTransport({organization,tenant,timeoutMs=8000,pollMs=2
    const task=pending.get(body.id);if(!task||!task.claimed||!equalSecret(body.nonce,task.nonce))throw fail(409,'Solicitação expirada');
    if(![200,400,401,403,409,422,429,503].includes(body.status))throw fail(400,'Resposta inválida');
    if(body.status!==200){clearTimeout(task.timer);pending.delete(task.id);task.reject(fail([400,401,403,409,422,429].includes(body.status)?body.status:503,body.status===403?'Acesso não liberado pelo Core':'O Core não confirmou o acesso'));return;}
-   let data;try{data=validateCoreAnswer(task.operation,body.data,organization,now(),tenant);if(task.operation==='authors'&&data.author_names.some(a=>!task.payload.author_ids.includes(a.id)))throw fail();}catch{clearTimeout(task.timer);pending.delete(task.id);task.reject(fail());throw fail(400,'Resposta inválida');}
+   let data;try{data=validateCoreAnswer(task.operation,body.data,organization,now(),tenant);if(evaOperations.has(task.operation)&&(data.tenant_id!==(task.payload.source==='core'?tenant:task.payload.license_id)||task.payload.source==='licensed'&&data.sub!==task.payload.subject||task.operation==='eva_status'&&data.job_id!==task.payload.job_id||task.operation==='eva_start'&&data.citations.some(id=>!task.payload.sources.some(s=>s.source_id===id))))throw fail();if(licensedOperations.has(task.operation)&&(task.operation==='licensed_enrollment'?data.license_id!==task.payload.license_id:data.sub!==task.payload.subject||data.tenant_id!==task.payload.license_id))throw fail();if(task.operation==='authors'&&data.author_names.some(a=>!task.payload.author_ids.includes(a.id)))throw fail();}catch{clearTimeout(task.timer);pending.delete(task.id);task.reject(fail());throw fail(400,'Resposta inválida');}
    clearTimeout(task.timer);pending.delete(task.id);lastPeer=now();task.resolve(data);
   },
   close(){closed=true;if(waiter){const w=waiter;waiter=null;w.finish(null);}for(const task of pending.values()){clearTimeout(task.timer);task.reject(fail());}pending.clear();}
