@@ -1,0 +1,10 @@
+const labels=['Oportunidade','Submercado','Modalidade','Consumo médio','Fornecimento','Prazo para resposta'];
+/** Read-only invitation facts, never internal backoffice performance inputs. */
+export default function TradingInvitationSummary({facts,opportunity,expiresAt}:{facts?:[string,string][];opportunity:Record<string,any>;expiresAt:string}){
+ const d=opportunity,market:Record<string,string>={SE_CO:'Sudeste / Centro-Oeste',S:'Sul',NE:'Nordeste',N:'Norte'},energy:Record<string,string>={CONVENTIONAL:'Convencional',INCENTIVIZED_50:'Incentivada 50%',INCENTIVIZED_100:'Incentivada 100%'};
+ // Backwards-compatible during the API rollout; the current API supplies the exact e-mail projection.
+ const fallback:[string,string][]=[['Oportunidade',d.title??''],['Submercado',market[d.submarket]??d.submarket??''],['Modalidade',energy[d.energyType]??d.energyType??''],['Consumo médio',Number.isFinite(d.averageMwhMonth)?Number(d.averageMwhMonth).toLocaleString('pt-BR')+' MWh/mês':''],['Fornecimento',d.startMonth&&d.months?d.startMonth+' · '+d.months+' meses':''],['Prazo para resposta',Number.isFinite(Date.parse(expiresAt))?new Date(expiresAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' (Brasília)':'']];
+ const rows=labels.flatMap(label=>{const row=(facts??fallback).find(row=>Array.isArray(row)&&row[0]===label&&typeof row[1]==='string'&&row[1].trim());return row?[row]:[];});
+ if(!rows.length)return null;
+ return <section aria-label="Resumo do convite de cotação" style={{border:'1px solid #31516c',borderRadius:10,padding:16,marginBlock:16,background:'#0d2942'}}><h3 style={{marginTop:0}}>Condições da solicitação · resumo do convite</h3><p>As mesmas informações do e-mail de convite, para consultar ao preencher sua proposta.</p><dl style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,220px),1fr))',gap:16}}>{rows.map(([label,value])=><div key={label}><dt>{label}</dt><dd style={{margin:0,fontWeight:600,overflowWrap:'anywhere'}}>{value}</dd></div>)}</dl></section>;
+}

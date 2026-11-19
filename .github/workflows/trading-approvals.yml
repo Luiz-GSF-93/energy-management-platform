@@ -20,6 +20,8 @@ on:
       - 'frontend/app/components/SupplierQuoteConversation.tsx'
       - 'frontend/test/trading-quotation-experience.cjs'
       - 'frontend/app/components/TradingSupplyFields.tsx'
+      - 'frontend/app/components/TradingInvitationSummary.tsx'
+      - 'frontend/test/trading-invitation-summary.cjs'
       - 'frontend/app/lib/trading-supply.ts'
       - 'frontend/test/trading-supply.cjs'
       - 'frontend/test/trading-required-fields.cjs'
@@ -47,7 +49,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand --runTestsByPath src/modules/trading-hub/trading-client-monitor.service.spec.ts src/modules/trading-hub/trading-client-monitor.model.spec.ts src/modules/trading-hub/trading-supply.spec.ts src/modules/ocr/eva-unit-fees.spec.ts src/modules/trading-hub/trading-mail-budget.spec.ts src/modules/trading-hub/trading-terms.spec.ts src/modules/trading-hub/trading-communication.spec.ts src/modules/trading-hub/trading-workflow.spec.ts src/modules/trading-hub/trading.spec.ts src/modules/trading-hub/trading-portal.spec.ts src/modules/trading-hub/trading-resend.spec.ts src/modules/trading-hub/trading-mail.spec.ts src/modules/trading-hub/trading-email-template.spec.ts
+      - run: npm test -- --runInBand --runTestsByPath src/modules/trading-hub/trading-client-monitor.service.spec.ts src/modules/trading-hub/trading-client-monitor.model.spec.ts src/modules/trading-hub/trading-supply.spec.ts src/modules/trading-hub/trading-invitation-facts.spec.ts src/modules/ocr/eva-unit-fees.spec.ts src/modules/trading-hub/trading-mail-budget.spec.ts src/modules/trading-hub/trading-terms.spec.ts src/modules/trading-hub/trading-communication.spec.ts src/modules/trading-hub/trading-workflow.spec.ts src/modules/trading-hub/trading.spec.ts src/modules/trading-hub/trading-portal.spec.ts src/modules/trading-hub/trading-resend.spec.ts src/modules/trading-hub/trading-mail.spec.ts src/modules/trading-hub/trading-email-template.spec.ts
         working-directory: backend
       - run: node test/database/owner-verified-publications.test.mjs && node test/database/trading-client-monitor.test.mjs && node test/database/trading-supply.test.mjs && node test/database/trading-workflow.test.mjs && node test/database/trading-quotes.test.mjs && node test/database/trading-workflow-expiry.test.mjs
         working-directory: backend
@@ -62,7 +64,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/trading-client-monitor.cjs && node test/trading-approvals.cjs && node test/trading-quotation-experience.cjs && node test/trading-analysis.cjs && node test/trading-supply.cjs && node test/trading-required-fields.cjs && node test/trading-matrix-review.cjs
+      - run: node test/trading-client-monitor.cjs && node test/trading-approvals.cjs && node test/trading-quotation-experience.cjs && node test/trading-analysis.cjs && node test/trading-supply.cjs && node test/trading-required-fields.cjs && node test/trading-matrix-review.cjs && node test/trading-invitation-summary.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
