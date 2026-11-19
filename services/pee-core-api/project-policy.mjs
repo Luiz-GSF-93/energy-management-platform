@@ -3,7 +3,7 @@ export class ProjectError extends Error{constructor(message,status=422){super(me
 const bad=m=>{throw new ProjectError(m);};
 export const text=(v,label,max=300)=>typeof v==='string'&&v.trim()&&v.length<=max?v.trim():bad('Preencha '+label);
 export function number(v,label,min=0,max=1e12){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)bad('Valor inválido: '+label);return v;}
-export const requiredSections={objective:'Objetivo e fronteira',baseline:'Diagnóstico e linha de base',technical:'Memorial descritivo',resources:'Recursos, quantidades e especificações',budget:'Orçamentos e fontes de financiamento',eligibility:'Enquadramento no edital',mv:'Plano de medição e verificação',schedule:'Cronograma físico-financeiro',disposal:'Descarte e destinação',risks:'Riscos e premissas',engineer:'Responsável técnico e ART'};
+export const requiredSections={objective:'Objetivo e fronteira',baseline:'Diagnóstico e linha de base',technical:'Memorial descritivo',resources:'Recursos, quantidades e especificações',budget:'Orçamentos e fontes de financiamento',eligibility:'Enquadramento no edital',mv:'Plano de medição e verificação',schedule:'Cronograma físico-financeiro',disposal:'Descarte e destinação',risks:'Riscos e premissas',engineer:'Responsável técnico e ART',training:'Treinamento, capacitação e divulgação',experience:'Experiência, atestados e certificações da equipe',market_barriers:'Barreiras de mercado e efeito multiplicador'};
 export const distributors=['CPFL Energia','Neoenergia','Energisa','Equatorial','Enel','EDP','Cemig','Light','Copel','Celesc'];
 export function validateSimulation(x){
  const input=x?.inputs;if(!input||typeof input!=='object'||!opportunityInputs[x.type])bad('Selecione o uso final e as premissas.');
