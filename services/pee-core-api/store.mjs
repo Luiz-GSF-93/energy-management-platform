@@ -16,6 +16,8 @@ export function createStore(env=process.env,{fetcher=fetch}={}){
  }
  return {
   async rpc(context,action,data={}){return(await request('/rest/v1/rpc/pee_store',{method:'POST',body:JSON.stringify({p_actor:context.subject,p_tenant:context.tenant,p_role:context.role,p_core:context.source==='core',p_action:action,p_data:data})})).json();},
+  async mail(context,action,data={}){return(await request('/rest/v1/rpc/pee_mail_user',{method:'POST',body:JSON.stringify({p_actor:context.subject,p_tenant:context.tenant,p_role:context.role,p_core:context.source==='core',p_action:action,p_data:data})})).json();},
+  async mailSystem(action,data={}){return(await request('/rest/v1/rpc/pee_mail_system',{method:'POST',body:JSON.stringify({p_action:action,p_data:data})})).json();},
   async upload(key,bytes,mime){if(!/^[a-f0-9-]{36}\/[a-f0-9-]{36}\/[a-f0-9]{64}$/.test(key))throw Error('Invalid private object key');await request('/storage/v1/object/pee-private/'+key,{method:'POST',headers:{'Content-Type':mime,'x-upsert':'false'},body:bytes});},
   async download(key){if(!/^[a-f0-9-]{36}\/[a-f0-9-]{36}\/[a-f0-9]{64}$/.test(key))throw Error('Invalid private object key');return request('/storage/v1/object/authenticated/pee-private/'+key,{method:'GET'});},
  };

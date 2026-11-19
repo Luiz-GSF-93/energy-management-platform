@@ -1,3 +1,7 @@
+import {prepareProjectPackage} from './project-package.mjs';
+import {handleDocumentSignatures} from './document-signatures.mjs';
+import {createCommunications} from './communications.mjs';
+import {resendConfiguration,createResendProvider} from './resend-provider.mjs';
 import {integratedProgress} from './project-progress.mjs';
 import {scoringMethods,scoringMetrics} from './scoring.mjs';
 import {enrichAudit,auditCsv} from './audit.mjs';
@@ -21,7 +25,7 @@ async function jsonBody(req,max=600000){if(!/^application\/json(?:;|$)/i.test(re
 const mimeTypes=['application/pdf','image/jpeg','image/png','text/csv','text/plain','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
 const categories=['manufacturer_manual','bills','baseline','diagram','art','budgets','mv_plan','consent','signature_evidence','official_decision','edital','cnpj_status','distributor_clearance','tax_clearance','labor_clearance','fgts','other'];
 function validFile(bytes,mime){if(mime==='application/pdf')return bytes.subarray(0,5).toString()==='%PDF-';if(mime==='image/png')return bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));if(mime==='image/jpeg')return bytes[0]===255&&bytes[1]===216&&bytes[2]===255;if(mime.endsWith('spreadsheetml.sheet'))return bytes[0]===80&&bytes[1]===75;return !bytes.includes(0)&&!/<(?:script|iframe|html)\b/i.test(bytes.toString('utf8'));}
-export function createApplication({store=createStore(),publicOrigin,coreOrigin,workspace='Expert Energy',coreCall,activityEnabled=false,officialReader,authorDirectoryEnabled=false}={}){
+export function createApplication({store=createStore(),publicOrigin,coreOrigin,workspace='Expert Energy',coreCall,activityEnabled=false,officialReader,authorDirectoryEnabled=false,mailProvider,mailWebhookSecret,mailAttachmentReader}={}){
  const limits=new Map(),evaLimits=new Map();
  function limit(c,method){
   const now=Date.now(),key=c.tenant+':'+c.subject,minute=Math.floor(now/60000);let counter=limits.get(key);
@@ -32,8 +36,10 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
  const list=async(c,kind)=>(await store.rpc(c,'list',{kind})).map(flatten);
  async function get(c,id,kind){if(!uuid(id))fail('Identificador inválido.');const raw=await store.rpc(c,'get',{id});if(kind&&raw.kind!==kind)fail('Registro não encontrado.',404);return flatten(raw);}
  async function related(c,id,kind){return get(c,id,kind);}
- async function snapshot(c,id){if(!uuid(id))fail('Identificador inválido.');const raw=await store.rpc(c,'snapshot',{project_id:id}),p=flatten(raw.project),rows=raw.records.map(r=>({...flatten(r),kind:r.kind}));return {project:p,simulations:rows.filter(r=>r.kind==='simulation'),documents:rows.filter(r=>r.kind==='document'),workflow:rows.filter(r=>r.kind==='workflow'),rule:rows.find(r=>r.kind==='rule'),company:rows.find(r=>r.kind==='company'),unit:rows.find(r=>r.kind==='unit'),workspace,actor:c.subject,fingerprint:raw.technical_hash,snapshot_hash:raw.snapshot_hash};}
+ async function snapshot(c,id){if(!uuid(id))fail('Identificador inválido.');const raw=await store.rpc(c,'snapshot',{project_id:id}),p=flatten(raw.project),rows=raw.records.map(r=>({...flatten(r),kind:r.kind}));return {project:p,simulations:rows.filter(r=>r.kind==='simulation'),documents:rows.filter(r=>r.kind==='document'),workflow:rows.filter(r=>r.kind==='workflow'),rule:rows.find(r=>r.kind==='rule'),company:rows.find(r=>r.kind==='company'),unit:rows.find(r=>r.kind==='unit'),workspace,actor:c.display_name??c.subject,fingerprint:raw.technical_hash,snapshot_hash:raw.snapshot_hash};}
 
+ const mailConfig=mailProvider===undefined?resendConfiguration():null;
+ const communications=createCommunications({store,snapshot,workspace,provider:mailProvider??(mailConfig?createResendProvider(mailConfig):null),webhookSecret:mailWebhookSecret??mailConfig?.secret,readAttachment:mailAttachmentReader});
  async function put(c,kind,id,version,payload){const clean={...payload};for(const key of ['id','version','created_by','updated_by','created_at','updated_at'])delete clean[key];return flatten(await store.rpc(c,'put',{kind,id,expected_version:version,payload:clean}));}
  async function auditAuthors(c,s,g,items,names=new Map()){
   if(g.display_name)names.set(c.subject,g.display_name);
@@ -86,7 +92,8 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
   }
   fail('Use a operação específica deste módulo.',403);
  }
- return {async handle(req,res,path,authorize){
+ return {mailEnabled:communications.enabled,archiveMail:communications.archive,async handle(req,res,path,authorize){
+  if(path==='/webhooks/resend'&&req.method==='POST'){await communications.webhook(req,res);return true;}
   if(req.method==='GET'&&path==='/commercial'){
    res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");res.end(await readFile(new URL('web/commercial.html',import.meta.url)));return true;
   }
@@ -97,16 +104,17 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    }res.setHeader('Content-Length',size);createReadStream(file).pipe(res);return true;
   }
   if(req.method==='GET'&&path.startsWith('/assets/')){
-   const assets={'/assets/workspace-progress.mjs':['application/javascript; charset=utf-8','web/workspace-progress.mjs'],'/assets/app.js':['application/javascript; charset=utf-8','web/app.js'],'/assets/activity.mjs':['application/javascript; charset=utf-8','web/activity.mjs'],'/assets/workspace-modules.mjs':['application/javascript; charset=utf-8','web/workspace-modules.mjs'],'/assets/workspace-admin.mjs':['application/javascript; charset=utf-8','web/workspace-admin.mjs'],'/assets/workspace-audit.mjs':['application/javascript; charset=utf-8','web/workspace-audit.mjs'],'/assets/workspace-team.mjs':['application/javascript; charset=utf-8','web/workspace-team.mjs'],'/assets/app.css':['text/css; charset=utf-8','web/app.css'],'/assets/logo.png':['image/png','web/logo.png'],'/assets/favicon.ico':['image/x-icon','web/favicon.ico'],'/assets/comercial.vtt':['text/vtt; charset=utf-8','web/comercial.vtt'],'/assets/comercial-poster.jpg':['image/jpeg','web/comercial-poster.jpg']};
+   const assets={'/assets/workspace-signatures.mjs':['application/javascript; charset=utf-8','web/workspace-signatures.mjs'],'/assets/certificate-signer.mjs':['application/javascript; charset=utf-8','web/certificate-signer.mjs'],'/assets/workspace-communications.mjs':['application/javascript; charset=utf-8','web/workspace-communications.mjs'],'/assets/workspace-progress.mjs':['application/javascript; charset=utf-8','web/workspace-progress.mjs'],'/assets/app.js':['application/javascript; charset=utf-8','web/app.js'],'/assets/activity.mjs':['application/javascript; charset=utf-8','web/activity.mjs'],'/assets/workspace-modules.mjs':['application/javascript; charset=utf-8','web/workspace-modules.mjs'],'/assets/workspace-admin.mjs':['application/javascript; charset=utf-8','web/workspace-admin.mjs'],'/assets/workspace-audit.mjs':['application/javascript; charset=utf-8','web/workspace-audit.mjs'],'/assets/workspace-team.mjs':['application/javascript; charset=utf-8','web/workspace-team.mjs'],'/assets/app.css':['text/css; charset=utf-8','web/app.css'],'/assets/logo.png':['image/png','web/logo.png'],'/assets/favicon.ico':['image/x-icon','web/favicon.ico'],'/assets/comercial.vtt':['text/vtt; charset=utf-8','web/comercial.vtt'],'/assets/comercial-poster.jpg':['image/jpeg','web/comercial-poster.jpg']};
    const match=assets[path]??({'/assets/fonts.css':['text/css; charset=utf-8','web/fonts.css'],'/assets/brand.css':['text/css; charset=utf-8','web/brand.css'],'/assets/energyos-icon.svg':['image/svg+xml','web/energyos-icon.svg']}[path])??(/^\/assets\/font-[a-f0-9]{12}\.ttf$/.test(path)?['font/ttf','web/'+path.split('/').at(-1)]:null);if(!match)return false;res.setHeader('Content-Type',match[0]);res.setHeader('Content-Security-Policy',"default-src 'none'; img-src data:");res.end(await readFile(new URL(match[1],import.meta.url)));return true;
   }
   if(path!=='/app'&&!path.startsWith('/api/app/'))return false;
-  const {session:s,grant:g}=await authorize(req);const c={source:'core',tenant:s.tenant,subject:s.subject,role:g.role,monthly_limit:g.monthly_project_limit};
+  const {session:s,grant:g}=await authorize(req);const c={source:'core',tenant:s.tenant,subject:s.subject,role:g.role,monthly_limit:g.monthly_project_limit,display_name:g.display_name??null};
   limit(c,req.method);
   if(req.method==='GET'&&path==='/app'){
-   res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");res.end(await readFile(new URL('web/index.html',import.meta.url)));return true;
+   res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self' wss://127.0.0.1:65156; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");res.end(await readFile(new URL('web/index.html',import.meta.url)));return true;
   }
   if(req.method!=='GET'){if(req.headers.origin!==publicOrigin||req.headers['x-csrf-token']!==s.csrf)fail('Confirme novamente seu acesso para continuar.',403);}
+  if(await communications.handle(req,res,path,c,g,{jsonBody,send,reauthorize:()=>authorize(req)}))return true;
   if(req.method==='GET'&&path==='/api/app/bootstrap'){
    const data=Object.fromEntries(await Promise.all(kinds.map(async k=>[k,await list(c,k)]))),usage=await store.rpc(c,'usage',{monthly_limit:c.monthly_limit});send(res,200,{identity:{workspace,role:c.role,subject:c.subject,display_name:g.display_name??null,monthly_limit:c.monthly_limit,csrf:s.csrf,expires_at:g.expires_at,core_url:coreOrigin+'/pee',source:c.source,activity_enabled:activityEnabled,idle_seconds:900},usage,distributors:distributors.map(({hosts,...d})=>d),official_sources:officialSources.map(({hosts,pathPrefix,...s})=>s),assistance_fields:Object.fromEntries(Object.entries(assistanceFields).map(([id,f])=>[id,f.label])),guide:guideReference,selection_criteria:selectionCriteria,scoring_metrics:scoringMetrics,scoring_methods:scoringMethods,typologies,types,inputs:opportunityInputs,reports:reportTypes,sections:requiredSections,data});return true;
   }
@@ -187,6 +195,12 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
   }
   const analysis=path.match(/^\/api\/app\/projects\/([a-f0-9-]{36})\/analysis$/);
   if(analysis&&req.method==='GET'){const data=await snapshot(c,analysis[1]);const assessment=assessProject(data);send(res,200,{...assessment,progress:integratedProgress(data,assessment)});return true;}
+  const packageRoute=path.match(/^\/api\/app\/projects\/([a-f0-9-]{36})\/package$/);
+  if(packageRoute&&req.method==='POST'){
+   write(c);const body=await jsonBody(req);if(!uuid(body.request_id))fail('Identificador de emissão obrigatório.');if(!['review','presentation'].includes(body.mode))fail('Escolha pacote de revisão ou de apresentação.');const data=await snapshot(c,packageRoute[1]),bundle=await prepareProjectPackage(data,{download:key=>store.download(key),mode:body.mode});const fresh=await authorize(req);if(fresh.grant.role!==c.role)fail('Sua permissão mudou. Reabra o projeto.',403);
+   if(body.mode==='presentation')await store.rpc(c,'emit',{id:body.request_id,project_id:data.project.id,document_hash:bundle.sha256,snapshot_hash:data.snapshot_hash,monthly_limit:c.monthly_limit});else if((await snapshot(c,data.project.id)).snapshot_hash!==data.snapshot_hash)fail('O projeto mudou durante a preparação. Atualize antes de baixar.',409);
+   res.setHeader('Content-Type','application/zip');res.setHeader('Content-Disposition','attachment; filename="EnergyOS-PEE-'+data.project.id+'-'+body.mode+'.zip"');res.setHeader('X-Document-SHA256',bundle.sha256);res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bundle.bytes);return true;
+  }
   const report=path.match(/^\/api\/app\/projects\/([a-f0-9-]{36})\/reports\/(final|presentation|diagnosis|memorial|mv|economics|schedule|documents|compliance|progress)$/);
   if(report&&req.method==='POST'){
    write(c);const body=await jsonBody(req),data=await snapshot(c,report[1]),html=renderReport(data,report[2]),hash=digest(html);
@@ -210,13 +224,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    const response=await store.download(doc.storage_key),bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>20971520||digest(bytes)!==doc.sha256)fail('Não foi possível confirmar a integridade do arquivo.',503);
    res.setHeader('Content-Type',doc.mime);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(doc.name));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
   }
-  const signature=path.match(/^\/api\/app\/documents\/([a-f0-9-]{36})\/signature$/);
-  if(signature&&req.method==='POST'){
-   review(c);const d=await related(c,signature[1],'document'),body=await jsonBody(req),evidence=await related(c,body.evidence_id,'document');
-   if(d.id===evidence.id||evidence.project_id!==d.project_id||evidence.category!=='signature_evidence'||!['gov','notarized','provider'].includes(body.method))fail('Anexe a comprovação da assinatura deste projeto.');
-   if(body.confirm!==true||typeof body.note!=='string'||body.note.trim().length<20)fail('Registre o resultado e a referência da conferência da assinatura.');
-   send(res,200,await put(c,'document',d.id,number(body.version,'versão',1),{...d,signature_method:body.method,signature_evidence_id:evidence.id,signature_review:'verified',reviewer:c.subject,review_note:body.note.slice(0,2000),reviewed_at:new Date().toISOString()}));return true;
-  }
+  if(await handleDocumentSignatures({req,res,path,c,get:related,put,jsonBody,send}))return true;
   const workflow=path.match(/^\/api\/app\/projects\/([a-f0-9-]{36})\/phase$/);
   if(workflow&&req.method==='POST'){
    review(c);const body=await jsonBody(req),data=await snapshot(c,workflow[1]),check=assessProject(data),transition=validateTransition(data.project,body.phase,check,body.decision);

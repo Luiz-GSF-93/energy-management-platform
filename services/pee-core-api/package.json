@@ -8,6 +8,6 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test.mjs disabled-mode.test.mjs supabase-auth.test.mjs access.test.mjs project-policy.test.mjs activity.test.mjs project-detail.test.mjs evaluation.test.mjs scoring.test.mjs official-sources.test.mjs audit.test.mjs project-progress.test.mjs"
+    "test": "node --test test.mjs disabled-mode.test.mjs supabase-auth.test.mjs access.test.mjs project-policy.test.mjs activity.test.mjs project-detail.test.mjs evaluation.test.mjs scoring.test.mjs official-sources.test.mjs audit.test.mjs project-progress.test.mjs communications.test.mjs communications-capacity.test.mjs document-signatures.test.mjs"
   }
 }

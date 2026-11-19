@@ -24,11 +24,11 @@ Exactly one Railway replica and one outbound Core connector remain required; tra
 
 ## Validation
 
-`npm test`: 19 service tests (Core bridge, security, disabled mode, engineering/RCB, escaped deterministic reports, Supabase server key handling and legacy licensing-reference policy). Private release fixtures additionally exercise PostgreSQL RLS, quotas, revisions, signature/submission restrictions and HTTP persistence using a disposable PGlite database. Fixtures never connect to production. Production verification must additionally confirm the dedicated schema, Core current grant, app bootstrap and upload/report flow.
+`npm test`: 72 service tests (Core bridge, security, disabled mode, engineering/RCB, escaped deterministic reports, Supabase server key handling and legacy licensing-reference policy). Private release fixtures additionally exercise PostgreSQL RLS, quotas, revisions, signature/submission restrictions and HTTP persistence using a disposable PGlite database. Fixtures never connect to production. Production verification must additionally confirm the dedicated schema, Core current grant, app bootstrap and upload/report flow.
 
 ## Business integrations still separate
 
-The standalone license reference is not the real sales module. The Core commercial module, independent licensed-user identity, live provider signature jobs, royalties ledger, official-source EVA and email dispatch must be implemented and homologated separately before their capability flags are enabled. Health reports these capabilities explicitly; a ready project workspace is not a declaration that those commercial integrations are complete. No email is sent, contract signed, charge made or distributor project submitted by installing this service.
+The standalone license reference is not the real sales module. The Core commercial module, independent licensed-user identity, live provider signature jobs, royalties ledger and automatic contract-provider jobs must be implemented and homologated separately before their capability flags are enabled. Health reports these capabilities explicitly; a ready project workspace is not a declaration that those commercial integrations are complete. No email is sent, contract signed, charge made or distributor project submitted by installing this service.
 
 Official technical references: https://supabase.com/docs/guides/database/postgres/row-level-security ; https://supabase.com/kb/troubleshooting/cant-revoke-a-role-membership-granted-by-supabase_admin-d08922 ; https://supabase.com/docs/guides/storage/security/access-control . PEE call rules: https://www.gov.br/aneel/pt-br/assuntos/programa-de-eficiencia-energetica/chamadas-publicas .
 
@@ -41,3 +41,18 @@ Version 002 must be applied to the dedicated PEE database before enabling the ne
 Session renewal is explicitly controlled by PEE_ACTIVITY_ENABLED. Real input renews the 15-minute idle window through Core; reads and timer-only polling do not. Core revocation, grant expiry and absolute session policy remain authoritative.
 
 The full approved 22-module rollout remains under implementation. Do not treat a menu item, draft contract or configured provider as evidence of an active paid license or a delivered message. No existing EnergyOS source is imported or changed by this service.
+
+
+## Private project communications (schema 004/005)
+
+The existing Resend account is shared. Use only a dedicated PEE key and webhook, kept in Railway secret variables. Full-access receiving credentials technically span the account: the application checks the signed event recipient against a registered opaque PEE reply address before requesting any message body. Unrelated mail is ignored. User operations enforce BOTH tenant and mailbox owner, including inside one workspace. No message body, recipient or CC/BCC list is copied to the workspace audit.
+
+Configure PEE_RESEND_ENABLED, PEE_RESEND_API_KEY, PEE_RESEND_WEBHOOK_SECRET, PEE_MAIL_FROM and PEE_MAIL_RECEIVING_DOMAIN only after both migrations. The webhook is POST /webhooks/resend and requires Svix authentication of the original raw body. Subscribe to email.received, email.sent, email.delivered, email.delivery_delayed, email.bounced, email.complained, email.failed and email.suppressed. Provider calls are fixed-path HTTPS, bounded to two starts/second with a bounded queue and Retry-After cooldown. No automatic network replay is performed. The existing account plan and capacity remain shared with other applications.
+
+Sending requires an explicitly reviewed server-generated preview, unchanged project snapshot, recipients/copies confirmation and attachment integrity. Up to 20 files and 20 MB total originals are supported per message. Stable provider idempotency keys protect uncertain sends for a 23-hour retry window. Incoming attachments are archived privately from the fixed Resend CDN, with public DNS pinning, size checks and integrity-checked downloads. Received messages are inert text; provider acceptance and delivery never imply a distributor protocol or approval.
+
+## Signatures and project package
+
+GOV.BR and ITI are official external user-operated portals; this private platform does not claim an authorized government signing API or automated ITI certification. A user can invoke the documented local Assinador SERPRO WebSocket for a PDF, explicitly choose their installed certificate and confirm locally. No private key, PFX or PIN enters the platform. Original, signed PDF (or manual-linking signed declaration) and validation evidence remain distinct private documents. Only an authorized reviewer can register a human check of matching evidence hashes and the ITI/notarization result.
+
+A review ZIP preserves all private originals, the final HTML report and a SHA-256 integrity manifest. A presentation ZIP is blocked while the approved evaluation engine reports issues; successful presentation issuance uses atomic monthly quota and snapshot guards. Package generation does not send a project or register an official submission. The approved normative UI and calculation engine remain unchanged.
