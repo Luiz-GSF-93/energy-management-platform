@@ -77,6 +77,7 @@ try{
  for(const role of ['anon','authenticated'])ok(await query("SELECT has_function_privilege($1,'trading_client_monitor(text,text,text,text,jsonb)','EXECUTE') value",[role])===false);
  for(const file of migrations)await db.exec(readFileSync('src/database/migrations/'+file,'utf8'));ok(await query('SELECT count(*)::int value FROM trading_client_monitors')===3);
 
+ const portalReply=readFileSync('src/database/migrations/20261005_f7_2_trading_portal.sql','utf8').split('CREATE FUNCTION public.trading_portal_reply')[1].split('REVOKE ALL ON FUNCTION public.trading_license_active')[0];await db.exec('CREATE FUNCTION public.trading_portal_reply'+portalReply);
  const extraMigrations=['20261341_trading_supply_period_units.sql','20261342_trading_monitor_supply_scope.sql'];
  for(const f of extraMigrations){try{await db.exec(readFileSync('src/database/migrations/'+f,'utf8'));}catch(e){console.error(f,e.position,e.internalPosition,e.internalQuery);throw e;}}
  const scopeId=randomUUID(),scopeProposal=randomUUID();

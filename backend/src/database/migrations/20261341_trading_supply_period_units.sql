@@ -112,6 +112,14 @@ BEGIN
   END IF;
  END LOOP;
 END $patch$;
+-- Keep legacy RPC checks consistent with the same deadline, including the end of a Brasilia calendar day.
+DO $legacy_deadline$ DECLARE f regprocedure;definition text;needle text='coalesce((r.data->>''validUntil'')::date<CURRENT_DATE,true)';
+BEGIN
+ FOREACH f IN ARRAY ARRAY['public.transition_trading_record(text,text,uuid,integer,text,text)'::regprocedure,'public.trading_portal_reply(text,jsonb,text,text)'::regprocedure] LOOP
+  definition:=pg_get_functiondef(f);
+  IF position(needle IN definition)>0 THEN EXECUTE replace(definition,needle,'coalesce(public.trading_proposal_deadline(r.data)<=clock_timestamp(),true)');END IF;
+ END LOOP;
+END $legacy_deadline$;
 DO $formalization$ DECLARE definition text;needle text='IF NOT public.trading_quote_is_live(w.organization_id,w.opportunity_id)';
 BEGIN
  definition:=pg_get_functiondef('public.trading_formalization_assert(text,boolean)'::regprocedure);
