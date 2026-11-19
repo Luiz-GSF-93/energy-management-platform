@@ -62,7 +62,7 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: frontend
-      - run: node test/trading-client-monitor.cjs && node test/trading-approvals.cjs && node test/trading-quotation-experience.cjs && node test/trading-analysis.cjs && node test/trading-supply.cjs && node test/trading-required-fields.cjs
+      - run: node test/trading-client-monitor.cjs && node test/trading-approvals.cjs && node test/trading-quotation-experience.cjs && node test/trading-analysis.cjs && node test/trading-supply.cjs && node test/trading-required-fields.cjs && node test/trading-matrix-review.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend
