@@ -1,4 +1,6 @@
-import {validateSubmissionMail}from'./distributor-contact.mjs';
+import{createSubmissionNotifications}from'./submission-notifications.mjs';
+import {validateSubmissionMail,requireEvaluationContact}from'./distributor-contact.mjs';
+import {isProtectedDocument}from'./document-control.mjs';
 import {randomUUID,randomBytes,createHash}from'node:crypto';
 import {ProjectError}from'./project-policy.mjs';
 import {assessProject}from'./evaluation.mjs';
@@ -9,17 +11,31 @@ const hash=b=>createHash('sha256').update(b).digest('hex'),uuid=v=>typeof v==='s
 const fail=(message,status=422)=>{throw new ProjectError(message,status);};
 const fileTypes=new Set(['application/pdf','image/png','image/jpeg','text/plain','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
 const cleanName=v=>String(v??'anexo').replace(/[\x00-\x1f\x7f/\\]/g,'_').slice(0,200);
-export function createCommunications({store,snapshot,workspace,provider=null,webhookSecret=null,readAttachment=downloadReceivedAttachment}={}){
+export function createCommunications({store,snapshot,workspace,provider=null,webhookSecret=null,readAttachment=downloadReceivedAttachment,publicOrigin}={}){
+ const protection=process.env.PEE_CONTENT_PROTECTION_ENABLED==='true',notifications=createSubmissionNotifications({store,provider,publicOrigin,enabled:protection});
  let activeSend=false,archiving=false;const sendLimits=new Map();
  const user=(c,action,data={})=>store.mail(c,action,data),system=(action,data={})=>store.mailSystem(action,data);
  const own=(r,c)=>enforceMailboxOwner(r,c),write=c=>{if(!['editor','manager'].includes(c.role))fail('Somente elaboradores e gestores podem enviar comunicações.',403);};
- async function dataForDraft(c,thread,input,author){
+ async function dataForDraft(c,thread,input,author,grant){
   const draft=validateCommunication(input),data=await snapshot(c,thread.project_id);if(!data.company||!data.unit)fail('Complete o beneficiário e a unidade do projeto.');
-  const documents=draft.document_ids.map(id=>{const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d)fail('Anexo não pertence a este projeto.',404);return {id:d.id,name:d.name,mime:d.mime,sha256:d.sha256,size:d.size};});
+  const protectedFlow=process.env.PEE_CONTENT_PROTECTION_ENABLED==='true';
+  if(protectedFlow&&draft.purpose==='submission'){
+   const contact=requireEvaluationContact(data.rule,{mail:true});
+   if(!grant?.email||c.source==='licensed'&&!grant.license_buyer_email)fail('Confirme no Core os e-mails do responsável pelo envio e do contratante antes da apresentação final.');
+   draft.to=[contact.to];draft.cc=[...new Set((contact.cc??[]).map(emailAddress))].filter(x=>x!==contact.to);draft.bcc=[];draft.notification_recipients=[...new Set([grant.license_buyer_email,grant.email].filter(Boolean).map(emailAddress))];draft.document_ids=data.documents.filter(d=>d.project_id===data.project.id&&d.category!=='signature_evidence'&&d.signature_review==='verified').map(d=>d.id);
+  }
+  const ids=new Set();for(const id of draft.document_ids){const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d)fail('Anexo não pertence a este projeto.',404);
+   if(protectedFlow&&isProtectedDocument(d,data.documents)&&draft.purpose!=='submission')fail('Documentos assinados ou validados só podem ser enviados pelo fluxo final à distribuidora.',403);
+   if(protectedFlow&&draft.purpose==='submission'&&d.category!=='signature_evidence'&&d.signature_review==='verified'){
+    if(!d.signed_document_id||!d.signature_evidence_id)fail('Faltam os vínculos da versão assinada e do relatório de validação.');ids.add(d.signed_document_id);ids.add(d.signature_evidence_id);if(d.category==='manufacturer_manual')ids.add(d.id);
+   }else ids.add(id);
+  }
+  if(ids.size>40)fail('O conjunto excede 40 arquivos. Confira o canal e os limites do edital antes de apresentar.');
+  const documents=[...ids].map(id=>{const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d)fail('Uma evidência não pertence ao projeto.',404);return{id:d.id,name:d.name,mime:d.mime,sha256:d.sha256,size:d.size};});
   if(documents.reduce((n,d)=>n+d.size,0)>20971520)fail('Os anexos da comunicação devem totalizar até 20 MB.');
   const analysis=assessProject(data);let submission_issues=[];try{validateSubmissionMail(draft,data,analysis);}catch(e){if(!(e instanceof ProjectError))throw e;submission_issues=[e.message];}
   const body=projectCommunication({draft,project:data.project,company:data.company,unit:data.unit,analysis,workspace:data.workspace??workspace,author,projectCode:thread.project_code});
-  const payload={...draft,submission_issues,body,html:communicationHtml(draft.subject,body),sender_name:author,documents,snapshot_hash:data.snapshot_hash,project_version:data.project.version,prepared_at:new Date().toISOString()};
+  const payload={...draft,project_id:data.project.id,project_name:data.project.name,submission_issues,body,html:communicationHtml(draft.subject,body),sender_name:author,documents,snapshot_hash:data.snapshot_hash,project_version:data.project.version,prepared_at:new Date().toISOString()};
   return {...payload,preview_hash:communicationHash(payload)};
  }
  async function privateFiles(c,message){return user(c,'files',{message_id:message.id});}
@@ -35,12 +51,13 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
    if(threadRoute&&req.method==='GET'){
     const before=new URL(req.url,'http://local.invalid').searchParams.get('before');if(before&&!/^[1-9]\d{0,15}$/.test(before))fail('Paginação inválida.');
     const result=await user(c,'thread',{id:threadRoute[1],before});own(result.thread,c);
+    if(protection)for(const m of result.messages)m.private_notifications=await notifications.list(c,m);
     result.messages=result.messages.map(m=>{own(m,c);return {...m,payload:{...m.payload,html:undefined}};});
     send(res,200,{...result,has_older:result.messages.length===100,next_before:result.messages[0]?.ordinal??null});return true;
    }
    if(path==='/api/app/communications/drafts'&&req.method==='POST'){
     write(c);const b=await jsonBody(req);if(!uuid(b.thread_id)||b.id&&!uuid(b.id))fail('Comunicação inválida.');
-    const {thread}=await user(c,'thread',{id:b.thread_id});own(thread,c);const payload=await dataForDraft(c,thread,b,grant.display_name);
+    const {thread}=await user(c,'thread',{id:b.thread_id});own(thread,c);const payload=await dataForDraft(c,thread,b,grant.display_name,grant);
     if(b.in_reply_to_id){if(!uuid(b.in_reply_to_id))fail('Resposta inválida.');const parent=own(await user(c,'message',{id:b.in_reply_to_id}),c);if(parent.thread_id!==thread.id||parent.direction!=='inbound')fail('A resposta não pertence à conversa.');payload.in_reply_to=typeof parent.payload.message_id==='string'&&!/[\s\x00-\x1f]/.test(parent.payload.message_id)?parent.payload.message_id:null;payload.in_reply_to_id=parent.id;payload.preview_hash=communicationHash({...payload,preview_hash:undefined});}
     const message=await user(c,'draft',{id:b.id??randomUUID(),thread_id:thread.id,expected_version:b.id?Number(b.version):0,payload});send(res,b.id?200:201,message);return true;
    }
@@ -50,7 +67,7 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
     if(b.confirm!==true||b.destination_confirmed!==true)fail('Confira os destinatários, as cópias, os anexos e confirme o envio.');
     const message=own(await user(c,'message',{id:sending[1]}),c),{thread}=await user(c,'thread',{id:message.thread_id});own(thread,c);
     if(b.version!==message.version||b.preview_hash!==message.payload.preview_hash)fail('A prévia mudou. Atualize antes de confirmar.',409);
-    if(['accepted','delivered','bounced','complained','delivery_delayed','suppressed'].includes(message.state)){send(res,200,message);return true;}
+    if(['accepted','delivered','bounced','complained','delivery_delayed','suppressed'].includes(message.state)){await notifications.schedule(c,message);send(res,200,message);return true;}
     const data=await snapshot(c,thread.project_id);if(data.snapshot_hash!==message.payload.snapshot_hash)fail('O projeto mudou após a preparação. Atualize o rascunho e revise a nova prévia.',409);
     validateSubmissionMail(message.payload,data,assessProject(data));
     if(activeSend)fail('Outro envio está sendo confirmado. Aguarde.',429);
@@ -59,12 +76,14 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
     try{
      const attachments=[];let size=0;
      for(const d of message.payload.documents){const current=data.documents.find(x=>x.id===d.id&&x.sha256===d.sha256);if(!current)fail('Um anexo mudou. Refaça a prévia.',409);const r=await store.download(current.storage_key),bytes=Buffer.from(await r.arrayBuffer());size+=bytes.length;if(bytes.length!==d.size||hash(bytes)!==d.sha256||size>20971520)fail('Integridade ou limite dos anexos não confirmado.',409);attachments.push({name:cleanName(d.name),mime:d.mime,bytes});}
-     await reauthorize();const lease=randomBytes(32).toString('hex'),prepared=await user(c,'start_send',{id:message.id,expected_version:message.version,preview_hash:message.payload.preview_hash,lease_hash:hash(lease)});
+     const refreshed=await reauthorize();if(protection&&message.payload.purpose==='submission'){const expected=[...new Set([refreshed.grant.license_buyer_email,refreshed.grant.email].filter(Boolean).map(emailAddress))];if(JSON.stringify(expected)!==JSON.stringify(message.payload.notification_recipients))fail('Os responsáveis pelas cópias mudaram no Core. Refaça a prévia.',409);}
+     const lease=randomBytes(32).toString('hex'),prepared=await user(c,'start_send',{id:message.id,expected_version:message.version,preview_hash:message.payload.preview_hash,lease_hash:hash(lease)});
      if(prepared.state!=='sending'){send(res,200,prepared);return true;}
      let result;
      try{result=await provider.send({message:{...message.payload,id:message.id},thread,attachments});}
      catch(error){const unknown=error instanceof ResendFailure&&error.uncertain;await user(c,'finish_send',{id:message.id,lease_hash:hash(lease),state:unknown?'unknown':'failed',code:unknown?'RESEND_UNCONFIRMED':'RESEND_FAILED'});fail(unknown?'O envio ficou sem confirmação. Atualize a conversa antes de tentar novamente.':'O provedor não confirmou o envio. Revise a comunicação antes de preparar outro envio.',503);}
      const saved=await user(c,'finish_send',{id:message.id,lease_hash:hash(lease),state:'accepted',provider_id:result.id,code:'RESEND_ACCEPTED'});
+     await notifications.schedule(c,saved);
      for(const event of await system('pending_delivery',{provider_id:result.id}))await system('apply',event);
      send(res,200,saved);return true;
     }finally{activeSend=false;}
@@ -106,7 +125,7 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
   },
   async archive(){
    if(!provider||archiving)return;archiving=true;
-   try{for(const job of await system('pending_files')){
+   try{await notifications.process();for(const job of await system('pending_files')){
     let complete=true,status='archived';const cached=await system('files',{provider_id:job.provider_id});let total=cached.reduce((n,f)=>n+f.size,0);
     for(const a of job.attachments??[]){
      if(cached.some(f=>f.provider_attachment_id===a.id))continue;

@@ -1,3 +1,4 @@
+import {documentControl,economicFormulae}from'./document-control.mjs';
 import {PDFDocument,rgb} from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import {readFile} from 'node:fs/promises';
@@ -26,12 +27,20 @@ export async function renderProjectPdf(data,type='final'){
  function wrap(raw,font,size){const rows=[];for(const p of String(raw).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').split(/\r?\n/)){let row='';for(const word of p.split(/\s+/)){if(!word)continue;if(row&&font.widthOfTextAtSize(row+' '+word,size)>width){rows.push(row);row='';}if(font.widthOfTextAtSize(word,size)>width){for(const c of word){if(row&&font.widthOfTextAtSize(row+c,size)>width){rows.push(row);row='';}row+=c;}}else row+=(row?' ':'')+word;}rows.push(row);}return rows;}
  next();const blocks=reportBlocks(renderReport(data,type));
  for(const [i,b] of blocks.entries()){
+  if(type==='final'&&b.heading&&['Glossário e identificação da plataforma','Conferência antes da apresentação'].includes(b.text))next();
   const font=b.heading?heading:body,size=b.heading?13:9.4,rows=wrap(b.text,font,size),line=b.heading?18:14.2;
   const needed=rows.length*line+8+(b.heading&&blocks[i+1]?Math.min(3,wrap(blocks[i+1].text,body,9.4).length)*14.2:0);
   if(needed<640&&y-needed<62)next();
   for(const row of rows){if(y<62)next();page.drawText(row,{x:51,y,font,size,color:b.heading?ink:b.table?muted:ink});y-=line;}y-=b.heading?8:9;
  }
- for(const[i,p]of pdf.getPages().entries()){p.drawLine({start:{x:40,y:42},end:{x:555,y:42},thickness:.5,color:rgb(.82,.87,.83)});p.drawText('EnergyOS – PEE · conferir edital, originais e assinaturas · não constitui protocolo',{x:42,y:28,size:6.4,font:body,color:muted});p.drawText(`${i+1} / ${pdf.getPageCount()}`,{x:513,y:28,size:8,font:body,color:muted});}
+ const control=documentControl(data);
+ for(const[i,p]of pdf.getPages().entries()){
+  p.drawLine({start:{x:40,y:44},end:{x:555,y:44},thickness:.5,color:rgb(.82,.87,.83)});
+  p.drawText('by EnergyOS PEE · '+control.label,{x:42,y:32,size:6.6,font:body,color:muted});
+  p.drawText('Snapshot: '+control.snapshot_sha256,{x:42,y:21,size:6.2,font:body,color:muted});
+  p.drawText(`${i+1} / ${pdf.getPageCount()}`,{x:513,y:32,size:8,font:body,color:muted});
+ }
+
  return Buffer.from(await pdf.save());
 }
 
@@ -48,6 +57,7 @@ export function projectWorkbookSheets(data){
   ['Medição e verificação',[['Campo','Preenchimento'],...Object.entries(p.mv_plan??{}).map(([k,v])=>[k,typeof v==='object'?JSON.stringify(v):v])]],
   ['Checklist',[['Nível de qualificação',a.qualification?.level],['Preenchimento %',a.qualification?.readiness_percent],['Conferências atendidas %',a.qualification?.verified_percent],['Impedimentos',a.qualification?.blockers],['Pendência','Revisar antes de apresentar'],...a.issues.map(x=>[x,'Pendente'])]],
   ['Anexos',[['Arquivo','Categoria','SHA-256','Método assinatura','Conferência','Versão','Medida vinculada'],...data.documents.filter(x=>x.project_id===p.id).map(x=>[x.name,x.category,x.sha256,x.signature_method,x.signature_review,x.version,x.simulation_id])]],
+  ['Fórmulas',[['Indicador','Fórmula aplicada','Unidades e premissas'],...economicFormulae]],
   ['Memorial',[['Seção','Conteúdo'],...Object.entries(p.sections??{}).map(([k,v])=>[k,v])]]
  ];
 }
