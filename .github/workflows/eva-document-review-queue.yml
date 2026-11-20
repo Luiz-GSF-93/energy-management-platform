@@ -3,6 +3,13 @@ on:
   pull_request:
     paths:
       - '.github/workflows/eva-document-review-queue.yml'
+      - 'backend/src/modules/portal-workspace/automatic-intake.service*'
+      - 'backend/src/modules/ocr/eva-assisted-closing.service*'
+      - 'backend/src/common/services/read-deadline.ts'
+      - 'backend/src/database/migrations/20261351_eva_prepared_intake_tracking.sql'
+      - 'backend/test/eva-prepared-intake-tracking.cjs'
+      - 'frontend/app/components/AutomaticInvoiceIntake.tsx'
+      - 'frontend/test/documents-workspace-tabs.cjs'
       - 'backend/src/modules/ocr/eva-document-review*'
       - 'backend/src/modules/operations/operations.service*'
       - 'backend/src/database/migrations/20261302_eva_document_review_queue.sql'
@@ -32,15 +39,15 @@ jobs:
           node-version: '20'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-document-review.service.spec.ts src/modules/operations/operations.service.spec.ts
+      - run: node node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/modules/ocr/eva-document-review.service.spec.ts src/modules/operations/operations.service.spec.ts src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/ocr/eva-assisted-closing.service.spec.ts
         working-directory: backend
-      - run: node test/eva-document-review-queue.cjs
+      - run: node test/eva-document-review-queue.cjs && node test/eva-prepared-intake-tracking.cjs
         working-directory: backend
       - run: npm run build
         working-directory: backend
       - run: npm ci --ignore-scripts
         working-directory: frontend
-      - run: node test/eva-document-review-queue.cjs && node test/eva-assisted-closing.cjs && node test/documents-upload-routing.cjs && node test/eva-guided-review.cjs && node test/ccee-cost-review.cjs
+      - run: node test/documents-workspace-tabs.cjs && node test/automatic-intake.cjs && node test/eva-document-review-queue.cjs && node test/eva-assisted-closing.cjs && node test/documents-upload-routing.cjs && node test/eva-guided-review.cjs && node test/ccee-cost-review.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
