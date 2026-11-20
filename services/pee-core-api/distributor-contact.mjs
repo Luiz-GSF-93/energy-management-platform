@@ -30,7 +30,7 @@ export function requireEvaluationContact(rule,{mail=false}={}){
 export function validateSubmissionMail(draft,data,assessment){
  if(draft.purpose!=='submission')return;
  const contact=requireEvaluationContact(data.rule,{mail:true});
- if(!draft.to?.includes(contact.to))fail('Use o e-mail principal da banca cadastrado e conferido para este edital.');
+ if(draft.to?.length!==1||draft.to[0]!==contact.to)fail('O envio final permite somente o e-mail principal da banca cadastrado e conferido para este edital.');
  if(assessment.issues.length)fail('Conclua os requisitos e as revisões do projeto antes de enviar documentação para avaliação.');
  if(!draft.document_ids?.length||!data.documents.some(d=>draft.document_ids.includes(d.id)&&d.project_id===data.project.id&&d.category!=='signature_evidence'))fail('Selecione os documentos do projeto que serão apresentados à banca.');
  for(const id of draft.document_ids){const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d||d.category!=='signature_evidence'&&d.signature_review!=='verified')fail('Os documentos de apresentação precisam ter assinatura e evidências conferidas.');}

@@ -15,10 +15,16 @@ export function createStore(env=process.env,{fetcher=fetch}={}){
   }return r;
  }
  return {
+  async notify(c,action,data){return(await request('/rest/v1/rpc/pee_notify_user',{method:'POST',body:JSON.stringify({p_actor:c.subject,p_tenant:c.tenant,p_role:c.role,p_core:c.source==='core',p_action:action,p_data:data})})).json();},
+  async notifySystem(action,data){return(await request('/rest/v1/rpc/pee_notify_system',{method:'POST',body:JSON.stringify({p_action:action,p_data:data})})).json();},
+  async security(c,event,detail){return(await request('/rest/v1/rpc/pee_security_event',{method:'POST',body:JSON.stringify({p_actor:c.subject,p_tenant:c.tenant,p_role:c.role,p_core:c.source==='core',p_event:event,p_detail:detail})})).json();},
+  async portalManage(c,action,data){return(await request('/rest/v1/rpc/pee_portal_manage',{method:'POST',body:JSON.stringify({p_actor:c.subject,p_tenant:c.tenant,p_role:c.role,p_core:c.source==='core',p_action:action,p_data:data})})).json();},
+  async portalClient(s,action,data){return(await request('/rest/v1/rpc/pee_portal_client',{method:'POST',body:JSON.stringify({p_tenant:s.tenant,p_invite:s.invite,p_hash:s.hash,p_action:action,p_data:data})})).json();},
   async verifyEmission(x){return(await request('/rest/v1/rpc/pee_verify_licensed_emission',{method:'POST',body:JSON.stringify({p_license:x.license_id,p_project:x.project_reference,p_emission:x.emission_reference})})).json();},
   async notice(action,data){return(await request('/rest/v1/rpc/pee_notice_system',{method:'POST',body:JSON.stringify({p_action:action,p_data:data})})).json();},
   async licensedStatus(c){return(await request('/rest/v1/rpc/pee_licensed_status',{method:'POST',body:JSON.stringify({p_actor:c.subject,p_tenant:c.tenant,p_role:c.role})})).json();},
   async royalty(c,action,data){return(await request('/rest/v1/rpc/pee_royalty_user',{method:'POST',body:JSON.stringify({p_actor:c.subject,p_tenant:c.tenant,p_role:c.role,p_action:action,p_data:data})})).json();},
+  async syncLicenseHold(grant){return(await request('/rest/v1/rpc/pee_sync_license_hold',{method:'POST',body:JSON.stringify({p_grant:grant})})).json();},
   async syncLicense(grant){return(await request('/rest/v1/rpc/pee_sync_license',{method:'POST',body:JSON.stringify({p_grant:grant})})).json();},
   async rpc(context,action,data={}){return(await request('/rest/v1/rpc/pee_store',{method:'POST',body:JSON.stringify({p_actor:context.subject,p_tenant:context.tenant,p_role:context.role,p_core:context.source==='core',p_action:action,p_data:data})})).json();},
   async mail(context,action,data={}){return(await request('/rest/v1/rpc/pee_mail_user',{method:'POST',body:JSON.stringify({p_actor:context.subject,p_tenant:context.tenant,p_role:context.role,p_core:context.source==='core',p_action:action,p_data:data})})).json();},
