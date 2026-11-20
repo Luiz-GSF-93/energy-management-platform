@@ -28,7 +28,7 @@ CREATE OR REPLACE FUNCTION public.eva_closing_event_authors(p_org text,p_ids uui
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 BEGIN
  IF p_org IS NULL OR length(btrim(p_org))=0 OR p_ids IS NULL OR cardinality(p_ids) NOT BETWEEN 1 AND 25 THEN RAISE EXCEPTION 'Invalid author scope' USING ERRCODE='22023';END IF;
- RETURN(SELECT coalesce(jsonb_agg(jsonb_build_object('closingId',e.closing_id,'sequence',e.sequence,'actorId',e.actor_id,'actorName',u.name)),'[]') FROM public.eva_assisted_closing_events e JOIN public.eva_assisted_closing_versions v ON v.organization_id=e.organization_id AND v.id=e.closing_id LEFT JOIN public.users u ON u.auth_user_id::text=e.actor_id::text WHERE e.organization_id=p_org AND v.id=ANY(p_ids));
+ RETURN(SELECT coalesce(jsonb_agg(jsonb_build_object('closingId',e.closing_id,'sequence',e.sequence,'actorId',e.actor_id,'actorName',u.name)),'[]') FROM public.eva_assisted_closing_events e JOIN public.eva_assisted_closing_versions v ON v.organization_id=e.organization_id AND v.id=e.closing_id LEFT JOIN LATERAL(SELECT profile.name FROM public.user_profiles profile WHERE profile.organization_id=e.organization_id AND profile.user_id::text=e.actor_id::text ORDER BY profile.updated_at DESC,profile.id DESC LIMIT 1)u ON true WHERE e.organization_id=p_org AND v.id=ANY(p_ids));
 END$$;
 REVOKE ALL ON FUNCTION public.eva_closing_event_authors(text,uuid[]) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.eva_closing_event_authors(text,uuid[]) TO service_role;

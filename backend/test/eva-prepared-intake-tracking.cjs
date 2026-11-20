@@ -8,13 +8,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),{PGlite}=requir
  CREATE TABLE eva_assisted_closing_versions(id uuid,organization_id text,customer_id text,month text,version int,created_at timestamptz,report jsonb);
  CREATE TABLE eva_assisted_closing_events(closing_id uuid,organization_id text,sequence int,state text,note text,actor_id text);
  CREATE TABLE eva_manual_preparations(organization_id text,customer_id text,consumer_unit_id text,month text,scope_kind text,state text);
- CREATE TABLE users(auth_user_id text,name text);
+ CREATE TABLE user_profiles(id text,user_id text,organization_id text,name text,updated_at timestamptz);
  INSERT INTO customers VALUES('customer','org','ACTIVE',null);INSERT INTO consumer_units VALUES('unit','org','customer','ACTIVE');
  INSERT INTO documents VALUES('document','org','customer','unit','2026-01-01',true,'hash','INVOICE_DISTRIBUTOR');
  INSERT INTO eva_automatic_intakes VALUES('00000000-0000-4000-8000-000000000001','org','customer','unit','2026-01','UNKNOWN',null,'INVOICE_DISTRIBUTOR','document','hash');
  INSERT INTO eva_assisted_closing_versions VALUES('00000000-0000-4000-8000-000000000002','org','customer','2026-01',1,now(),'{"approvalEligible":true,"missing":[],"units":[{"id":"unit","documentId":"document","sourceHash":"hash"}]}');
  INSERT INTO eva_assisted_closing_events VALUES('00000000-0000-4000-8000-000000000002','org',1,'READY_FOR_REVIEW','Report preserved','actor');
- INSERT INTO users VALUES('actor','Reviewer');`);
+ INSERT INTO user_profiles VALUES('profile','actor','org','Reviewer',now());INSERT INTO user_profiles VALUES('foreign-profile','actor','foreign','Foreign reviewer',now());`);
  await db.exec(fs.readFileSync('src/database/migrations/20261351_eva_prepared_intake_tracking.sql','utf8'));
  const id='00000000-0000-4000-8000-000000000001',closing='00000000-0000-4000-8000-000000000002';
  const read=async(org='org')=>(await db.query('select eva_intake_prepared_completions($1,$2::uuid[]) result',[org,[id]])).rows[0].result;
