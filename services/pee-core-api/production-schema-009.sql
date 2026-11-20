@@ -18,14 +18,14 @@ begin
  perform pee_store(p_actor,p_tenant,p_role,p_core,'usage','{"monthly_limit":1}');
  if p_role not in('manager','editor','reviewer')then raise exception 'PEE_ROLE'using errcode='42501';end if;
  if p_action='list'then
-  select coalesce(jsonb_agg(to_jsonb(x)-'token_hash'-'session_hash'),'[]')into v from pee_portal_invites x where project_id=(p_data->>'project_id')::uuid;
+  select coalesce(jsonb_agg(to_jsonb(x)-'token_hash'-'session_hash'-'resume_hash'),'[]')into v from pee_portal_invites x where project_id=(p_data->>'project_id')::uuid;
   return jsonb_build_object('invites',v,'requests',(select coalesce(jsonb_agg(to_jsonb(x)order by created_at),'[]')from pee_portal_requests x where project_id=(p_data->>'project_id')::uuid));
  end if;
  if p_action='invite'then
   if p_role not in('editor','manager')or not exists(select 1 from pee_records where id=(p_data->>'project_id')::uuid and kind='project')or p_data->>'token_hash'!~'^[a-f0-9]{64}$'or length(p_data->>'name')not between 2 and 200 or length(p_data->>'email')not between 3 and 254 then raise exception 'PEE_PORTAL_INPUT'using errcode='42501';end if;
   if(select count(*)from pee_portal_invites where project_id=(p_data->>'project_id')::uuid and revoked_at is null)>50 then raise exception 'PEE_PORTAL_LIMIT';end if;
   insert into pee_portal_invites(tenant_id,id,project_id,client_id,name,email,token_hash,expires_at,created_by)values(p_tenant,(p_data->>'id')::uuid,(p_data->>'project_id')::uuid,(p_data->>'client_id')::uuid,p_data->>'name',p_data->>'email',p_data->>'token_hash',now()+interval '7 days',p_actor)returning * into i;
-  insert into pee_audit(tenant_id,actor_id,action,record_id,detail)values(p_tenant,p_actor,'portal.invited',i.project_id,jsonb_build_object('invite_id',i.id,'name',i.name,'email',i.email,'expires_at',i.expires_at));return to_jsonb(i)-'token_hash'-'session_hash';
+  insert into pee_audit(tenant_id,actor_id,action,record_id,detail)values(p_tenant,p_actor,'portal.invited',i.project_id,jsonb_build_object('invite_id',i.id,'name',i.name,'email',i.email,'expires_at',i.expires_at));return to_jsonb(i)-'token_hash'-'session_hash'-'resume_hash';
  end if;
  select * into i from pee_portal_invites where id=(p_data->>'invite_id')::uuid for update;
  if not found then raise exception 'PEE_NOT_FOUND'using errcode='P0002';end if;

@@ -1,4 +1,4 @@
-# EnergyOS – PEE / project platform 0.7.0
+# EnergyOS – PEE / project platform 0.8.0
 
 Independent service. No existing EnergyOS entrypoint imports it. Keep the existing EnergyOS services and main branch unchanged.
 
