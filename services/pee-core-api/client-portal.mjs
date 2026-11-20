@@ -93,6 +93,12 @@ export function createClientPortal({store,sealer,publicOrigin,enabled=false,mail
     send(res,201,{invite,url,mail_state,notice:'Convite pessoal de uso único, válido por sete dias. Envie somente ao contato identificado.'});return true;
    }
    if(!uuid(b.invite_id))fail('Convite inválido.');
+   if(path==='/api/app/portal/renew'){
+    if(!['editor','manager'].includes(c.role))fail('Seu perfil não permite renovar convites.',403);if(b.send_email===true&&!mailProvider?.portal)fail('O envio de convites não está disponível.',503);
+    const token=randomBytes(32).toString('base64url'),invite=await manage('renew',{invite_id:b.invite_id,token_hash:sha(token)}),project=await get(c,invite.project_id,'project'),url=publicOrigin+'/client#'+new URLSearchParams({tenant:c.tenant,invite:invite.id,token}).toString();let mail_state='not_requested';
+    if(b.send_email===true){try{const sent=await mailProvider.portal({id:invite.id,notice_id:randomUUID(),email:invite.email,name:invite.name,url,origin:publicOrigin,project:project.name});mail_state='accepted';await manage('mail_result',{invite_id:invite.id,state:mail_state,provider_id:sent.id});}catch{mail_state='unknown';await manage('mail_result',{invite_id:invite.id,state:mail_state,provider_id:null});}}
+    send(res,200,{invite,url,mail_state,notice:'Convite renovado por sete dias. Links e sessões anteriores foram encerrados; solicitações e histórico foram preservados.'});return true;
+   }
    if(path==='/api/app/portal/request'){
     if(!['editor','manager'].includes(c.role))fail('Seu perfil não permite solicitar documentos.',403);if(!categories.includes(b.category)||typeof b.title!=='string'||b.title.trim().length<3||b.title.length>300||typeof b.instructions!=='string'||b.instructions.length>10000)fail('Confira o título, as instruções e a categoria.');
     if(b.category==='manufacturer_manual'){const list=await manage('list',{project_id:b.project_id});const invite=list.invites.find(i=>i.id===b.invite_id),sim=await get(c,b.simulation_id,'simulation');if(!invite||sim.project_id!==invite.project_id)fail('Vincule o manual à medida deste projeto.');}

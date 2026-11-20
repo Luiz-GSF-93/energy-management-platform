@@ -32,6 +32,11 @@ begin
  if p_action='mail_result'and p_role in('manager','editor')then
   if p_data->>'state'not in('accepted','unknown')then raise exception 'PEE_MAIL_STATE';end if;
   insert into pee_audit(tenant_id,actor_id,action,record_id,detail)values(p_tenant,p_actor,'portal.invitation_mail',i.project_id,jsonb_build_object('invite_id',i.id,'recipient',i.email,'state',p_data->>'state','provider_id',p_data->>'provider_id'));return jsonb_build_object('recorded',true);
+ elsif p_action='renew'and p_role in('manager','editor')then
+  if i.revoked_at is not null or not coalesce(p_data->>'token_hash'~'^[a-f0-9]{64}$',false)then raise exception 'PEE_UNAUTHORIZED'using errcode='42501';end if;
+  update pee_portal_invites set token_hash=p_data->>'token_hash',expires_at=now()+interval '7 days',used_at=null,session_hash=null,session_expires_at=null,session_absolute_at=null,resume_hash=null,resume_expires_at=null,resume_requested_at=null,resume_count=0 where id=i.id returning * into i;
+  insert into pee_audit(tenant_id,actor_id,action,record_id,detail)values(p_tenant,p_actor,'portal.renewed',i.project_id,jsonb_build_object('invite_id',i.id,'client_name',i.name,'expires_at',i.expires_at,'history_preserved',true));
+  return to_jsonb(i)-'token_hash'-'session_hash'-'resume_hash';
  elsif p_action='revoke'and p_role in('manager','editor')then
   update pee_portal_invites set revoked_at=now(),session_hash=null where id=i.id;
  elsif p_action='request'and p_role in('manager','editor')then

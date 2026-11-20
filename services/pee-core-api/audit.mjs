@@ -1,6 +1,7 @@
 const entities={company:'Empresa',unit:'Unidade consumidora',project:'Projeto',simulation:'Simulação',document:'Documento',rule:'Perfil do edital',workflow:'Etapa da CPP',communication:'Comunicação',royalty:'Royalty'};
 const labels={
  'portal.resume_requested':'Renovação do link pessoal solicitada',
+ 'portal.renewed':'Convite do cliente renovado com histórico preservado',
  'portal.invited':'Cliente convidado para o portal do projeto',
  'portal.request':'Documentação solicitada ao cliente',
  'portal.exchange':'Convite confirmado pelo cliente',
