@@ -25,6 +25,7 @@ const resumed=await client(id,'anything','resume_request',{email:'CLIENT@invalid
 await assert.rejects(client(id,'wrong','exchange_context'));assert.equal((await client(id,'resume-one','exchange_context')).created_by,actor);
 await client(id,'resume-one','exchange',{session_hash:hash('session-new')});await assert.rejects(client(id,'resume-one','exchange',{session_hash:hash('session-replay')}));await assert.rejects(client(id,'session-one','bootstrap'));await client(id,'session-new','bootstrap');
 for(let k=0;k<4;k++)assert.ok(await client(id,'anything','resume_request',{email:'client@invalid.example',resume_hash:hash('next-'+k)}));assert.equal(await client(id,'anything','resume_request',{email:'client@invalid.example',resume_hash:hash('limited')}),null);
-await manage('revoke',{invite_id:id});await assert.rejects(client(id,'session-new','bootstrap'));
+const renewed=await manage('renew',{invite_id:id,token_hash:hash('renewed-token')});assert.equal(renewed.id,id);assert.equal(Object.hasOwn(renewed,'token_hash'),false);await assert.rejects(client(id,'session-new','bootstrap'));await client(id,'renewed-token','exchange',{session_hash:hash('renewed-session')});assert.equal((await client(id,'renewed-session','bootstrap')).requests[0].id,request);
+await manage('revoke',{invite_id:id});await assert.rejects(client(id,'renewed-session','bootstrap'));await assert.rejects(manage('renew',{invite_id:id,token_hash:hash('do-not-resurrect')}));
 await pg.exec('reset role');assert.equal((await pg.query('select count(*)as n from pee_schema_versions')).rows[0].n,12);
 await pg.close();console.log('PASS portal SQL migrations, project isolation, role checks, single-use invitation, session binding, direct table denial and revocation');
