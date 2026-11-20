@@ -1,0 +1,21 @@
+{
+  "name": "@energyos/pee-core-api",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs disabled-mode.test.mjs supabase-auth.test.mjs access.test.mjs project-policy.test.mjs activity.test.mjs project-detail.test.mjs evaluation.test.mjs scoring.test.mjs official-sources.test.mjs audit.test.mjs project-progress.test.mjs communications.test.mjs communications-capacity.test.mjs document-signatures.test.mjs distributor-contact.test.mjs licensed-access.test.mjs license-notices.test.mjs eva-policy.test.mjs licensed-identity.test.mjs portfolio.test.mjs client-portal.test.mjs licensed-mfa.test.mjs content-protection.test.mjs integration/portal-storage.test.mjs integration/portal-http.test.mjs sales-mails.test.mjs",
+    "pretest": "npm ci --ignore-scripts --strict-ssl=true --no-fund"
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
+    "pdf-lib": "1.17.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16"
+  }
+}

@@ -1,0 +1,8 @@
+import test from'node:test';import assert from'node:assert/strict';import{randomUUID}from'node:crypto';import{createLicensedIdentity}from'./licensed-identity.mjs';
+test('MFA requires a verified authenticator and an upgraded provider token',async()=>{
+ const id=randomUUID(),factor=randomUUID(),calls=[],jwt=aal=>'e30.'+Buffer.from(JSON.stringify({aal})).toString('base64url')+'.synthetic';let accept=false;
+ const provider=createLicensedIdentity({PEE_LICENSING_ENABLED:'true',SUPABASE_URL:'https://xogqasqiqktjsjunmcet.supabase.co',SUPABASE_SERVER_KEY:'sb_secret_synthetic_only'},{fetcher:async(url,o)=>{calls.push(String(url));const p=new URL(url).pathname;if(p.endsWith('/user'))return new Response(JSON.stringify({id,email:'fixture@invalid.example',email_confirmed_at:'2026-11-20',factors:[{id:factor,status:'verified',factor_type:'totp'}]}));if(p.endsWith('/challenge'))return new Response(JSON.stringify({id:randomUUID()}));if(p.endsWith('/verify'))return accept?new Response(JSON.stringify({access_token:jwt('aal2'),refresh_token:'fixture-refresh'})):new Response('{}',{status:401});return new Response('{}',{status:400});}});
+ assert.equal((await provider.mfaStatus(jwt('aal1'))).required,true);assert.equal((await provider.mfaStatus(jwt('aal2'))).required,false);
+ const before=calls.length;await assert.rejects(provider.verifyFactor(jwt('aal1'),factor,'abc'));assert.equal(calls.length,before);
+ await assert.rejects(provider.verifyFactor(jwt('aal1'),factor,'000000'));accept=true;const session=await provider.verifyFactor(jwt('aal1'),factor,'123456');assert.equal((await provider.mfaStatus(session.access_token)).aal2,true);
+});
