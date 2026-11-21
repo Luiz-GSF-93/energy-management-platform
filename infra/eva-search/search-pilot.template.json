@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Preparation only. No deployment authorized. Empty isolated EVA Search pilot."
+  },
+  "parameters": {
+    "searchServiceName": {
+      "type": "string",
+      "defaultValue": "srch-energyos-eva-pilot",
+      "minLength": 2,
+      "maxLength": 60,
+      "metadata": {
+        "description": "New service only. Confirm availability and refuse any Modify/Delete action before deployment."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Search/searchServices",
+      "apiVersion": "2025-05-01",
+      "name": "[parameters('searchServiceName')]",
+      "location": "brazilsouth",
+      "sku": {
+        "name": "basic"
+      },
+      "tags": {
+        "environment": "pilot",
+        "purpose": "eva-official-knowledge",
+        "costCenter": "EnergyOS"
+      },
+      "properties": {
+        "replicaCount": 1,
+        "partitionCount": 1,
+        "hostingMode": "Default",
+        "publicNetworkAccess": "Disabled",
+        "disableLocalAuth": true,
+        "networkRuleSet": {
+          "bypass": "None",
+          "ipRules": []
+        },
+        "semanticSearch": "disabled"
+      }
+    }
+  ],
+  "outputs": {
+    "searchServiceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]"
+    }
+  }
+}
