@@ -7,7 +7,7 @@ export const sourcePreparationEnabled=()=>process.env[SOURCE_PREPARATION_FLAG]==
 /** A vertical cell may span an otherwise empty continuation row. Never flatten a
  * horizontal merge, overlap, hidden value or a second tax into the same row. */
 export function normalizedTaxBlocks(blocks:Block[]):Block[]{
- return blocks.map(block=>{
+ const normalized=blocks.map(block=>{
   if(block.kind!=='TAX_SUMMARY')return block;
   return {...block,rows:block.rows.map(row=>{
    const merged=row.cells.filter(c=>c.rowSpan>1);
@@ -19,6 +19,14 @@ export function normalizedTaxBlocks(blocks:Block[]):Block[]{
    }
    return {...row,cells:row.cells.map(c=>({...c,rowSpan:1}))};
   })};
+ });
+ // Collapse only complete, byte-equivalent tax tables after whitespace normalization.
+ // Conflicting values, merged cells and unverified text remain separate and fail closed.
+ const seen=new Set<string>();
+ return normalized.filter(block=>{
+  if(block.kind!=='TAX_SUMMARY'||!block.rows.length||block.rows.some(row=>!row.cells.length||row.cells.some(c=>c.rowSpan!==1||c.columnSpan!==1||!c.value.text.trim()||c.value.issues.some(i=>i!=='MISSING_CONFIDENCE'))))return true;
+  const signature=JSON.stringify(block.rows.map(row=>row.cells.map(c=>[c.column,c.value.text.replace(/\s+/g,' ').trim()])));
+  if(seen.has(signature))return false;seen.add(signature);return true;
  });
 }
 

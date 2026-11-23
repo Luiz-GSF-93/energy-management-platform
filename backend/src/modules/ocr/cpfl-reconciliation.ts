@@ -1,6 +1,8 @@
 import type {CpflOperation} from './cpfl-paulista-layout';
 /** Arithmetic checks are evidence, not approval. Summary lines are never added twice. */
-export function reconcileCpflOperations(rows:CpflOperation[]){
+export function reconcileCpflOperations(input:CpflOperation[]){
+ // Printed informational repeats are not billable terms, regardless of PDF page order.
+ const rows=input.filter(row=>row.role!=='INFORMATION');
  const checks:{label:string;state:string;differenceCents:string|null}[]=[];
  const cents=(r:CpflOperation)=>{const v=r.fields.amount?.decimal;if(!v||!/^[-]?[0-9]+(?:\.[0-9]{1,2})?$/.test(v))return null;const [a,b='']=v.split('.');return BigInt(a+b.padEnd(2,'0'));};
  const unique=(component:string)=>{const found=rows.filter(r=>r.component===component);return found.length===1?found[0]:null;};

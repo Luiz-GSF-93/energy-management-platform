@@ -10,3 +10,11 @@ describe('CPFL unsigned refund subtotal',()=>{
  it('does not interpret unknown components',()=>{const rows=sample();rows[3].role='UNKNOWN';expect(reconcileCpflOperations(rows).state).not.toBe('MATCH');});
  it('does not reinterpret positive debit subtotals',()=>{const rows=sample();rows[3].fields.amount.decimal='15.00';rows[7].fields.amount.decimal='110.00';expect(reconcileCpflOperations(rows)).toMatchObject({state:'MATCH',interpretation:'SIGNED_SUBTOTAL'});});
 });
+
+it('ignores printed information outside the charge sequence without hiding unknown billable rows',()=>{
+ const rows=sample();rows[5].fields.amount.decimal='-20.00';
+ const info={component:'UNLABELLED_TOTAL_REPEAT',role:'INFORMATION',fields:{description:{text:''},amount:{decimal:'70.00'}}} as unknown as CpflOperation;
+ expect(reconcileCpflOperations([info,...rows]).state).toBe('MATCH');
+ expect(reconcileCpflOperations([{...info,role:'UNKNOWN'},...rows]).state).not.toBe('MATCH');
+ expect(reconcileCpflOperations([info,...rows.slice(0,7),{...rows[7],fields:{...rows[7].fields,amount:{...rows[7].fields.amount,decimal:'71.00'}}}]).state).toBe('DIVERGENT');
+});

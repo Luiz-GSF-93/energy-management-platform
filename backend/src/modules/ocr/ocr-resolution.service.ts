@@ -1,6 +1,6 @@
 import {verifiedNativeInvoiceLayout} from './native-invoice-credits';
 import {SourcePreparationService} from './source-preparation.service';
-import {globalModelConfidence} from './eva-global-model';
+import {globalModelConfidence,documentedInvoiceProposalReady} from './eva-global-model';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {globalModelLayout} from './eva-global-model';
 import {proposalFieldsSafe} from './calculation-autofill-reference';
@@ -64,7 +64,7 @@ export class OcrResolutionService {
     proposalReady=ready||proposalFieldsSafe(identity.fields,consumption.fields)&&safeScope;
    }
    if(originalIdentity?.state==='MISMATCH'){ready=false;proposalReady=false;}
-   if(originalIdentity?.state==='MATCH'&&originalIdentity.fileHash===source.doc.file_hash){const global=globalModelConfidence(source.raw,0.9,undefined,layout);proposalReady=proposalReady||global.state==='READY_FOR_REVIEW'&&unit.status==='ACTIVE'&&unit.free_market===true&&unit.tariff_group==='A'&&unit.tariff_modality==='GREEN'&&reviewedLayoutSupported(layout.layoutId)&&layout.reconciliation.state==='MATCH'&&refs.length===1&&refs[0]===month;}
+   if(originalIdentity?.state==='MATCH'&&originalIdentity.fileHash===source.doc.file_hash){const global=globalModelConfidence(source.raw,0.9,undefined,layout);proposalReady=proposalReady||(global.state==='READY_FOR_REVIEW'||documentedInvoiceProposalReady(source.raw,layout,originalIdentity))&&unit.status==='ACTIVE'&&unit.free_market===true&&unit.tariff_group==='A'&&unit.tariff_modality==='GREEN'&&reviewedLayoutSupported(layout.layoutId)&&layout.reconciliation.state==='MATCH'&&refs.length===1&&refs[0]===month;}
   }
   const provenance='OCR · documento '+document+' · SHA-256 '+source.doc.file_hash;
   const candidates:any[]=[];

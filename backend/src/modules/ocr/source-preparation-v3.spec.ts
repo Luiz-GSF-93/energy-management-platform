@@ -52,3 +52,12 @@ describe('Source-backed preparation V3, initially disabled',()=>{
  it('shows a sourced fixed fee while keeping financial approval blocked',()=>{const fields:any[]=[{key:'fee:fixed',state:'FILLED',value:1302.05,source:'Contrato de gestão vigente'}],c={ready:false,proposalReady:false};const operational=operationalProposal(fields,c,null);expect(operational).toMatchObject({state:'UNAVAILABLE',fixedFee:{amount:'1302.05'}});const report=assistedClosingReport('org','client','2026-04',[{unitId:'unit',name:'Exemplo',plan:{fields,operational}}]);expect(report.units[0].fixedFee).toBe('1302.05');expect(report.approvalEligible).toBe(false);expect(report.financial.savings).toBeNull();});
  it('does not show a fee without a source or round fractional cents',()=>{for(const fee of [{value:'1.001',source:'Contrato'},{value:'1.00',source:''}])expect(operationalProposal([{key:'fee:fixed',state:'FILLED',...fee}] as any,{ready:false},null).fixedFee.amount).toBeNull();});
 });
+
+it('collapses only complete identical tax summaries and retains every conflicting or unsafe table',()=>{
+ const a=taxes();a.rows=a.rows.slice(0,4).map((r:any)=>({...r,cells:r.cells.map((c:any)=>({...c,rowSpan:1}))}));
+ const b=structuredClone(a);b.source='tables[99]';const before=JSON.stringify([a,b]);
+ expect(normalizedTaxBlocks([a,b])).toHaveLength(1);expect(JSON.stringify([a,b])).toBe(before);
+ const conflict=structuredClone(b);conflict.rows[1].cells[3].value=f('1,01');expect(normalizedTaxBlocks([a,conflict])).toHaveLength(2);
+ const merged=structuredClone(b);merged.rows[1].cells[3].columnSpan=2;expect(normalizedTaxBlocks([a,merged])).toHaveLength(2);
+ const unsafe=structuredClone(b);unsafe.rows[1].cells[3].value.issues=['UNVERIFIED_SOURCE'];expect(normalizedTaxBlocks([a,unsafe])).toHaveLength(2);
+});
