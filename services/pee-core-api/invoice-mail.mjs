@@ -1,0 +1,10 @@
+import{AccessFailure,identifier}from'./core-transport.mjs';import{emailAddress,communicationHash}from'./communications-policy.mjs';import{createHash}from'node:crypto';
+export function validateInvoiceMail(b){
+ if(!b||Object.keys(b).some(k=>!['id','license_id','email','name','organization','reference','due_on','amount_cents','pdf_base64'].includes(k))||!identifier(b.id)||!identifier(b.license_id)||!['name','organization'].every(k=>typeof b[k]==='string'&&b[k].trim().length>=2&&b[k].length<=200)||!/^PE[a-f0-9]{13}$/.test(b.reference)||!/^20\d\d-\d\d-\d\d$/.test(b.due_on)||!Number.isFinite(Date.parse(b.due_on+'T12:00:00Z'))||new Date(b.due_on+'T12:00:00Z').toISOString().slice(0,10)!==b.due_on||!Number.isSafeInteger(b.amount_cents)||b.amount_cents<250||b.amount_cents>9999999999||typeof b.pdf_base64!=='string'||b.pdf_base64.length>2800000||!/^[A-Za-z0-9+/]+={0,2}$/.test(b.pdf_base64))throw new AccessFailure(422,'Fatura comercial inválida.');
+ emailAddress(b.email);const pdf=Buffer.from(b.pdf_base64,'base64');if(pdf.toString('base64')!==b.pdf_base64||pdf.subarray(0,5).toString()!=='%PDF-')throw new AccessFailure(422,'PDF bancário inválido.');return b;
+}
+export function createInvoiceMails({store,provider}){return async b=>{
+ validateInvoiceMail(b);const hash=communicationHash(b);let row=await store.notice('prepare',{id:b.id,license_id:b.license_id,request_hash:hash,recipient_hash:createHash('sha256').update(emailAddress(b.email)).digest('hex')});
+ if(row.provider_id)return{state:'accepted',provider_id:row.provider_id};row=await store.notice('start',{id:b.id,request_hash:hash});if(row.provider_id)return{state:'accepted',provider_id:row.provider_id};
+ try{const result=await provider.invoice(b);if(!identifier(result?.id))throw Error('PROVIDER_ID');await store.notice('accepted',{id:b.id,provider_id:result.id});return{state:'accepted',provider_id:result.id};}catch{await store.notice('uncertain',{id:b.id});throw new AccessFailure(503,'Envio de fatura sem confirmação. Confira o histórico antes de repetir.');}
+};}
