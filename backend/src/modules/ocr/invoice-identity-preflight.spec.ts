@@ -73,3 +73,14 @@ describe('CPFL explicitly labelled recipient tax band',()=>{
  it('does not use the issuer CNPJ or unlabelled distant text as the recipient',()=>{expect(read(bill.replace('11.444.777/0001-61','11.222.333/0001-81')).checks.taxId).toBe('MISMATCH');expect(read(bill.replace('INSC.EST:','Informacao:')).checks.taxId).toBe('REVIEW');});
  it('preserves conflicting unit, reference and recipient checks',()=>{expect(read(bill.replace('UC 1234567','UC 9999999')).state).toBe('MISMATCH');expect(read(bill.replace('OUT/2026','NOV/2026')).state).toBe('MISMATCH');expect(read(bill.replace('NOTA FISCAL','INSC.EST: 321 / CNPJ: 11.222.333/0001-81\nNOTA FISCAL')).state).toBe('MISMATCH');});
 });
+
+it('accepts an exact EIRELI/LTDA business core only with all other identity evidence and an audited UC',()=>{
+ const old=process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;try{
+ process.env.EVA_SOURCE_PREPARATION_V3_ENABLED='true';
+ const registration={customerName:'FABRICA DE PECAS EXEMPLO LTDA',taxId:'11222333000181',unitNumber:'1234567',address:'AV EXEMPLO 246 DISTRITO INDUSTRIAL',month:'2026-01',auditedUnitNumbers:['7654321']};
+ const content='COMPANHIA PAULISTA DE FORCA E LUZ\nRUA EMITENTE 1632\nFABRICA DE PECAS EXEMPLO EIRELI\nAV EXEMPLO 246 DISTRITO INDUSTRIAL\nNumero da Instalacao 7654321\nINSC. EST: 123 / CNPJ: 11.222.333/0001-81\nNOTA FISCAL Nº 123\nRef: mes/ano\nJAN/2026';
+ expect(invoiceIdentityText(content,registration).state).toBe('MATCH');
+ expect(invoiceIdentityText(content,{...registration,auditedUnitNumbers:[]}).state).not.toBe('MATCH');
+ for(const changed of [content.replace('0001-81','0001-82'),content.replace('246','247'),content.replace('JAN/2026','FEV/2026'),content.replace('PECAS EXEMPLO EIRELI','PECAS OUTRA EIRELI')])expect(invoiceIdentityText(changed,registration).state).not.toBe('MATCH');
+ }finally{if(old===undefined)delete process.env.EVA_SOURCE_PREPARATION_V3_ENABLED;else process.env.EVA_SOURCE_PREPARATION_V3_ENABLED=old;}
+});

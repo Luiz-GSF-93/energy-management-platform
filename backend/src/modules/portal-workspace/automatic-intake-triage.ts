@@ -1,3 +1,4 @@
+import {invoiceCustomerNameMatches} from '../ocr/invoice-customer-name';
 import {companyTaxIdentity} from '../ocr/eva-preparation-policy';
 import {createHash} from 'node:crypto';
 import {invoiceAddressMatches,invoiceIdentityText} from '../ocr/invoice-identity-preflight';
@@ -15,8 +16,9 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  let recipient=supplier?supplierRecipientText(text):'';
  if(!supplier){
   // CPFL's recipient strip is distinct from issuer and bank details.
-  const first=norm((pages.find(p=>p.page===1)??pages[0]).text),before=first.split(/NOTA\s+FISCAL\s+N|DESCRICAO\s+DA\s+OPERACAO/)[0];
-  const lines=before.split('\n'),name=compact(c.company_name),start=lines.findIndex(line=>name.length>=8&&compact(line).includes(name));
+  const recipientPage=pages.find(p=>{const header=norm(p.text).split(/NOTA\s+FISCAL\s+N|DESCRICAO\s+DA\s+OPERACAO/)[0];return [...header.matchAll(/INSC\.?\s*EST[^\n]*?CNPJ\s*:\s*([0-9A-Z./-]+)/g)].some(m=>['EXACT','SAME_ROOT'].includes(companyTaxIdentity(c.document,[m[1]],{unit:false,address:false,period:false}).relation));})??pages.find(p=>p.page===1)??pages[0];
+  const first=norm(recipientPage.text),before=first.split(/NOTA\s+FISCAL\s+N|DESCRICAO\s+DA\s+OPERACAO/)[0];
+  const lines=before.split('\n'),start=lines.findIndex(line=>invoiceCustomerNameMatches(line,c.company_name));
   // Subsequent pages repeat the issuer header. They are not a second recipient
   // address. Missing recipient identification must not fall back to the issuer.
   const taxLine=lines.findIndex(line=>/INSC\.?\s*EST[^\n]*?CNPJ\s*:/.test(line)&&compact(line).includes(compact(c.document)));
@@ -26,7 +28,7 @@ export function intakeIdentityDiagnostic(pages:IntakePage[],c:IntakeCustomer,u:I
  const explicitTax=!supplier?[...t.matchAll(/INSC\.?\s*EST[^\n]*?CNPJ\s*:\s*([0-9A-Z./-]+)/g)].map(m=>compact(m[1])):[];
  const taxes=[...new Set(explicitTax.length?explicitTax:ids)];
  const tax=compact(c.document),addressMatch=invoiceAddressMatches(recipient,u.address);
- const addressLines=recipient.split('\n').map(s=>s.trim()).filter(s=>/^(?:RUA|R\.?\s|AVENIDA|AV\.?\s|RDV\s|RODOVIA\s|ESTRADA\s|CRT\s)/.test(norm(s))&&/(?:\d|S\s*\/\s*N)/.test(s));
+ const addressLines=recipient.split('\n').map(s=>s.trim()).filter(s=>/^(?:RUA|R\.?\s|AVENIDA|AV\.?\s|A[ \t]+V[ \t]+|RDV\s|RODOVIA\s|ESTRADA\s|CRT\s)/.test(norm(s))&&/(?:\d|S\s*\/\s*N)/.test(s));
  // Address mismatch requires an actual, unique printed street. Never use labels alone.
  const addresses=addressMatch?[u.address]:[...new Map(addressLines.map(line=>[compact(line),line])).values()];
  const codes=[...t.matchAll(/(?:NUMERO\s+DA\s+INSTALACAO|CODIGO\s+DA\s+INSTALACAO|UNIDADE\s+CONSUMIDORA|\bUC\b|\bINSTALACAO)\s*(?:N[º°.]?|:)?\s*([0-9][0-9.-]{4,30})\b/g)].map(m=>compact(m[1]));

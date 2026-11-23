@@ -1,3 +1,4 @@
+import {invoiceCustomerNameMatches} from './invoice-customer-name';
 import {companyTaxIdentity} from './eva-preparation-policy';
 import {sourcePreparationEnabled} from './source-preparation-v3';
 import {extractPdfText} from './eva-pdf-text.extractor';
@@ -38,8 +39,8 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
   checks.unit=!uc||!explicit.length?'REVIEW':explicit.every(n=>accepted.has(n))?'MATCH':'MISMATCH';
   const streets=(v:string)=>{const n=norm(v),found:string[]=[];for(const m of n.matchAll(/\b(?:RUA|R\.?|AVENIDA|AV\.?)\s+([A-Z][A-Z .'-]{1,80}?)(?:,\s*|\s+)(\d+)\b/g)){const zip=/\b(\d{5})[- ](\d{3})\b/.exec(n.slice(m.index!+m[0].length,m.index!+m[0].length+180));if(zip)found.push(compact(m[1])+'|'+m[2]+'|'+zip[1]+zip[2]);}return found;};
   const registeredStreet=streets(r.address??'');if(registeredStreet.length===1&&streets(text).includes(registeredStreet[0]))checks.address='MATCH';
-  const name=compact(r.customerName),groupName=compact(norm(r.customerName??'').replace(/\b(?:MATRIZ|FILIAL)\b.*$/,''));
-  const nameMatches=(part:string)=>name.length>=8&&(compact(part).includes(name)||groupName.length>=8&&compact(part).includes(groupName));
+  const name=compact(r.customerName);
+  const nameMatches=(part:string)=>invoiceCustomerNameMatches(part,r.customerName);
   const customerTax=taxes.filter(id=>{const match=[...t.matchAll(/\b[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\s*\/?\s*[0-9A-Z]{4}-?[0-9]{2}\b/g)].find(m=>compact(m[0])===id&&nameMatches(t.slice(Math.max(0,m.index!-220),m.index)));return Boolean(name.length>=8&&match);});
   recipientTaxes=customerTax;
   checks.taxId=!tax?'REVIEW':customerTax.includes(tax)?'MATCH':customerTax.length?'MISMATCH':'REVIEW';
@@ -51,7 +52,7 @@ export function invoiceIdentityText(text:string,r:InvoiceRegistration){
    // the complete labeled row, customer and consistent readings; never take a
    // nearby meter, barcode or arbitrary number as the installation.
    if(checks.unit==='REVIEW'){
-    const rows=[...t.matchAll(/CODIGO\s+DA\s+INSTALACAO\s+LEITURA\s+ATUAL\s+LEITURA\s+ANTERIOR\s+N[º°.]?\s*(?:DE\s+)?DIAS\s+([^\n]{8,180})\n\s*([0-9][0-9.-]{4,25})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{1,2})\b/g)].filter(m=>name.length>=8&&compact(m[1])===name);
+    const rows=[...t.matchAll(/CODIGO\s+DA\s+INSTALACAO\s+LEITURA\s+ATUAL\s+LEITURA\s+ANTERIOR\s+N[º°.]?\s*(?:DE\s+)?DIAS\s+([^\n]{8,180})\n\s*([0-9][0-9.-]{4,25})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{1,2})\b/g)].filter(m=>nameMatches(m[1]));
     const date=(value:string)=>{const [day,month,year]=value.split('/').map(Number),ms=Date.UTC(year,month-1,day),d=new Date(ms);return d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day?ms:NaN;};
     if(rows.length&&rows.every(m=>Number(m[5])>=1&&Number(m[5])<=62&&(date(m[3])-date(m[4]))/86400000===Number(m[5])))checks.unit=rows.every(m=>accepted.has(compact(m[2])))?'MATCH':'MISMATCH';
    }
