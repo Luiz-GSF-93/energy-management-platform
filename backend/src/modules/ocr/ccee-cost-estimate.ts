@@ -60,7 +60,7 @@ export function cceeCostEstimate(rows:any[],unit:any,month:string,currentItems:a
   }
   for(const [key,group] of monthly){
    const list=samples.get(key)??[];
-   if(list.length<3)list.push({month:m,amount:money(group.amount),settlementId:head.id,version:head.version_number,financialHash:proof.financialHash,costId:proof.costId,revision:proof.revision,approvalEventId:proof.approvalEventId,approvedBy:proof.approvedBy,approvedAt:proof.approvedAt,items:group.items,label:group.effect==='CREDIT'?'Créditos operacionais CCEE':'Custos operacionais CCEE',effect:group.effect});
+   if(list.length<3)list.push({month:m,amount:money(group.amount),settlementId:head.id,version:head.version_number,financialHash:proof.financialHash,costId:proof.costId,revision:proof.revision,evidenceKind:head.evidenceFormat??'FINANCIAL_SETTLEMENT',validatedBy:head.evidenceFormat==='VALIDATED_MONTHLY_COST'?head.validated_by:null,validatedAt:head.evidenceFormat==='VALIDATED_MONTHLY_COST'?head.validated_at:null,approvalEventId:proof.approvalEventId,approvedBy:proof.approvedBy,approvedAt:proof.approvedAt,items:group.items,label:group.effect==='CREDIT'?'Créditos operacionais CCEE':'Custos operacionais CCEE',effect:group.effect});
    samples.set(key,list);
   }
  }
