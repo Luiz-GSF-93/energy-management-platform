@@ -1,3 +1,4 @@
+import{controlledPage}from'./controlled-view.mjs';
 import{networkAddress}from'./network-address.mjs';
 import {randomBytes,randomUUID,createHash}from'node:crypto';
 import {readFile}from'node:fs/promises';
@@ -66,9 +67,13 @@ export function createClientPortal({store,sealer,publicOrigin,enabled=false,mail
    if(req.method==='GET'&&path==='/api/client/bootstrap'){send(res,200,{...publicView(await client(s,'bootstrap')),csrf:s.csrf,idle_seconds:900});return true;}
    if(req.method==='POST'&&path==='/api/client/activity'){await client(s,'activity');setCookie(res,sealer.seal('session',s,900));send(res,200,{ok:true});return true;}
    if(req.method==='POST'&&path==='/api/client/logout'){await client(s,'logout');setCookie(res,'',0);send(res,200,{ok:true});return true;}
+   const viewing=path.match(/^\/api\/client\/requests\/([a-f0-9-]{36})\/view\/(\d{1,5})$/);
+   if(viewing&&req.method==='GET'){
+    const d=await client(s,'original',{id:viewing[1]});if(!d.storage_key.startsWith(s.tenant+'/'))fail('Documento fora deste projeto.',403);const bytes=Buffer.from(await(await store.download(d.storage_key)).arrayBuffer());if(bytes.length!==d.size||sha(bytes)!==d.sha256)fail('Integridade não confirmada.',409);send(res,200,{...await controlledPage(bytes,d.mime,Number(viewing[2])),name:d.name,control:'by EnergyOS PEE · DOC-'+d.id+' · v'+d.version+' · SHA-256 '+d.sha256});return true;
+   }
    const original=path.match(/^\/api\/client\/requests\/([a-f0-9-]{36})\/original$/);
    if(original&&req.method==='GET'){
-    const d=await client(s,'original',{id:original[1]});if(d.signature_review==='verified'||d.category==='signature_evidence'||!d.storage_key.startsWith(s.tenant+'/'))fail('Este arquivo está protegido contra exportação.',403);
+    const d=await client(s,'original',{id:original[1]});if(process.env.PEE_CONTENT_PROTECTION_ENABLED==='true')fail('Download indisponível. Consulte o original em tela.',403);if(d.signature_review==='verified'||d.category==='signature_evidence'||!d.storage_key.startsWith(s.tenant+'/'))fail('Este arquivo está protegido contra exportação.',403);
     const bytes=Buffer.from(await(await store.download(d.storage_key)).arrayBuffer());if(bytes.length!==d.size||sha(bytes)!==d.sha256)fail('Integridade não confirmada.',503);res.setHeader('Content-Type',d.mime);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(d.name));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
    }
    const submit=path.match(/^\/api\/client\/requests\/([a-f0-9-]{36})\/submit$/);

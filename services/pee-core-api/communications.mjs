@@ -11,7 +11,7 @@ const hash=b=>createHash('sha256').update(b).digest('hex'),uuid=v=>typeof v==='s
 const fail=(message,status=422)=>{throw new ProjectError(message,status);};
 const fileTypes=new Set(['application/pdf','image/png','image/jpeg','text/plain','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
 const cleanName=v=>String(v??'anexo').replace(/[\x00-\x1f\x7f/\\]/g,'_').slice(0,200);
-export function createCommunications({store,snapshot,workspace,provider=null,webhookSecret=null,readAttachment=downloadReceivedAttachment,publicOrigin}={}){
+export function createCommunications({store,snapshot,workspace,provider=null,webhookSecret=null,readAttachment=downloadReceivedAttachment,publicOrigin,controlledViews}={}){
  const protection=process.env.PEE_CONTENT_PROTECTION_ENABLED==='true',notifications=createSubmissionNotifications({store,provider,publicOrigin,enabled:protection});
  let activeSend=false,archiving=false;const sendLimits=new Map();
  const user=(c,action,data={})=>store.mail(c,action,data),system=(action,data={})=>store.mailSystem(action,data);
@@ -19,10 +19,16 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
  async function dataForDraft(c,thread,input,author,grant){
   const draft=validateCommunication(input),data=await snapshot(c,thread.project_id);if(!data.company||!data.unit)fail('Complete o beneficiário e a unidade do projeto.');
   const protectedFlow=process.env.PEE_CONTENT_PROTECTION_ENABLED==='true';
+  const linkCopies=[...new Set([...draft.cc,...draft.bcc])];draft.link_copies=linkCopies;
+  if(protectedFlow&&(draft.document_ids.length||draft.purpose==='submission')){
+   const contact=requireEvaluationContact(data.rule,{mail:true});
+   draft.to=[contact.to];draft.cc=[...new Set((contact.cc??[]).map(emailAddress))].filter(x=>x!==contact.to);draft.bcc=[];
+   draft.notification_recipients=[...new Set([...linkCopies,grant?.license_buyer_email,grant?.email].filter(Boolean).map(emailAddress))];
+  }
   if(protectedFlow&&draft.purpose==='submission'){
    const contact=requireEvaluationContact(data.rule,{mail:true});
    if(!grant?.email||c.source==='licensed'&&!grant.license_buyer_email)fail('Confirme no Core os e-mails do responsável pelo envio e do contratante antes da apresentação final.');
-   draft.to=[contact.to];draft.cc=[...new Set((contact.cc??[]).map(emailAddress))].filter(x=>x!==contact.to);draft.bcc=[];draft.notification_recipients=[...new Set([grant.license_buyer_email,grant.email].filter(Boolean).map(emailAddress))];draft.document_ids=data.documents.filter(d=>d.project_id===data.project.id&&d.category!=='signature_evidence'&&d.signature_review==='verified').map(d=>d.id);
+   draft.to=[contact.to];draft.cc=[...new Set((contact.cc??[]).map(emailAddress))].filter(x=>x!==contact.to);draft.bcc=[];draft.notification_recipients=[...new Set([...linkCopies,grant.license_buyer_email,grant.email].filter(Boolean).map(emailAddress))];draft.document_ids=data.documents.filter(d=>d.project_id===data.project.id&&d.category!=='signature_evidence'&&d.signature_review==='verified').map(d=>d.id);
   }
   const ids=new Set();for(const id of draft.document_ids){const d=data.documents.find(d=>d.id===id&&d.project_id===data.project.id);if(!d)fail('Anexo não pertence a este projeto.',404);
    if(protectedFlow&&isProtectedDocument(d,data.documents)&&draft.purpose!=='submission')fail('Documentos assinados ou validados só podem ser enviados pelo fluxo final à distribuidora.',403);
@@ -70,13 +76,18 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
     if(['accepted','delivered','bounced','complained','delivery_delayed','suppressed'].includes(message.state)){await notifications.schedule(c,message);send(res,200,message);return true;}
     const data=await snapshot(c,thread.project_id);if(data.snapshot_hash!==message.payload.snapshot_hash)fail('O projeto mudou após a preparação. Atualize o rascunho e revise a nova prévia.',409);
     validateSubmissionMail(message.payload,data,assessProject(data));
+    if(protection&&message.payload.documents.length){
+     const contact=requireEvaluationContact(data.rule,{mail:true});
+     if(message.payload.to.length!==1||message.payload.to[0]!==contact.to||message.payload.bcc.length||JSON.stringify(message.payload.cc)!==JSON.stringify((contact.cc??[]).filter(x=>x!==contact.to)))fail('Atualize a comunicação: os arquivos podem seguir somente à banca cadastrada. As demais cópias recebem link privado.',409);
+     if(data.project.demonstration?.example_only===true)fail('Projeto demonstrativo: documentos fictícios não podem ser enviados à banca.',403);
+    }
     if(activeSend)fail('Outro envio está sendo confirmado. Aguarde.',429);
     const minute=Math.floor(Date.now()/60000),key=c.tenant+':'+c.subject;for(const[k,v]of sendLimits)if(v.minute<minute)sendLimits.delete(k);const count=sendLimits.get(key)??{minute,count:0};if(++count.count>3)fail('Limite de três confirmações de envio por minuto.',429);sendLimits.set(key,count);
     activeSend=true;
     try{
      const attachments=[];let size=0;
      for(const d of message.payload.documents){const current=data.documents.find(x=>x.id===d.id&&x.sha256===d.sha256);if(!current)fail('Um anexo mudou. Refaça a prévia.',409);const r=await store.download(current.storage_key),bytes=Buffer.from(await r.arrayBuffer());size+=bytes.length;if(bytes.length!==d.size||hash(bytes)!==d.sha256||size>20971520)fail('Integridade ou limite dos anexos não confirmado.',409);attachments.push({name:cleanName(d.name),mime:d.mime,bytes});}
-     const refreshed=await reauthorize();if(protection&&message.payload.purpose==='submission'){const expected=[...new Set([refreshed.grant.license_buyer_email,refreshed.grant.email].filter(Boolean).map(emailAddress))];if(JSON.stringify(expected)!==JSON.stringify(message.payload.notification_recipients))fail('Os responsáveis pelas cópias mudaram no Core. Refaça a prévia.',409);}
+     const refreshed=await reauthorize();if(protection&&message.payload.purpose==='submission'){const expected=[...new Set([refreshed.grant.license_buyer_email,refreshed.grant.email].filter(Boolean).map(emailAddress))];if(expected.some(e=>!message.payload.notification_recipients?.includes(e)))fail('Os responsáveis pelas cópias mudaram no Core. Refaça a prévia.',409);}
      const lease=randomBytes(32).toString('hex'),prepared=await user(c,'start_send',{id:message.id,expected_version:message.version,preview_hash:message.payload.preview_hash,lease_hash:hash(lease)});
      if(prepared.state!=='sending'){send(res,200,prepared);return true;}
      let result;
@@ -89,12 +100,14 @@ export function createCommunications({store,snapshot,workspace,provider=null,web
     }finally{activeSend=false;}
    }
    const filesRoute=path.match(/^\/api\/app\/communications\/messages\/([a-f0-9-]{36})\/files(?:\/([a-f0-9-]{36}))?$/);
-   if(filesRoute&&req.method==='GET'){
+   if(filesRoute&&['GET','POST'].includes(req.method)){
     const message=own(await user(c,'message',{id:filesRoute[1]}),c),files=await privateFiles(c,message);
     if(!filesRoute[2]){send(res,200,{files:files.map(({storage_key,...f})=>f),archive_status:message.payload.attachment_archive_status??null});return true;}
     const file=files.find(f=>f.id===filesRoute[2]);if(!file)fail('Anexo não disponível na sua caixa.',404);own(file,c);
     const r=await store.download(file.storage_key),bytes=Buffer.from(await r.arrayBuffer());if(bytes.length!==file.size||hash(bytes)!==file.sha256)fail('A integridade do anexo não foi confirmada.',409);
-    await reauthorize();res.setHeader('Content-Type','application/octet-stream');res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(cleanName(file.name)));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
+    await reauthorize();if(req.method==='POST'){const b=await jsonBody(req,1000);if(b.preview!==true)fail('Use a visualização controlada.');const {thread}=await user(c,'thread',{id:message.thread_id});own(thread,c);send(res,200,controlledViews.register(c,{bytes,mime:file.mime,name:file.name,project_id:thread.project_id}));return true;}
+    if(protection)fail('Download indisponível. Consulte o anexo na conversa privada.',403);
+    res.setHeader('Content-Type','application/octet-stream');res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(cleanName(file.name)));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
    }
    fail('Operação de comunicação não encontrada.',404);
   },

@@ -3,7 +3,7 @@ import{validateDemoSettings,demonstrationSourceHash,demonstrationPresentation,ex
 import{buildDemonstrationInWorker}from'./demonstration-renderer.mjs';
 const uuid=v=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
 const fail=(m,s=422)=>{throw new ProjectError(m,s);};
-export function createDemonstrationApi({store,snapshot,put,get,assessment,build=buildDemonstrationInWorker}={}){
+export function createDemonstrationApi({store,snapshot,put,get,assessment,build=buildDemonstrationInWorker,controlledViews}={}){
  const jobs=new Map();
  function prune(){const now=Date.now();for(const[id,j]of jobs)if(j.state!=='preparing'&&j.created_at<now-3600000)jobs.delete(id);}
  return{async handle(req,res,path,c,{jsonBody,send,reauthorize}){
@@ -46,12 +46,12 @@ export function createDemonstrationApi({store,snapshot,put,get,assessment,build=
     }catch(error){job.state='failed';job.message=error instanceof ProjectError||error?.status?error.message:'A preparação não foi concluída. Atualize o projeto antes de repetir.';}
    })();return true;
   }
-  if(operation==='documents'&&req.method==='GET'){
+  if(operation==='documents'&&['GET','POST'].includes(req.method)){
    if(!['editor','reviewer','manager'].includes(c.role))fail('Seu perfil permite consultar os dados, mas não exportar documentos.',403);
    const demo=p.demonstration;if(!demo?.package_id||!demo.manifest)fail('Prepare primeiro o dossiê do exemplo.',404);const doc=await get(c,demo.package_id,'document');
    if(doc.demonstration_only!==true||doc.demonstration_project_id!==p.id||!doc.storage_key?.startsWith(c.tenant+'/')||doc.size>20971520)fail('Documento indisponível neste projeto.',403);
    const original=Buffer.from(await(await store.download(doc.storage_key)).arrayBuffer());if(original.length!==doc.size||demoDigest(original)!==doc.sha256||doc.sha256!==demo.manifest.package_sha256)fail('A integridade do dossiê não foi confirmada.',409);
-   const bytes=ref==='all'?original:await extractDemonstrationDocument(original,demo.manifest,ref),name=demo.manifest.reference+'-'+(ref??'all')+'.pdf';res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(name));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
+   const bytes=ref==='all'?original:await extractDemonstrationDocument(original,demo.manifest,ref),name=demo.manifest.reference+'-'+(ref??'all')+'.pdf';if(req.method==='POST'){const b=await jsonBody(req,1000);if(b.preview!==true)fail('Abra o documento pela consulta controlada.');send(res,200,controlledViews.register(c,{bytes,mime:'application/pdf',name,project_id:p.id}));return true;}if(process.env.PEE_CONTENT_PROTECTION_ENABLED==='true')fail('Consulte o exemplo em tela. Downloads indisponíveis.',403);res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(name));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
   }
   fail('Operação demonstrativa inválida.',405);
  }};
