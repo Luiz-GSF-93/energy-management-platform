@@ -1,6 +1,6 @@
 {
   "name": "@energyos/pee-core-api",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test template-library.test.mjs audit-workspace.test.mjs rcb-basis.test.mjs navigation.test.mjs test.mjs disabled-mode.test.mjs supabase-auth.test.mjs access.test.mjs project-policy.test.mjs activity.test.mjs project-detail.test.mjs evaluation.test.mjs scoring.test.mjs official-sources.test.mjs audit.test.mjs project-progress.test.mjs communications.test.mjs communications-capacity.test.mjs document-signatures.test.mjs distributor-contact.test.mjs licensed-access.test.mjs license-notices.test.mjs eva-policy.test.mjs licensed-identity.test.mjs portfolio.test.mjs client-portal.test.mjs licensed-mfa.test.mjs content-protection.test.mjs integration/portal-storage.test.mjs integration/portal-http.test.mjs sales-mails.test.mjs",
+    "test": "node --test demonstration.test.mjs check-resolution.test.mjs template-library.test.mjs audit-workspace.test.mjs rcb-basis.test.mjs navigation.test.mjs test.mjs disabled-mode.test.mjs supabase-auth.test.mjs access.test.mjs project-policy.test.mjs activity.test.mjs project-detail.test.mjs evaluation.test.mjs scoring.test.mjs official-sources.test.mjs audit.test.mjs project-progress.test.mjs communications.test.mjs communications-capacity.test.mjs document-signatures.test.mjs distributor-contact.test.mjs licensed-access.test.mjs license-notices.test.mjs eva-policy.test.mjs licensed-identity.test.mjs portfolio.test.mjs client-portal.test.mjs licensed-mfa.test.mjs content-protection.test.mjs integration/portal-storage.test.mjs integration/portal-http.test.mjs sales-mails.test.mjs",
     "pretest": "npm ci --ignore-scripts --strict-ssl=true --no-fund"
   },
   "dependencies": {
