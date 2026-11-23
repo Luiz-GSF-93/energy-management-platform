@@ -13,3 +13,5 @@ Rollout: run checks, apply the transactional migration with short lock timeout, 
 Rollback: revert the code release and restore the prior function definition from migration 20261246 if necessary. Restoring the old function reintroduces the customer-size failure; no data restoration is required because source records are not modified.
 
 Migration 20261355 also repairs the existing continuation gate: legacy HTTP_503 closing-capture failures with zero preparation runs and zero overlapping closings can be reconciled. A valid closing for a different unit does not block this unstarted unit. Provider submission failures, unknown stages, any own preparation run, own or consolidated closing and malformed scope still fail closed. No financial approval or membership gate changes.
+
+Migration 20261356 keeps an accepted continuation with no closing in the active queue. Archived follow-up selects the latest 25 uploads using stable creation order, avoiding idle polling updates hiding newly completed work. The frontend reports queued/preparing closing phases after completed reading instead of a static OCR percentage.
