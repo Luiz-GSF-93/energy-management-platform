@@ -53,7 +53,7 @@ jobs:
         working-directory: backend
       - run: node test/database/owner-verified-publications.test.mjs && node test/database/trading-client-monitor.test.mjs && node test/database/trading-supply.test.mjs && node test/database/trading-workflow.test.mjs && node test/database/trading-quotes.test.mjs && node test/database/trading-workflow-expiry.test.mjs
         working-directory: backend
-      - run: npm run build && node test/database/verify-management-allocations.mjs
+      - run: npm run build && node test/database/verify-management-allocations.mjs && node test/database/verify-management-defaults.mjs
         working-directory: backend
   frontend:
     runs-on: ubuntu-latest

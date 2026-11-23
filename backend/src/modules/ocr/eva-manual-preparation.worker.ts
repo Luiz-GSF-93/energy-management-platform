@@ -11,6 +11,7 @@ import {EvaManualPreparationQueue} from './eva-manual-preparation.queue';
 function preparationDiagnostic(error:unknown){
  try{
   const response=(error as any)?.getResponse?.();
+  if(response?.code==='EVA_CLOSING_COMMAND_UNCONFIRMED'&&['reserve','finish','fee-default'].includes(response.stage))return 'PREPARATION_'+String(response.stage).replace('-','_').toUpperCase()+'_RECEIPT_PENDING';
   if(response?.code==='EVA_CLOSING_SOURCE_TIMEOUT'&&['capture','reserve','finish'].includes(response.stage))return 'PREPARATION_'+String(response.stage).toUpperCase()+'_TIMEOUT';
   if(response?.code==='EVA_READ_UNAVAILABLE'){
    const reads:Record<string,string>={'closing:snapshot':'PREPARATION_SNAPSHOT_TIMEOUT','eva_scoped_closing_action:capture':'PREPARATION_CAPTURE_TIMEOUT','eva_scoped_closing_action:history':'PREPARATION_HISTORY_TIMEOUT'};
