@@ -25,9 +25,33 @@ describe('CCEE historical estimates',()=>{
  it('reads costs from a human-approved EVA report, including a secondary unit in a consolidated report',()=>{const r=cceeCostEstimate([eva()],unit,'2026-05');expect(r.total).toBe('30.00');expect(r.items[0].sources[0]).toMatchObject({approvalEventId:'approval',approvedBy:'manager',revision:null,costId:null});});
  it.each(['hash','state','unit','event','estimated'])('rejects invalid or estimated EVA %s evidence',kind=>{const r=eva();if(kind==='hash')r.payload_hash='b'.repeat(64);if(kind==='state')r.state='INCOMPLETE';if(kind==='unit'){r.report.units[0].id='other';r.payload_hash=reviewDigest(r.report);}if(kind==='event')r.events[0].state='REJECTED';if(kind==='estimated'){r.report.units[0].prepared={ccee:{state:'ESTIMATED'}};r.payload_hash=reviewDigest(r.report);}expect(cceeCostEstimate([r],unit,'2026-05').state).toBe('UNAVAILABLE');});
  it('does not count legacy and EVA representations of the same month twice',()=>expect(cceeCostEstimate([row('2026-04','40.00'),eva()],unit,'2026-05').total).toBe('30.00'));
+ it('does not let a newer approval for another unit hide this unit actual month',()=>{
+  const own=eva(),other=eva();other.id='other-approval';other.version_number=9;other.report.units[0].id='other-unit';other.payload_hash=reviewDigest(other.report);other.events[0].closing_id=other.id;
+  const result=cceeCostEstimate([other,own],unit,'2026-05');
+  expect(result.total).toBe('30.00');expect(result.items[0].sources[0].settlementId).toBe(own.id);
+ });
+ it('weights this unit months even when each month has a newer unrelated unit approval',()=>{
+  const history=['2026-02','2026-03','2026-04'].flatMap((month,i)=>{const own=eva(month),other=eva(month);own.version_number=2;own.report.units[0].fields[0].value.items[0].amount=String((i+1)*10)+'.00';own.payload_hash=reviewDigest(own.report);other.version_number=3;other.report.units[0].id='other-unit';other.payload_hash=reviewDigest(other.report);return [other,own];});
+  expect(cceeCostEstimate(history,unit,'2026-05').total).toBe('23.33');
+ });
+ it('does not fall back to an older actual when this unit latest approval is estimated',()=>{
+  const old=eva(),latest=eva();latest.version_number=9;latest.report.units[0].prepared={ccee:{state:'ESTIMATED'}};latest.payload_hash=reviewDigest(latest.report);
+  expect(cceeCostEstimate([old,latest],unit,'2026-05').state).toBe('UNAVAILABLE');
+ });
 });
 
 describe('Explicit operator CCEE premise',()=>{
  it('preserves amount, author and reason as an estimate without actual historical samples',()=>{expect(operatorCceeEstimate({amount:'2200',reason:'Budget supplied for this unit and month',confirmed:true},'operator','2026-02')).toMatchObject({total:'2200.00',state:'ESTIMATED',method:'OPERATOR_DEFINED',operator:'operator',reviewRequired:true,financialApproval:false,items:[{nature:'ESTIMATED',sources:[]}]});});
  it('does not replace an actual current record or an explicit declaration',()=>{expect(operatorCceeEstimate({amount:'2200',reason:'Budget supplied for this unit and month',confirmed:true},'operator','2026-02',[{category:'CCEE',scenario:'ACL'}]).state).toBe('CURRENT_RECORD');});
+});
+
+function monthly(month='2026-04',amount='40.00',extra:any={}){return {id:'validated-cost',organization_id:'org',customer_id:'customer',consumer_unit_id:'unit',month,version:2,version_number:2,revision:3,status:'VALIDATED',validated_at:'2026-06-01T10:00:00Z',validated_by:'operator',costs:{items:[{id:'monthly-item',category:'CCEE',scenario:'ACL',effect:'COST',label:'CCEE da competência',source:'Extrato real conferido',amount}]},evidenceFormat:'VALIDATED_MONTHLY_COST',...extra};}
+describe('Validated monthly CCEE cost observations',()=>{
+ it('uses a corrected validated cost without requiring republication of the old closing',()=>{const result=cceeCostEstimate([eva(),monthly()],unit,'2026-05');expect(result.total).toBe('40.00');expect(result.items[0].sources[0]).toMatchObject({costId:'validated-cost',revision:3,approvalEventId:null,evidenceKind:'VALIDATED_MONTHLY_COST',validatedBy:'operator'});expect(result.financialApproval).toBe(false);});
+ it('weights real validated months and does not propagate an estimated month',()=>{const estimated=monthly('2026-04','900.00');estimated.costs.items[0].label='Estimativa CCEE revisada';const r=cceeCostEstimate([monthly('2026-02','10.00'),monthly('2026-03','20.00'),estimated],unit,'2026-05');expect(r.total).toBe('16.00');expect(r.items[0].sources).toHaveLength(2);});
+ it.each([{status:'DRAFT'},{validated_at:null},{validated_by:null},{revision:0},{consumer_unit_id:'foreign'},{organization_id:'foreign'},{customer_id:'foreign'},{month:'2026-06'}])('rejects unvalidated or foreign monthly evidence %j',patch=>expect(cceeCostEstimate([monthly('2026-04','40.00',patch)],unit,'2026-05').state).toBe('UNAVAILABLE'));
+ it('does not fall back behind a newer unvalidated cost version',()=>expect(cceeCostEstimate([monthly(),monthly('2026-04','90.00',{version:3,version_number:3,status:'DRAFT'})],unit,'2026-05').state).toBe('UNAVAILABLE'));
+ it('does not accept duplicate latest versions',()=>expect(cceeCostEstimate([monthly(),monthly('2026-04','90.00',{id:'duplicate'})],unit,'2026-05').state).toBe('UNAVAILABLE'));
+ it('preserves a current record and never adds its historical estimate again',()=>expect(cceeCostEstimate([monthly()],unit,'2026-05',[{category:'CCEE',scenario:'ACL',amount:'50.00'}]).state).toBe('CURRENT_RECORD'));
+ it('allows an actual replacement to identify the estimate it replaces without classifying it as estimated',()=>{const cost=monthly();cost.costs.items[0].source='Relatório oficial da competência; substitui a estimativa anterior, sem duplicação.';expect(cceeCostEstimate([cost],unit,'2026-05').total).toBe('40.00');cost.costs.items[0].label='Estimativa CCEE';expect(cceeCostEstimate([cost],unit,'2026-05').state).toBe('UNAVAILABLE');});
 });

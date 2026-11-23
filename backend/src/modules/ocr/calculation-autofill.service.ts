@@ -1,3 +1,4 @@
+import {validatedCceeCostHistory} from './ccee-validated-cost-history';
 import {commercialClosingHistory} from './commercial-closing-history';
 import {supplierInvoiceCostDraft,supplierInvoiceCostIdentity} from './supplier-invoice-cost-draft';
 import {MonthlyCostsService} from '../contracts/services/monthly-costs.service';
@@ -82,6 +83,7 @@ export class CalculationAutofillService{
    const previous=Array.from({length:6},(_,i)=>{const n=Number(month.slice(0,4))*12+Number(month.slice(5))-i-2;return String(Math.floor(n/12))+'-'+String(n%12+1).padStart(2,'0');});
    const closingHistory=await commercialClosingHistory(db,t,unit,u.customer_id,previous,contractClosingDraftEnabled()?(documentedSettlementEnabled()?'DOCUMENTED':'CONTRACT'):'BASE');
    history.push(...closingHistory);
+   if(this.config.get('CCEE_VALIDATED_COST_HISTORY_ENABLED')==='true')history.push(...await validatedCceeCostHistory(db,t.organizationId,u.customer_id,unit,month,previous));
    c.cceeEstimate=cceeCostEstimate(history,u,month,c.cost?.costs?.items??[],c.cost?.costs?.noCosts===true);
    }
   }

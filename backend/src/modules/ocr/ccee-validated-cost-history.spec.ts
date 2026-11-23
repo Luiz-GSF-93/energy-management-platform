@@ -1,0 +1,8 @@
+import {validatedCceeCostHistory} from './ccee-validated-cost-history';
+const scope={organization_id:'org',customer_id:'customer',consumer_unit_id:'unit',month:'2026-04',version:1};
+function db(data:any,error:any=null){const calls:any[]=[];const q:any={then:(resolve:any)=>Promise.resolve({data,error}).then(resolve)};for(const method of ['select','eq','gte','lt','order','limit'])q[method]=(...args:any[])=>{calls.push([method,...args]);return q;};return {client:{from:(name:string)=>{calls.push(['from',name]);return q;}},calls};}
+describe('Tenant-bound validated CCEE cost history',()=>{
+ it('bounds the read by organization, customer, unit, month and count',async()=>{const d=db([scope]);expect(await validatedCceeCostHistory(d.client,'org','customer','unit','2026-05',['2026-04','2026-03'])).toEqual([expect.objectContaining({evidenceFormat:'VALIDATED_MONTHLY_COST',version_number:1})]);expect(d.calls).toEqual(expect.arrayContaining([['eq','organization_id','org'],['eq','customer_id','customer'],['eq','consumer_unit_id','unit'],['gte','month','2026-03'],['lt','month','2026-05'],['limit',101]]));});
+ it.each([{organization_id:'foreign'},{customer_id:'foreign'},{consumer_unit_id:'foreign'},{month:'2026-05'}])('rejects a response outside the authorized scope %j',async patch=>{const d=db([{...scope,...patch}]);await expect(validatedCceeCostHistory(d.client,'org','customer','unit','2026-05',['2026-04'])).rejects.toThrow('fora');});
+ it.each([{data:Array.from({length:101},()=>scope),error:null},{data:null,error:{code:'failure'}}])('refuses partial history %j',async result=>{const d=db(result.data,result.error);await expect(validatedCceeCostHistory(d.client,'org','customer','unit','2026-05',['2026-04'])).rejects.toThrow('indisponível');});
+});
