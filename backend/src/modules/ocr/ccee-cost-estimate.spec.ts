@@ -25,6 +25,19 @@ describe('CCEE historical estimates',()=>{
  it('reads costs from a human-approved EVA report, including a secondary unit in a consolidated report',()=>{const r=cceeCostEstimate([eva()],unit,'2026-05');expect(r.total).toBe('30.00');expect(r.items[0].sources[0]).toMatchObject({approvalEventId:'approval',approvedBy:'manager',revision:null,costId:null});});
  it.each(['hash','state','unit','event','estimated'])('rejects invalid or estimated EVA %s evidence',kind=>{const r=eva();if(kind==='hash')r.payload_hash='b'.repeat(64);if(kind==='state')r.state='INCOMPLETE';if(kind==='unit'){r.report.units[0].id='other';r.payload_hash=reviewDigest(r.report);}if(kind==='event')r.events[0].state='REJECTED';if(kind==='estimated'){r.report.units[0].prepared={ccee:{state:'ESTIMATED'}};r.payload_hash=reviewDigest(r.report);}expect(cceeCostEstimate([r],unit,'2026-05').state).toBe('UNAVAILABLE');});
  it('does not count legacy and EVA representations of the same month twice',()=>expect(cceeCostEstimate([row('2026-04','40.00'),eva()],unit,'2026-05').total).toBe('30.00'));
+ it('does not let a newer approval for another unit hide this unit actual month',()=>{
+  const own=eva(),other=eva();other.id='other-approval';other.version_number=9;other.report.units[0].id='other-unit';other.payload_hash=reviewDigest(other.report);other.events[0].closing_id=other.id;
+  const result=cceeCostEstimate([other,own],unit,'2026-05');
+  expect(result.total).toBe('30.00');expect(result.items[0].sources[0].settlementId).toBe(own.id);
+ });
+ it('weights this unit months even when each month has a newer unrelated unit approval',()=>{
+  const history=['2026-02','2026-03','2026-04'].flatMap((month,i)=>{const own=eva(month),other=eva(month);own.version_number=2;own.report.units[0].fields[0].value.items[0].amount=String((i+1)*10)+'.00';own.payload_hash=reviewDigest(own.report);other.version_number=3;other.report.units[0].id='other-unit';other.payload_hash=reviewDigest(other.report);return [other,own];});
+  expect(cceeCostEstimate(history,unit,'2026-05').total).toBe('23.33');
+ });
+ it('does not fall back to an older actual when this unit latest approval is estimated',()=>{
+  const old=eva(),latest=eva();latest.version_number=9;latest.report.units[0].prepared={ccee:{state:'ESTIMATED'}};latest.payload_hash=reviewDigest(latest.report);
+  expect(cceeCostEstimate([old,latest],unit,'2026-05').state).toBe('UNAVAILABLE');
+ });
 });
 
 describe('Explicit operator CCEE premise',()=>{

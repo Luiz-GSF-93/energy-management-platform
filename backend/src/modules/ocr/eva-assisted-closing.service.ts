@@ -61,6 +61,13 @@ export class EvaAssistedClosingService{
    }
   }
   let publications:any[]=[];if(this.publicationEnabled()&&history.rows?.length){const r=await this.db.getClient().rpc('read_eva_closing_publications',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_portal:false,p_from:scope.month,p_to:scope.month,p_customer:history.rows[0].customer_id});if(r.error||!Array.isArray(r.data))throw new ServiceUnavailableException('Não foi possível conferir a divulgação.');publications=r.data.map((p:any)=>({id:p.id,closingId:p.closingId,state:p.state}));}return {enabled:true,guidedReviewEnabled:process.env.EVA_GUIDED_REVIEW_ENABLED!=='false',approvalPublishes:this.publicationEnabled(),publications,dialogueEnabled:this.config.get('EVA_CLOSING_DIALOGUE_ENABLED')==='true',contextEnabled:this.config.get('EVA_CLOSING_CONTEXT_ENABLED')==='true',changesEnabled:this.config.get('EVA_CLOSING_CHANGES_ENABLED')==='true',unitId:scope.consumerUnitId,month:scope.month,...history};}
+ private async managementDefaults(q:any,t:TenantContext){
+  if(this.config.get('EVA_MANAGEMENT_DEFAULTS_ENABLED')!=='true')return false;
+  const derived=await closingPreparationCommand(this.db.getClient(),'ensure_management_fee_default',{p_org:t.organizationId,p_actor:t.userId,p_unit:q.consumerUnitId,p_month:q.month});
+  if(derived.error)throw new ConflictException('Não foi possível confirmar a regra automática dos honorários. Confira a vigência do contrato e se o rateio inclui as unidades atuais. As fontes foram preservadas.');
+  if(!derived.data||typeof derived.data.created!=='boolean'||derived.data.needsReview)throw new ConflictException('A regra recorrente de honorários foi alterada ou revogada. Confira a regra mensal antes de preparar a nova versão.');
+  return derived.data.created;
+ }
  async dialogueUnit(q:any,t:TenantContext){
   if(!this.enabled())throw new ServiceUnavailableException('Fechamento desligado.');this.scope(q);
   const captured=await this.rpc('capture',q,t,null,{}),u=captured?.financial?.tables?.consumer_units?.find((u:any)=>u.id===q.consumerUnitId&&u.organization_id===t.organizationId);
@@ -72,8 +79,19 @@ export class EvaAssistedClosingService{
   if(!this.enabled()||!ocrDraftRole(t)||!ocrDraftPermission(t)||!t.permissions?.includes(P.ENERGIA_OCR_PROCESS))throw new ForbiddenException('Preparação automática exige acesso interno aos rascunhos da organização.');
   this.scope(q);
   if(!uuid(documentId)||!/^[a-f0-9]{64}$/.test(sourceHash))throw new BadRequestException('Fonte da fatura inválida.');
-  const current:any=await readDeadline('closing:inspect',()=>this.autofill.inspect({consumerUnitId:q.consumerUnitId,month:q.month},t),60000);
-  if(!current.available||!current.canPrepare||current.documentId!==documentId||current.sourceHash!==sourceHash||current.unitId!==q.consumerUnitId||current.month!==q.month||!/^[a-f0-9]{64}$/.test(current.basis??''))throw new ConflictException('Atualize a fonte desta unidade e competência antes de preencher.');
+  let current:any=await readDeadline('closing:inspect',()=>this.autofill.inspect({consumerUnitId:q.consumerUnitId,month:q.month},t),60000);
+  const matches=(value:any)=>value.available&&value.canPrepare&&value.documentId===documentId&&value.sourceHash===sourceHash&&value.unitId===q.consumerUnitId&&value.month===q.month&&/^[a-f0-9]{64}$/.test(value.basis??'');
+  if(!matches(current))throw new ConflictException('Atualize a fonte desta unidade e competência antes de preencher.');
+  if(this.config.get('EVA_MANAGEMENT_DEFAULTS_ENABLED')==='true'){
+   // A first invoice must see the confirmed monthly basis before choosing its
+   // scope. Derivation remains behind the existing scoped permission gate.
+   const rights=await this.rpc('history',{...q,scopeKind:'UNIT'},t,null,{page:0});
+   if(!rights.canPrepare)throw new ForbiddenException('Sem permissão para preparar.');
+   if(await this.managementDefaults(q,t)){
+    current=await readDeadline('closing:inspect',()=>this.autofill.inspect({consumerUnitId:q.consumerUnitId,month:q.month},t),60000);
+    if(!matches(current))throw new ConflictException('A fonte mudou durante a aplicação dos honorários. Reconfira o original antes de continuar.');
+   }
+  }
   const sourceBasis=await this.rpc('capture',{...q,scopeKind:'UNIT'},t,null,{});
   const scopeKind=sharedClosingRequired(sourceBasis,q.month)?'CUSTOMER':'UNIT';
   const completionKey=autofillHash([t.organizationId,scopeKind,q.month,sourceBasis,...(scopeKind==='UNIT'?[q.consumerUnitId,current.basis]:[])]);
@@ -95,11 +113,7 @@ export class EvaAssistedClosingService{
   const q=this.scope({consumerUnitId:b.consumerUnitId,month:b.month,...(b.scopeKind?{scopeKind:b.scopeKind}:{})});
   const rights=await this.rpc('history',q,t,null,{page:0});if(!rights.canPrepare)throw new ForbiddenException('Sem permissão para preparar.');
   const prior=rights.rows.find((r:any)=>r.id===b.requestId);if(prior)return {row:await this.completeOwnedDraftReceipt(prior,q,t),replayed:true};
-  if(this.config.get('EVA_MANAGEMENT_DEFAULTS_ENABLED')==='true'){
-   const derived=await closingPreparationCommand(this.db.getClient(),'ensure_management_fee_default',{p_org:t.organizationId,p_actor:t.userId,p_unit:q.consumerUnitId,p_month:q.month});
-   if(derived.error)throw new ConflictException('Não foi possível confirmar a regra automática dos honorários. Confira a vigência do contrato e se o rateio inclui as unidades atuais. As fontes foram preservadas.');
-   if(!derived.data||typeof derived.data.created!=='boolean'||derived.data.needsReview)throw new ConflictException('A regra recorrente de honorários foi alterada ou revogada. Confira a regra mensal antes de preparar a nova versão.');
-  }
+  await this.managementDefaults(q,t);
   let sources=await this.rpc('capture',q,t,null,{});const all=sources?.financial?.tables?.consumer_units;
   if(!Array.isArray(all)||!all.length||all.length>100||new Set(all.map((u:any)=>u.id)).size!==all.length)throw new ConflictException('Conjunto completo de unidades indisponível.');
   const primary=all.find((u:any)=>u.id===q.consumerUnitId);if(!primary)throw new ForbiddenException('Unidade fora do escopo.');

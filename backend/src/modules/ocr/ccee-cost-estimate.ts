@@ -26,7 +26,9 @@ function evidence(r:any,unit:any,month:string){
 export function cceeCostEstimate(rows:any[],unit:any,month:string,currentItems:any[]=[],currentNoCosts=false){
  const result:any={format:'ccee-weighted-estimate-1',month,state:'UNAVAILABLE',method:'RECENCY_3_2_1',items:[],total:null,reviewRequired:true,financialApproval:false,observations:['Estimativa CCEE: revisar no backoffice antes de aprovar. Garantias e penalidades não são projetadas automaticamente.']};
  if(currentNoCosts||currentItems.some(i=>i.category==='CCEE'&&i.scenario==='ACL'))return {...result,state:'CURRENT_RECORD',observations:['Registro ou declaração atual preservado; nenhuma estimativa o substitui.']};
- const scoped=rows.filter(r=>r.organization_id===unit.organization_id&&r.customer_id===unit.customer_id&&(r.evidenceFormat==='EVA_APPROVED'||r.consumer_unit_id===unit.id)&&String(r.month).slice(0,7)<month&&monthNumber(month)-monthNumber(String(r.month).slice(0,7))<=6);
+ // Rank versions only after binding each approved report to this unit. A newer
+ // approval for another unit must not hide this unit's actual monthly source.
+ const scoped=rows.filter(r=>r.organization_id===unit.organization_id&&r.customer_id===unit.customer_id&&(r.evidenceFormat==='EVA_APPROVED'?Array.isArray(r.report?.units)&&r.report.units.some((u:any)=>u.id===unit.id):r.consumer_unit_id===unit.id)&&String(r.month).slice(0,7)<month&&monthNumber(month)-monthNumber(String(r.month).slice(0,7))<=6);
  const months=[...new Set(scoped.map(r=>String(r.month).slice(0,7)))].sort().reverse();
  const samples=new Map<string,any[]>();
  for(const m of months){
