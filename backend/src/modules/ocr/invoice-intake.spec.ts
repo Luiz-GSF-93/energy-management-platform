@@ -27,3 +27,9 @@ describe('invoice identity intake',()=>{
  it('missing registration cannot match',()=>{const result=assessInvoiceIntake(fixture(),{...context,customer:null,unit:null});expect(result.checks.filter(c=>['customer','taxId','unit','address','market'].includes(c.field)).every(c=>c.state==='REVIEW')).toBe(true);});
  it('does not certify an arbitrary PDF as electricity invoice',()=>expect(check({content:'Recibo de aluguel',pages:[],documents:[]},'documentType').message).toContain('Não foi possível'));
 });
+
+it('reconciles only an exact legal-name core, keeping independent identity checks and human financial approval',()=>{
+ const raw=fixture();raw.documents[0].fields.CustomerName.content='Cliente Teste EIRELI';
+ expect(check(raw,'customer').state).toBe('MATCH');expect(assessInvoiceIntake(raw,context).canImport).toBe(false);
+ raw.documents[0].fields.CustomerName.content='Cliente Outra EIRELI';expect(check(raw,'customer').state).toBe('MISMATCH');
+});

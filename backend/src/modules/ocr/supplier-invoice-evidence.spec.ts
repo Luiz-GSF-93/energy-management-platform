@@ -34,3 +34,18 @@ describe('Scoped supplier fiscal confirmation',()=>{
   it('records explicit human installation evidence without claiming native UC/address matches',()=>{const {c,e}=make();expect(confirmedSupplierInstallation(c,e)?.installationIdentity).toMatchObject({matched:true,matchedBy:'OPERATOR_CONFIRMATION',unitMatch:false,addressMatch:false,actor:'actor',unitId:'unit'});});
   it.each(['unit','month','hash','author','multiple','missing-ack'])('does not accept %s as installation evidence',kind=>{const {c,e}:any=make();if(kind==='unit')e.reviewProposals[0].installationReview.unitId='other';if(kind==='month')e.reviewProposals[0].month='2026-02';if(kind==='hash')c.manualOverrides.supplierInvoiceAllocation.fileHash='b'.repeat(64);if(kind==='author')c.manualAuthor=null;if(kind==='multiple')e.documents.push({id:'other'});if(kind==='missing-ack')delete c.manualOverrides.supplierInvoiceAllocation.installationConfirmation;expect(confirmedSupplierInstallation(c,e)).toBeNull();});
  });
+
+it('records documented loss coverage without changing invoice quantity, price or amount, and exposes a real shortfall',()=>{
+ const c=context();c.manualAuthor='operator';c.manualOverrides.supplierInvoiceAllocation={...allocation(),lossReference:{percent:'3.0356',source:'Documented monthly performance report approved loss proportion.'}};
+ const before=JSON.stringify(c.supplierInvoiceProposal),r=supplierInvoiceEvidenceDraft(c);
+ expect((r as any)?.energyCoverage).toMatchObject({consumptionMwh:'1.600000000000',lossPercent:'3.0356',requiredMwh:'1.648569600000',invoiceMwh:'1.5000',shortfallMwh:'0.148569600000',state:'SHORTFALL',financialApproval:false});
+ expect(r?.requirements.some(v=>v.code==='SUPPLIER_ENERGY_COVERAGE')).toBe(true);expect(JSON.stringify(c.supplierInvoiceProposal)).toBe(before);
+ c.supplierInvoiceProposal.quantityMwh='1.7000';expect((supplierInvoiceEvidenceDraft(c) as any)?.energyCoverage.state).toBe('COVERED');
+});
+it.each([{percent:'-3',source:'Verified report source reference.'},{percent:'3',source:'short'},{percent:'3',source:'Verified report source reference.',autoApprove:true}])('rejects unsupported loss evidence %j',lossReference=>expect(()=>supplierInvoiceAllocationInput({...allocation(),lossReference})).toThrow());
+
+it('uses an explicitly allocated PROINFA volume for energy coverage without subtracting money from the NF',()=>{
+ const c=context();c.manualAuthor='operator';c.manualOverrides.supplierInvoiceAllocation={...allocation(),lossReference:{percent:'3.0356',source:'Monthly report loss ratio confirmed by operator.'},energyCredit:{kind:'PROINFA',quantityMwh:'0.200',source:'Monthly PROINFA volume and allocation confirmed by operator.'}};
+ const r=supplierInvoiceEvidenceDraft(c);expect((r as any)?.energyCoverage).toMatchObject({availableMwh:'1.700000000000',creditMwh:'0.200000000000',shortfallMwh:'0.000000000000',state:'COVERED'});expect(r?.supplier.totalAmount).toBe('300.00');expect(r?.financialApproval).toBe(false);
+ c.manualOverrides.supplierInvoiceAllocation.energyCredit.quantityMwh='-1';expect(supplierInvoiceEvidenceDraft(c)?.state).toBe('PENDING');
+});

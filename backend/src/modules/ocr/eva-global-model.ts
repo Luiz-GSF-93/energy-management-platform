@@ -127,3 +127,18 @@ export function verifiedGlobalPreparation(evidence:AiEvidence[],advice:any){
  for(const e of evidence)if(e.fieldKey&&!seen.has(e.fieldKey)){seen.add(e.fieldKey);fields.push({key:e.fieldKey,label:e.label,value:e.value,evidenceId:e.id,origin:'OCR_MAPPED',source:e.source});}
  return {version:2,state:fields.length?'PREPARED':'NO_EVIDENCE',fields,rejected:proposed.length-fields.filter(f=>f.origin==='OCR_AI_VERIFIED').length,automaticFinancialApproval:false};
 }
+
+/** A draft may use independent original identity plus fully reconciled financial
+ * transcription when generic OCR identity fields are absent. This never approves
+ * a financial record, edits OCR confidence, or accepts an uncertain amount. */
+export function documentedInvoiceProposalReady(raw:any,layout:any,identity:any){
+ if(!sourcePreparationEnabled()||identity?.state!=='MATCH'||!/^[a-f0-9]{64}$/.test(identity.fileHash??'')||layout?.reconciliation?.state!=='MATCH')return false;
+ const taxes=layout.taxReconciliation?.checks;
+ if(!Array.isArray(taxes)||['icmsAmount','pisAmount','cofinsAmount'].some(key=>taxes.filter(t=>t.key===key&&t.state==='MATCH_EXTRACTED'&&t.declared!==null&&t.declared===t.extracted).length!==1))return false;
+ const operations=list(layout.operations),rows=operations.filter(r=>['CHARGE','CREDIT'].includes(r.role));
+ if(!rows.length||rows.length>80||operations.some(r=>r.role==='UNKNOWN')||new Set(rows.map(r=>r.source)).size!==rows.length)return false;
+ const verified=(f:any)=>{const p=globalFieldEvidence(raw,f);return p.filled&&p.confidence!==null&&p.confidence>0.85;};
+ const totals=operations.filter(r=>r.component==='TOTAL_A_PAGAR');
+ if(totals.length!==1||!verified(totals[0].fields.amount)||!/^\d+(?:\.\d{1,2})?$/.test(totals[0].fields.amount.decimal??''))return false;
+ return rows.every(r=>r.source&&!list(r.issues).some(i=>['UNVERIFIED_SOURCE','MERGED_OR_DUPLICATE_CELL','UNMAPPED_COMPONENT','UNMAPPED_COLUMN'].includes(i))&&!['DIVERGENT','DIFFERENCE'].includes(r.arithmetic?.state)&&verified(r.fields.description)&&verified(r.fields.amount)&&/^-?\d+(?:\.\d{1,2})?$/.test(r.fields.amount.decimal??'')&&['quantity','unit','aneelRate','grossRate','icmsAmount','pisAmount','cofinsAmount'].every(key=>!r.fields[key]?.text?.trim()||verified(r.fields[key])));
+}

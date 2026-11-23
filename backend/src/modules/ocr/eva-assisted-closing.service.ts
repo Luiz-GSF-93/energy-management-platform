@@ -1,3 +1,5 @@
+import {customerEnergyNetting,applyEnergyNettingToDraft} from './customer-energy-netting';
+import {calculationAutofillPlan} from './calculation-autofill.model';
 import {closingPreparationCommand} from './closing-preparation-command';
 import {readDeadline,readRpc} from '../../common/services/read-deadline';
 import {supplierInvoiceCostDraft,SUPPLIER_COST_DRAFT_VERSION} from './supplier-invoice-cost-draft';
@@ -151,7 +153,13 @@ export class EvaAssistedClosingService{
   if(documentedSettlementEnabled())for(const e of entries){const proof=e.context?.documentedSupplierInvoice;if(proof&&!(sources.documentedSupplierDocuments??[]).some((d:any)=>d.id===proof.id&&d.organization_id===t.organizationId&&d.customer_id===primary.customer_id&&d.consumer_unit_id===e.unitId&&d.file_hash===proof.file_hash&&d.file_verified===true&&String(d.reference_month).slice(0,7)===q.month))throw new ConflictException('A nota documentada mudou durante a captura. Reconfira antes de preparar.');}
   if(documentedSettlementEnabled())for(const e of entries){const group=e.context?.contractDraft?.source;if(!group?.invoiceSetHash)continue;if(!supplierInvoiceSetCaptureMatches(group,sources.documentedSupplierDocuments??[],{organizationId:t.organizationId,customerId:primary.customer_id,unitId:e.unitId,month:q.month}))throw new ConflictException('Uma das notas do conjunto mudou durante a captura. Reconfira todas as fontes antes de preparar.');}
   if(q.scopeKind==='UNIT'&&sharedClosingRequired(sources,q.month))entries[0].scopeRequirement='Honorário variável compartilhado: prepare o consolidado do cliente para calcular economia e rateio com todas as unidades.';
+  const energyNetting=customerEnergyNetting(entries,t.organizationId,primary.customer_id,q.month,q.scopeKind);
+  if(energyNetting.accepted)for(const e of entries){
+   e.context={...e.context,contractDraft:applyEnergyNettingToDraft(e.plan.contractDraft,energyNetting.proof)};
+   e.plan=calculationAutofillPlan(e.context,sources.libraries??[]);
+  }
   const report=assistedClosingReport(t.organizationId,primary.customer_id,q.month,entries);
+  if(energyNetting.accepted)(report as any).energyCoverageNetting=energyNetting.proof;
   (report as any).documentRequests=closingDocumentRequests(sources,q.month,entries.map(entry=>entry.unitId));
   if(q.scopeKind==='UNIT'){(report as any).scope={kind:'UNIT',unitIds:[q.consumerUnitId]};const unitReport=report.units.find((u:any)=>u.id===q.consumerUnitId);if(unitReport)unitReport.sources.cceeLocal=await closingCceeLocal(this.db.getClient(),t,primary,q.month);}
 

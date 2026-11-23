@@ -135,7 +135,7 @@ export class CalculationAutofillService{
   const token=autofillHash({basis,actor:t.userId,plan,resolution:c.token});
   return {available:true as const,unit,month,documentId:c.document.id,sourceHash:c.document.file_hash,basis,token,c,plan};
  }
- private output(c:Awaited<ReturnType<CalculationAutofillService['context']>>,t:TenantContext){if(!c.available)return {enabled:true,available:false,percent:0,canPrepare:false,observations:[c.observation],unitId:c.unit,month:c.month};return {enabled:true,available:true,unitId:c.unit,month:c.month,documentId:c.documentId,sourceHash:c.sourceHash,basis:c.basis,token:c.token,canPrepare:this.canWrite(t),...c.plan};}
+ private output(c:Awaited<ReturnType<CalculationAutofillService['context']>>,t:TenantContext){if(!c.available)return {enabled:true,available:false,percent:0,canPrepare:false,observations:[c.observation],unitId:c.unit,month:c.month};return {enabled:true,available:true,unitId:c.unit,customerId:c.c.unit.customer_id,month:c.month,documentId:c.documentId,sourceHash:c.sourceHash,basis:c.basis,token:c.token,canPrepare:this.canWrite(t),...c.plan};}
  async assertOfficialFlagReferences(report:any,t:TenantContext){
   if(!this.officialFlags)return;if(report?.organizationId!==t.organizationId||!Array.isArray(report.units))throw new ConflictException('Referência oficial fora da organização.');
   const current=await this.officialFlags.reference(t.organizationId,report.month);

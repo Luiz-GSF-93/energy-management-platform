@@ -1,3 +1,4 @@
+import {invoiceCustomerNameMatches} from './invoice-customer-name';
 import { extractInvoiceEvidence, OcrEvidence } from './invoice-evidence';
 export type CheckState = 'MATCH' | 'MISMATCH' | 'REVIEW';
 export interface IntakeCheck { field:string; label:string; state:CheckState; message:string; confidence:number|null; pages:number[]; }
@@ -28,7 +29,7 @@ export function assessInvoiceIntake(raw:Record<string,any>,context:IntakeContext
  const compare=(field:string,label:string,value:OcrEvidence|null,expected:unknown,format:(s:string)=>string=normalize)=>{
   const actual=value?format(value.content):'';const target=typeof expected==='string'?format(expected):'';
   let state:CheckState='REVIEW';let message='Informação ausente, ambígua ou sem evidência suficiente; conferir a fatura e o cadastro.';
-  if(actual&&target&&value?.pages.length&&value.spans.length&&value.confidence!==null&&value.confidence>0.85){state=actual===target?'MATCH':'MISMATCH';message=state==='MATCH'?'Compatível com o cadastro consultado.':'Divergência entre a fatura e o cadastro selecionado. Importação bloqueada.';}
+  if(actual&&target&&value?.pages.length&&value.spans.length&&value.confidence!==null&&value.confidence>0.85){state=(actual===target||field==='customer'&&invoiceCustomerNameMatches(value.content,String(expected??'')))?'MATCH':'MISMATCH';message=state==='MATCH'?'Compatível com o cadastro consultado.':'Divergência entre a fatura e o cadastro selecionado. Importação bloqueada.';}
   else if(value?.confidence!==null&&value?.confidence!==undefined&&value.confidence<0.45)message='Confiança abaixo de 45%; processamento automático rejeitado.';
   else if(value?.confidence!==null&&value?.confidence!==undefined&&value.confidence<=0.85)message='Confiança entre 45% e 85%; conferência pelo Expert obrigatória.';
   checks.push({field,label,state,message,confidence:value?.confidence??null,pages:value?.pages??[]});

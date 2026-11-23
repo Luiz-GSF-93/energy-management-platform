@@ -8,6 +8,16 @@ function fixture(){
 }
 describe('Demand contracted explicitly in the current invoice panel',()=>{
  it('uses the invoice quantity for this competence and freezes its original provenance without editing the registration',()=>{const c=fixture(),r=withInvoiceDemand(c);expect(r.unit.contracted_demand).toBe('500');expect(c.unit.contracted_demand).toBe(0);expect(r.closingDemandSource).toMatchObject({documentId:'doc',hash:c.document.file_hash,month:'2026-02',values:[{band:'ALL',amount:'500',pages:[1]}],registered:{single:0}});expect(closingDemandContext(r,{},c.month)).toBe(r);});
- it.each(['foreignUnit','foreignCustomer','foreignOrg','hash','identity','month','unverified','ambiguous','offRow','history','span','label'])('does not substitute a quantity from %s',kind=>{const c=fixture();if(kind==='foreignUnit')c.document.consumer_unit_id='foreign';if(kind==='foreignCustomer')c.document.customer_id='foreign';if(kind==='foreignOrg')c.document.organization_id='foreign';if(kind==='hash')c.originalIdentity.fileHash='b'.repeat(64);if(kind==='identity')c.originalIdentity.state='REVIEW';if(kind==='month')c.month='2026-03';if(kind==='unverified')c.document.file_verified=false;if(kind==='ambiguous')c.source.raw.pages[0].lines.push({...c.source.raw.pages[0].lines[2]});if(kind==='offRow')c.source.raw.pages[0].lines[2].polygon=[7.5,9,7.7,9,7.7,9.08,7.5,9.08];if(kind==='history')c.source.raw.pages[0].pageNumber=3;if(kind==='span')c.source.raw.pages[0].lines[2].spans=[{offset:0,length:3}];if(kind==='label')c.source.raw.pages[0].lines[1].content='Demanda medida kW';expect(invoiceDemandReference(c)).toBeNull();expect(withInvoiceDemand(c)).toBe(c);});
+ it.each(['foreignUnit','foreignCustomer','foreignOrg','hash','identity','month','unverified','ambiguous','offRow','span','label'])('does not substitute a quantity from %s',kind=>{const c=fixture();if(kind==='foreignUnit')c.document.consumer_unit_id='foreign';if(kind==='foreignCustomer')c.document.customer_id='foreign';if(kind==='foreignOrg')c.document.organization_id='foreign';if(kind==='hash')c.originalIdentity.fileHash='b'.repeat(64);if(kind==='identity')c.originalIdentity.state='REVIEW';if(kind==='month')c.month='2026-03';if(kind==='unverified')c.document.file_verified=false;if(kind==='ambiguous')c.source.raw.pages[0].lines.push({...c.source.raw.pages[0].lines[2]});if(kind==='offRow')c.source.raw.pages[0].lines[2].polygon=[7.5,9,7.7,9,7.7,9.08,7.5,9.08];if(kind==='span')c.source.raw.pages[0].lines[2].spans=[{offset:0,length:3}];if(kind==='label')c.source.raw.pages[0].lines[1].content='Demanda medida kW';expect(invoiceDemandReference(c)).toBeNull();expect(withInvoiceDemand(c)).toBe(c);});
  it('does not infer a blue contracted split from a single green quantity',()=>{const c=fixture();c.unit.tariff_modality='BLUE';expect(invoiceDemandReference(c)).toBeNull();});
+});
+
+it('reads a complete contracted panel on a later physical PDF page and retains page provenance',()=>{
+ const c=fixture();c.source.raw.pages[0].pageNumber=4;
+ expect(invoiceDemandReference(c)?.values[0]).toMatchObject({amount:'500',pages:[4],source:'pages[3].lines[2]'});
+});
+it('accepts identical repeated panels without doubling the contract and rejects conflicting repeats',()=>{
+ const c=fixture(),copy=structuredClone(c.source.raw.pages[0]);copy.pageNumber=4;c.source.raw.pages.push(copy);
+ expect(invoiceDemandReference(c)?.values[0]).toMatchObject({amount:'500',pages:[1,4]});
+ copy.lines[2].content='501';expect(invoiceDemandReference(c)).toBeNull();
 });
