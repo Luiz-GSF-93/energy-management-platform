@@ -1,3 +1,4 @@
+import {closingPreparationCommand} from './closing-preparation-command';
 import {readDeadline,readRpc} from '../../common/services/read-deadline';
 import {supplierInvoiceCostDraft,SUPPLIER_COST_DRAFT_VERSION} from './supplier-invoice-cost-draft';
 import {preparationPolicy} from './eva-preparation-policy';
@@ -34,7 +35,7 @@ export class EvaAssistedClosingService{
   const contractDraft=contractClosingDraftEnabled();
   const documented=documentedSettlementEnabled()&&contractDraft;
   const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_disclose:disclose,p_mode:documented?'DOCUMENTED':contractDraft?'CONTRACT':'BASE',p_scope:q.scopeKind??'CUSTOMER',p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body};
-  const r=['history','capture'].includes(action)?await readRpc(this.db.getClient(),'eva_scoped_closing_action',args):await this.db.getClient().rpc('eva_scoped_closing_action',args);
+  const r=['history','capture'].includes(action)?await readRpc(this.db.getClient(),'eva_scoped_closing_action',args):['reserve','finish'].includes(action)?await closingPreparationCommand(this.db.getClient(),'eva_scoped_closing_action',args):await this.db.getClient().rpc('eva_scoped_closing_action',args);
   if(!r.error&&r.data!=null)return r.data;
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso restrito ao backoffice autorizado.');
   if(['23505','PT409','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
@@ -94,6 +95,11 @@ export class EvaAssistedClosingService{
   const q=this.scope({consumerUnitId:b.consumerUnitId,month:b.month,...(b.scopeKind?{scopeKind:b.scopeKind}:{})});
   const rights=await this.rpc('history',q,t,null,{page:0});if(!rights.canPrepare)throw new ForbiddenException('Sem permissão para preparar.');
   const prior=rights.rows.find((r:any)=>r.id===b.requestId);if(prior)return {row:await this.completeOwnedDraftReceipt(prior,q,t),replayed:true};
+  if(this.config.get('EVA_MANAGEMENT_DEFAULTS_ENABLED')==='true'){
+   const derived=await closingPreparationCommand(this.db.getClient(),'ensure_management_fee_default',{p_org:t.organizationId,p_actor:t.userId,p_unit:q.consumerUnitId,p_month:q.month});
+   if(derived.error)throw new ConflictException('Não foi possível confirmar a regra automática dos honorários. Confira a vigência do contrato e se o rateio inclui as unidades atuais. As fontes foram preservadas.');
+   if(!derived.data||typeof derived.data.created!=='boolean'||derived.data.needsReview)throw new ConflictException('A regra recorrente de honorários foi alterada ou revogada. Confira a regra mensal antes de preparar a nova versão.');
+  }
   let sources=await this.rpc('capture',q,t,null,{});const all=sources?.financial?.tables?.consumer_units;
   if(!Array.isArray(all)||!all.length||all.length>100||new Set(all.map((u:any)=>u.id)).size!==all.length)throw new ConflictException('Conjunto completo de unidades indisponível.');
   const primary=all.find((u:any)=>u.id===q.consumerUnitId);if(!primary)throw new ForbiddenException('Unidade fora do escopo.');
