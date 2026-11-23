@@ -24,3 +24,15 @@ it('does not mix issuer headers from continuation pages into the recipient addre
 it('uses the explicit recipient CNPJ band when the printed company name changed',()=>{const d=intakeIdentityDiagnostic([{page:1,text:'DANF3E\nRUA EMITENTE 1632\nNOME ANTIGO DO CLIENTE\nR ITANHAEM 2957\nUC 1234567\nINSC. EST: 123 / CNPJ: 11.222.333/0001-81\nNOTA FISCAL Nº 123\nReferencia JUL/2026'}],c,{...u,address:'R ITANHAEM 2957 VL ELISA'},'a'.repeat(64),'2026-07');expect(d?.fields[0].status).toBe('MATCH');expect(d?.fields[1].found).toContain('R ITANHAEM 2957');});
 
 it('does not require or invent a UC on a supplier NF identified by address and CNPJ',()=>{const text='DANFE CNPJ DESTINATARIO / REMETENTE\nEMPRESA SINTETICA 11.222.333/0001-81 RUA EXEMPLO 123\nFATURA / DUPLICATAS\nDADOS DO PRODUTO / SERVICO\nENERGIA ELETRICA fornecida no mes de julho/2026\nDADOS ADICIONAIS';const d=intakeIdentityDiagnostic([{page:1,text}],c,u,'a'.repeat(64),'2026-07');expect(d?.documentType).toBe('INVOICE_SUPPLIER');expect(d?.fields[2]).toMatchObject({found:[],status:'INCONCLUSIVE'});expect(d?.fields[1].status).toBe('MATCH');});
+
+it('uses the actual CPFL recipient page when physical pages are reordered and legal suffix changed',()=>{
+ const customer={...c,company_name:'FABRICA DE PECAS EXEMPLO LTDA'},target={...u,address:'AV EXEMPLO 246 DISTRITO INDUSTRIAL'};
+ const pages=[{page:1,text:'DANF3E\nRUA EMITENTE 1632\nFABRICA DE PECAS EXEMPLO EIRELI\nAV EXEMPLO 246\nConsumo ponta JAN 26'},
+ {page:2,text:'DANF3E\nRUA EMITENTE 1632\nFABRICA DE PECAS EXEMPLO EIRELI\nAV EXEMPLO 246 DISTRITO INDUSTRIAL\nInstalacao 7654321\nINSC. EST: 123 / CNPJ: 11.222.333/0001-81\nNOTA FISCAL Nº 123\nRef: mes/ano\nJAN/2026'}];
+ expect(intakeIdentityDiagnostic(pages,customer,target,'a'.repeat(64),'2026-01')).toMatchObject({action:'CONTINUE_JUSTIFIED',unitCode:'7654321',fields:expect.arrayContaining([expect.objectContaining({key:'taxId',status:'MATCH'}),expect.objectContaining({key:'address',status:'MATCH'}),expect.objectContaining({key:'period',status:'MATCH'})])});
+});
+it('preserves a split AV glyph in a supplier fiscal address for source-bound human continuation',()=>{
+ const text='DANFE\nDADOS DO PRODUTO / SERVICO\nProtocolo de autorizacao de uso\n123456\nEMPRESA SINTETICA\n11.222.333/0001-81\nA V EXEMPLO FISCAL, 246\nCALCULO DO IMPOSTO\nFATURAMENTO REF 01/2026';
+ const d=intakeIdentityDiagnostic([{page:1,text}],c,u,'a'.repeat(64),'2026-01');
+ expect(d?.fields[1]).toMatchObject({status:'MISMATCH',found:['A V EXEMPLO FISCAL, 246']});expect(d?.fields[2]).toMatchObject({status:'INCONCLUSIVE',found:[]});expect(d?.action).toBe('REVIEW');
+});
