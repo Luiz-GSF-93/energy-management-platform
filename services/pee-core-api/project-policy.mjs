@@ -37,7 +37,9 @@ export function projectIssues(project,simulations,documents,rule){
  for(const req of rule?.requirements??[])if(!project.requirement_answers?.[req.id]?.answer?.trim()||req.document_required&&!own.some(d=>d.requirement_id===req.id))issues.push('Exigência do edital: '+req.label);
  let economy=null;try{economy=aggregate(project,simulations);}catch(e){issues.push(e.message);}
  if(economy?.coincidence_pending)issues.push('Comprovação de simultaneidade da demanda na ponta');
- if(economy&&typeof rule?.max_rcb==='number'&&economy.rcb>rule.max_rcb)issues.push('RCB acima do limite cadastrado do edital');
+ // The reviewed qualification evaluates PEE-only limits with reconciled resource funding.
+ // Comparing the total here would wrongly reject a valid counterpart-funded proposal.
+ if(economy&&rule?.rcb_basis!=='pee'&&typeof rule?.max_rcb==='number'&&economy.rcb>rule.max_rcb)issues.push('RCB acima do limite cadastrado do edital');
  return {issues:[...new Set(issues)],completeness:Math.max(0,100-Math.min(100,issues.length*5)),economy,approval_probability:null};
 }
 export const phases=['Elaboração','Revisão técnica','Pronto para submissão','Submetido','Em avaliação','Diligência','Aprovado','Cadastro de reserva','Reprovado','Execução','Medição e verificação','Concluído'];
