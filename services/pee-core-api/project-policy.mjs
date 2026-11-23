@@ -25,7 +25,7 @@ export function aggregate(project,simulations){
  return {energy_mwh:energy,demand_kw:demand,investment,om,annual_cost:annualCost,annual_benefit:benefit,rcb:annualCost/benefit,measures:chosen.length,warning:'Estimativa de engenharia. Confirmar custos anualizados, custos evitados, contrapartidas, vida útil e metodologia na planilha oficial do edital.',coincidence_pending:chosen.length>1&&e.coincidence_confirmed!==true};
 }
 export function projectIssues(project,simulations,documents,rule){
- const issues=[];for(const [key,label]of Object.entries(requiredSections))if(!project.sections?.[key]?.trim())issues.push(label);
+ const issues=[];if(project.demonstration?.example_only===true)issues.push('Projeto demonstrativo: documentos fictícios não habilitam submissão real. Substitua as evidências e conclua a revisão formal em um projeto real.');for(const [key,label]of Object.entries(requiredSections))if(!project.sections?.[key]?.trim())issues.push(label);
  for(const [k,label]of [['company_id','Empresa beneficiária'],['unit_id','Unidade consumidora'],['distributor','Distribuidora'],['call_name','Chamada pública'],['call_url','Fonte oficial do edital']])if(!project[k])issues.push(label);
  const chosen=simulations.filter(s=>s.selected&&s.project_id===project.id);
  if(!chosen.length)issues.push('Seleção de medidas');
