@@ -115,6 +115,49 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  await assert.rejects(()=>scoped('decide',id(1),id(46),decision,'UNIT',id(24),'manager'),e=>e.message==='Shared variable fee requires consolidated closing');checks++;
  ok((await scoped('history',id(1),null,{page:0})).rows[0].state==='READY_FOR_REVIEW');
 
+
+ // Sibling preparation receipts cannot invalidate an independent unit closing.
+ await capture([rule]);
+ const sourceGuard=fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261353_eva_unit_commercial_source_consistency.sql'),'utf8');
+ await db.exec(sourceGuard);await db.exec(sourceGuard);await call('finish',id(43),{});
+ const commercial=[{id:'own-receipt',consumer_unit_id:id(1),state:'PARTIAL',source_hash:'a'.repeat(64),source_basis:'b'.repeat(64),manual:{price:'10.00'},author:id(20)},{id:'sibling-receipt',consumer_unit_id:id(3),state:'PARTIAL',source_hash:'d'.repeat(64),source_basis:'e'.repeat(64),manual:{price:'20.00'},author:id(20)}];
+ await db.exec('CREATE TABLE test_commercial_sources(payload jsonb)');await db.query('INSERT INTO test_commercial_sources VALUES($1)',[JSON.stringify(commercial)]);
+ const capturedDefinition=(await db.query("SELECT pg_get_functiondef('public.capture_eva_assisted_closing_sources(text,text,text)'::regprocedure) d")).rows[0].d;
+ assert(capturedDefinition.includes('RETURN base;'));
+ await db.exec(capturedDefinition.replace('RETURN base;',"RETURN jsonb_set(base,'{commercial}',(SELECT payload FROM public.test_commercial_sources));"));
+ const setCommercial=rows=>db.query('UPDATE test_commercial_sources SET payload=$1',[JSON.stringify(rows)]);
+ const matches=(a,b,scope='UNIT',u=id(1))=>db.query('SELECT eva_closing_sources_match($1,$2,$3,$4) value',[JSON.stringify(a),JSON.stringify(b),scope,u]).then(r=>r.rows[0].value);
+ const baseSources=await scoped('capture',id(1),null,{}),changedSibling={...commercial[1],id:'new-sibling-receipt',source_basis:'f'.repeat(64)};
+ const siblingSources={...baseSources,commercial:[commercial[0],changedSibling]};
+ ok(await matches(baseSources,siblingSources));ok(!await matches(baseSources,siblingSources,'CUSTOMER'));
+ for(const change of [{source_hash:'0'.repeat(64)},{source_basis:'0'.repeat(64)},{manual:{price:'99.00'}},{author:id(24)},{state:'RUNNING'},{state:'UNKNOWN'}])ok(!await matches(baseSources,{...baseSources,commercial:[{...commercial[0],...change},commercial[1]]}));
+ for(const key of ['financial','libraries','previous','documentedSupplierDocuments','demandDocuments','operationalFlow','contractMemories'])ok(!await matches(baseSources,{...baseSources,[key]:{changed:true}}));
+ for(const malformed of [{...baseSources,commercial:{}},{...baseSources,commercial:[{},commercial[0]]},{...baseSources,commercial:[commercial[0],commercial[0]]}])ok(!await matches(baseSources,malformed));
+ ok(!await matches(baseSources,baseSources,'INVALID'));ok(!await matches(null,baseSources));
+ for(const role of ['anon','authenticated','service_role'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_closing_sources_match(jsonb,jsonb,text,text)','EXECUTE') value",[role])).rows[0].value);
+ await setCommercial([commercial[0],changedSibling]);
+ const independent={...ub,basis:'6'.repeat(64),sources:baseSources};
+ ok((await scoped('reserve',id(1),id(70),independent)).acquired);
+ await setCommercial([commercial[0],{...changedSibling,id:'sibling-after-reserve'}]);
+ ok((await scoped('finish',id(1),id(70),{})).state==='READY_FOR_REVIEW');
+ await setCommercial([commercial[0],{...changedSibling,id:'sibling-before-approval'}]);
+ await deny(()=>scoped('decide',id(1),id(70),decision));
+ await deny(()=>scoped('decide',id(1),id(70),{...decision,hash:'0'.repeat(64)},'UNIT',id(24),'manager'));
+ await deny(()=>scoped('decide',id(1),id(70),decision,'UNIT',id(24),'manager','other'));
+ ok((await scoped('decide',id(1),id(70),decision,'UNIT',id(24),'manager')).state==='APPROVED');
+ const retained=(await db.query('SELECT source_snapshot,payload_hash FROM eva_assisted_closing_versions WHERE id=$1',[id(70)])).rows[0];assert.deepEqual(retained.source_snapshot,baseSources);ok(retained.payload_hash===independent.hash);
+ const eventTotal=(await db.query('SELECT count(*) count FROM eva_assisted_closing_events WHERE closing_id=$1',[id(70)])).rows[0].count;
+ await scoped('decide',id(1),id(70),decision,'UNIT',id(24),'manager');ok((await db.query('SELECT count(*) count FROM eva_assisted_closing_events WHERE closing_id=$1',[id(70)])).rows[0].count===eventTotal);
+ const ownSources=await scoped('capture',id(1),null,{});await scoped('reserve',id(1),id(71),{...ub,basis:'7'.repeat(64),sources:ownSources});await scoped('finish',id(1),id(71),{});
+ await setCommercial([{...commercial[0],manual:{price:'99.00'}},changedSibling]);await deny(()=>scoped('decide',id(1),id(71),decision,'UNIT',id(24),'manager'));
+ await setCommercial(commercial);
+ const librarySources=await scoped('capture',id(1),null,{});await scoped('reserve',id(1),id(72),{...ub,basis:'8'.repeat(64),sources:librarySources});await scoped('finish',id(1),id(72),{});
+ await db.exec("INSERT INTO tariff_library_versions VALUES('real-source-change','org')");await deny(()=>scoped('decide',id(1),id(72),decision,'UNIT',id(24),'manager'));
+ await db.exec("DELETE FROM tariff_library_versions WHERE id='real-source-change'");
+ const consolidatedSources=await scoped('capture',id(1),null,{},'CUSTOMER');await scoped('reserve',id(1),id(73),{...b,basis:'9'.repeat(64),sources:consolidatedSources,report:customerReport},'CUSTOMER');
+ await setCommercial([commercial[0],changedSibling]);ok((await scoped('finish',id(1),id(73),{},'CUSTOMER')).state==='INCOMPLETE');
+ await deny(()=>db.query('UPDATE eva_assisted_closing_versions SET source_snapshot=source_snapshot WHERE id=$1',[id(70)]));
+
  console.log('Assisted closing SQL:',checks,'checks passed');
  }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});
 
