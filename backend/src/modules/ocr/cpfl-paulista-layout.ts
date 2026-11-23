@@ -164,6 +164,25 @@ function extractCpflOnly(raw:any){
   else if(/INDICADORES DE CONTINUIDADE|\b(?:DIC|FIC|DMIC|DICRI)\b/.test(title)){kind='CONTINUITY';label='Indicadores de continuidade';}
   if(kind)blocks.push({kind,label,source,rows:rows.slice(0,100).map(ri=>({index:ri,cells:cells.filter(c=>c.rowIndex===ri).sort((a,b)=>a.columnIndex-b.columnIndex).map(c=>({column:c.columnIndex,columnSpan:c.columnSpan??1,rowSpan:c.rowSpan??1,value:electricalField(raw,c)}))}))});
  });
+ // Some CPFL originals print the flag panel as positioned text, not an OCR table.
+ // Keep the original page/span proof and require a nearby explicit panel heading.
+ if(!blocks.some(b=>b.kind==='FLAGS_GD'))for(const page of list(raw.pages).slice(0,100)){
+  const lines=list(page.lines),box=(l:any)=>{const p=list(l?.polygon);return p.length===8&&p.every(Number.isFinite)?{x:Math.min(p[0],p[2],p[4],p[6]),right:Math.max(p[0],p[2],p[4],p[6]),y:Math.min(p[1],p[3],p[5],p[7]),bottom:Math.max(p[1],p[3],p[5],p[7])}:null;};
+  for(const heading of lines.filter(l=>norm(l.content)==='BANDEIRAS TARIFARIAS')){
+   const h=box(heading);if(!h)continue;const height=h.bottom-h.y;if(height<=0)continue;
+   for(const color of lines.filter(l=>/^(VERDE|AMARELA|VERMELHA(?: PATAMAR)? [12])$/.test(norm(l.content)))){
+    const c=box(color);if(!c||c.y<h.bottom||c.y>h.bottom+height*6||c.x<h.x-height*3||c.right>h.right+height*3)continue;
+    const days=lines.filter(l=>/^\d{1,2} DIAS$/.test(norm(l.content))).filter(l=>{const d=box(l);return d&&Math.abs(d.y-c.y)<height&&d.x>=c.right&&d.x-c.right<height*6;});
+    if(days.length!==1)continue;const pieces=[color,days[0]],spans=pieces.flatMap(l=>list(l.spans));
+    if(spans.length!==2||pieces.some(l=>list(l.spans).length!==1||text(raw.content).slice(l.spans[0].offset,l.spans[0].offset+l.spans[0].length)!==l.content))continue;
+    const start=spans[0].offset,end=spans[1].offset+spans[1].length;if(end<=start||end-start>80)continue;
+    const content=text(raw.content).slice(start,end);if(norm(content)!==norm(color.content+' '+days[0].content))continue;
+    const value=electricalField(raw,{content,spans:[{offset:start,length:end-start}],boundingRegions:[{pageNumber:page.pageNumber}]});
+    if(value.issues.includes('UNVERIFIED_SOURCE'))continue;
+    blocks.push({kind:'FLAGS_GD',label:'Bandeira tarifária — painel impresso',source:'pages['+page.pageNumber+'].flagPanel',rows:[{index:0,cells:[{column:0,columnSpan:1,rowSpan:1,value}]}]});
+   }
+  }
+ }
  const totals=operations.filter(r=>r.component==='TOTAL_A_PAGAR'&&r.fields.amount?.decimal);
  if(totals.length===1)for(const r of operations){if(!r.fields.description?.text.trim()&&r.fields.amount?.decimal===totals[0].fields.amount.decimal&&Object.entries(r.fields).every(([k,v])=>k==='amount'||!v.text.trim())){r.component='UNLABELLED_TOTAL_REPEAT';r.role='INFORMATION';r.issues=r.issues.filter(i=>i!=='UNMAPPED_COMPONENT');r.issues.push('REPEATED_TOTAL_NOT_ADDED');}}
  if(!operations.length)issues.push('OPERATIONS_NOT_MAPPED');

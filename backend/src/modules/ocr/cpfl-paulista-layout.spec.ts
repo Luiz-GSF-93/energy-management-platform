@@ -10,6 +10,18 @@ function fixture(){
  return {raw,field,table,operation};
 }
 describe('CPFL Paulista layout library',()=>{
+ it.each([false,true])('reads a positioned flag panel only with original span proof (tampered=%s)',tampered=>{
+  const {raw,field}=fixture();const line=(s:string,x:number,y:number)=>({...field(s,.99),polygon:[x,y,x+.25,y,x+.25,y+.1,x,y+.1]});
+  raw.pages[0].lines=[line('Bandeiras Tarifárias',3.5,1.9),line('Verde',3.4,2.1),line('31 Dias',3.7,2.1)];
+  if(tampered)raw.pages[0].lines[1].content='Amarela';
+  const flags=extractCpflPaulistaLayout(raw).blocks.filter(b=>b.kind==='FLAGS_GD');expect(flags).toHaveLength(tampered?0:1);
+  if(!tampered){expect(flags[0].rows[0].cells[0].value.text).toBe('Verde\n31 Dias');expect(flags[0].rows[0].cells[0].value.pages).toEqual([1]);}
+ });
+ it('does not read tariff modality or a flag on another panel as the current flag',()=>{
+  const {raw,field}=fixture();const line=(s:string,x:number,y:number)=>({...field(s,.99),polygon:[x,y,x+.25,y,x+.25,y+.1,x,y+.1]});
+  raw.pages[0].lines=[line('Bandeiras Tarifárias',3.5,1.9),line('Verde',1,2.1),line('31 Dias',1.3,2.1)];
+  expect(extractCpflPaulistaLayout(raw).blocks.filter(b=>b.kind==='FLAGS_GD')).toHaveLength(0);
+ });
  it.each(['Ressarcimento DIC Mensal','Ressarcimento FIC Trimestral','Ressarcimento DMIC','Ressarcimento DICRI Anual'])('preserves printed continuity credit %s as an existing refund',description=>{const {raw,table}=fixture();table([columns,[description,'','','','','3.076,74-','','','','','']]);const row=extractCpflPaulistaLayout(raw).operations[0];expect(row).toMatchObject({component:'REFUND',role:'CREDIT'});expect(row.fields.amount.decimal).toBe('-3076.74');expect(row.fields.amount.issues).not.toContain('UNVERIFIED_SOURCE');expect(row.issues).not.toContain('UNMAPPED_COMPONENT');});
  it('does not guess a refund from an unknown compensation label',()=>{const {raw,operation}=fixture();operation('Ressarcimento não identificado');expect(extractCpflPaulistaLayout(raw).operations[0].role).toBe('UNKNOWN');});
 
