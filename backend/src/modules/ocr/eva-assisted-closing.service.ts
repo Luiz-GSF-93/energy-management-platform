@@ -37,6 +37,7 @@ export class EvaAssistedClosingService{
   const args={p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_action:action,p_disclose:disclose,p_mode:documented?'DOCUMENTED':contractDraft?'CONTRACT':'BASE',p_scope:q.scopeKind??'CUSTOMER',p_unit:q.consumerUnitId,p_month:q.month,p_id:id,p_body:body};
   const r=['history','capture'].includes(action)?await readRpc(this.db.getClient(),'eva_scoped_closing_action',args):['reserve','finish'].includes(action)?await closingPreparationCommand(this.db.getClient(),'eva_scoped_closing_action',args):await this.db.getClient().rpc('eva_scoped_closing_action',args);
   if(!r.error&&r.data!=null)return r.data;
+  if(r.error?.code==='P8401'&&r.error?.message==='Capture too large')throw new ServiceUnavailableException({code:'EVA_CLOSING_CAPTURE_LIMIT',stage:action,message:'A preparação atingiu o limite de fontes desta competência. A leitura e os documentos foram preservados; a plataforma precisa conferir a captura antes da retomada. Não reenvie os arquivos.'});
   if(r.error?.code==='42501')throw new ForbiddenException('Acesso restrito ao backoffice autorizado.');
   if(['23505','PT409','40001'].includes(r.error?.code))throw new ConflictException('As fontes ou a decisão mudaram. Atualize o histórico antes de continuar.');
   if(r.error?.code==='57014'&&action==='history')throw new ServiceUnavailableException('A consulta do histórico excedeu o prazo. Suas confirmações anteriores foram preservadas. Atualize o histórico antes de preparar outra versão.');

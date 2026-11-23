@@ -243,5 +243,11 @@ await db.query("UPDATE checkpoint_sources SET value='{\"revision\":2}'");ok((awa
 await db.query("INSERT INTO eva_assisted_closing_versions(id,organization_id,customer_id,month,report,source_snapshot,version) VALUES($1,'org','client','2026-09',$2,'{}',2)",[id(810),JSON.stringify(checkpointReport)]);ok((await checkpoint()).row===null);await db.query('DELETE FROM eva_assisted_closing_versions WHERE id=$1',[id(810)]);
 await deny(()=>db.query('SELECT eva_intake_prepared_checkpoint($1,$2,$3)',[unstarted,id(806),'DOCUMENTED']));
 for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'eva_intake_prepared_checkpoint(uuid,uuid,text)','EXECUTE') p",[role])).rows[0].p);
+const pendingCatalog=fs.readFileSync(__dirname+'/../src/database/migrations/20261356_eva_pending_preparation_catalog.sql','utf8');await db.exec(pendingCatalog);
+await db.query("UPDATE eva_automatic_intakes SET state='AWAITING_SOURCES',closing_id=NULL WHERE id=$1",[id(10)]);
+let pendingList=await call('list',null,{queueOnly:'true'});ok(pendingList.rows.some(r=>r.id===id(10)));ok(!pendingList.completed.some(r=>r.id===id(10)));
+await db.query("UPDATE eva_automatic_intakes SET closing_id=$2 WHERE id=$1",[id(10),id(809)]);
+pendingList=await call('list',null,{queueOnly:'true'});ok(!pendingList.rows.some(r=>r.id===id(10)));ok(pendingList.completed.some(r=>r.id===id(10)));
+await db.exec(pendingCatalog);ok((await call('list',null,{queueOnly:'true'})).completed.some(r=>r.id===id(10)));
 console.log('Automatic intake SQL:',checks,'checks passed');
 }finally{await db.close()}})().catch(e=>{console.error(e);process.exitCode=1});

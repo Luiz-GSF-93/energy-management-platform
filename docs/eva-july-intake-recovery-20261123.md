@@ -1,0 +1,17 @@
+# EVA: preparation capture scope and July recovery
+
+The July/2026 distributor documents for Balsamo reached archived/identified status, then `CLOSING_PREPARATION` failed with HTTP 503. Read-only reproduction returned `P8401: Capture too large`. No July calculation preparation run existed. The customer had 21 OCR results totaling 12,341,969 bytes, including 12,248,626 bytes of raw provider output. The three July results total 1,772,652 bytes. Invoice intake had retried six or seven times per PDF; no new model attempt was recorded by these receipts.
+
+Migration 20261354 limits the OCR result rows in the financial capture to documents whose reference month belongs to the requested competence. It retains complete current-month OCR, all document metadata, contracts, demand review history, validated historical costs and fee allocations. It keeps the 12 MB/20,000 row safety bounds. It does not delete or rewrite originals, OCR, financial records, decisions or user permissions. Public and any existing portal implementation are patched with exact baseline guards; runtime signatures are refreshed. Existing draft snapshots remain immutable: a draft captured under the old scope must be reconfirmed with current sources before a decision. Published results remain preserved.
+
+The interface distinguishes completed reading from unconfirmed closing preparation. It no longer renders the technical stop after archiving as a 70% OCR progress bar. A single continuation checks the existing receipts and reuses preserved reads. It does not approve or publish. Capture-limit errors have a specific sanitized diagnostic and operator explanation rather than an undifferentiated 503.
+
+Validation: financial-capture-month.cjs covers a customer whose historical OCR exceeds 12 MB, current/future/unscoped month boundaries, full current evidence, source drift, original preservation, tenant isolation, portal consistency, runtime signature, privileges and repeated migration. Closing/worker regressions cover the sanitized error and no provider resubmission. DOM tests cover clear phase display and continuation single-flight.
+
+Rollout: run checks, apply the transactional migration with short lock timeout, verify read-only captures, publish API/worker/frontend, reconcile the three existing July receipts through the normal application action, and inspect the resulting proposals. Do not force status to processed or remove essential financial confirmations.
+
+Rollback: revert the code release and restore the prior function definition from migration 20261246 if necessary. Restoring the old function reintroduces the customer-size failure; no data restoration is required because source records are not modified.
+
+Migration 20261355 also repairs the existing continuation gate: legacy HTTP_503 closing-capture failures with zero preparation runs and zero overlapping closings can be reconciled. A valid closing for a different unit does not block this unstarted unit. Provider submission failures, unknown stages, any own preparation run, own or consolidated closing and malformed scope still fail closed. No financial approval or membership gate changes.
+
+Migration 20261356 keeps an accepted continuation with no closing in the active queue. Archived follow-up selects the latest 25 uploads using stable creation order, avoiding idle polling updates hiding newly completed work. The frontend reports queued/preparing closing phases after completed reading instead of a static OCR percentage.
