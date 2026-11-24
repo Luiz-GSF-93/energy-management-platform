@@ -34,5 +34,32 @@ try{
  result=await ensure('2026-02','foreign',foreign);ok(result.created&&result.sourceRuleId===null,'Fixed-only contract derives its per-unit basis without new financial assumptions');
  for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>ensure(),e=>e.code==='42501');checks++;await db.exec('RESET ROLE');}
  await assert.rejects(()=>db.exec("UPDATE management_fee_allocations SET is_default=true"),e=>e.code==='P5302');checks++;
+
+ // Apply the new product policy only after proving legacy migration behavior.
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261358_management_fee_unit_policy.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261358_management_fee_unit_policy.sql',import.meta.url),'utf8'));
+ await db.query('UPDATE management_contracts SET end_date=null WHERE id=$1',[a]);
+ result=await ensure('2026-09');ok(result.created&&result.policy==='GLOBAL_PER_UNIT_V1','New hybrid month derives the unit basis without manual rule');
+ let unitRule=(await db.query('SELECT * FROM management_fee_allocations WHERE id=$1',[result.ruleId])).rows[0];
+ ok(unitRule.fixed_fee_basis==='PER_UNIT'&&unitRule.variable_fee_basis==='PER_UNIT'&&unitRule.allocations.length===0&&unitRule.created_by==='preparer','Full fixed and unit variable basis with actual actor');
+ ok(!(await ensure('2026-09')).created,'Unit policy is idempotent');
+ const shares=JSON.stringify([{consumerUnitId:a,percentage:'50'},{consumerUnitId:u,percentage:'50'}]);
+ const legacy=(await db.query(`INSERT INTO management_fee_allocations(organization_id,customer_id,contract_id,month,fixed_fee_basis,variable_fee_basis,allocations,source,reason,created_by,is_default) VALUES ('org',$1,$1,'2026-10','PER_UNIT','CONSOLIDATED',$2,'Legacy consolidated rule','Historical fixture','admin',true) RETURNING *`,[a,shares])).rows[0];
+ result=await ensure('2026-10');unitRule=(await db.query('SELECT * FROM management_fee_allocations WHERE id=$1',[result.ruleId])).rows[0];
+ ok(result.created&&unitRule.previous_id===legacy.id&&unitRule.version===2&&unitRule.variable_fee_basis==='PER_UNIT','Unapproved legacy basis gains an audited unit-policy version');
+ ok((await db.query('SELECT variable_fee_basis FROM management_fee_allocations WHERE id=$1',[legacy.id])).rows[0].variable_fee_basis==='CONSOLIDATED','Historical rule is not overwritten');
+ await db.query("INSERT INTO eva_assisted_closing_events VALUES ('org',$1,2,'SUPERSEDED')",[policy.id]);
+ ok((await ensure('2026-06')).reason==='PRESERVED_APPROVAL','Any prior approval is preserved even after supersession');
+ const concurrent=await Promise.all([ensure('2026-11'),ensure('2026-11')]);
+ ok(concurrent.filter(x=>x.created).length===1&&Number((await db.query("SELECT count(*) n FROM management_fee_allocations WHERE contract_id=$1 AND month='2026-11'",[a])).rows[0].n)===1,'Concurrent preparations create one rule');
+ await assert.rejects(()=>ensure('2026-12','foreign',u),e=>e.code==='42501');checks++;
+ for(const role of ['anon','authenticated']){await db.exec('SET ROLE '+role);await assert.rejects(()=>ensure('2026-12'),e=>e.code==='42501');checks++;await db.exec('RESET ROLE');}
+ ok(Number((await db.query('SELECT savings_percentage FROM management_contracts WHERE id=$1',[a])).rows[0].savings_percentage)===8,'Product basis never changes the contractual percentage');
+ await db.query("INSERT INTO consumer_units VALUES ('00000000-0000-4000-8000-000000000004','org',$1,'ACTIVE')",[a]);
+ ok(!(await ensure('2026-11','org','00000000-0000-4000-8000-000000000004')).created,'New unit uses the same unit policy without asking for new allocation shares');
+ const beforeRollback=Number((await db.query('SELECT count(*) n FROM management_fee_allocations')).rows[0].n);
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261352_management_fee_defaults.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../src/database/migrations/20261358_management_fee_unit_policy.sql',import.meta.url),'utf8'));
+ ok(!(await ensure('2026-11')).created&&Number((await db.query('SELECT count(*) n FROM management_fee_allocations')).rows[0].n)===beforeRollback,'Rollback and reapplication preserve captured monthly history');
  console.log('Recurring fees: '+checks+' isolated database checks passed.');
 }finally{await db.close();}
