@@ -43,6 +43,14 @@ export function selectAutofillLibrary(rows:any[],u:any,month:string,requirements
  return {record:candidates.length===1?candidates[0]:null,state:candidates.length===1?'MATCHED':candidates.length?'AMBIGUOUS':'MISSING',excluded:eligible.filter(r=>!candidates.includes(r)).map(r=>({id:r.id,version:r.version,reason:'TAX_TREATMENT_NOT_NET'}))};
 }
 /** A candidate is not a financial validation. No fabricated zero or attestation. */
+/** Read the customer's effective register; a missing allocation never erases the contract amounts. */
+export function registeredManagementContracts(c:any){
+ const period=monthPeriod(c.month),u=c.unit;
+ return adjustedContracts(c.captured.management??[],c.captured.adjustments??[],c.month).filter((x:any)=>{
+  const start=String(x.start_date??'').slice(0,10),end=x.end_date==null?null:String(x.end_date).slice(0,10);
+  return x.organization_id===u.organization_id&&x.customer_id===u.customer_id&&x.status==='ACTIVE'&&/^\d{4}-\d{2}-\d{2}$/.test(start)&&start<=period.start&&(end===null||/^\d{4}-\d{2}-\d{2}$/.test(end)&&end>=period.end);
+ });
+}
 export function calculationAutofillPlan(c:any,libraries:any[]){
  const u=c.unit,period=monthPeriod(c.month),fields:FillField[]=[],observations:string[]=[...(c.proposalObservations??[])];
  const add=(key:string,label:string,value:unknown,unit:string,scenario:string,source:string,observation:string|null=null)=>{
@@ -79,7 +87,7 @@ export function calculationAutofillPlan(c:any,libraries:any[]){
   add(scenario+':tax:'+code,code,p?{rate:p.amount_text,treatment:p.treatment,basis:p.tax_basis}:null,'',''+scenario,p?'Parâmetro '+p.id+' revisão '+p.revision+' · '+p.source:'',p?null:'Incidência e bases precisam de evidência cadastrada; a alíquota da fatura não comprova o cenário comparativo.');
  }
  const reference=c.reference;
- const management=adjustedContracts(c.captured.management,c.captured.adjustments,c.month).filter((x:any)=>x.organization_id===u.organization_id&&x.customer_id===u.customer_id&&x.status==='ACTIVE'&&String(x.start_date).slice(0,10)<=period.start&&String(x.end_date).slice(0,10)>=period.end),currentManagement=management.length===1?management[0]:null;
+ const management=registeredManagementContracts(c),currentManagement=management.length===1?management[0]:null;
  const feeReference=!management.length&&reference?.fee;
  const m=currentManagement??(feeReference?{id:feeReference.contract.id,fixed_fee_monthly:feeReference.fixedUnit,savings_percentage:feeReference.percentage,remuneration_model:feeReference.contract.model}:null);
  const feeSource=feeReference?reference.source+' · honorários, sem vigência atual confirmada':m?'Contrato de gestão '+m.id:'';
