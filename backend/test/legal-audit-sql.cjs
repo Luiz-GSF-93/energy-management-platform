@@ -121,5 +121,7 @@ const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  ok(JSON.stringify((await db.query("SELECT organization_resource_usage('a') u")).rows[0].u)===searchQuota);ok(JSON.stringify((await db.query('SELECT to_jsonb(u) d FROM bot_energy_ai_usage u ORDER BY id')).rows)===searchUsage);
  for(const role of ['anon','authenticated'])ok(!(await db.query("SELECT has_function_privilege($1,'public.legal_audit_search(text,text,text,boolean,text,text,text,text,text,integer)','EXECUTE') p",[role])).rows[0].p);
  ok((await db.query("SELECT legal_audit_excerpt($1,'cessao') e",['Introdução '.repeat(100)+'Cessão de direitos requer anuência.'])).rows[0].e.includes('Cessão de direitos'));
+ await db.exec(fs.readFileSync(path.join(__dirname,'../src/database/migrations/20261360_legal_audit_search_excerpt.sql'),'utf8'));
+ const contextual=(await db.query("SELECT legal_audit_excerpt($1,'seguro garantia') e",['Garantia antecipada. '+ 'Introdução '.repeat(100)+'Seguro garantia contratado.'])).rows[0].e;ok(contextual.includes('Seguro garantia contratado'));
  console.log('Legal audit SQL:',checks,'checks passed');
  }finally{await db.close();}})().catch(e=>{console.error({message:e.message,code:e.code,position:e.position,internalQuery:e.internalQuery,where:e.where,stack:e.stack?.split("\n").slice(0,3).join("\n")});process.exitCode=1});

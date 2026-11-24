@@ -5,6 +5,7 @@ on:
       - 'backend/src/modules/ocr/**'
       - 'backend/src/database/migrations/2026133[3456]*'
       - 'backend/src/database/migrations/20261359*'
+      - 'backend/src/database/migrations/20261360*'
       - 'backend/test/legal-audit*'
       - 'backend/test/legal-library*'
       - 'backend/test/fixtures/legal-library*'
