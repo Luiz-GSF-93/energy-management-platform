@@ -11,7 +11,8 @@ export function operationalReviewReceipt(row:any,run:any,document:any){
  const u=row?.report?.units?.find((v:any)=>v.id===run.consumer_unit_id);
  return !!row&&row.organization_id===run.organization_id&&row.customer_id===run.customer_id&&row.month===run.month&&row.consumer_unit_id===run.consumer_unit_id&&row.report?.scope?.kind==='UNIT'&&row.report?.unitIds?.length===1&&row.report.unitIds[0]===run.consumer_unit_id&&['READY_FOR_REVIEW','INCOMPLETE','APPROVED'].includes(row.state)&&u?.documentId===document?.id&&u?.sourceHash===document?.fileHash;
 }
-/** Partial API coverage must stay provisional until the exact cost revision is checked. */
+/** Partial API coverage stays provisional until the exact cost revision is checked.
+ * A subsequent API reference is a reservation, not revocation of that human review. */
 export function applyOperationalCceeReview(report:any,sources:any){
  if(sources.operationalFlow?.enabled!==true||report.scope?.kind!=='UNIT')return;
  for(const unit of report.units??[]){
@@ -20,7 +21,16 @@ export function applyOperationalCceeReview(report:any,sources:any){
   const staleApi=(unit.sources?.cceeLocal?.candidates??[]).some((candidate:any)=>autoItems.some((item:any)=>item.source.includes(candidate.mapVersion)&&(!item.source.includes(candidate.eventCode)||!item.source.includes(candidate.sourceHash))));
   const ack=sources.operationalFlow.costAcks?.find((r:any)=>r.unitId===unit.id)?.ack;
   const current=sources.operationalFlow.costRows?.find((r:any)=>r.unitId===unit.id&&r.id===cost.id);
-  if(!staleApi&&ack?.costId===cost.id&&(ack?.revision===cost.revision||/^[a-f0-9]{64}$/.test(ack?.costHash??'')&&ack.costHash===current?.costHash))continue;
+  if(ack?.costId===cost.id&&(ack?.revision===cost.revision||/^[a-f0-9]{64}$/.test(ack?.costHash??'')&&ack.costHash===current?.costHash)){
+   unit.sources={...unit.sources,cceeCoverageReview:{...ack,apiReferenceChanged:staleApi}};
+   if(staleApi){
+    const message='CCEE: cobertura e valores desta revisão foram conferidos pelo operador. A referência da API difere da origem importada; valores confirmados e fontes originais preservados. Confira a ressalva antes de aprovar; não houve atualização automática dos custos.';
+    if(report.preparationPolicy){report.preparationPolicy.reservations??=[];if(!report.preparationPolicy.reservations.some((r:any)=>r.unitId===unit.id&&r.code==='CCEE_REVIEWED_API_REFERENCE'))report.preparationPolicy.reservations.push({unitId:unit.id,code:'CCEE_REVIEWED_API_REFERENCE',message});}
+    report.observations??=[];if(!report.observations.includes(message))report.observations.push(message);
+    report.completeness='ESTIMATED';
+   }
+   continue;
+  }
   const message='CCEE: confira a cobertura integral dos encargos desta competência; as rubricas importadas não comprovam custos ausentes, ERCAP ou cotas nucleares.';
   if(!staleApi&&report.preparationPolicy&&canContinueWithReservation(unit,{context:{originalIdentity:{state:unit.sources?.identityState,fileHash:unit.sourceHash},document:{id:unit.documentId,file_hash:unit.sourceHash}},comparative:unit.methodology,plan:{operational:{invoice:unit.prepared?.invoice}}})){
    report.preparationPolicy.reservations.push({unitId:unit.id,code:'CCEE_COVERAGE',message});

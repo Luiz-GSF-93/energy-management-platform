@@ -10,6 +10,12 @@ ENERGIA ELETRICA (Incentivada) fornecida no mês de maio/2026
 DADOS ADICIONAIS`;
 const run=(t=text,month='2026-05',tax='11222333000181')=>supplierInvoiceProposal(t,month,tax,source);
 describe('Supplier NF proposal',()=>{
+ it('reuses a same-root branch DANFE with an abbreviated registered avenue and a separately serialized CEP',()=>{
+  const bill=text.replace('11.222.333/0001-81','11.222.333/0002-62\n14120-000 CENTRO\nDUMONT\nAVENIDA VINTE E UM DE MARCO 505\nSP'),unit={unitNumber:'9000001',address:'AV VINTE E UM DE MARCO 505 CENTRO 14120-000'};
+  expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source,unit)).toMatchObject({amount:'300.00',financialApproval:false,installationIdentity:{matchedBy:'UNIT_ADDRESS',taxIdentity:{relation:'SAME_ROOT',accepted:true}},taxIdentity:{found:['11222333000262']}});
+  expect(supplierInvoiceProposal(bill.replace('MARCO 505','MARCO 5050'),'2026-05','11222333000181',source,unit)).toBeNull();
+  expect(supplierInvoiceProposal(bill,'2026-06','11222333000181',source,unit)).toBeNull();
+ });
  it('accepts a same-root recipient only with a matching scoped unit address, preserving the full CNPJ and reservation',()=>{
   const bill=text.replace('11.222.333/0001-81','11.222.333/0002-62\nRUA DA UNIDADE 100 CENTRO'),unit={unitNumber:'12345678',address:'RUA DA UNIDADE 100 CENTRO'};
   expect(supplierInvoiceProposal(bill,'2026-05','11222333000181',source,unit)).toMatchObject({amount:'300.00',taxIdentity:{relation:'SAME_ROOT',found:['11222333000262']}});
