@@ -1,0 +1,11 @@
+EVA: reuse registered sources and persisted human review
+
+1. Missing monthly invoice previously made the closing report also claim there was no management fee, even when the effective contract was already in the scoped capture. Preserve independently verified fixed fee, percentage and tariff library references in the partial proposal. Still require monthly billing evidence before computing final results. Reuse existing period, adjustment, tenant, customer and ambiguity checks.
+
+2. Supplier DANFE matching flattened the entire registered address, including postcode and neighborhood, into one substring. Native PDFs can put postcode before the street and expand AV to AVENIDA. Match the complete normalized street/number/complement line with the same postcode when registered, retaining literal legacy matches while refusing numeric prefixes. Existing same-CNPJ-root policy then works with independent unit address proof and an explicit reservation; another root or conflicting explicit UC is still rejected. No invoice amounts, original CNPJ or registrations are changed.
+
+3. A current, persisted CCEE cost acknowledgement was invalidated by a subsequent API reference difference, repeatedly reopening the same coverage question. Respect the exact acknowledged cost id/revision or unchanged financial digest. Keep the external-reference difference as a visible reservation and preserve original sources and values. A changed cost revision and financial digest still require review. No automatic approval or publication is introduced.
+
+Verification: 348 regression checks across 12 suites, backend production build and local parsing of an already preserved supplier original without OCR/AI. Explicit tests cover same-root branches, reordered postcode, avenue abbreviation, conflicting UCs, different numbers/complements/postcodes, absent/expired/foreign fee registers and changed versus acknowledged CCEE costs.
+
+Rollout: compatible application-only change; no migration, license expansion, new provider calls or paid infrastructure. BETA 20261124.4. Rollback the application commit if needed; immutable prior approvals and source history remain unchanged.

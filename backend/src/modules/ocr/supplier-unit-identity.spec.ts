@@ -2,6 +2,17 @@ import {supplierUnitIdentity,supplierUnitCodes} from './supplier-unit-identity';
 const unit={unitNumber:'9000001',address:'Rua da Unidade 123 Centro',aliases:['7000001']};
 const tax='11222333000181',branch='11222333000262';
 describe('Fiscal recipient and supplied installation',()=>{
+ it('matches an abbreviated avenue with postcode in a different DANFE cell while preserving the branch CNPJ',()=>{
+  const registered={unitNumber:'9000001',address:'AV VINTE E UM DE MARCO 505 CENTRO 14120-000'};
+  const recipient='Empresa sintetica 11.222.333/0002-62\n14120-000 CENTRO\nDUMONT\nAVENIDA   VINTE E UM DE MARCO 505\nSP';
+  expect(supplierUnitIdentity(tax,branch,registered,[],[recipient],true)).toMatchObject({matched:true,matchedBy:'UNIT_ADDRESS',taxIdentity:{relation:'SAME_ROOT',accepted:true}});
+  for(const bad of [recipient.replace('MARCO 505','MARCO 5050'),recipient.replace('14120-000','14121-000'),recipient.replace('MARCO 505','MARCO 505 CASA 2')])expect(supplierUnitIdentity(tax,branch,registered,[],[bad],true).matched).toBe(false);
+  expect(supplierUnitIdentity(tax,branch,registered,['8000001'],[recipient],true)).toMatchObject({matched:false,conflict:true});
+ });
+ it('does not prefix-match a street number without a postcode',()=>{
+  const registered={unitNumber:'9000001',address:'RUA DA UNIDADE 123'};
+  expect(supplierUnitIdentity(tax,tax,registered,[],['RUA DA UNIDADE 1234'],true).matched).toBe(false);
+ });
  it.each(['9000001','7000001'])('accepts a matrix recipient with proven UC %s and a different fiscal address',code=>{expect(supplierUnitIdentity(branch,tax,unit,[code],['Avenida da Matriz 900'],true)).toMatchObject({matched:true,matchedBy:'UNIT_CODE',addressMatch:false,taxIdentity:{accepted:true,relation:'SAME_ROOT'}});});
  it('accepts an address identifying the supplied branch when no UC is printed',()=>{expect(supplierUnitIdentity(branch,tax,unit,[],['Rua da Unidade 123 Centro CEP 12345-000'],true).matched).toBe(true);});
  it.each([{codes:['8000001']},{codes:['9000001','8000001']}])('blocks an explicit conflicting UC even when the address matches: %j',({codes})=>{expect(supplierUnitIdentity(tax,tax,unit,codes,[unit.address],true)).toMatchObject({matched:false,conflict:true});});
