@@ -3,6 +3,16 @@ import {settlementHash} from './documented-supplier-settlement';
 const entry=():any=>({unitId:'unit',name:'Teste',context:{document:{id:'doc'},captured:{parameters:[]}},plan:{library:{id:'lib'},fields:[{key:'ACR:TE:ALL',state:'FILLED',value:'1'},...['ICMS','PIS','COFINS'].map(code=>({key:'ACR:tax:'+code,state:'FILLED',value:{treatment:'EXEMPT'}})),{key:'supplier:tax',state:'FILLED',value:'INCLUDED'},{key:'fee:fixed',state:'FILLED',value:'50.00'},{key:'costs:monthly',state:'FILLED',value:{noCosts:true,items:[]}}],operational:{state:'PARTIAL',invoice:{amount:'200.00'},supplier:{amount:'500.00'},acr:{lines:[{key:'ACR:TE:ALL',amount:'1000.00',quantity:'1000',rate:'1',measure:'BRL_KWH'}]}},referenceUsed:false}});
 const report=(e:any[]= [entry()])=>assistedClosingReport('org','customer','2026-09',e);
 describe('EVA assisted closing',()=>{
+ it('charges the complete fixed fee and contractual percentage independently per unit',()=>{
+  const a=entry(),b=entry();b.unitId='sibling';
+  b.plan.operational.acr.lines[0].amount='500.00';
+  for(const e of [a,b]){e.plan.fields.find((f:any)=>f.key==='fee:fixed').value='1031.69';e.plan.fields.push({key:'fee:percentage',state:'FILLED',value:'9'},{key:'fee:basis',state:'FILLED',value:'PER_UNIT'},{key:'fee:allocation',state:'FILLED',value:[]});}
+  const before=JSON.stringify([a,b]),r=report([a,b]);
+  expect(r.approvalEligible).toBe(true);
+  expect(r.financial).toMatchObject({fixedFee:'2063.38',variableFee:'27.00',totalFees:'2090.38'});
+  expect(r.units.map((u:any)=>[u.fixedFee,u.variableFee])).toEqual([['1031.69','27.00'],['1031.69','0.00']]);
+  expect(JSON.stringify([a,b])).toBe(before);expect(r.automaticApproval).toBe(false);expect(r.publicationAllowed).toBe(false);
+ });
  it('preserves independently calculated ACR while the shared fee requires customer consolidation',()=>{const e=entry();e.scopeRequirement='Honorário variável compartilhado: prepare o consolidado do cliente para calcular economia e rateio com todas as unidades.';const r=report([e]);expect(r.units[0].acr).toBe('1000.00');expect(r.comparisonPreview).toEqual({state:'AVAILABLE',acr:'1000.00',financialApproval:false});expect(r.units[0].aclBeforeFees).toBe('700.00');expect(r.financial.acr).toBeNull();expect(r.financial.savings).toBeNull();expect(r.approvalEligible).toBe(false);expect(r.missing).toContain('Teste: '+e.scopeRequirement);expect(r.automaticApproval).toBe(false);});
  it('never aggregates a partial unit or duplicate unit into the independent ACR preview',()=>{const a=entry(),b=entry();b.unitId='other';b.unavailable='Original indisponível';expect(report([a,b]).comparisonPreview.acr).toBeNull();expect(report([a,entry()]).comparisonPreview.acr).toBeNull();});
  it('does not treat genuine unavailable invoice evidence as a fee-scope reservation',()=>{const e=entry();e.unavailable='Fatura verificada indisponível.';const r=report([e]);expect(r.units[0].acr).toBeNull();expect(r.approvalEligible).toBe(false);expect(r.missing).toContain('Teste: Fatura verificada indisponível.');});
