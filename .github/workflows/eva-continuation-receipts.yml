@@ -19,7 +19,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: backend
-      - run: npx jest src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/ocr/eva-manual-preparation.spec.ts --runInBand
+      - run: npx jest src/modules/portal-workspace/automatic-intake.service.spec.ts src/modules/portal-workspace/automatic-intake.worker.spec.ts src/modules/ocr/eva-manual-preparation.spec.ts --runInBand
         working-directory: backend
       - run: node test/eva-continuation-conflicts.cjs && node test/eva-automatic-intake.cjs
         working-directory: backend

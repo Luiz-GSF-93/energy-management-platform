@@ -63,7 +63,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      }
     }
     if(['RECOGNIZING','OCR_QUEUED','OCR_POLLING','LINKING'].includes(i.state)){
-     let raw=i.raw_result;
+     let raw=i.raw_result;let partialDigitalIdentity=false;
      if(i.state==='OCR_POLLING'&&!raw){
       if(i.attempts>120){await transition('review',{note:'A leitura excedeu as tentativas permitidas. O arquivo foi preservado.'});return;}
       const polled=await observeEvaStage('OCR_POLL',()=>this.connector.poll(i.operation_url));
@@ -78,7 +78,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      if(xml){raw=xml.raw;/* Preserve the immutable first extraction on replay; typed fields above come from the hash-checked original. */await this.rpc('eva_intake_xml_source',{p_id:job.id,p_token:job.token,p_raw:i.raw_result??raw});}
      if(i.state==='OCR_QUEUED'&&!xml){
       if(!this.connector.isConfigured()){await transition('review',{note:'OCR indisponível. O arquivo foi preservado.'});return;}
-      await transition('begin_ocr');submitting=true;
+      stage='OCR_SUBMIT';await transition('begin_ocr');submitting=true;
       const result=await observeEvaStage('OCR_SUBMIT',()=>this.connector.submit({buffer:bytes,size:bytes.length,mimetype:i.mime,originalname:i.filename},i.file_hash));
       await transition('accepted',{operation:result.url});return;
      }
@@ -87,7 +87,10 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
       if(raw)pages=(raw.pages??[]).map((p:any)=>({page:p.pageNumber,text:(p.lines??[]).map((l:any)=>l.content).join('\n')||(p.spans??[]).map((s:any)=>String(raw.content??'').slice(s.offset,s.offset+s.length)).join('\n')}));
       else if(i.mime==='application/pdf'){
        const extraction=await observeEvaStage('PDF_TEXT',()=>extractPdfText(bytes,20000));
-       if(!extraction.ocrRequired)pages=[...new Set(extraction.sections.map(s=>s.page))].map(page=>({page,text:extraction.sections.filter(s=>s.page===page).map(s=>s.text).join('\n')}));
+       partialDigitalIdentity=extraction.ocrRequired;
+       const unsafe=new Set(extraction.sections.filter(s=>s.issues.some(issue=>['EMPTY_PAGE','LAYOUT_REVIEW'].includes(issue))).map(s=>s.page));
+       const readable=extraction.sections.filter(s=>!unsafe.has(s.page)&&s.text.trim());
+       pages=[...new Set(readable.map(s=>s.page))].map(page=>({page,text:readable.filter(s=>s.page===page).map(s=>s.text).join('\n')}));
       }
       if(!pages.length){await transition('need_ocr',{note:'Identificação por OCR necessária. Uma única leitura será usada também na preparação.'});return;}
       if(i.external&&(xml?xml.fiscal.kind!=='INVOICE_DISTRIBUTOR':portalInvoiceKind(pages.map(p=>p.text).join('\n'))!=='DISTRIBUTOR')){
@@ -121,6 +124,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
        }
        const proof=automaticIntakeContext(pages,customer,units,i.file_hash,i.hints);if(proof.state==='MATCH'&&(!raw||automaticOcrIdentityConfidence(raw,proof,customer,units.find((u:any)=>u.id===proof.unitId))||proof.unitId===selected?.id&&acceptedIdentityContinuation(identityReview,identityDiagnostic)))matches.push(proof);
       }
+      if(matches.length!==1&&partialDigitalIdentity){await transition('need_ocr',{note:'A parte digital não identificou a unidade de forma única. Uma única leitura OCR será usada para conferir o original completo.'});return;}
       if(matches.length!==1){const fields=identityDiagnostic?.fields?.filter((f:any)=>f.status!=='MATCH'&&!(identityDiagnostic.documentType==='INVOICE_SUPPLIER'&&f.key==='unit'&&Array.isArray(f.found)&&f.found.length===0));await transition('review',{note:fields?.length?'Confira '+fields.map((f:any)=>f.label+': '+(f.status==='MISMATCH'?'diferente do cadastro':'não comprovado')).join('; ')+'. A leitura e suas respostas foram preservadas.':'A leitura está disponível. Selecione o cliente, a unidade e a competência para conferir os campos do original.',diagnostic:{stage:'IDENTIFICATION',code:'IDENTITY_REVIEW_REQUIRED'}});if(identityDiagnostic?.fingerprint)await this.rpc('eva_intake_continue_requested',{p_id:job.id,p_fingerprint:identityDiagnostic.fingerprint});return;}
       if(i.external&&matches[0].documentType!=='INVOICE_DISTRIBUTOR'){
        await transition('review',{note:'O portal aceita somente fatura da distribuidora. A nota do fornecedor deve ser conferida pela equipe do backoffice.',diagnostic:{stage:'DOCUMENT_TYPE',code:'PORTAL_INVOICE_REQUIRED'}});return;
@@ -190,7 +194,8 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
      try{await this.rpc('eva_intake_retry_read',{p_id:job.id,p_token:job.token,p_read:(e.getResponse() as any).read});return;}
      catch{this.log.warn('EVA_INTAKE_READ_RECOVERY_REQUIRES_RECONCILIATION');}
     }
-    const unknown=preparing||submitting;
+    const rejected=submitting&&e instanceof OcrProviderError&&['PROVIDER_REJECTED','INVALID_DOCUMENT','INVALID_CONFIGURATION','NOT_CONFIGURED'].includes(e.code);
+    const unknown=preparing||submitting&&!rejected;
     if(submitting&&e instanceof OcrProviderError&&e.code==='RATE_LIMITED'){
      try{await transition('retry_ocr',{error:'RATE_LIMITED',delay:e.retryAfterSeconds,note:'O provedor adiou a leitura antes de aceitá-la. Aguardando o prazo informado.'});}catch{this.log.warn('EVA_INTAKE_RATE_ACK_PENDING');}return;
     }
@@ -201,7 +206,7 @@ export class AutomaticIntakeWorker implements OnModuleInit,OnModuleDestroy{
     const duplicate=['P2091','P2092','23505'].includes((e as any)?.code);
     stage=i?.state==='LINKING'?'ARCHIVING':stage;const code=String((e as any)?.code??(e as any)?.getResponse?.()?.code??(/^[A-Z][A-Z0-9_]{2,63}$/.test((e as any)?.message??'')?(e as any).message:typeof(e as any)?.getStatus==='function'?'HTTP_'+(e as any).getStatus():'UNAVAILABLE')).replace(/[^A-Z0-9_]/g,'').slice(0,64);
     this.log.warn('EVA_INTAKE_FAILURE '+stage+' '+code);
-    try{await transition(unknown?'unknown':'review',{diagnostic:{stage,cause:code,code:unknown?'UNCONFIRMED_RESULT':duplicate?'EXISTING_DOCUMENT':stage==='ARCHIVING'?'ARCHIVE_FAILED':'SOURCE_REVIEW_REQUIRED'},note:code==='EVA_CLOSING_CAPTURE_LIMIT'?'Leitura concluída. A preparação atingiu o limite de fontes; os arquivos e respostas estão preservados. A plataforma precisa conferir a captura, sem repetir OCR.':unknown?'Resultado não confirmado. Confira o histórico antes de repetir.':duplicate?'Já existe uma fatura desta unidade e competência. Confira a versão existente, sem iniciar outra leitura.':stage==='ARCHIVING'?'A identificação foi concluída, mas houve falha técnica ao arquivar. O original e suas respostas foram preservados; não reenvie o arquivo.':'A fonte ou autorização precisa de conferência. O arquivo original foi preservado.'});}catch{this.log.warn('EVA_INTAKE_ACK_PENDING');}
+    try{await transition(unknown?'unknown':'review',{diagnostic:{stage,cause:code,code:unknown?'UNCONFIRMED_RESULT':duplicate?'EXISTING_DOCUMENT':stage==='ARCHIVING'?'ARCHIVE_FAILED':'SOURCE_REVIEW_REQUIRED'},note:code==='EVA_CLOSING_CAPTURE_LIMIT'?'Leitura concluída. A preparação atingiu o limite de fontes; os arquivos e respostas estão preservados. A plataforma precisa conferir a captura, sem repetir OCR.':unknown?(submitting?'O provedor não confirmou a leitura. O original está preservado. Confira e autorize a retomada desta etapa, sem reenviar o arquivo.':'Resultado não confirmado. Confira o histórico antes de repetir.'):rejected?'O provedor não aceitou a leitura. O original está preservado; confira a disponibilidade do serviço ou o arquivo antes de retomar.':duplicate?'Já existe uma fatura desta unidade e competência. Confira a versão existente, sem iniciar outra leitura.':stage==='ARCHIVING'?'A identificação foi concluída, mas houve falha técnica ao arquivar. O original e suas respostas foram preservados; não reenvie o arquivo.':'A fonte ou autorização precisa de conferência. O arquivo original foi preservado.'});}catch{this.log.warn('EVA_INTAKE_ACK_PENDING');}
    }
   }finally{this.busy=false;}
  }

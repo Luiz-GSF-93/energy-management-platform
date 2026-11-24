@@ -1,0 +1,13 @@
+EVA: recovery of an unacknowledged initial OCR submission
+
+An UNKNOWN receipt at 15% had no OCR operation ID, raw result or archived source. The old preserved-preparation reconciliation intentionally requires those later checkpoints and cannot recover that earlier submission.
+
+The separate reading recovery inspects the exact tenant receipt before asking the internal operator to authorize one additional OCR attempt. Prior consumption remains explicitly uncertain. It verifies consent, license, permissions, original hash and receipt timestamp, serializes the transition, records the authorization and allows only one retry. Replays of the same request do not enqueue another operation. It neither uploads another original nor approves or publishes financial results. Genuine ambiguous submissions are never automatically retried.
+
+Safe digital PDF pages can identify a customer, unit and month without discarding the whole digital identity merely because an auxiliary page requires OCR. An ambiguous identity falls back to the full original OCR. Financial OCR remains separate and reads the full source; no financial pages are ignored. Certain provider rejection is reported for review instead of being mislabeled as unknown submission.
+
+Deployment: apply 20261361 before compatible API/frontend. Existing preserved-preparation reconciliation remains unchanged. Rollback application code if needed; the additive service-only RPC may remain unused. Never reset a receipt to bypass the single-retry record.
+
+Verification: 188 isolated SQL checks; intake service/worker regression suites; partial digital PDF with unreadable auxiliary page; explicit confirmation UI; backend and frontend production builds.
+
+Production recovery: receipt 430ea7a8-6a85-4045-9b27-273e651daa1c, same original, express user authorization. Retry accepted by OCR and reading preserved, unit/month recognized and linked. Financial proposal requires the supplier NF for September 2026; no financial approval/publication performed. Complementary source requirements must remain visible and cannot be replaced by fabricated values.
