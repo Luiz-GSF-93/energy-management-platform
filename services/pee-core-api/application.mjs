@@ -1,3 +1,4 @@
+import{createEvaLibrary}from'./eva-library.mjs';
 import{createControlledViews,controlledPage}from'./controlled-view.mjs';
 import{createDemonstrationApi}from'./demonstration-api.mjs';
 import{demonstrationPresentation}from'./demonstration.mjs';
@@ -55,6 +56,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
  const resolvedMail=mailProvider??(mailConfig?createResendProvider(mailConfig):null);
  clientPortal=createClientPortal({store,sealer:portalSealer,publicOrigin,enabled:portalEnabled,mailProvider:resolvedMail,coreCall});
  async function demoSnapshot(c,id){const data=await snapshot(c,id);data.organization=(await list(c,'company')).find(x=>x.platform_organization===true);return data;}
+ const evaLibrary=createEvaLibrary({store,list,snapshot});
  const controlledViews=createControlledViews({store,get:related,renderer:documentRenderer});
  const demonstration=createDemonstrationApi({store,snapshot:demoSnapshot,put,get:related,assessment:assessProject,build:demonstrationBuilder,controlledViews});
  const communications=createCommunications({store,snapshot,workspace,publicOrigin,provider:resolvedMail,webhookSecret:mailWebhookSecret??mailConfig?.secret,readAttachment:mailAttachmentReader,controlledViews});
@@ -167,7 +169,7 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    res.setHeader('Content-Type',mime);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(name));res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");res.end(bytes);return true;
   }
   if(req.method==='GET'&&path==='/api/app/bootstrap'){
-   const data=Object.fromEntries(await Promise.all(kinds.map(async k=>[k,c.role==='finance'&&k!=='royalty'?[]:await list(c,k)]))),usage=await store.rpc(c,'usage',{monthly_limit:c.monthly_limit});send(res,200,{identity:{email:g.email??null,content_protection_enabled:protection,network_address:protection?networkAddress(req):null,workspace:c.workspace,role:c.role,subject:c.subject,display_name:g.display_name??null,monthly_limit:c.monthly_limit,csrf:s.csrf,expires_at:g.expires_at,core_url:coreOrigin+'/pee',source:c.source,activity_enabled:activityEnabled,idle_seconds:900},usage,distributors:distributors.map(({hosts,...d})=>d),official_sources:officialSources.map(({hosts,pathPrefix,...s})=>s),assistance_fields:Object.fromEntries(Object.entries(assistanceFields).map(([id,f])=>[id,f.label])),guide:guideReference,selection_criteria:selectionCriteria,scoring_metrics:scoringMetrics,scoring_methods:scoringMethods,typologies,types,inputs:opportunityInputs,reports:reportTypes,sections:requiredSections,data});return true;
+   const data=Object.fromEntries(await Promise.all(kinds.map(async k=>[k,c.role==='finance'&&k!=='royalty'?[]:await list(c,k)]))),usage=await store.rpc(c,'usage',{monthly_limit:c.monthly_limit});send(res,200,{identity:{email:g.email??null,content_protection_enabled:protection,eva_library_enabled:process.env.PEE_EVA_LIBRARY_ENABLED==='true',network_address:protection?networkAddress(req):null,workspace:c.workspace,role:c.role,subject:c.subject,display_name:g.display_name??null,monthly_limit:c.monthly_limit,csrf:s.csrf,expires_at:g.expires_at,core_url:coreOrigin+'/pee',source:c.source,activity_enabled:activityEnabled,idle_seconds:900},usage,distributors:distributors.map(({hosts,...d})=>d),official_sources:officialSources.map(({hosts,pathPrefix,...s})=>s),assistance_fields:Object.fromEntries(Object.entries(assistanceFields).map(([id,f])=>[id,f.label])),guide:guideReference,selection_criteria:selectionCriteria,scoring_metrics:scoringMetrics,scoring_methods:scoringMethods,typologies,types,inputs:opportunityInputs,reports:reportTypes,sections:requiredSections,data});return true;
   }
   if(req.method==='POST'&&path==='/api/app/security/events'){if(!protection)fail('Recurso não habilitado.',404);const b=await jsonBody(req,1500);if(!['window_hidden','copy_command_blocked','print_command_blocked'].includes(b.event))fail('Evento inválido.');await store.security(c,b.event,{reported_by_browser:true,display_name:c.display_name,network_address:networkAddress(req)});send(res,200,{recorded:true});return true;}
   if(req.method==='GET'&&path==='/api/app/portfolio'){
@@ -177,12 +179,19 @@ export function createApplication({store=createStore(),publicOrigin,coreOrigin,w
    for(let i=0;i<page.length;i+=4){items.push(...await Promise.all(page.slice(i,i+4).map(async p=>portfolioRow(await snapshot(c,p.id)))));}
    const last=page.at(-1)?.id??null;send(res,200,{items,total:projects.length,next_cursor:last&&projects.some(p=>p.id>last)?last:null,calculated_at:new Date().toISOString()});return true;
   }
+  if(req.method==='GET'&&path==='/api/app/eva/library'){
+   if(process.env.PEE_EVA_LIBRARY_ENABLED!=='true'||c.role==='finance')fail('Biblioteca assistiva indisponível para este acesso.',403);let checked=0;const verify=async()=>{if(Date.now()-checked<10000)return;const fresh=await authorize(req);if(fresh.session.tenant!==c.tenant||fresh.session.subject!==c.subject||fresh.grant.role!==c.role)throw Error('library_scope');checked=Date.now();};
+   send(res,200,await evaLibrary.prepare(c,verify));return true;
+  }
   if(req.method==='POST'&&['/api/app/eva/analyze','/api/app/eva/status'].includes(path)){
    if(process.env.PEE_EVA_AI_ENABLED!=='true')fail('A assistência EVA ainda não foi habilitada.',503);
    const body=await jsonBody(req,6000),auth={organization_id:s.organization,audience:'energyos-pee',source:c.source,...(c.source==='core'?{token:s.coreToken}:{license_id:c.tenant,subject:c.subject})};
    if(path.endsWith('/status')){if(!uuid(body.job_id))fail('Consulta EVA inválida.');send(res,200,await coreCall('eva_status',{...auth,job_id:body.job_id}));return true;}
-   let result;try{result=await assistFromOfficialSources(body,{...(officialReader?{reader:officialReader}:{})});}catch{fail('Confira o campo PEE e as fontes oficiais.');}const sources=result.sources.filter(x=>x.status==='excerpt').map(({source_id,url,excerpt,sha256})=>({source_id,url,excerpt,sha256}));if(!sources.length)fail('Nenhuma evidência oficial disponível. Confira as fontes antes de pedir análise.',422);
-   send(res,200,{...await coreCall('eva_start',{...auth,field:body.field,question:body.question??'',sources}),sources:result.sources,label:result.label});return true;
+   let result;try{result=await assistFromOfficialSources(body,{...(officialReader?{reader:officialReader}:{})});}catch{fail('Confira o campo PEE e as fontes oficiais.');}const sources=result.sources.filter(x=>x.status==='excerpt').map(({source_id,url,excerpt,sha256})=>({source_id,url,excerpt,sha256}));let library;const libraryEnabled=process.env.PEE_EVA_LIBRARY_ENABLED==='true';if(libraryEnabled){if(c.role==='finance')fail('Perfil sem acesso à biblioteca técnica.',403);if(body.project_id&&!uuid(body.project_id))fail('Projeto inválido.');library=await evaLibrary.retrieve(c,{question:body.question??'',field:body.field,project_id:body.project_id});if(!library.ready){send(res,409,{message:'A biblioteca está sendo preparada. Aguarde a indexação.',library:library.status});return true;}}
+   if(!sources.length&&!library?.chunks.length)fail('Não há trechos suficientes para responder. Confira as fontes e os arquivos legíveis.',422);const fresh=await authorize(req);if(fresh.grant.role!==c.role)fail('Permissão alterada.',403);
+   if(libraryEnabled)await store.security(c,'eva_library_consulted',{field:body.field,document_references:library?.chunks.map(x=>({reference:x.reference,sha256:x.sha256,page:x.page,source_id:x.source_id}))??[],question_sha256:digest(Buffer.from(body.question??'')),actions_executed:false});
+   const job=await coreCall('eva_start',{...auth,field:body.field,question:body.question??'',sources,...(libraryEnabled?{library:{tenant_id:c.tenant,chunks:library.chunks}}:{})});
+   send(res,200,{...job,sources:result.sources,label:result.label,...(libraryEnabled?{library:{status:library.status,references:library.chunks}}:{})});return true;
   }
   if(req.method==='POST'&&path==='/api/app/eva'){
    const key=c.tenant+':'+c.subject,minute=Math.floor(Date.now()/60000);for(const[k,v]of evaLimits)if(v.minute<minute)evaLimits.delete(k);let entry=evaLimits.get(key);if(!entry){entry={minute,count:0};evaLimits.set(key,entry);}if(++entry.count>3)fail('A EVA permite até 3 consultas por minuto. Aguarde para continuar.',429);
