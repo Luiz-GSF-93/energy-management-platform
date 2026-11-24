@@ -54,6 +54,13 @@ export class LegalAuditService{
   return this.action(t,'enqueue',b.requestId,{documentId:b.documentId,sourceHash:doc.data.file_hash,customerId:b.customerId,unitId:b.unitId,asOf:b.asOf,basis,sources,libraryVersion:version});
  }
 
+ async search(t:TenantContext,b:any){
+  this.scope(t);
+  const keys=['q','customerId','unitId','kind','documentId','offset'],kinds=['CONTRACT_ENERGY','CONTRACT_CUSD','CONTRACT_CCER','CONTRACT_MANAGEMENT','OTHER'];
+  if(!b||Object.keys(b).some(k=>!keys.includes(k))||typeof b.q!=='string'||b.q.trim().length<3||b.q.length>500||['customerId','unitId','documentId'].some(k=>b[k]!==undefined&&b[k]!==''&&!uuid(b[k]))||b.kind!==undefined&&b.kind!==''&&!kinds.includes(b.kind)||b.offset!==undefined&&(!/^\d{1,5}$/.test(String(b.offset))||Number(b.offset)>10000))throw new BadRequestException('Digite de 3 a 500 caracteres e confira os filtros da auditoria.');
+  const result=await this.db.getClient().rpc('legal_audit_search',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_query:b.q.trim(),p_customer:b.customerId||null,p_unit:b.unitId||null,p_kind:b.kind||null,p_document:b.documentId||null,p_offset:Number(b.offset||0)});
+  this.fail(result.error);return result.data;
+ }
  async detail(t:TenantContext,id:string){if(!uuid(id))throw new BadRequestException('Análise inválida.');return this.action(t,'detail',id);}
  async confirmReview(t:TenantContext,id:string,b:any){
   this.scope(t);

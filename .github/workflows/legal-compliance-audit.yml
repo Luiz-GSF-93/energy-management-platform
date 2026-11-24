@@ -4,12 +4,14 @@ on:
     paths:
       - 'backend/src/modules/ocr/**'
       - 'backend/src/database/migrations/2026133[3456]*'
+      - 'backend/src/database/migrations/20261359*'
       - 'backend/test/legal-audit*'
       - 'backend/test/legal-library*'
       - 'backend/test/fixtures/legal-library*'
       - 'frontend/app/backoffice/ocr-audit/**'
       - 'frontend/app/backoffice/eva-knowledge/**'
       - 'frontend/test/legal-audit*'
+      - 'frontend/test/legal-command-search.cjs'
       - '.github/workflows/legal-compliance-audit.yml'
   push:
     branches: [main]
@@ -47,7 +49,7 @@ jobs:
         working-directory: backend
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - run: node test/legal-audit.cjs && node test/ocr-audit.cjs
+      - run: node test/legal-audit.cjs && node test/ocr-audit.cjs && node test/legal-command-search.cjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
