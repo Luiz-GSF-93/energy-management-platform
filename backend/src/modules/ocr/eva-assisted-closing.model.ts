@@ -197,7 +197,7 @@ export function assistedClosingReport(org:string,customer:string,month:string,en
    }else{
    const allocations=entries.map(e=>field(e.plan,'fee:allocation')?.value);
    const canonical=(value:any)=>Array.isArray(value)?value.map(x=>({consumerUnitId:x.consumerUnitId,percentage:allocationUnits(String(x.percentage)).toString()})).sort((a,b)=>String(a.consumerUnitId).localeCompare(String(b.consumerUnitId))):value;
-   if(!allocations.every(a=>JSON.stringify(canonical(a))===JSON.stringify(canonical(allocations[0]))))throw Error('Rateio mensal divergente entre unidades.');const a=allocations[0];if(!Array.isArray(a)||a.length!==units.length||a.some(x=>!units.some(u=>u.id===x.consumerUnitId)))throw Error('Rateio não cobre todas as unidades do cliente.');
+   if(!allocations.every(a=>JSON.stringify(canonical(a))===JSON.stringify(canonical(allocations[0]))))throw Error('Rateio mensal divergente entre unidades.');const a=allocations[0];if(!Array.isArray(a)||a.length!==units.length||a.some(x=>!units.some(u=>u.id===x.consumerUnitId)))throw Error('Rateio não cobre todas as unidades do cliente. Os valores fixo e percentual já foram carregados das fontes de honorários; falta definir somente a distribuição do variável entre as unidades, sem recadastrar o contrato.');
    variable=base>0n?rounded(base*percent,100000000n):0n;shares=allocateFee(fmt(variable),a);
    }
   }
