@@ -79,7 +79,18 @@ export class AutomaticIntakeService{
   if(r.error)throw new ServiceUnavailableException('Não foi possível consultar o painel. O processamento foi preservado.');
   return {enabled:true,...r.data};
  }
+ async readingRecovery(t:TenantContext,id:string,body:any){
+  if(!this.enabled(t.organizationId)||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).join(',')!=='reading')throw new BadRequestException('Retomada da leitura inválida.');
+  const inspect=body.reading===true,b=inspect?{}:body.reading;
+  if(!inspect&&(!b||Object.keys(b).sort().join(',')!=='confirmed,expectedUpdatedAt,reason,requestId,sourceHash'||b.confirmed!==true||typeof b.reason!=='string'||b.reason.trim().length<20||b.reason.length>1000||typeof b.sourceHash!=='string'||!/^[a-f0-9]{64}$/.test(b.sourceHash)||typeof b.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(b.expectedUpdatedAt))||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(b.requestId??'')))throw new BadRequestException('Confira o original e confirme uma única nova tentativa de OCR.');
+  const r=await this.db.getClient().rpc('eva_intake_reading_recovery',{p_org:t.organizationId,p_actor:t.userId,p_role:t.roleId,p_platform:t.accessMode==='platform_operation',p_id:id,p_action:inspect?'inspect':'resume',p_body:b});
+  if(r.error?.code==='42501')throw new ForbiddenException('A retomada exige acesso interno e licença de documentos vigente.');
+  if(r.error)throw new ConflictException('A etapa de leitura mudou ou já foi retomada. Atualize o acompanhamento; não reenvie o arquivo.');
+  if(r.data?.id!==id||inspect&&!r.data?.readingRecovery||!inspect&&!r.data?.replayed&&r.data?.state!=='RECOGNIZING')throw new ServiceUnavailableException('Confirmação da retomada indisponível. Confira o acompanhamento antes de repetir.');
+  if(!inspect)wakeEvaWorkers();return r.data;
+ }
  async reconcile(t:TenantContext,id:string,body:any){
+  if(body&&Object.prototype.hasOwnProperty.call(body,'reading'))return this.readingRecovery(t,id,body);
   if(!this.enabled(t.organizationId)||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)||!body||Object.keys(body).length)throw new BadRequestException('Reconciliação inválida.');
   let result:any;
   try{result=await this.action(t,'reconcile_preparation',id,{reason:'Reconferência técnica do resultado preservado solicitada pela equipe interna autorizada.'},true);}
