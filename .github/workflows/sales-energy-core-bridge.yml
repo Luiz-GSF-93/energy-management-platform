@@ -3,9 +3,12 @@ on:
   pull_request:
     paths:
       - 'backend/src/modules/sales-intake/sales-core-bridge*'
+      - 'backend/src/modules/sales-intake/sales-asaas*'
       - 'backend/src/modules/sales-intake/sales-intake.module.ts'
       - 'backend/src/database/migrations/20261362_platform_sales_energy_core_bridge.sql'
+      - 'backend/src/database/migrations/20261363_asaas_payment_identifier_compatibility.sql'
       - 'backend/test/sales-core-bridge.cjs'
+      - 'backend/test/sales-asaas-payment-id.cjs'
       - 'integrations/energy-core/**'
       - '.github/workflows/sales-energy-core-bridge.yml'
 permissions:
@@ -23,9 +26,11 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
         working-directory: backend
-      - run: npm test -- --runInBand sales-core-bridge.spec.ts
+      - run: npm test -- --runInBand sales-core-bridge.spec.ts sales-asaas.spec.ts sales-asaas-payment-id.spec.ts
         working-directory: backend
       - run: node test/sales-core-bridge.cjs
+        working-directory: backend
+      - run: node test/sales-asaas-payment-id.cjs
         working-directory: backend
       - run: npm run build
         working-directory: backend

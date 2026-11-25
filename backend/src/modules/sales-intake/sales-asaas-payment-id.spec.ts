@@ -1,0 +1,8 @@
+import {BadRequestException} from '@nestjs/common';
+import {SalesAsaasAdapter,paymentId,paymentSummary,SANDBOX_URL} from './sales-asaas.adapter';
+const sample={id:'pay_0_example123',customer:'cus_0000001',value:2600,netValue:2599.01,status:'PENDING',externalReference:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'};
+describe('Asaas emitted payment identifier compatibility',()=>{
+ it.each(['pay_legacy123','pay_0_example123','pay_1_a_b'])('accepts provider-safe ID %s',id=>{expect(paymentId.test(id)).toBe(true);expect(paymentSummary({...sample,id}).id).toBe(id);});
+ it.each(['pay_','pay_../customers','pay_a/b','pay_a?x=1','pay_a#x','pay_a%2Fb','pay_a b','pay_'+ 'x'.repeat(101)])('rejects path/control/length injection: %s',id=>{expect(paymentId.test(id)).toBe(false);expect(()=>paymentSummary({...sample,id})).toThrow(BadRequestException);});
+ it('queries the emitted ID exactly once and does not change amounts',async()=>{const previous=global.fetch;try{global.fetch=jest.fn().mockResolvedValue(Response.json(sample));const settings:Record<string,string>={SALES_ASAAS_SANDBOX_ENABLED:'true',SALES_ASAAS_SANDBOX_CALLS_ENABLED:'true',SALES_ASAAS_BASE_URL:SANDBOX_URL,SALES_ASAAS_SANDBOX_API_KEY:'test-key-not-used-externally'};expect(await new SalesAsaasAdapter({get:(k:string)=>settings[k]} as any).payment(sample.id)).toMatchObject({id:sample.id,grossCents:260000,netCents:259901});expect(global.fetch).toHaveBeenCalledTimes(1);expect(global.fetch).toHaveBeenCalledWith(SANDBOX_URL+'/payments/'+sample.id,expect.objectContaining({method:'GET',redirect:'error'}));}finally{global.fetch=previous;}});
+});

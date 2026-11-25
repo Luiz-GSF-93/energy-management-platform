@@ -1,7 +1,7 @@
 import {BadRequestException,Injectable,ServiceUnavailableException} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 export const SANDBOX_URL='https://api-sandbox.asaas.com/v3';
-export const paymentId=/^pay_[a-zA-Z0-9]{1,100}$/;
+export const paymentId=/^pay_[a-zA-Z0-9_]{1,100}$/;
 export function cents(value:unknown):number|null {
  if(value===undefined||value===null)return null;
  if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>10000000||Math.abs(value*100-Math.round(value*100))>0.000001)throw new BadRequestException('Valor financeiro inválido.');

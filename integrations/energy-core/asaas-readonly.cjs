@@ -12,7 +12,7 @@ function configuration(env){
 }
 async function payment(env,id,transport=fetch){
  const {url,key}=configuration(env);
- if(typeof id!=='string'||!/^pay_[a-zA-Z0-9]{1,100}$/.test(id))throw Error('Identificador de cobrança inválido.');
+ if(typeof id!=='string'||!/^pay_[a-zA-Z0-9_]{1,100}$/.test(id))throw Error('Identificador de cobrança inválido.');
  let reader;
  try{
   const r=await transport(url+'/payments/'+id,{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{access_token:key,Accept:'application/json','User-Agent':'EnergyCore-LicenseSales/1.0'}});
