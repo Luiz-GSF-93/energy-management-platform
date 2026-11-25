@@ -1,0 +1,61 @@
+ENERGYOS → ENERGY CORE → ASAAS — integração preparada, ainda não ativada
+
+Responsabilidades
+Site e motor comercial: recebem o interesse na licença EnergyOS. EnergyOS preserva a solicitação e seu protocolo; Energy Core administra proposta, contrato e faturamento. EVA, OCR, contratos de energia e documentos das organizações permanecem no EnergyOS. Asaas deve ser chamado pelo backend do Energy Core com credencial própria; não transportar chaves pelo navegador, site ou por esta API. Um evento comercial retornado pelo Core não é comprovação bancária, assinatura validada, concessão de acesso ou ativação de licença.
+
+Interface no EnergyOS, prefixo /api/v1
+POST /integrations/energy-core/sales/claim
+Authorization: Bearer <credencial exclusiva, armazenada nos cofres dos dois backends>
+Body: {"requestId":"UUID do lote"}
+Resposta: schemaVersion=1, requests (máximo 10), com receipt, leaseId, leaseUntil, idempotencyKey, createdAt e lead. O prazo de processamento é de cinco minutos. O Core deve criar sua solicitação com unicidade de idempotencyKey antes do ACK; em falha após criação, consultar por essa chave, nunca criar outra cobrança ou proposta às cegas. Repetir o mesmo requestId recupera o lote ainda válido, sem reservar solicitações novas. Para um novo lote, usar outro UUID. Poll recomendado: um consumidor, uma consulta a cada 30 segundos quando ocioso, sem polling pelo navegador.
+
+POST /integrations/energy-core/sales/ack
+Body: {"receipt":"UUID recebido","leaseId":"UUID do lote","coreRequestId":"referencia-interna-Core"}
+Retorno ACCEPTED confirma somente o recebimento no Core. A mesma confirmação é idempotente. Lease vencido ou trocado é recusado. Até dez reservas sem confirmação levam à fila DEAD_LETTER. O Owner consulta e autoriza a retomada; não há repetição ilimitada. O consumidor precisa monitorar erros 409/503 sem perder seu protocolo.
+
+POST /integrations/energy-core/sales/updates
+Body: {"eventId":"UUID estável do evento","receipt":"UUID recebido","revision":1,"status":"PROPOSAL_PREPARED","proposalRef":"referencia-proposta-Core"}
+Status aceitos: PROPOSAL_PREPARED, CONTRACT_PREPARED, CONTRACT_SIGNED, CANCELLED. Contratos exigem contractRef. Somente referências curtas, sem URLs ou documentos contratuais integrais. Revisões devem crescer; reordenação e regressão são recusadas; eventId duplicado com conteúdo diferente gera conflito. Guardar e repetir o mesmo evento após timeout. Nenhum retorno altera licença, pagamentos ou tabelas financeiras. O Core continua sendo responsável por comprovar assinatura e recebimento em seu próprio fluxo.
+
+Administração Owner
+GET /api/v1/admin/sales/energy-core: configuração e contagens da fila, até 25 protocolos com falha.
+POST /api/v1/admin/sales/energy-core/routing: {"enabled":true,"reason":"justificativa de pelo menos 20 caracteres"}.
+POST /api/v1/admin/sales/energy-core/retry: {"receipt":"UUID","reason":"justificativa de pelo menos 20 caracteres"}.
+O banco revalida Owner ativo. Perfis das organizações não administram a integração. As rotas do consumidor usam autenticação de serviço própria e não fornecem acesso a outros módulos.
+
+Implantação coordenada
+1. Aplicar e testar a migração 20261362, que inicia desligada, sem copiar solicitações antigas. Não há mudança de preços, licenças, pagamentos ou valores aprovados.
+2. Publicar os controllers e service, registrados em SalesIntakeModule. API protegida por SALES_CORE_BRIDGE_ENABLED=true e SALES_CORE_BRIDGE_TOKEN exclusivo (43–255 caracteres sem espaços; gerar de fonte criptográfica). Não reutilizar token de webhook, chave Asaas ou chave Supabase. A ativação desta credencial é ampliação de acesso e deve ser revisada com o serviço Azure identificado.
+3. Recurso localizado no Azure em 25/11: energy-core-api, grupo rg-energy-core-prod, Brazil South, status Em execução; ingresso interno. O portal mostra etiqueta energy-core-release=0.21.0-rc.22 e revisão energy-core-api--0000245. A etiqueta não substitui a confirmação da imagem efetivamente publicada. Também existe energy-core-worker. O painel de implantação não apresenta repositório GitHub conectado. Foi localizado código local do Energy Core com package.json 0.21.0-rc.44, em trabalho concorrente; não substituir esse serviço pela base antiga nem presumir que a cópia local corresponde à imagem em execução. Instalar e testar o consumidor com deduplicação sobre a versão Core correta. Não foi implantado consumidor real. Como o Core consulta o EnergyOS, esta interface não exige tornar pública a API interna do Azure.
+4. Validar dados sintéticos, repetição, timeout após gravação no Core, reinício, lease vencido, evento fora de ordem e isolamento. As duas travas (flag backend e política no banco) permanecem desligadas até essa homologação.
+5. Alinhar o site/jornada comercial à gestão pelo Core. A recomendação de plano existente não é um contrato Core. A fila captura somente solicitações novas após habilitar a política. Propostas locais EnergyOS para protocolos roteados passam a ser recusadas no banco para evitar dois administradores comerciais. Não habilitar a rota sem atualizar essa experiência e os avisos ao usuário; as telas Owner antigas não foram substituídas por esta preparação.
+6. Habilitar o encaminhamento pelo Owner somente com o Core pronto. Cadastro histórico não é exportado automaticamente. Minimizar dados: nome/contato e requisitos comerciais já consentidos; nenhum arquivo OCR, fatura ou dado operacional de organização é exportado. Revogação/apagamento de lead remove os itens e eventos correlatos locais; o Core precisa implementar retenção própria e propagação de exclusões antes do go-live.
+7. Rollback: desligar flag e política para suspender o consumidor e novos encaminhamentos. Não apagar fila, propostas ou contratos; protocolos já encaminhados continuam pertencendo ao Core e não podem voltar ao processamento financeiro local por inferência. Não há parada planejada do OCR/EVA.
+
+Asaas no Energy Core
+Arquivo integrations/energy-core/asaas-readonly.cjs é um adaptador inicial para instalar no backend do Core. Apenas GET de cobrança, URL fixa por ambiente, User-Agent, sem redirecionamento, timeout 10s, resposta até 64KiB, minimização de dados e autenticação de webhook com segredo independente. Não cria cobrança, cliente ou recorrência. Usa CORE_ASAAS_ENABLED, CORE_ASAAS_ENVIRONMENT=sandbox|production, CORE_ASAAS_SANDBOX_API_KEY ou CORE_ASAAS_PRODUCTION_API_KEY. Leitura de produção exige CORE_ASAAS_PRODUCTION_READ_ENABLED=true. Token de webhook em CORE_ASAAS_WEBHOOK_TOKEN.
+Não expor o adaptador pelo EnergyOS nem copiar a conta/chave Asaas automaticamente. A conta Asaas do Energy Core, titularidade, ambiente, permissões, rede e webhooks precisam ser confirmados no Azure. Webhook deve persistir e deduplicar o ID antes de HTTP 200; consulta e conciliação financeira ficam assíncronas. Não reativar a fila antiga EnergyOS-Sandbox-Homologacao apontando para um endereço Core não homologado.
+Criação de cobrança/recorrência, assinatura contratual, confirmação financeira, conciliação e comando idempotente de provisionamento são próximas etapas no backend Core real. Os métodos existentes no EnergyOS não foram transferidos nem habilitados em produção nesta entrega.
+
+Senha Sandbox
+A senha de Sandbox é independente de Produção. Usar “Esqueci minha senha” em https://sandbox.asaas.com/login/auth e concluir a recuperação diretamente no Asaas. Não enviar senha, link de recuperação ou chave pelo chat. Sem login e webhook real não declarar homologação ou recuperação da fila concluída.
+
+Fontes oficiais consultadas em 25/11/2026
+https://docs.asaas.com/reference/comece-por-aqui
+https://docs.asaas.com/docs/autentica%C3%A7%C3%A3o-1
+https://docs.asaas.com/docs/receba-eventos-do-asaas-no-seu-endpoint-de-webhook
+https://docs.asaas.com/docs/fila-pausada
+
+Validação desta preparação
+Ver resultados dos testes locais e CI da PR. Na preparação inicial não houve cobrança, chamada real Asaas, concessão de credencial, migração em produção nem transferência de dados ao Core. Na continuidade autorizada de 25/11, a migração 20261362 foi ensaiada com rollback e aplicada em produção, com política desligada, fila vazia, RLS e execução restrita ao backend. Isso não ativa o encaminhamento nem comprova a implantação do consumidor Core.
+
+Conferência do código Core
+Estrutura NestJS/TypeScript em apps/api e PostgreSQL com transaction(org) e RLS. Nenhuma implementação Asaas foi encontrada nas pastas apps/api/src, database, docs e shared examinadas. Existem fluxos comerciais e de licenças EnergyOS-PEE, além de integração de recebimentos Inter; estes pertencem a fluxos próprios e não foram substituídos. O adaptador aqui preparado é destinado à venda de licenças EnergyOS solicitada neste trabalho. Não reutilizar o protocolo PEE como autorização, não importar faturas operacionais e não trocar o provedor de recebimento de contratos existentes. A cópia Core está sendo atualizada em outro chat; esta entrega preserva todos os arquivos desse trabalho e mantém a candidata isolada em PR no EnergyOS.
+
+Resultados confirmados
+26 verificações SQL passaram em PGlite descartável; 15 casos do novo serviço passaram; quatro testes do adaptador Asaas passaram; compilação TypeScript das classes novas aprovada. CI Energy Core sales bridge aprovou Jest nativo, as verificações SQL, build completo do backend e os quatro testes Asaas em Linux. Asaas real, assinatura, Core real e provisionamento ainda não homologados por estes testes.
+
+Diagnóstico do webhook e correção de compatibilidade
+Após o usuário recuperar a senha e entrar no Sandbox, foi consultado o log do webhook de 11/11/2026 às 12:13: HTTP 400, mensagem Identificação financeira inválida, evento PAYMENT_CREATED, com identificador de cobrança contendo sublinhado interno (formato pay_0_...). O endereço configurado é a API Railway do EnergyOS, não a API interna do Core.
+A validação JavaScript aceitava somente letras e números após pay_. Duas funções SQL instaladas e três constraints de IDs repetiam essa restrição. A correção admite sublinhado, mantém prefixo, limite de comprimento, caracteres seguros e todas as validações monetárias. A migração adicional 20261363 preserva as definições instaladas das funções, alterando apenas o padrão exato do identificador, e amplia somente as três constraints de payment_id identificadas. Não recria cobranças, não muda valores e não ativa licenças.
+Testes adicionais: 12 casos TypeScript, 20 verificações SQL (incluindo idempotência da migração, dados e permissões preservados) e um quinto teste do adaptador Core. Reativar a fila somente depois de publicar API/banco compatíveis; conferir nova entrega HTTP 200 e persistência. Não remover eventos antigos nem trocar o destino pelo Core sem homologar seu receptor.
