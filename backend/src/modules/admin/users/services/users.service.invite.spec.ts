@@ -190,6 +190,7 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
           error: null,
         },
       ),
+      createUser: jest.fn().mockImplementation(async(input:any)=>({data:{user:{id:userId,email:input.email,app_metadata:input.app_metadata}},error:null})),
       inviteUserByEmail: jest.fn().mockResolvedValue(
         options.inviteUser ?? {
           data: {
@@ -243,6 +244,21 @@ describe('UsersService.invite — F1.2.4c.2.2b.1', () => {
       compensationOrder,
     };
   }
+
+  it('creates a paid-Core identity once without sending a second Supabase invitation',async()=>{
+    const h=harness({profiles:[],authUsers:[]});
+    const password='Synthetic-temporary-password-123!';
+    await expect(h.service.invite(dto as any,{...auditContext,platformOperation:true},{password,expiresAt:new Date(Date.now()+3600000).toISOString(),jobId:membershipId})).resolves.toMatchObject({provisioningPath:'new_identity'});
+    expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();
+    expect(h.authAdmin.createUser).toHaveBeenCalledTimes(1);
+    expect(h.authAdmin.createUser).toHaveBeenCalledWith(expect.objectContaining({email_confirm:true,app_metadata:expect.objectContaining({energyos_password_setup_required:true,energyos_core_temporary_password:true})}));
+    expect(JSON.stringify(h.auditService.logUserInvite.mock.calls)).not.toContain(password);
+  });
+  it('Core onboarding never changes an existing identity password',async()=>{
+    const h=harness();
+    await expect(h.service.invite(dto as any,{...auditContext,platformOperation:true},{password:'Synthetic-temporary-password-123!',expiresAt:new Date(Date.now()+3600000).toISOString(),jobId:membershipId})).resolves.toMatchObject({provisioningPath:'existing_identity'});
+    expect(h.authAdmin.createUser).not.toHaveBeenCalled();expect(h.authAdmin.inviteUserByEmail).not.toHaveBeenCalled();expect(h.authAdmin.updateUserById).not.toHaveBeenCalled();
+  });
 
   it('reuses an existing identity/profile and creates only membership', async () => {
     const h = harness();

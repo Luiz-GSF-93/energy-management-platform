@@ -1,0 +1,44 @@
+name: Core license delivery
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/core-licensing/**'
+      - 'backend/src/common/auth/**'
+      - 'backend/src/common/services/core-subscription-access*'
+      - 'backend/src/modules/admin/users/**'
+      - 'backend/src/modules/auth/auth.service.ts'
+      - 'backend/src/database/migrations/20261364*'
+      - 'backend/test/core-license-module.cjs'
+      - 'backend/test/database/core-licensing.test.mjs'
+      - 'frontend/app/auth/first-access/**'
+      - 'frontend/app/components/CoreSubscriptionBoundary.tsx'
+      - '.github/workflows/core-license-delivery.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand core-license.spec.ts invite-password-policy.spec.ts auth.service.accept-invite.spec.ts users.service.invite.spec.ts
+        working-directory: backend
+      - run: node test/database/core-licensing.test.mjs
+        working-directory: backend
+      - run: node test/database/verify-license-governance.mjs
+        working-directory: backend
+      - run: node node_modules/typescript/bin/tsc --outDir tmp/core-license-smoke --incremental false
+        working-directory: backend
+      - run: node test/core-license-module.cjs
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: node node_modules/typescript/bin/tsc --noEmit
+        working-directory: frontend

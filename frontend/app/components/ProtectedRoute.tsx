@@ -1,4 +1,5 @@
 'use client';
+import CoreSubscriptionBoundary from './CoreSubscriptionBoundary';
 
 import {
   ReactNode,
@@ -83,5 +84,5 @@ export default function ProtectedRoute({
     );
   }
 
-  return <>{children}</>;
+  return <CoreSubscriptionBoundary>{children}</CoreSubscriptionBoundary>;
 }

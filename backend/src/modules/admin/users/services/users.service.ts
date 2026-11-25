@@ -12,7 +12,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { randomUUID,createHash } from 'crypto';
 import { AuditService } from '../../../../common/services/audit.service';
 import { SupabaseService } from '../../../../services/supabase.service';
 import {
@@ -638,6 +638,7 @@ export class UsersService {
       userAgent?: string;
       platformOperation?: boolean;
     },
+    coreTemporary?: {password:string;expiresAt:string;jobId:string},
   ): Promise<{
     userId: string;
     membershipId: string;
@@ -645,6 +646,7 @@ export class UsersService {
     provisioningPath: 'new_identity' | 'existing_identity';
     notificationStatus?: MembershipNotificationStatus;
   }> {
+    if(coreTemporary&&(!auditContext.platformOperation||!/^[a-f0-9-]{36}$/i.test(coreTemporary.jobId)||coreTemporary.password.length<24||!Number.isFinite(Date.parse(coreTemporary.expiresAt))||Date.parse(coreTemporary.expiresAt)<=Date.now()||Date.parse(coreTemporary.expiresAt)>Date.now()+25*3600000))throw new BadRequestException('Primeiro acesso inválido.');
     const client = this.supabaseService.getClient();
     const authClient = this.supabaseService.createAuthClient();
 
@@ -904,7 +906,7 @@ export class UsersService {
         const welcome=await this.welcomeContext(auditContext.organizationId,role.name,dto.affiliationType,dto.customerId);
         const welcomeInfo=welcomeContent(welcome);
         const { data: inviteData, error: inviteError } =
-          await authClient.auth.admin.inviteUserByEmail(normalizedEmail, {
+          coreTemporary?await authClient.auth.admin.createUser({email:normalizedEmail,password:coreTemporary.password,email_confirm:true,user_metadata:{name:normalizedName},app_metadata:{energyos_password_setup_required:true,energyos_core_temporary_password:true,energyos_temporary_password_expires_at:coreTemporary.expiresAt,energyos_temporary_password_digest:createHash('sha256').update(coreTemporary.password).digest('hex'),energyos_core_welcome_job:coreTemporary.jobId}}):await authClient.auth.admin.inviteUserByEmail(normalizedEmail, {
             data: {
               name: normalizedName,
               energyos_audience: welcomeInfo.audience,
@@ -1119,7 +1121,7 @@ export class UsersService {
         membershipId: confirmedMembershipId,
         membershipStatus: 'active',
         provisioningPath,
-        ...(provisioningPath === 'existing_identity' && !dto.portalUnitIds ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType, undefined, targetUserId)} : {}),
+        ...(provisioningPath === 'existing_identity' && !dto.portalUnitIds && !coreTemporary ? {notificationStatus: await this.notifyMembership(confirmedMembershipId, normalizedEmail, auditContext.organizationId, role.name, dto.affiliationType, undefined, targetUserId)} : {}),
       };
     } catch (error) {
       // Compensate owned writes at most once per invite execution.
