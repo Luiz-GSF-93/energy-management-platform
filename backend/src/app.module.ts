@@ -1,3 +1,4 @@
+import {CoreLicenseModule} from './modules/core-licensing/core-license.module';
 import {TrainingModule} from './modules/training/training.module';
 import {AuditModule} from './modules/audit/audit.module';
 import {AuditCaptureMiddleware} from './modules/audit/audit.middleware';
@@ -47,7 +48,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
 @Module({
-  imports: [TrainingModule,AuditModule,PortalWorkspaceModule,
+  imports: [CoreLicenseModule,TrainingModule,AuditModule,PortalWorkspaceModule,
     ConfigModule.forRoot({ isGlobal: true }),
     CommonModule,
     OrganizationBrandingModule,

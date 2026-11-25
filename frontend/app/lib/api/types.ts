@@ -20,6 +20,7 @@ export interface OrganizationContextSummary {
 }
 
 export interface CurrentOrganizationContext {
+  subscription?:{managed:boolean;organizationId?:string;state?:string;blocked?:boolean;notice?:string|null;overdueDays?:number;paidThrough?:string|null;oldestUnpaidDueOn?:string|null};
   name?: string;
   id: string;
   role: string;

@@ -2,6 +2,7 @@ import { Request } from 'express';
 import type {PortalCustomerContext} from '../services/portal-customer-context';
 
 interface BaseAccessContext {
+  subscription?:import('../services/core-subscription-access').CoreSubscription;
   individualPermissions?: boolean;
   userId: string;
   role: string;

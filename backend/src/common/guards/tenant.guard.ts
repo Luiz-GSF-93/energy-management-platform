@@ -1,3 +1,4 @@
+import {assertCoreSubscription} from '../services/core-subscription-access';
 import {transientBackendError} from '../services/transient-backend-error';
 import {readDeadline} from '../services/read-deadline';
 import {memberPermissions} from '../services/member-permissions';
@@ -293,6 +294,7 @@ export class TenantGuard implements CanActivate {
 
       this.logger.log(`[ROLE_VALID] role validated`);
 
+      const coreBilling=await assertCoreSubscription(this.supabaseService.getClient(),activeOrgId,userId,request.path);
       let portalCustomerScope;
       const portalPath=request.path.replace(/^\/api\/v1/,'');
       const identityOnly=['/auth/context','/auth/profile','/portal/access'].includes(portalPath);
@@ -317,6 +319,7 @@ export class TenantGuard implements CanActivate {
 
       // 11. Montar TenantContext completo (PRESERVADO DO ORIGINAL + NOVO roleId)
       const tenantContext: TenantContext = {
+        ...(coreBilling?{subscription:coreBilling}:{}),
         ...(membership.permission_limit!=null?{individualPermissions:true}:{}),
         ...(portalCustomerScope?{portalCustomerScope}:{}),
         scope: 'organization',

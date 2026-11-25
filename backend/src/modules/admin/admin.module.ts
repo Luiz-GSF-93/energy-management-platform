@@ -15,6 +15,6 @@ import { UsersService } from './users/services/users.service';
   imports: [CommonModule, AuthModule],
   controllers: [UserRequestsController, UserRecoveryController, OrganizationsController, OrganizationSetupController, UsersController],
   providers: [UserRequestsService, UserRecoveryService, OrganizationsService, UsersService],
-  exports: [OrganizationsService,UserRequestsService],
+  exports: [OrganizationsService,UserRequestsService,UsersService],
 })
 export class AdminModule {}

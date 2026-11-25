@@ -1,3 +1,4 @@
+import {coreTemporaryAccess,temporaryPasswordMatches} from '../../common/auth/core-temporary-password';
 import {transientBackendError} from '../../common/services/transient-backend-error';
 import {readDeadline} from '../../common/services/read-deadline';
 import {memberPermissions} from '../../common/services/member-permissions';
@@ -150,6 +151,7 @@ export class AuthService {
           role_id: membership.roles.id,
         })),
         currentOrganization: {
+          ...(tenant.subscription?{subscription:tenant.subscription}:{}),
           id: currentMembership.organization_id,
           name: currentMembership.organizations.name,
           role: currentRole.name,
@@ -305,7 +307,10 @@ export class AuthService {
   async acceptInvite(userId:string,password:string) {
     const client=this.supabaseService.createAuthClient();
     const {data,error}=await client.auth.admin.getUserById(userId);
-    if(error || !data?.user?.invited_at) throw new ForbiddenException('Convite inválido ou indisponível');
+    const metadata=data?.user?.app_metadata;
+    const temporary=coreTemporaryAccess(metadata);
+    if(error || !data?.user || (!data.user.invited_at&&!temporary) || (metadata?.energyos_core_temporary_password===true&&metadata.energyos_password_setup_required===true&&!temporary)) throw new ForbiddenException('Convite inválido ou expirado. Utilize a recuperação de senha.');
+    if(temporary&&temporaryPasswordMatches(password,metadata?.energyos_temporary_password_digest))throw new BadRequestException('Escolha uma senha pessoal diferente da senha provisória.');
     const result=await client.auth.admin.updateUserById(userId,{password,...(data.user.app_metadata?.energyos_password_setup_required===true?{app_metadata:{...data.user.app_metadata,energyos_password_setup_required:false}}:{})});
     if(result.error) throw new BadRequestException('Não foi possível definir a senha. Verifique os requisitos de segurança.');
     return {success:true};
