@@ -1,0 +1,32 @@
+name: Energy Core sales bridge
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/sales-intake/sales-core-bridge*'
+      - 'backend/src/modules/sales-intake/sales-intake.module.ts'
+      - 'backend/src/database/migrations/20261362_platform_sales_energy_core_bridge.sql'
+      - 'backend/test/sales-core-bridge.cjs'
+      - 'integrations/energy-core/**'
+      - '.github/workflows/sales-energy-core-bridge.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm test -- --runInBand sales-core-bridge.spec.ts
+        working-directory: backend
+      - run: node test/sales-core-bridge.cjs
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: node --test integrations/energy-core/asaas-readonly.test.cjs
