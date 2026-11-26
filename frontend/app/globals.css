@@ -286,6 +286,26 @@ a {
   width: min(100%, 28rem);
 }
 
+/* Public login presentation; authentication states and other auth routes retain their layout. */
+.auth-page--login { padding: clamp(1.25rem, 4vw, 3.5rem); }
+.auth-login-layout { width: min(100%, 76rem); display: grid; grid-template-columns: minmax(20rem, 27rem) minmax(0, 1fr); align-items: start; gap: clamp(2rem, 5vw, 5rem); }
+.auth-shell--login { width: 100%; min-width: 0; }
+.auth-shell--login .auth-brand { margin-bottom: 2rem; }
+.login-institutional { position: relative; min-width: 0; overflow: hidden; padding: clamp(1.5rem, 3.5vw, 3rem); border: 1px solid rgba(75, 165, 205, .3); border-radius: 1.75rem; background: linear-gradient(145deg, #0b2b47, #06213a 70%); color: #eef7ff; isolation: isolate; }
+.login-institutional__glow { position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 100% 0%, rgba(0, 201, 242, .13), transparent 55%), radial-gradient(ellipse at 10% 100%, rgba(0, 217, 149, .07), transparent 60%); }
+.login-institutional__eyebrow { display: block; margin: 0 0 1rem; font-size: .75rem; line-height: 1.5; letter-spacing: .13em; font-weight: 700; color: #91d9ee; }
+.login-institutional h2 { margin: 0 0 1rem; font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.12; letter-spacing: -.04em; font-weight: 750; }
+.login-institutional h2 em { color: #58e1cf; font-style: normal; }
+.login-institutional__link { display: inline-block; color: #74e5d8; font-size: .9375rem; text-underline-offset: .25rem; }
+.login-institutional__link:hover { color: #c5fff5; }
+.login-institutional__privacy { margin: 1rem 0 0; color: #a7c1d5; font-size: .75rem; line-height: 1.6; }
+.login-institutional :is(a, summary):focus-visible { outline: 2px solid #75e8dd; outline-offset: 5px; border-radius: .25rem; }
+@media (max-width: 58rem) {
+  .auth-login-layout { grid-template-columns: 1fr; max-width: 36rem; gap: 2rem; }
+  .auth-shell--login { max-width: 28rem; justify-self: center; }
+  .login-institutional { padding: 1.5rem; }
+}
+
 .auth-brand {
   margin-bottom: var(--space-8);
   text-align: center;
