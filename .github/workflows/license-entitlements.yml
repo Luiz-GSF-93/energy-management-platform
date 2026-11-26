@@ -1,0 +1,41 @@
+name: License entitlements and public login
+on:
+  pull_request:
+    paths:
+      - 'backend/src/modules/plans/**'
+      - 'backend/src/modules/core-licensing/**'
+      - 'backend/src/database/migrations/20261365*'
+      - 'backend/test/database/core-support*'
+      - 'frontend/app/auth/login/**'
+      - 'frontend/app/components/LoginInstitutionalPanel.tsx'
+      - 'frontend/app/backoffice/licenses/**'
+      - 'frontend/app/globals.css'
+      - 'frontend/test/portal-login.cjs'
+      - '.github/workflows/license-entitlements.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: backend
+      - run: node node_modules/jest/bin/jest.js --runInBand src/modules/plans/upgrade-intent.spec.ts src/modules/core-licensing/core-license.spec.ts src/modules/core-licensing/core-support-contract.spec.ts
+        working-directory: backend
+      - run: node test/database/core-support-entitlements.test.mjs && node test/database/core-support-integration.test.mjs && node test/database/central-support.test.mjs
+        working-directory: backend
+      - run: node node_modules/typescript/bin/tsc --noEmit
+        working-directory: backend
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: npm install --no-save --package-lock=false --ignore-scripts jsdom@26.1.0
+        working-directory: frontend
+      - run: node test/portal-login.cjs
+        working-directory: frontend
+      - run: npm run build -- --webpack
+        working-directory: frontend

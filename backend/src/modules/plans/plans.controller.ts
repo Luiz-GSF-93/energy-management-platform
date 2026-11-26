@@ -8,6 +8,7 @@ import {RequestWithAuthenticatedUser} from '../../common/interfaces/authenticate
 import {PERMISSIONS as P} from '../../common/constants/permissions';
 import {PlansService,PLAN_VIEW,PLAN_MANAGE} from './plans.service';
 import {ApplyPlanDto,SavePlanDto,UpgradeRequestDto} from './plans.dto';
+import {upgradeIntent} from './upgrade-intent';
 const validation=new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true});
 @Controller('admin/plans') @PlatformScope() @UsePipes(validation)
 export class PlatformPlansController {
@@ -22,7 +23,7 @@ export class PlatformPlansController {
 export class OrganizationPlansController {
  constructor(private readonly plans:PlansService){}
  @Get('usage') @RequirePermission([P.ORGANIZATION_LICENSES_VIEW]) usage(@Tenant() tenant:TenantContext){return this.plans.usage(tenant.organizationId);}
- @Post('upgrade-requests') @RequirePermission([P.ORGANIZATION_LICENSES_VIEW]) request(@Body() dto:UpgradeRequestDto,@Tenant() tenant:TenantContext){return this.plans.requestUpgrade(tenant.organizationId,dto.note,tenant.userId);}
+ @Post('upgrade-requests') @RequirePermission([P.ORGANIZATION_LICENSES_VIEW]) request(@Body() dto:UpgradeRequestDto,@Tenant() tenant:TenantContext){return this.plans.requestUpgrade(tenant.organizationId,upgradeIntent(dto),tenant.userId);}
  @Get('plans') @RequirePermission([P.ORGANIZATION_LICENSES_VIEW]) list(){return this.plans.list(true);}
  @Post('from-plan') @RequirePermission([P.ORGANIZATION_LICENSES_CREATE]) create(@Body() dto:ApplyPlanDto,@Tenant() tenant:TenantContext,@Req() req:Request){if(tenant.accessMode!=='platform_operation')throw new ForbiddenException('Somente o administrador da plataforma pode alterar a licença.');return this.plans.apply(tenant.organizationId,dto,{userId:tenant.userId,ip:req.ip,agent:req.get('user-agent')});}
 }

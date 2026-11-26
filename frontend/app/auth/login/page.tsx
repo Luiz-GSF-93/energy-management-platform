@@ -8,6 +8,7 @@ import {
 import Link from 'next/link';
 import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import AuthenticatedDestination from '@/app/components/AuthenticatedDestination';
+import LoginInstitutionalPanel from '@/app/components/LoginInstitutionalPanel';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -79,8 +80,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="auth-page">
-      <div className="auth-shell">
+    <main className="auth-page auth-page--login">
+      <div className="auth-login-layout">
+      <div className="auth-shell auth-shell--login">
         <header className="auth-brand">
           <h1 className="auth-brand__name"><EnergyOSLogo className="auth-brand__logo" /></h1>
 
@@ -144,6 +146,8 @@ export default function LoginPage() {
             <div className="auth-account-preview"><span role="link" aria-disabled="true">Não tenho conta</span><small>Em breve</small></div>
           </form>
         </Card>
+      </div>
+      <LoginInstitutionalPanel />
       </div>
     </main>
   );

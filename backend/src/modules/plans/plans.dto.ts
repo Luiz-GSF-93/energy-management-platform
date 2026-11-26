@@ -49,4 +49,9 @@ export class ApplyPlanDto {
  @IsDateString() @Matches(/^\d{4}-\d{2}-\d{2}$/) renewalDate!:string;
 }
 
-export class UpgradeRequestDto { @IsString() @MinLength(3) @MaxLength(2000) note!:string; }
+export class UpgradeRequestDto {
+ @IsString() @MinLength(3) @MaxLength(2000) note!:string;
+ @IsOptional() @IsIn(['plan','documents','module','tickets']) kind?:string;
+ @IsOptional() @IsInt() @Min(1) @Max(1000000) quantity?:number;
+ @IsOptional() @IsString() @MaxLength(50) module?:string;
+}

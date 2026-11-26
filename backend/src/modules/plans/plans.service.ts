@@ -51,7 +51,13 @@ export class PlansService {
   const today=new Date().toISOString().slice(0,10);
   const effective=(licenses.data??[]).filter((l:any)=>l.status?.toLowerCase()==='active'&&l.start_date&&l.start_date<=today&&(!l.end_date||l.end_date>=today));
   if(effective.length>1)throw new ConflictException('Há mais de uma licença vigente. Solicite revisão administrativa.');
-  return {used:used.data,license:effective[0]??null,requests:await licenseRequestAuthors(client,requests.data??[],org),updatedAt:new Date().toISOString()};
+  let support=null;
+  if(process.env.SALES_CORE_SUPPORT_ENTITLEMENTS_ENABLED==='true'){
+   const result=await client.rpc('central_support_license_usage',{p_org:org});
+   if(result.error)throw new InternalServerErrorException('Não foi possível confirmar a franquia de atendimento. Atualize antes de contratar adicionais.');
+   support=result.data;
+  }
+  return {used:used.data,license:effective[0]??null,support,requests:await licenseRequestAuthors(client,requests.data??[],org),updatedAt:new Date().toISOString()};
  }
  async upgrades(org?:string){
   let q=this.supabase.getClient().from('license_upgrade_requests').select('*, organizations(name)').eq('status','pending').order('created_at');

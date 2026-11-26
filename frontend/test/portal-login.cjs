@@ -43,6 +43,9 @@ const render=async(Component=Entry)=>{routes=[];calls=[];await act(async()=>root
  authStatus='mfa_required';context=null;await render(Login);ok(routes.join()==='/auth/mfa'&&!text().includes('Fazer login'),'login MFA challenge cannot redirect to dashboard');
  await render(Mfa);ok(text().includes('AuthenticatorSettings')&&!routes.length,'MFA challenge stays available');
  authStatus='unauthenticated';await render(Login);ok(text().includes('Fazer login')&&!routes.length,'signed out sees login');
+ ok(!!document.querySelector('.auth-login-layout')&&!!document.querySelector('.login-institutional'),'public split layout renders without tenant context');
+ ok(!document.querySelector('.login-institutional iframe,.login-institutional script,.login-institutional video[autoplay]'),'institutional content does not embed external scripts or autoplay');
+ ok(document.querySelectorAll('input[type=password]').length===1,'institutional layout keeps one credential form');
  login=async()=>{authCalls++;authStatus='authenticated';context=organization();root.render(React.createElement(Login,{key:sequence}));};api=async()=>({organizationId:'org',audience:'client'});await render(Login);
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));ok(authCalls===1&&routes.join()==='/portal','credential submission delegates sole redirect to validated destination');
  console.log(checks+' portal login regression checks passed');
