@@ -8,9 +8,11 @@ on:
       - 'backend/test/database/core-support*'
       - 'frontend/app/auth/login/**'
       - 'frontend/app/components/LoginInstitutionalPanel.tsx'
+      - 'frontend/app/components/LoginHero.css'
       - 'frontend/app/backoffice/licenses/**'
       - 'frontend/app/globals.css'
       - 'frontend/test/portal-login.cjs'
+      - 'frontend/test/login-hero.cjs'
       - '.github/workflows/license-entitlements.yml'
 permissions:
   contents: read
@@ -35,7 +37,7 @@ jobs:
         working-directory: frontend
       - run: npm install --no-save --package-lock=false --ignore-scripts jsdom@26.1.0
         working-directory: frontend
-      - run: node test/portal-login.cjs
+      - run: node test/portal-login.cjs && node test/login-hero.cjs
         working-directory: frontend
       - run: npm run build -- --webpack
         working-directory: frontend

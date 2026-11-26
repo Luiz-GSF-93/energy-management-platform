@@ -296,21 +296,6 @@ a {
 .login-institutional__eyebrow { display: block; margin: 0 0 1rem; font-size: .75rem; line-height: 1.5; letter-spacing: .13em; font-weight: 700; color: #91d9ee; }
 .login-institutional h2 { margin: 0 0 1rem; font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.12; letter-spacing: -.04em; font-weight: 750; }
 .login-institutional h2 em { color: #58e1cf; font-style: normal; }
-.login-institutional__intro { max-width: 36rem; color: #c6d9e9; font-size: 1.0625rem; line-height: 1.65; margin: 0; }
-.login-institutional__visual { margin: 1.5rem 0 2rem; padding: 1rem 1rem .75rem; background: rgba(3, 19, 35, .38); border: 1px solid rgba(101, 158, 187, .18); border-radius: 1rem; }
-.login-institutional__visual svg { display: block; width: 100%; height: auto; max-height: 10rem; }
-.login-institutional__grid { fill: none; stroke: #80a6c4; opacity: .14; stroke-width: 1; }
-.login-institutional__curve { fill: none; stroke: url(#login-energy-line); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
-.login-institutional__visual > span { display: block; margin-top: .65rem; font-size: .6875rem; letter-spacing: .12em; color: #a2c5dc; }
-.login-institutional__features { display: grid; gap: 1.15rem; }
-.login-institutional__features article { position: relative; padding-left: 2.5rem; }
-.login-institutional__features article > span { position: absolute; left: 0; top: .1rem; display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border: 1px solid rgba(90, 200, 211, .3); border-radius: .5rem; color: #78d9df; font-size: .6875rem; }
-.login-institutional__features h3 { margin: 0 0 .25rem; font-size: 1rem; font-weight: 650; }
-.login-institutional__features p { margin: 0; color: #bfd2e1; font-size: .875rem; line-height: 1.6; }
-.login-institutional__learn { margin: 1.5rem 0 1rem; padding-top: 1.25rem; border-top: 1px solid rgba(137, 186, 207, .2); }
-.login-institutional__learn summary { color: #d9edf7; font-size: .9375rem; cursor: pointer; }
-.login-institutional__learn details p { color: #bfd2e1; font-size: .875rem; line-height: 1.65; margin: .75rem 0 0; }
-.login-institutional__learn video { display: block; width: 100%; border-radius: .75rem; }
 .login-institutional__link { display: inline-block; color: #74e5d8; font-size: .9375rem; text-underline-offset: .25rem; }
 .login-institutional__link:hover { color: #c5fff5; }
 .login-institutional__privacy { margin: 1rem 0 0; color: #a7c1d5; font-size: .75rem; line-height: 1.6; }
@@ -319,7 +304,6 @@ a {
   .auth-login-layout { grid-template-columns: 1fr; max-width: 36rem; gap: 2rem; }
   .auth-shell--login { max-width: 28rem; justify-self: center; }
   .login-institutional { padding: 1.5rem; }
-  .login-institutional__visual { margin-bottom: 1.5rem; }
 }
 
 .auth-brand {

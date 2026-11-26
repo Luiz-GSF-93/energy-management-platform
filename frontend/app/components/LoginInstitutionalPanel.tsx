@@ -1,41 +1,66 @@
-/** Public, repository-reviewed content only. Never read tenant/customer APIs here. */
-const publicTrainingVideo: string | null = null;
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import './LoginHero.css';
 
-export default function LoginInstitutionalPanel() {
-  const localVideo = publicTrainingVideo && /^\/media\/login\/[a-z0-9_-]+\.(mp4|webm)$/.test(publicTrainingVideo)
-    ? publicTrainingVideo : null;
-  return (
-    <aside className="login-institutional" aria-labelledby="login-institutional-title">
-      <div className="login-institutional__glow" aria-hidden="true" />
-      <div className="login-institutional__content">
-        <span className="login-institutional__eyebrow">GESTÃO DE ENERGIA COM INTELIGÊNCIA</span>
-        <h2 id="login-institutional-title">Mais contexto.<br /><em>Melhores decisões.</em></h2>
-        <p className="login-institutional__intro">Documentos, contratos e informações de energia conectados para acompanhar sua operação com a EVA.</p>
-        <div className="login-institutional__visual" aria-hidden="true">
-          <svg viewBox="0 0 520 170" focusable="false">
-            <defs><linearGradient id="login-energy-line" x1="0" x2="1"><stop stopColor="#00c9f2"/><stop offset="1" stopColor="#00d995"/></linearGradient></defs>
-            <path className="login-institutional__grid" d="M10 30H510M10 75H510M10 120H510M80 10V160M180 10V160M280 10V160M380 10V160M480 10V160"/>
-            <path className="login-institutional__curve" d="M12 133L65 121L112 128L164 92L213 104L264 65L310 79L359 43L408 57L458 26L508 18"/>
-            <circle cx="359" cy="43" r="6" fill="#00d995"/><circle cx="508" cy="18" r="6" fill="#00c9f2"/>
-          </svg>
-          <span>INFORMAÇÃO CONECTADA À SUA OPERAÇÃO</span>
-        </div>
-        <section className="login-institutional__news" aria-labelledby="login-news-title">
-          <p className="login-institutional__eyebrow" id="login-news-title">NO SEU ENERGYOS</p>
-          <div className="login-institutional__features">
-            <article><span aria-hidden="true">01</span><h3>Documentos e EVA</h3><p>Leitura de faturas e notas em PDF ou XML, com fontes preservadas para conferência.</p></article>
-            <article><span aria-hidden="true">02</span><h3>Mercado Livre de Energia</h3><p>Gestão do Mercado Livre e Adesão ACL, com seus contratos e unidades no contexto certo.</p></article>
-            <article><span aria-hidden="true">03</span><h3>Portal do Cliente</h3><p>Acompanhamento das informações disponibilizadas pela organização responsável.</p></article>
-          </div>
-        </section>
-        <section className="login-institutional__learn" aria-label="Orientações e treinamento">
-          {localVideo ? <video controls preload="none" playsInline src={localVideo} aria-label="Treinamento público do EnergyOS" /> : (
-            <details><summary>Primeiros passos com o EnergyOS</summary><p>Entre com seu perfil, selecione o ambiente autorizado e acompanhe as orientações da EVA. Confira as fontes antes de validar; a aprovação segue as permissões da organização.</p></details>
-          )}
-        </section>
-        <a className="login-institutional__link" href="https://www.energy-os.app.br/" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Conheça o EnergyOS para sua operação</a>
-        <p className="login-institutional__privacy">Conteúdo institucional público. As informações da sua organização ficam no ambiente autenticado.</p>
-      </div>
-    </aside>
-  );
+/** Illustrative local content only: no tenant APIs, financial values, OCR or AI calls. */
+export const LOGIN_HERO_INTERVAL_MS=6000;
+const slides=[
+ {id:'dashboard',label:'Dashboard energético',title:'Uma visão conectada da operação.',description:'Consumo, contratos e cenários reunidos para apoiar a consultoria e a gestão energética.',view:'chart',tags:['Consumo','Contratos','Cenários']},
+ {id:'eva',label:'EVA · análise de documentos',title:'Do documento à informação conferida.',description:'Leitura assistida de faturas, notas e contratos, com evidências preservadas e conferência humana.',view:'document',tags:['Leitura','Extração','Conferência']},
+ {id:'compliance',label:'Controle de compliance',title:'Pontos de atenção em contexto.',description:'Organize cláusulas, garantias e pendências documentais para orientar uma revisão criteriosa.',view:'checks',tags:['Garantias','Cláusulas','Evidências']},
+ {id:'governance',label:'Governança',title:'Cada decisão com seu histórico.',description:'Perfis, etapas e responsabilidades para separar o preenchimento, a conferência e a aprovação.',view:'flow',tags:['Permissões','Rastreabilidade','Aprovação']},
+ {id:'regulatory',label:'Auditoria regulatória',title:'Análises apoiadas em fontes oficiais.',description:'Documentos e referências do setor elétrico no contexto da avaliação, com ressalvas e fontes para conferência.',view:'checks',tags:['Fontes oficiais','Vigências','Relatório']},
+ {id:'strategy',label:'Consultoria estratégica',title:'Mais contexto para planejar energia.',description:'Compare cenários e condições comerciais para apoiar a estratégia energética de empresas e unidades.',view:'chart',tags:['Mercado Livre','Comparativos','Planejamento']}
+] as const;
+
+function DemoScreen({slide}:{slide:typeof slides[number]}){
+ return <div className="login-hero-stage" aria-hidden="true">
+  <div className="login-hero-window">
+   <div className="login-hero-window__bar"><span className="login-hero-window__dots">● ● ●</span><strong>Energy<span>OS</span></strong><span>Visão ilustrativa</span></div>
+   <div className="login-hero-window__workspace">
+    <div className="login-hero-window__rail"><b>E</b><span>▦</span><span>▤</span><span>◇</span><span>✓</span></div>
+    <div className="login-hero-window__main"><div className="login-hero-window__heading"><span>{slide.label}</span><span className="login-hero-chip">EVA</span></div>
+     <div className="login-hero-kpis">{slide.tags.map((tag,i)=><div key={tag}><small>0{i+1}</small><strong>{tag}</strong><span className="login-hero-kpis__line"/></div>)}</div>
+     {slide.view==='chart'?<div className="login-hero-chart"><div className="login-hero-chart__legend"><span>Referência</span><span>Cenário em análise</span></div><div className="login-hero-chart__bars">{['JAN','FEV','MAR','ABR','MAI','JUN'].map(month=><div key={month}><span/><span/><small>{month}</small></div>)}</div></div>:
+      slide.view==='document'?<div className="login-hero-document"><div className="login-hero-document__paper"><strong>Contrato de energia</strong><i/><i/><p>Garantias e condições de fornecimento</p><i/><i/></div><div className="login-hero-document__findings"><b>EVA · pontos de atenção</b><span>✓ Original preservado</span><span>◇ Cláusulas em revisão</span><span>↗ Fontes para conferência</span></div></div>:
+      slide.view==='flow'?<div className="login-hero-flow">{['Documento recebido','Conferência do operador','Aprovação do responsável','Publicação autorizada'].map((label,i)=><div key={label}><b>{i<2?'✓':String(i+1).padStart(2,'0')}</b><span>{label}</span><small>{i<2?'Conferido':'Próxima etapa'}</small></div>)}</div>:
+      <div className="login-hero-checks">{(slide.id==='regulatory'?['Referências oficiais','Vigência das fontes','Evidências do documento']:['Garantias contratuais','Cessão e obrigações','Cláusulas para revisão']).map((label,i)=><div key={label}><span>{i===2?'◇':'✓'}</span><b>{label}</b><small>{i===2?'Conferir':'Referenciado'}</small></div>)}<p>Relatório de conformidade · fontes e considerações</p></div>}
+    </div>
+   </div>
+  </div>
+  <div className="login-hero-float"><span>✦</span><div><strong>EVA</strong><small>Informação para a sua decisão</small></div></div>
+ </div>;
+}
+
+export default function LoginInstitutionalPanel(){
+ const[index,setIndex]=useState(0),[paused,setPaused]=useState(false),[hovered,setHovered]=useState(false),[focused,setFocused]=useState(false),[visible,setVisible]=useState(false),[inView,setInView]=useState(false),[reduced,setReduced]=useState(true);
+ const panel=useRef<HTMLElement>(null);
+ useEffect(()=>{
+  const media=typeof window.matchMedia==='function'?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+  const motion=()=>setReduced(media?.matches??false),visibility=()=>setVisible(document.visibilityState==='visible');motion();visibility();
+  media?.addEventListener('change',motion);document.addEventListener('visibilitychange',visibility);
+  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>setInView(entries.some(e=>e.isIntersecting)),{threshold:.15}):null;
+  if(observer&&panel.current)observer.observe(panel.current);else setInView(true);
+  return()=>{media?.removeEventListener('change',motion);document.removeEventListener('visibilitychange',visibility);observer?.disconnect();};
+ },[]);
+ useEffect(()=>{
+  if(paused||hovered||focused||!visible||!inView||reduced)return;
+  const timer=window.setInterval(()=>setIndex(i=>(i+1)%slides.length),LOGIN_HERO_INTERVAL_MS);
+  return()=>window.clearInterval(timer);
+ },[index,paused,hovered,focused,visible,inView,reduced]);
+ const slide=slides[index];
+ return <aside ref={panel} className="login-institutional" aria-labelledby="login-institutional-title" onPointerEnter={()=>setHovered(true)} onPointerLeave={()=>setHovered(false)} onFocusCapture={()=>setFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setFocused(false);}}>
+  <div className="login-institutional__glow" aria-hidden="true"/>
+  <span className="login-institutional__eyebrow">CONSULTORIA · ESTRATÉGIA · GESTÃO</span>
+  <h2 id="login-institutional-title">Inteligência para sua<br/><em>gestão de energia.</em></h2>
+  <section className="login-hero" aria-roledescription="carrossel" aria-label="Recursos do EnergyOS">
+   <div className="login-hero-slide" key={slide.id} aria-roledescription="slide" aria-label={`${index+1} de ${slides.length}`}>
+    <DemoScreen slide={slide}/>
+    <div className="login-hero-caption"><span>{slide.label}</span><h3>{slide.title}</h3><p>{slide.description}</p></div>
+   </div>
+   <div className="login-hero-controls"><button type="button" aria-label="Módulo anterior" onClick={()=>setIndex(i=>(i+slides.length-1)%slides.length)}>←</button><div className="login-hero-dots">{slides.map((item,i)=><button type="button" key={item.id} aria-label={`Ver ${item.label}`} aria-current={i===index?'true':undefined} onClick={()=>setIndex(i)}><span/></button>)}</div><button type="button" aria-label="Próximo módulo" onClick={()=>setIndex(i=>(i+1)%slides.length)}>→</button><button type="button" className="login-hero-pause" aria-pressed={paused} disabled={reduced} onClick={()=>setPaused(p=>!p)}>{reduced?'Manual':paused?'Reproduzir':'Pausar'}</button></div>
+  </section>
+  <p className="login-institutional__privacy">Simulação visual dos recursos, sem dados reais. {reduced?'Movimento reduzido: use os controles para navegar.':'Troca automática a cada 6 segundos; pausa ao interagir com o banner.'}</p>
+  <a className="login-institutional__link" href="https://www.energy-os.app.br/" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Conheça o EnergyOS ↗</a>
+ </aside>;
 }
