@@ -288,8 +288,8 @@ a {
 
 /* Public login presentation; authentication states and other auth routes retain their layout. */
 .auth-page--login { padding: clamp(1.25rem, 4vw, 3.5rem); }
-.auth-login-layout { width: min(100%, 76rem); display: grid; grid-template-columns: minmax(20rem, 27rem) minmax(0, 1fr); align-items: start; gap: clamp(2rem, 5vw, 5rem); }
-.auth-shell--login { width: 100%; min-width: 0; }
+.auth-login-layout { width: min(100%, 76rem); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: clamp(1.5rem, 3vw, 3rem); }
+.auth-shell--login { width: 100%; max-width: 27rem; min-width: 0; justify-self: center; }
 .auth-shell--login .auth-brand { margin-bottom: 2rem; }
 .login-institutional { position: relative; min-width: 0; overflow: hidden; padding: clamp(1.5rem, 3.5vw, 3rem); border: 1px solid rgba(75, 165, 205, .3); border-radius: 1.75rem; background: linear-gradient(145deg, #0b2b47, #06213a 70%); color: #eef7ff; isolation: isolate; }
 .login-institutional__glow { position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 100% 0%, rgba(0, 201, 242, .13), transparent 55%), radial-gradient(ellipse at 10% 100%, rgba(0, 217, 149, .07), transparent 60%); }
@@ -300,7 +300,7 @@ a {
 .login-institutional__link:hover { color: #c5fff5; }
 .login-institutional__privacy { margin: 1rem 0 0; color: #a7c1d5; font-size: .75rem; line-height: 1.6; }
 .login-institutional :is(a, summary):focus-visible { outline: 2px solid #75e8dd; outline-offset: 5px; border-radius: .25rem; }
-@media (max-width: 58rem) {
+@media (max-width: 48rem) {
   .auth-login-layout { grid-template-columns: 1fr; max-width: 36rem; gap: 2rem; }
   .auth-shell--login { max-width: 28rem; justify-self: center; }
   .login-institutional { padding: 1.5rem; }

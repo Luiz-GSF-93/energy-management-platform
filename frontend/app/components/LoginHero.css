@@ -63,7 +63,7 @@
 .login-institutional :is(a,button):focus-visible { outline:2px solid #75e8dd; outline-offset:3px; }
 .login-hero-slide { animation:login-hero-enter .35s ease-out; }
 @keyframes login-hero-enter { from {opacity:.25} to {opacity:1} }
-@media(max-width:58rem) {
+@media(max-width:48rem) {
  .login-institutional h2 { font-size:1.85rem; }
  .login-hero-stage { padding-inline:0; }
  .login-hero-window { transform:rotateY(-5deg) rotateX(3deg); }
@@ -76,4 +76,8 @@
 @media(prefers-reduced-motion:reduce) {
  .login-hero-slide { animation:none; }
  .login-hero-window,.login-hero-document__paper,.login-hero-float { transform:none; }
+}
+
+@media(min-width:48.001rem) and (max-width:64rem) {
+ .login-hero-controls>button[aria-label] { display:none; }
 }
