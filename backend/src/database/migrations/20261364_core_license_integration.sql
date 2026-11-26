@@ -23,12 +23,15 @@ CREATE TABLE public.platform_core_welcomes(
  password_cipher jsonb,user_id uuid,membership_id uuid,provisioning_path text,provider_id text,expires_at timestamptz,lease_id uuid,mail_hash text,mail_attempts integer NOT NULL DEFAULT 0,
  detail text,updated_at timestamptz NOT NULL DEFAULT now(),created_at timestamptz NOT NULL DEFAULT now()
 );
-DO $$DECLARE t text;BEGIN
- FOREACH t IN ARRAY ARRAY['platform_core_plan_links','platform_core_license_links','platform_core_license_events','platform_core_welcomes']LOOP
-  EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);
-  EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC,anon,authenticated,service_role',t);
- END LOOP;
-END $$;
+-- Explicit RLS for every new table; no direct access through API roles.
+ALTER TABLE public.platform_core_plan_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_core_license_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_core_license_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_core_welcomes ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.platform_core_plan_links FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE public.platform_core_license_links FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE public.platform_core_license_events FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE public.platform_core_welcomes FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.platform_core_billing_state(b jsonb,on_day date)RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog AS $$
 DECLARE due date;days integer;
@@ -89,7 +92,7 @@ BEGIN
   SELECT r.id INTO STRICT roleid FROM public.roles r WHERE r.organization_id=org AND r.scope='organization'AND r.name='admin_org';
   INSERT INTO public.platform_core_welcomes(core_subscription_id,organization_id,email,name,role_id)VALUES(coreid,org,p_body#>>'{customer,email}',p_body#>>'{customer,adminName}',roleid)RETURNING id INTO welcomeid;
  ELSE
-  UPDATE public.platform_core_license_links SET revision=rev,license_revision=(saved->>'governance_revision')::integer,billing=p_body->'billing',payment=p_body->'payment',updated_at=now()WHERE core_subscription_id=coreid;
+  UPDATE public.platform_core_license_links SET revision=rev,license_revision=(saved->>'governance_revision')::integer,billing=p_body->'billing',payment=p_body->'payment',updated_at=now() WHERE core_subscription_id=coreid;
   SELECT id INTO welcomeid FROM public.platform_core_welcomes WHERE core_subscription_id=coreid;
  END IF;
  result:=jsonb_build_object('organizationId',org,'licenseId',saved->>'id','revision',rev,'state',state->>'state','startsOn',starts,'welcomeId',welcomeid);
@@ -129,24 +132,24 @@ BEGIN
   IF w.state<>'PREPARED'THEN RETURN to_jsonb(w)||jsonb_build_object('organization_name',l.source#>>'{customer,legalName}');END IF;
   lease:=(p_body->>'leaseId')::uuid;
   IF lease IS NULL OR jsonb_typeof(p_body->'cipher')<>'object'OR (p_body->>'expiresAt')::timestamptz<=now()OR (p_body->>'expiresAt')::timestamptz>now()+interval '25 hours'THEN RAISE EXCEPTION 'Invalid temporary access' USING ERRCODE='22023';END IF;
-  UPDATE public.platform_core_welcomes SET state='PROVISIONING',lease_id=lease,password_cipher=p_body->'cipher',expires_at=(p_body->>'expiresAt')::timestamptz,updated_at=now()WHERE id=wid RETURNING * INTO w;
+  UPDATE public.platform_core_welcomes SET state='PROVISIONING',lease_id=lease,password_cipher=p_body->'cipher',expires_at=(p_body->>'expiresAt')::timestamptz,updated_at=now() WHERE id=wid RETURNING * INTO w;
   RETURN to_jsonb(w)||jsonb_build_object('organization_name',l.source#>>'{customer,legalName}');
  END IF;
  IF w.lease_id IS DISTINCT FROM(p_body->>'leaseId')::uuid THEN RAISE EXCEPTION 'Welcome lease changed' USING ERRCODE='P3660';END IF;
  IF p_action='identity' THEN
   IF w.state<>'PROVISIONING'OR p_body->>'path' IS NULL OR p_body->>'path' NOT IN('new_identity','existing_identity')OR NOT EXISTS(SELECT 1 FROM public.organization_members WHERE id::text=p_body->>'membershipId'AND organization_id=w.organization_id AND user_id::text=p_body->>'userId'AND role_id=w.role_id AND status='active')THEN RAISE EXCEPTION 'Identity proof missing' USING ERRCODE='P3660';END IF;
-  UPDATE public.platform_core_welcomes SET state='IDENTITY_READY',user_id=(p_body->>'userId')::uuid,membership_id=(p_body->>'membershipId')::uuid,provisioning_path=p_body->>'path',updated_at=now()WHERE id=wid RETURNING * INTO w;
+  UPDATE public.platform_core_welcomes SET state='IDENTITY_READY',user_id=(p_body->>'userId')::uuid,membership_id=(p_body->>'membershipId')::uuid,provisioning_path=p_body->>'path',updated_at=now() WHERE id=wid RETURNING * INTO w;
  ELSIF p_action='sending' THEN
   IF w.state NOT IN('IDENTITY_READY','SENDING')OR w.expires_at<=now()OR w.mail_attempts>=5 OR (w.mail_hash IS NOT NULL AND w.mail_hash IS DISTINCT FROM p_body->>'mailHash')OR p_body->>'mailHash' IS NULL OR p_body->>'mailHash'!~'^[a-f0-9]{64}$'OR(p_body->>'nextLeaseId')::uuid IS NULL THEN RAISE EXCEPTION 'Welcome not ready' USING ERRCODE='P3660';END IF;
   IF w.state='SENDING'AND w.updated_at>now()-make_interval(secs=>least(1800,60*power(2,greatest(0,w.mail_attempts-1)))::integer)THEN RAISE EXCEPTION 'Mail confirmation pending' USING ERRCODE='P3660';END IF;
-  UPDATE public.platform_core_welcomes SET state='SENDING',lease_id=(p_body->>'nextLeaseId')::uuid,mail_hash=p_body->>'mailHash',mail_attempts=mail_attempts+1,updated_at=now()WHERE id=wid RETURNING * INTO w;
+  UPDATE public.platform_core_welcomes SET state='SENDING',lease_id=(p_body->>'nextLeaseId')::uuid,mail_hash=p_body->>'mailHash',mail_attempts=mail_attempts+1,updated_at=now() WHERE id=wid RETURNING * INTO w;
  ELSIF p_action='sent' THEN
   IF w.state<>'SENDING'OR coalesce(length(p_body->>'providerId'),0) NOT BETWEEN 1 AND 200 THEN RAISE EXCEPTION 'Mail confirmation missing' USING ERRCODE='P3660';END IF;
-  UPDATE public.platform_core_welcomes SET state='SENT',provider_id=p_body->>'providerId',password_cipher=NULL,updated_at=now()WHERE id=wid RETURNING * INTO w;
+  UPDATE public.platform_core_welcomes SET state='SENT',provider_id=p_body->>'providerId',password_cipher=NULL,updated_at=now() WHERE id=wid RETURNING * INTO w;
   INSERT INTO public.audit_logs(id,organization_id,user_id,action,resource_type,resource_id,changes,status,user_agent)VALUES(gen_random_uuid()::text,w.organization_id,p_actor,'CREATE','core_welcome',w.id::text,jsonb_build_object('userId',w.user_id,'membershipId',w.membership_id,'providerId',w.provider_id,'passwordLogged',false,'passwordSetupRequired',w.provisioning_path='new_identity'),'success','Energy Core license onboarding');
  ELSIF p_action='unknown' THEN
   IF w.state NOT IN('PROVISIONING','IDENTITY_READY','SENDING')THEN RETURN to_jsonb(w)||jsonb_build_object('organization_name',l.source#>>'{customer,legalName}');END IF;
-  UPDATE public.platform_core_welcomes SET state='UNKNOWN',detail='Confirmação técnica necessária; não repetir criação de usuário ou envio sem conferir o provedor.',updated_at=now()WHERE id=wid RETURNING * INTO w;
+  UPDATE public.platform_core_welcomes SET state='UNKNOWN',detail='Confirmação técnica necessária; não repetir criação de usuário ou envio sem conferir o provedor.',updated_at=now() WHERE id=wid RETURNING * INTO w;
  END IF;
  RETURN to_jsonb(w)||jsonb_build_object('organization_name',l.source#>>'{customer,legalName}');
 END $$;
