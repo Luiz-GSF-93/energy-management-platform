@@ -36,10 +36,10 @@ describe('Sales intake public ingress',()=>{
  });
  test('disabled intake remains 404 and never reaches persistence without ingress headers',async()=>{
   process.env.SALES_INTAKE_ENABLED='false';const rpc=jest.fn();const service=new SalesIntakeService({getClient:()=>({rpc})} as any);
-  await expect(new PublicSalesController(service).submit(null,undefined,{} as Request)).rejects.toMatchObject({status:404});expect(rpc).not.toHaveBeenCalled();
+  await expect(new PublicSalesController(service).submit(null,undefined,{} as Request,undefined)).rejects.toMatchObject({status:404});expect(rpc).not.toHaveBeenCalled();
  });
  test('invalid ingress cannot call persistence even when enabled',()=>{
   process.env.SALES_INTAKE_ENABLED='true';const submit=jest.fn();const controller=new PublicSalesController({submit} as any);
-  expect(()=>controller.submit(null,undefined,request({host:'service.railway.internal'}))).toThrow();expect(submit).not.toHaveBeenCalled();
+  expect(()=>controller.submit(null,undefined,request({host:'service.railway.internal'}),undefined)).toThrow();expect(submit).not.toHaveBeenCalled();
  });
 });
