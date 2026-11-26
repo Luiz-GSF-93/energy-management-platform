@@ -82,6 +82,7 @@ export default function LoginPage() {
   return (
     <main className="auth-page auth-page--login">
       <div className="auth-login-layout">
+      <div className="auth-login-form-pane">
       <div className="auth-shell auth-shell--login">
         <header className="auth-brand">
           <h1 className="auth-brand__name"><EnergyOSLogo className="auth-brand__logo" /></h1>
@@ -146,6 +147,7 @@ export default function LoginPage() {
             <div className="auth-account-preview"><span role="link" aria-disabled="true">Não tenho conta</span><small>Em breve</small></div>
           </form>
         </Card>
+      </div>
       </div>
       <LoginInstitutionalPanel />
       </div>

@@ -81,3 +81,15 @@
 @media(min-width:48.001rem) and (max-width:64rem) {
  .login-hero-controls>button[aria-label] { display:none; }
 }
+
+@media(min-width:48.001rem) and (max-height:800px) {
+ .auth-page--login .login-institutional { padding: 1.25rem clamp(1.25rem, 3vw, 3rem); }
+ .auth-page--login .login-institutional h2 { font-size: clamp(1.6rem, 2.4vw, 2.2rem); margin-bottom: .35rem; }
+ .auth-page--login .login-institutional__eyebrow { margin-bottom: .6rem; font-size: .65rem; }
+ .auth-page--login .login-hero-stage { padding-block: 1rem 1.5rem; }
+ .auth-page--login .login-hero-window__workspace { min-height: 11rem; }
+ .auth-page--login .login-hero-caption { min-height: 7rem; padding-top: .6rem; }
+ .auth-page--login .login-hero-caption h3 { font-size: 1.05rem; margin-block: .35rem; }
+ .auth-page--login .login-hero-caption p { font-size: .8rem; line-height: 1.5; }
+ .auth-page--login .login-institutional__privacy { margin-block: .65rem; font-size: .65rem; }
+}
