@@ -30,6 +30,8 @@ const button=name=>[...document.querySelectorAll('button')].find(b=>b.getAttribu
  await act(async()=>button('Ver Consultoria estratégica').click());assert.equal(label(),'Consultoria estratégica');
  assert.equal(document.querySelectorAll('[aria-current="true"]').length,1);
  assert.ok(document.body.textContent.includes('sem dados reais'));assert.equal(document.querySelectorAll('iframe,script,video').length,0);assert.equal(fetchCalls,0);
+ await act(async()=>root.render(React.createElement(Panel,{language:'en'})));await act(async()=>button('View Energy dashboard').click());assert.equal(label(),'Energy dashboard');assert.ok(button('Previous module'));
+ await act(async()=>root.render(React.createElement(Panel,{language:'es'})));await act(async()=>button('Ver Panel energético').click());assert.equal(label(),'Panel energético');assert.ok(button('Próximo módulo'));assert.equal(fetchCalls,0);
  await act(async()=>root.unmount());assert.equal(timers.size,0);assert.equal(motionChange,null);assert.ok(disconnected);
  console.log('Login hero: rotation, pause, keyboard focus, visibility, reduced motion, cleanup and no service calls passed');
 }finally{Module._load=original;dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

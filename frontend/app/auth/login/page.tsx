@@ -9,6 +9,7 @@ import Link from 'next/link';
 import EnergyOSLogo from '@/app/components/EnergyOSLogo';
 import AuthenticatedDestination from '@/app/components/AuthenticatedDestination';
 import LoginInstitutionalPanel from '@/app/components/LoginInstitutionalPanel';
+import {useLoginLanguage,loginText} from '@/app/components/login-language';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -22,6 +23,8 @@ import { useAuth } from '@/app/providers';
 
 export default function LoginPage() {
   const router = useRouter();
+  const {language,setLanguage}=useLoginLanguage();
+  const t=(text:string)=>loginText(language,text);
 
   const {
     status,
@@ -85,6 +88,7 @@ export default function LoginPage() {
       <div className="auth-login-form-pane">
       <div className="auth-shell auth-shell--login">
         <header className="auth-brand">
+          <label className="auth-login-language">{t('Idioma')}<select aria-label={t('Idioma')} value={language} onChange={e=>setLanguage(e.target.value)}><option value="pt">Português</option><option value="en">English</option><option value="es">Español</option></select></label>
           <h1 className="auth-brand__name"><EnergyOSLogo className="auth-brand__logo" /></h1>
 
           <p className="auth-brand__description auth-brand__powered">
@@ -98,7 +102,7 @@ export default function LoginPage() {
             onSubmit={handleLogin}
           >
             <h2 className="auth-form__title">
-              Fazer login
+              {t('Fazer login')}
             </h2>
 
             {error ? (
@@ -108,20 +112,20 @@ export default function LoginPage() {
             ) : null}
 
             <Input
-              label="E-mail"
+              label={t('E-mail')}
               type="email"
               value={email}
               onChange={(event) =>
                 setEmail(event.target.value)
               }
-              placeholder="seu@email.com"
+              placeholder={t('seu@email.com')}
               autoComplete="email"
               required
               disabled={submitting}
             />
 
             <Input
-              label="Senha"
+              label={t('Senha')}
               type="password"
               value={password}
               onChange={(event) =>
@@ -139,17 +143,18 @@ export default function LoginPage() {
                 disabled={submitting}
               >
                 {submitting
-                  ? 'Entrando...'
-                  : 'Entrar'}
+                  ? t('Entrando...')
+                  : t('Entrar')}
               </Button>
             </div>
-            <Link href="/auth/forgot-password">Esqueci minha senha</Link>
-            <div className="auth-account-preview"><span role="link" aria-disabled="true">Não tenho conta</span><small>Em breve</small></div>
+            <Link href="/auth/forgot-password">{t('Esqueci minha senha')}</Link>
+            <div className="auth-account-preview"><span role="link" aria-disabled="true">{t('Não tenho conta')}</span><small>{t('Em breve')}</small></div>
           </form>
         </Card>
       </div>
+      <footer className="auth-login-site-footer"><span>by expert energy</span><span>© 2026 EnergyOS - E.E.P.E - {t('Todos os direitos reservados.')} v1.1.2</span><a href={'https://www.energy-os.app.br/politica-de-privacidade/'+(language==='pt'?'':language+'/')}>{t('Política de Privacidade')}</a></footer>
       </div>
-      <LoginInstitutionalPanel />
+      <LoginInstitutionalPanel language={language} />
       </div>
     </main>
   );
