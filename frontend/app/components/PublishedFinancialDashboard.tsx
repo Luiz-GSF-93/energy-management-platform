@@ -1,6 +1,8 @@
 'use client';
 import {usePortalUnitScope} from './PortalUnitContext';
 import {usePublicationRefresh} from './usePublicationRefresh';
+import {isTemporaryReadingFailure,useReadingRefresh} from './useReadingRefresh';
+import ReadingRefreshControl from './ReadingRefreshControl';
 import ApprovedFinancialCharts,{FinancialChartMonth} from './ApprovedFinancialCharts';
 import PublishedClientInsights from './PublishedClientInsights';
 import Link from 'next/link';
@@ -31,6 +33,7 @@ export default function PublishedFinancialDashboard({organizationId,organization
  const publicationsId=useId(),[publicationsOpen,setPublicationsOpen]=useState(false);
  const current=new Date(),initial={from:current.getFullYear()+'-01',to:current.getFullYear()+'-12',customerId:''};
  const [filters,setFilters]=useState<Filters>(initial),[request,setRequest]=useState({...initial,revision:0}),[data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[customers,setCustomers]=useState<{id:string;name:string}[]>([]);
+ const reading=useReadingRefresh({defer:audience==='client',scope:JSON.stringify([organizationId,audience,previewCustomerId,request,scopeUnits]),data,apply:setData});
  useEffect(()=>{
   const abort=new AbortController();let cancelled=false;
   const scope=JSON.stringify([organizationId,audience,previewCustomerId,request,scopeUnits]);if(scopeRef.current!==scope){scopeRef.current=scope;setData(null);setError('');setLoading(true);setPublicationsOpen(false);}
@@ -38,8 +41,8 @@ export default function PublishedFinancialDashboard({organizationId,organization
   apiRequest<Data>((previewCustomerId?'/api/v1/portal/preview?':audience==='client'?'/api/v1/portal/financial?':'/api/v1/financial-settlements/published?')+query,{signal:abort.signal,cache:'no-store'}).then(result=>{
    const validCustomer=audience==='client'?result.audience==='client'&&typeof result.customerId==='string'&&result.customerId.length>0&&(!previewCustomerId||result.customerId===previewCustomerId)&&result.period.customerId===result.customerId&&result.rows.every(r=>r.customerId===result.customerId):result.period.customerId===(request.customerId||null);
    if(result.organizationId!==organizationId||result.period.from!==request.from||result.period.to!==request.to||!validCustomer||scopeUnits!=='null'&&result.rows.some(r=>r.units.some(u=>!JSON.parse(scopeUnits).includes(u.id))))throw new Error('O escopo da consulta mudou. Atualize o painel.');
-   if(!cancelled){setError('');setData(result);if(audience==='backoffice'&&!request.customerId)setCustomers(Array.from(new Map(result.rows.map(r=>[r.customerId,{id:r.customerId,name:r.customerName}])).values()));}
-  }).catch(e=>{if(!cancelled){setData(null);setError(e instanceof Error?e.message:'Não foi possível consultar as publicações.');}}).finally(()=>{if(!cancelled)setLoading(false);});
+   if(!cancelled){setError('');reading.offer(result);if(audience==='backoffice'&&!request.customerId)setCustomers(Array.from(new Map(result.rows.map(r=>[r.customerId,{id:r.customerId,name:r.customerName}])).values()));}
+  }).catch(e=>{if(!cancelled){if(audience!=='client'||!isTemporaryReadingFailure(e)){setData(null);reading.clear();}setError(e instanceof Error?e.message:'Não foi possível consultar as publicações.');}}).finally(()=>{if(!cancelled)setLoading(false);});
   return()=>{cancelled=true;abort.abort();};
  },[organizationId,request,audience,previewCustomerId,publicationRevision,scopeUnits]);
  const update=(key:keyof Filters,value:string)=>{setFilters(f=>({...f,[key]:value}));setData(null);setError('');};
@@ -53,7 +56,8 @@ export default function PublishedFinancialDashboard({organizationId,organization
    {audience==='backoffice'?<label>Cliente publicado <select disabled={loading} value={filters.customerId} onChange={e=>update('customerId',e.target.value)}><option value="">Todos os clientes publicados</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>:null}
    <Button type="submit" disabled={loading}>{loading?'Consultando…':'Consultar publicações'}</Button>
   </form>
-  {error?<Alert variant="error">{error}</Alert>:null}{loading?<p role="status">Conferindo publicações e integridade das versões…</p>:null}
+  {audience==='client'?<ReadingRefreshControl pending={reading.pending} onApply={reading.accept} error={data?error:''}/>:null}
+  {error&&!(data&&audience==='client')?<Alert variant="error">{error}</Alert>:null}{loading?<p role="status">Conferindo publicações e integridade das versões…</p>:null}
   {data&&!loading?<>
    <div className="published-financial__actions"><Button variant="secondary" disabled={!data.rows.length} onClick={()=>window.print()}>Imprimir / salvar PDF</Button><Button variant="secondary" disabled={!data.rows.length} onClick={download}>Exportar CSV para Excel</Button></div>
    <div className="published-financial__report">
