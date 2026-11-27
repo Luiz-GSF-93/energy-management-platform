@@ -37,7 +37,7 @@ export class CoreWelcomeService{
   if(Date.parse(job.expires_at)<=Date.now()||job.mail_attempts>=5){job=await command('unknown',{leaseId:job.lease_id});return result();}
   const nextLeaseId=randomUUID();
   const message=coreWelcomeEmail({name:job.name,email:job.email,organization:job.organization_name,url,password:job.provisioning_path==='new_identity'?openCorePassword(secret,id,job.password_cipher):null,expiresAt:job.expires_at});
-  const body=JSON.stringify({from:this.config.get<string>('MEMBERSHIP_EMAIL_FROM')||'EnergyOS <nao-responda@notificacoes.expertenergy.com.br>',to:[job.email],...message});
+  const body=JSON.stringify({from:'EnergyOS <energyos@expertenergy.com.br>',reply_to:'energyos@expertenergy.com.br',to:[job.email],...message});
   try{job=await command('sending',{leaseId:job.lease_id,nextLeaseId,mailHash:createHash('sha256').update(body).digest('hex')});}catch(error){if(error instanceof ConflictException)return{id,state:'PENDING',retryAfterSeconds:60};throw error;}
   if(job.state==='SENT')return result();
   try{
