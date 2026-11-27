@@ -2,31 +2,37 @@
 import {usePortalUnitScope} from './PortalUnitContext';
 import AnnualConsumptionComparison,{type AnnualPlanningView} from './AnnualConsumptionComparison';
 import {usePublicationRefresh} from './usePublicationRefresh';
-import {useEffect,useRef,useState} from 'react';
+import {isTemporaryReadingFailure,useReadingRefresh} from './useReadingRefresh';
+import ReadingRefreshControl from './ReadingRefreshControl';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import {Alert,Button,Card} from '@/app/components/ui';
 import AnnualForecastPresentation,{type AnnualForecast} from '@/app/backoffice/reports/AnnualForecastPresentation';
 type Planning={annualComparison?:AnnualPlanningView;forecastId:string;unitName?:string;sourceOrigins?:{month:string;kind:string}[];state:string;calculatedAt?:string;sourceFingerprint?:string;sourceMonths?:string[];notice:string;forecast?:Published};
 type Published=AnnualForecast&{id:string;unitName:string;publishedAt:string;version:number};
+type ForecastReading={rows:Published[];currentPlanning?:Planning[];consolidatedAnnual?:AnnualPlanningView|null};
 export default function PublishedForecastDashboard(){
  const publicationRevision=usePublicationRefresh(),scope=usePortalUnitScope(),scopeUnits=JSON.stringify(scope?.unitIds??null);
  const scopeRef=useRef(scopeUnits);
  const [consolidated,setConsolidated]=useState<AnnualPlanningView|null>(null);
  const [planning,setPlanning]=useState<Planning[]>([]);
  const [rows,setRows]=useState<Published[]|null>(null),[error,setError]=useState(''),[revision,setRevision]=useState(0),[selected,setSelected]=useState('');
+ const applyReading=useCallback((data:ForecastReading)=>{setConsolidated(data.consolidatedAnnual??null);setPlanning(data.currentPlanning??[]);setRows(data.rows);setSelected(old=>data.rows.some(r=>r.id===old)||data.currentPlanning?.some(p=>p.forecastId===old)?old:data.currentPlanning?.[0]?.forecastId??data.rows[0]?.id??'');},[]);
+ const reading=useReadingRefresh<ForecastReading>({defer:true,scope:scopeUnits,data:rows===null?null:{rows,currentPlanning:planning,consolidatedAnnual:consolidated},apply:applyReading});
  useEffect(()=>{
   const abort=new AbortController();let cancelled=false;
   if(scopeRef.current!==scopeUnits){scopeRef.current=scopeUnits;setRows(null);setPlanning([]);setConsolidated(null);setError('');}
-  apiRequest<{rows:Published[];currentPlanning?:Planning[];consolidatedAnnual?:AnnualPlanningView|null}>('/api/v1/portal/energy-forecasts'+(scope?.unitIds?'?unitIds='+encodeURIComponent(scope.unitIds.join(',')):''),{cache:'no-store',signal:abort.signal}).then(data=>{
-   if(cancelled)return;setConsolidated(data.consolidatedAnnual??null);setPlanning(data.currentPlanning??[]);setRows(data.rows);setError('');setSelected(old=>data.rows.some(r=>r.id===old)||data.currentPlanning?.some(p=>p.forecastId===old)?old:data.currentPlanning?.[0]?.forecastId??data.rows[0]?.id??'');
-  }).catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:'Não foi possível consultar a previsão.');});
+  apiRequest<ForecastReading>('/api/v1/portal/energy-forecasts'+(scope?.unitIds?'?unitIds='+encodeURIComponent(scope.unitIds.join(',')):''),{cache:'no-store',signal:abort.signal}).then(data=>{
+   if(cancelled)return;reading.offer({rows:data.rows,currentPlanning:data.currentPlanning??[],consolidatedAnnual:data.consolidatedAnnual??null});setError('');
+  }).catch(e=>{if(!cancelled){if(!isTemporaryReadingFailure(e)){setRows(null);setPlanning([]);setConsolidated(null);reading.clear();}setError(e instanceof Error?e.message:'Não foi possível consultar a previsão.');}});
   return()=>{cancelled=true;abort.abort();};
  },[revision,publicationRevision,scopeUnits]);
  const forecast=rows?.find(r=>r.id===selected),current=planning.find(p=>p.forecastId===selected);
  const choices=[...(rows??[]).map(r=>({id:r.id,label:r.unitName+' · '+r.asOfMonth+' · v'+r.version})),...planning.filter(p=>!rows?.some(r=>r.id===p.forecastId)).map(p=>({id:p.forecastId,label:(p.unitName??'Unidade')+' · planejamento atual'}))];
  return <Card><h2>Planejamento de consumo</h2><p>Projeção com prioridade para medições CCEE completas; na ausência, consumo publicado e histórico documentado da distribuidora.</p>
- <Button variant="secondary" disabled={rows===null&&!error} onClick={()=>{setRows(null);setError('');setRevision(n=>n+1);}}>Atualizar previsões</Button>
- {error?<Alert>{error}</Alert>:rows===null?<p role="status">Consultando previsões publicadas…</p>:!choices.length?<p>Nenhuma previsão publicada disponível. Versões em preparação ou somente validadas aguardam publicação pela equipe de gestão.</p>:<>
+ <Button variant="secondary" disabled={rows===null&&!error} onClick={()=>{reading.expectRefresh();setError('');setRevision(n=>n+1);}}>Atualizar previsões</Button>
+ <ReadingRefreshControl pending={reading.pending} onApply={reading.accept} error={rows!==null?error:''}/>
+ {error&&rows===null?<Alert>{error}</Alert>:null}{rows===null?<p role="status">Consultando previsões publicadas…</p>:!choices.length?<p>Nenhuma previsão publicada disponível. Versões em preparação ou somente validadas aguardam publicação pela equipe de gestão.</p>:<>
  {consolidated?.state==='AVAILABLE'?<AnnualConsumptionComparison planning={consolidated}/>:consolidated?<Alert>{consolidated.notice} {consolidated.pending.join(' ')}</Alert>:null}
  <label>Detalhamento por unidade e competência de corte<select value={selected} onChange={e=>setSelected(e.target.value)}>{choices.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}</select></label>
  {!consolidated&&current?.annualComparison?.state==='AVAILABLE'?<AnnualConsumptionComparison planning={current.annualComparison}/>:null}

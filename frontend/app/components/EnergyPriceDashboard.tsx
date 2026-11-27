@@ -1,6 +1,8 @@
 'use client';
 import {usePortalUnitScope} from './PortalUnitContext';
 import {notifyPublicationUpdated,usePublicationRefresh} from './usePublicationRefresh';
+import {isTemporaryReadingFailure,useReadingRefresh} from './useReadingRefresh';
+import ReadingRefreshControl from './ReadingRefreshControl';
 import {useEffect,useRef,useState} from 'react';
 import {apiRequest} from '@/app/lib/api/client';
 import EnergyPriceChart,{EnergyPriceMonth} from './EnergyPriceChart';
@@ -15,6 +17,7 @@ export default function EnergyPriceDashboard({organizationId,audience='backoffic
  const scopeRef=useRef('');
  const [year,setYear]=useState(new Date().getFullYear()),[customer,setCustomer]=useState(''),[unit,setUnit]=useState(''),[options,setOptions]=useState<Unit[]>([]),[data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0),[publishing,setPublishing]=useState(false),[checked,setChecked]=useState<string[]>([]);
  const [refreshing,setRefreshing]=useState(false),[updatedAt,setUpdatedAt]=useState<string|null>(null);
+ const reading=useReadingRefresh({defer:audience==='client',scope:JSON.stringify([organizationId,audience,year,customer,unit,scopeUnits]),data,apply:setData});
  const publicationRevision=usePublicationRefresh({paused:refreshing||publishing||checked.length>0});
  useEffect(()=>{
   const abort=new AbortController();let current=true;
@@ -24,8 +27,8 @@ export default function EnergyPriceDashboard({organizationId,audience='backoffic
   const query=new URLSearchParams({year:String(year)});if(audience==='backoffice'&&customer)query.set('customerId',customer);if(scopeUnits!=='null')query.set('unitIds',JSON.parse(scopeUnits).join(','));else if(unit)query.set('unitId',unit);
   apiRequest<Data>('/api/v1/'+(audience==='client'?'portal/':'')+'energy-prices?'+query,{signal:abort.signal,cache:'no-store'}).then(result=>{
    if(result.organizationId!==organizationId||result.audience!==audience||result.year!==year||audience==='backoffice'&&customer!==''&&result.customerId!==customer||audience==='client'&&!result.customerId||unit&&result.units.some(u=>u.id!==unit)||result.customerId&&result.units.some(u=>u.customerId!==result.customerId)||scopeUnits!=='null'&&result.units.some(u=>!JSON.parse(scopeUnits).includes(u.id)))throw Error('Escopo do indicador alterado; atualize a consulta.');
-   if(!current)return;if(audience==='backoffice'&&!customer&&result.customerId){setCustomer(result.customerId);setOptions(result.units);return;}setError('');setData(result);setUpdatedAt(new Date().toISOString());if(!unit&&(audience==='client'||!customer))setOptions(result.units);
-  }).catch(e=>{if(current){setData(null);setError(e instanceof Error?e.message:'Indicador indisponível.');}}).finally(()=>{if(current){setLoading(false);setRefreshing(false);}});
+   if(!current)return;if(audience==='backoffice'&&!customer&&result.customerId){setCustomer(result.customerId);setOptions(result.units);return;}setError('');reading.offer(result);setUpdatedAt(new Date().toISOString());if(!unit&&(audience==='client'||!customer))setOptions(result.units);
+  }).catch(e=>{if(current){if(audience!=='client'||!isTemporaryReadingFailure(e)){setData(null);reading.clear();}setError(e instanceof Error?e.message:'Indicador indisponível.');}}).finally(()=>{if(current){setLoading(false);setRefreshing(false);}});
   return()=>{current=false;abort.abort();};
  },[organizationId,audience,year,customer,unit,revision,publicationRevision,scopeUnits]);
  const marketReference=data?[...data.months].reverse().find(m=>m.pldSpread5!=null&&m.pldSpread15!=null):undefined;
@@ -39,9 +42,10 @@ export default function EnergyPriceDashboard({organizationId,audience='backoffic
   <div className={styles.filters}><label>Ano <select value={year} disabled={publishing} onChange={e=>select('year',e.target.value)}>{Array.from({length:101},(_,i)=>2000+i).map(y=><option key={y} value={y}>{y}</option>)}</select></label>
    {audience==='backoffice'?<label>Cliente <select value={customer} disabled={publishing} onChange={e=>select('customer',e.target.value)}><option value="">Selecione um cliente</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>:null}
    <label hidden={audience==='client'&&!!portalScope}>Unidades <select disabled={publishing||audience==='backoffice'&&!customer} value={unit} onChange={e=>select('unit',e.target.value)}><option value="">Consolidar unidades do cliente</option>{options.filter(u=>audience==='client'||u.customerId===customer).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
-   <Button variant="secondary" disabled={loading||publishing} onClick={()=>setRevision(v=>v+1)}>Atualizar</Button></div>
-  {loading?<p role="status">Conferindo referências e publicações…</p>:null}{error?<Alert variant="error">{error}</Alert>:null}
-  {updatedAt&&!error?<p role="status">Última consulta: {new Date(updatedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})} · atualização automática a cada minuto com a página visível.</p>:null}
+   <Button variant="secondary" disabled={loading||publishing} onClick={()=>{reading.expectRefresh();setRevision(v=>v+1);}}>Atualizar</Button></div>
+  {audience==='client'?<ReadingRefreshControl pending={reading.pending} onApply={reading.accept} error={data?error:''}/>:null}
+  {loading?<p role="status">Conferindo referências e publicações…</p>:null}{error&&!(data&&audience==='client')?<Alert variant="error">{error}</Alert>:null}
+  {updatedAt&&(!error||data&&audience==='client')?<p role="status">Última consulta: {new Date(updatedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})} · atualização automática a cada minuto com a página visível.</p>:null}
   {data?.customerId&&!loading?<><div className={styles.cards}><article><span>{data.workspaceV2?'TE ACR · referência publicada':'Antes da adesão · TE ACR'}</span><strong>{display(data.acrAverage)}</strong><small>{data.workspaceV2?'Média dos meses disponíveis, ponderada pelo consumo.':'Referência anual; confira período e estimativas abaixo.'}</small></article><article><span>Perfil ACL · valor contratado</span><strong>{display(data.aclAverage)}</strong><small>Preço médio efetivo da energia faturada, incluindo compras avulsas; exclui distribuidora, demanda e honorários. Confira a base tributária publicada.</small></article><article><span>PLD mensal · CCEE</span><strong>{display([...data.months].reverse().find(m=>m.pld!==null)?.pld??null)}</strong><small>{data.months.filter(m=>m.pld!==null).slice(-1).map(m=>'Referência '+m.month+' · CCEE. ')}Média de mês encerrado; o mês em andamento aguarda todas as horas. Cenários de +5%, +10% e +15% no gráfico.</small></article></div>
    <div className={styles.layout}><EnergyPriceChart months={data.months} footer={data.footer}/><aside className={styles.strategy}><h3>Preço indicativo de compra</h3>{data.indicative.value!==null?<><strong>{display(data.indicative.value)}</strong><p className={styles.notice}>{data.indicative.notice}</p><p>{data.indicative.reason}</p></>:marketReference?<><strong>{display(marketReference.pldSpread5??null)} a {display(marketReference.pldSpread15??null)}</strong><p className={styles.notice}>Faixa estimada · PLD + 5% a + 15% · {marketReference.month}</p><p>Cenários de mercado já demonstrados no gráfico, sem tributos. Não representam cotação ou oferta. A comparação líquida entre ACR e compras faturadas ainda depende da segregação fiscal das fontes.</p></>:<><strong>{display(null)}</strong><p>{data.indicative.reason}</p></>}<p>Compare propostas com a mesma vigência, volume, perdas e flexibilidade. Confirme a estratégia com seu Consultor.</p></aside></div>
    <p className={styles.disclosure}>{data.disclosure}</p>

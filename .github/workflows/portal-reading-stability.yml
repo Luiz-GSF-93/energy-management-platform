@@ -1,0 +1,33 @@
+name: Portal reading continuity
+on:
+  pull_request:
+    paths:
+      - 'frontend/app/components/useReadingRefresh.ts'
+      - 'frontend/app/components/ReadingRefreshControl.tsx'
+      - 'frontend/app/components/EnergyPriceDashboard.tsx'
+      - 'frontend/app/components/PublishedFinancialDashboard.tsx'
+      - 'frontend/app/components/PublishedForecastDashboard.tsx'
+      - 'frontend/app/components/PortalInvoices.tsx'
+      - 'frontend/app/backoffice/trading-hub/TradingApprovals.tsx'
+      - 'frontend/test/portal-reading-refresh.cjs'
+      - 'frontend/test/publication-refresh.cjs'
+      - 'frontend/test/portal-invoice-reading.cjs'
+      - '.github/workflows/portal-reading-stability.yml'
+permissions:
+  contents: read
+jobs:
+  reading-continuity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node test/portal-reading-refresh.cjs && node test/portal-invoice-reading.cjs && node test/publication-refresh.cjs && node test/client-portal.cjs && node test/portal-identity-ui.cjs && node test/portal-global-unit-scope.cjs && node test/portal-composition-corrections.cjs && node test/trading-approvals.cjs
+      - run: node_modules/.bin/tsc --noEmit
+      - run: npm run build -- --webpack
